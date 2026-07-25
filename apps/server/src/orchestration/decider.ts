@@ -22,8 +22,8 @@ import {
 } from "@synara/shared/threadWorkspace";
 import { doThreadMarkerRangesOverlap } from "@synara/shared/threadMarkers";
 import {
-  providerSupportsRuntimeMode,
-  runtimeModeCompatibilityMessage,
+  providerSupportsAutoRuntimeMode,
+  unsupportedAutoRuntimeModeMessage,
 } from "@synara/shared/runtimeMode";
 import {
   collectTailTurnIds,
@@ -69,17 +69,17 @@ const STUDIO_PROJECT_KIND_SET = new Set<ProjectKind>(["studio"]);
 // use placeholder roots (e.g. the home dir) that legitimately coexist with real projects.
 const WORKSPACE_OWNING_PROJECT_KIND_SET = new Set<ProjectKind>(["project", "studio"]);
 
-function validateProviderRuntimeMode(
+function validateAutoRuntimeMode(
   command: OrchestrationCommand,
   provider: OrchestrationThread["modelSelection"]["provider"],
   runtimeMode: OrchestrationThread["runtimeMode"],
 ) {
-  return providerSupportsRuntimeMode(provider, runtimeMode)
+  return runtimeMode !== "auto" || providerSupportsAutoRuntimeMode(provider)
     ? Effect.void
     : Effect.fail(
         new OrchestrationCommandInvariantError({
           commandType: command.type,
-          detail: runtimeModeCompatibilityMessage(provider, runtimeMode),
+          detail: unsupportedAutoRuntimeModeMessage(provider),
         }),
       );
 }
@@ -883,7 +883,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
-      yield* validateProviderRuntimeMode(
+      yield* validateAutoRuntimeMode(
         command,
         command.modelSelection.provider,
         command.runtimeMode,
@@ -945,7 +945,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
-      yield* validateProviderRuntimeMode(
+      yield* validateAutoRuntimeMode(
         command,
         command.modelSelection.provider,
         command.runtimeMode,
@@ -1046,7 +1046,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
-      yield* validateProviderRuntimeMode(
+      yield* validateAutoRuntimeMode(
         command,
         command.modelSelection.provider,
         command.runtimeMode,
@@ -1202,7 +1202,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
       const project = readModel.projects.find((candidate) => candidate.id === thread.projectId);
       if (command.modelSelection !== undefined) {
-        yield* validateProviderRuntimeMode(
+        yield* validateAutoRuntimeMode(
           command,
           command.modelSelection.provider,
           thread.runtimeMode,
@@ -1501,7 +1501,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
-      yield* validateProviderRuntimeMode(
+      yield* validateAutoRuntimeMode(
         command,
         thread.modelSelection.provider,
         command.runtimeMode,
@@ -1559,7 +1559,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         });
       }
       const sourceProposedPlan = command.sourceProposedPlan;
-      yield* validateProviderRuntimeMode(
+      yield* validateAutoRuntimeMode(
         command,
         command.modelSelection?.provider ?? targetThread.modelSelection.provider,
         command.runtimeMode,
@@ -1692,7 +1692,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           detail: checkpointRevertInProgressDetail(command.threadId),
         });
       }
-      yield* validateProviderRuntimeMode(
+      yield* validateAutoRuntimeMode(
         command,
         command.modelSelection?.provider ?? thread.modelSelection.provider,
         command.runtimeMode,
@@ -1967,7 +1967,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           detail: checkpointRevertInProgressDetail(command.threadId),
         });
       }
-      yield* validateProviderRuntimeMode(
+      yield* validateAutoRuntimeMode(
         command,
         command.modelSelection?.provider ?? thread.modelSelection.provider,
         command.runtimeMode,

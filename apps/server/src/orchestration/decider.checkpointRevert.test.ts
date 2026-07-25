@@ -384,34 +384,6 @@ describe("checkpoint revert decider", () => {
         },
       }),
     );
-    const incompatibleError = await Effect.runPromise(
-      Effect.flip(
-        decideOrchestrationCommand({
-          command: {
-            type: "thread.message.edit-and-resend",
-            commandId: CommandId.makeUnsafe("cmd-reject-incompatible-edit"),
-            threadId: THREAD_ID,
-            messageId: MessageId.makeUnsafe("message-to-edit"),
-            text: "edited",
-            modelSelection: {
-              provider: "antigravity",
-              model: "gemini-2.5-pro",
-            },
-            interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-            runtimeMode: "auto",
-            createdAt: NOW,
-          },
-          readModel,
-        }),
-      ),
-    );
-    expect(incompatibleError).toMatchObject({
-      _tag: "OrchestrationCommandInvariantError",
-      commandType: "thread.message.edit-and-resend",
-      detail:
-        'Provider "antigravity" does not support runtime mode "auto". Supported modes: "full-access".',
-    });
-
     const decidedEdit = await Effect.runPromise(
       decideOrchestrationCommand({
         command: {

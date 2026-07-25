@@ -254,7 +254,7 @@ describe("ProviderCommandReactor", () => {
       const base: ProviderSession = runtimeSessions[index] ?? {
         provider: modelSelection.provider,
         status: "ready",
-        runtimeMode: "approval-required",
+        runtimeMode: "full-access",
         threadId,
         resumeCursor: { opaque: "resume-synthetic" },
         createdAt: now,
@@ -548,8 +548,7 @@ describe("ProviderCommandReactor", () => {
         title: "Thread",
         modelSelection: modelSelection,
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode:
-          modelSelection.provider === "antigravity" ? "full-access" : "approval-required",
+        runtimeMode: "approval-required",
         branch: null,
         worktreePath: null,
         createdAt: now,
@@ -1519,7 +1518,7 @@ describe("ProviderCommandReactor", () => {
           provider: "codex",
           model: "gpt-5-codex",
         },
-        runtimeMode: "full-access",
+        runtimeMode: "approval-required",
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
         envMode: "local",
         branch: null,
@@ -3967,7 +3966,7 @@ describe("ProviderCommandReactor", () => {
           model: "Gemini 3.5 Flash",
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode: "full-access",
+        runtimeMode: "approval-required",
         createdAt: now,
       }),
     );
@@ -4018,7 +4017,7 @@ describe("ProviderCommandReactor", () => {
           model: "Gemini 3.5 Flash",
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode: "full-access",
+        runtimeMode: "approval-required",
         createdAt: now,
       }),
     );
@@ -4128,7 +4127,7 @@ describe("ProviderCommandReactor", () => {
           model: "Gemini 3.5 Flash",
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode: "full-access",
+        runtimeMode: "approval-required",
         createdAt: now,
       }),
     );

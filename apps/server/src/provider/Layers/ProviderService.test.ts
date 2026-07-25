@@ -1079,7 +1079,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
         provider: "antigravity",
         threadId,
         cwd: "/tmp/project",
-        runtimeMode: "full-access",
+        runtimeMode: "approval-required",
       });
       const binding = Option.getOrUndefined(yield* directory.getBinding(threadId));
       const lifecycleGeneration = binding?.lifecycleGeneration;

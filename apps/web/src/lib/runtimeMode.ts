@@ -7,13 +7,11 @@ import type {
 import {
   normalizeRuntimeModeForProvider,
   providerSupportsAutoRuntimeMode,
-  providerSupportsRuntimeMode,
 } from "@synara/shared/runtimeMode";
 
 export {
   normalizeRuntimeModeForProvider,
   providerSupportsAutoRuntimeMode,
-  providerSupportsRuntimeMode,
 };
 
 export function providerModelSupportsAutoRuntimeMode(

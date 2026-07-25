@@ -2,24 +2,29 @@ import { describe, expect, it } from "vitest";
 
 import {
   normalizeRuntimeModeForProvider,
-  providerSupportsRuntimeMode,
-  supportedRuntimeModesForProvider,
+  providerSupportsAutoRuntimeMode,
+  runtimeModeEscalatesPrivilege,
 } from "./runtimeMode";
 
 describe("runtime mode compatibility", () => {
   it("limits Auto to providers with a native reviewer", () => {
-    expect(providerSupportsRuntimeMode("codex", "auto")).toBe(true);
-    expect(providerSupportsRuntimeMode("claudeAgent", "auto")).toBe(true);
-    expect(providerSupportsRuntimeMode("opencode", "auto")).toBe(false);
-    expect(providerSupportsRuntimeMode("cursor", "auto")).toBe(false);
+    expect(providerSupportsAutoRuntimeMode("codex")).toBe(true);
+    expect(providerSupportsAutoRuntimeMode("claudeAgent")).toBe(true);
+    expect(providerSupportsAutoRuntimeMode("opencode")).toBe(false);
+    expect(providerSupportsAutoRuntimeMode("cursor")).toBe(false);
   });
 
-  it("keeps Antigravity full-access only without silently escalating callers", () => {
-    expect(supportedRuntimeModesForProvider("antigravity")).toEqual(["full-access"]);
-    expect(normalizeRuntimeModeForProvider("approval-required", "antigravity")).toBe(
+  it("normalizes only unsupported Auto selections", () => {
+    expect(normalizeRuntimeModeForProvider("auto", "opencode")).toBe("approval-required");
+    expect(normalizeRuntimeModeForProvider("approval-required", "opencode")).toBe(
       "approval-required",
     );
-    expect(normalizeRuntimeModeForProvider("auto", "antigravity")).toBe("auto");
-    expect(normalizeRuntimeModeForProvider("full-access", "antigravity")).toBe("full-access");
+    expect(normalizeRuntimeModeForProvider("full-access", "opencode")).toBe("full-access");
+  });
+
+  it("treats Auto as more privileged than Supervised but less privileged than Full access", () => {
+    expect(runtimeModeEscalatesPrivilege("approval-required", "auto")).toBe(true);
+    expect(runtimeModeEscalatesPrivilege("auto", "full-access")).toBe(true);
+    expect(runtimeModeEscalatesPrivilege("auto", "approval-required")).toBe(false);
   });
 });

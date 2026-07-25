@@ -464,7 +464,7 @@ describe("ClaudeAdapterLive", () => {
 
       const createInput = harness.getLastCreateQueryInput();
       assert.deepEqual(createInput?.options.settingSources, ["user", "project", "local"]);
-      assert.equal(createInput?.options.permissionMode, "default");
+      assert.equal(createInput?.options.permissionMode, undefined);
       assert.equal(createInput?.options.allowDangerouslySkipPermissions, undefined);
       const systemPrompt = createInput?.options.systemPrompt;
       if (
@@ -489,7 +489,7 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("keeps the picker runtime mode authoritative over provider options", () => {
+  it.effect("keeps explicit claude permission mode over runtime-derived defaults", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
@@ -505,8 +505,8 @@ describe("ClaudeAdapterLive", () => {
       });
 
       const createInput = harness.getLastCreateQueryInput();
-      assert.equal(createInput?.options.permissionMode, "bypassPermissions");
-      assert.equal(createInput?.options.allowDangerouslySkipPermissions, true);
+      assert.equal(createInput?.options.permissionMode, "plan");
+      assert.equal(createInput?.options.allowDangerouslySkipPermissions, undefined);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),

@@ -8,7 +8,7 @@
 import { Schema } from "effect";
 
 import { ProjectId, ThreadId, TurnId } from "./baseSchemas";
-import { ModelSelection, ProviderKind, RuntimeMode } from "./orchestration";
+import { ModelSelection, ProviderKind } from "./orchestration";
 import { ProviderModelDescriptor } from "./providerDiscovery";
 import { ServerProviderAuthStatus } from "./server";
 
@@ -75,7 +75,7 @@ export const SynaraCreateThreadSpec = Schema.Struct({
   // MCP catalog no longer advertises branch-backed worktree creation.
   baseBranch: Schema.optional(Schema.String.check(Schema.isNonEmpty())),
   branchName: Schema.optional(Schema.String.check(Schema.isNonEmpty())),
-  runtimeMode: Schema.optional(RuntimeMode),
+  runtimeMode: Schema.optional(Schema.Literals(["approval-required", "full-access"])),
 });
 export type SynaraCreateThreadSpec = typeof SynaraCreateThreadSpec.Type;
 
@@ -148,7 +148,7 @@ export const SynaraCreatedThreadResult = Schema.Struct({
   target: ModelSelection,
   provider: ProviderKind,
   model: Schema.String,
-  runtimeMode: RuntimeMode,
+  runtimeMode: Schema.Literals(["approval-required", "full-access"]),
   environment: Schema.Literals(["local", "worktree"]),
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),

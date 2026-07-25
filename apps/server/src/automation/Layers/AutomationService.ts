@@ -27,8 +27,8 @@ import {
 } from "@synara/contracts";
 import { providerStartOptionsFromServerSettings } from "@synara/shared/serverSettings";
 import {
-  providerSupportsRuntimeMode,
-  runtimeModeCompatibilityMessage,
+  providerSupportsAutoRuntimeMode,
+  unsupportedAutoRuntimeModeMessage,
 } from "@synara/shared/runtimeMode";
 import { Cause, Effect, Layer, Option, PubSub, Queue, Stream } from "effect";
 
@@ -756,18 +756,16 @@ export const AutomationServiceLive = Layer.effect(
         : Effect.void;
     };
 
-    const validateProviderRuntimeMode = (input: {
+    const validateAutoRuntimeMode = (input: {
       readonly modelSelection: AutomationDefinition["modelSelection"];
       readonly runtimeMode: AutomationDefinition["runtimeMode"];
     }) =>
-      providerSupportsRuntimeMode(input.modelSelection.provider, input.runtimeMode)
+      input.runtimeMode !== "auto" ||
+      providerSupportsAutoRuntimeMode(input.modelSelection.provider)
         ? Effect.void
         : Effect.fail(
             new AutomationServiceError({
-              message: runtimeModeCompatibilityMessage(
-                input.modelSelection.provider,
-                input.runtimeMode,
-              ),
+              message: unsupportedAutoRuntimeModeMessage(input.modelSelection.provider),
             }),
           );
 
@@ -935,7 +933,7 @@ export const AutomationServiceLive = Layer.effect(
           worktreeMode: definition.worktreeMode,
           acknowledgedRisks: definition.acknowledgedRisks,
         });
-        yield* validateProviderRuntimeMode(definition);
+        yield* validateAutoRuntimeMode(definition);
         yield* validateFastIntervalPolicy({
           schedule: definition.schedule,
           enabled: definition.enabled,
@@ -2306,7 +2304,7 @@ export const AutomationServiceLive = Layer.effect(
           worktreeMode: input.worktreeMode ?? "auto",
           acknowledgedRisks: input.acknowledgedRisks ?? [],
         });
-        yield* validateProviderRuntimeMode({
+        yield* validateAutoRuntimeMode({
           modelSelection: input.modelSelection,
           runtimeMode: input.runtimeMode ?? "approval-required",
         });
@@ -2365,7 +2363,7 @@ export const AutomationServiceLive = Layer.effect(
           worktreeMode: updated.worktreeMode,
           acknowledgedRisks: updated.acknowledgedRisks,
         });
-        yield* validateProviderRuntimeMode(updated);
+        yield* validateAutoRuntimeMode(updated);
         yield* validateHeartbeatTarget(updated);
         const saved = yield* automationRepository
           .saveDefinition(updated)

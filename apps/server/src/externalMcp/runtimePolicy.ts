@@ -2,9 +2,11 @@ import type { ExternalMcpCapability, RuntimeMode } from "@synara/contracts";
 
 import { GatewayToolError } from "../agentGateway/toolRuntime.ts";
 
+type ExternalMcpRuntimeMode = Exclude<RuntimeMode, "auto">;
+
 export interface ExternalMcpRuntimePolicy {
   readonly environment: "local" | "worktree";
-  readonly runtimeMode: RuntimeMode;
+  readonly runtimeMode: ExternalMcpRuntimeMode;
 }
 
 export function resolveExternalMcpRuntimePolicy(input: {

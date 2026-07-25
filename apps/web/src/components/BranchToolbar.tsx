@@ -22,7 +22,6 @@ import { resolveThreadEnvironmentPresentation } from "../lib/threadEnvironment";
 import {
   RUNTIME_MODE_PRESENTATION,
   providerModelSupportsAutoRuntimeMode,
-  providerSupportsRuntimeMode,
 } from "../lib/runtimeMode";
 import { useStore } from "../store";
 import {
@@ -156,8 +155,6 @@ export function RuntimeUsageControls({
   const autoModeAvailable =
     provider !== undefined &&
     providerModelSupportsAutoRuntimeMode(provider, runtimeModel, providerStatus);
-  const supervisedModeAvailable =
-    provider === undefined || providerSupportsRuntimeMode(provider, "approval-required");
   const runtimePresentation = RUNTIME_MODE_PRESENTATION[runtimeMode ?? "approval-required"];
 
   return (
@@ -211,8 +208,9 @@ export function RuntimeUsageControls({
               onValueChange={(value) => {
                 if (
                   !value ||
-                  (value !== "full-access" && value !== "auto" && value !== "approval-required") ||
-                  (provider !== undefined && !providerSupportsRuntimeMode(provider, value)) ||
+                  (value !== "full-access" &&
+                    value !== "auto" &&
+                    value !== "approval-required") ||
                   (value === "auto" && !autoModeAvailable) ||
                   value === runtimeMode
                 ) {
@@ -221,25 +219,26 @@ export function RuntimeUsageControls({
                 onRuntimeModeChange(value);
               }}
             >
-              {supervisedModeAvailable ? (
-                <MenuRadioItem value="approval-required">
-                  <span className="inline-flex items-start gap-2">
-                    <HiOutlineHandRaised className="mt-0.5 size-4 shrink-0" />
-                    <span className="flex flex-col">
-                      <span>Supervised</span>
-                      <span className="text-xs font-normal text-muted-foreground">
-                        {RUNTIME_MODE_PRESENTATION["approval-required"].description}
-                      </span>
+              <MenuRadioItem value="approval-required">
+                <span className="inline-flex items-start gap-2">
+                  <HiOutlineHandRaised className="mt-0.5 size-4 shrink-0" />
+                  <span className="flex flex-col">
+                    <span>Supervised</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {RUNTIME_MODE_PRESENTATION["approval-required"].description}
                     </span>
                   </span>
-                </MenuRadioItem>
-              ) : null}
+                </span>
+              </MenuRadioItem>
               {autoModeAvailable ? (
                 <MenuRadioItem value="auto">
                   <span className="inline-flex items-start gap-2">
                     <CentralIcon
                       name="shield-code"
-                      className={cn("mt-0.5 size-4 shrink-0", RUNTIME_AUTO_ICON_ACCENT_CLASS_NAME)}
+                      className={cn(
+                        "mt-0.5 size-4 shrink-0",
+                        RUNTIME_AUTO_ICON_ACCENT_CLASS_NAME,
+                      )}
                     />
                     <span className="flex flex-col">
                       <span>Auto</span>

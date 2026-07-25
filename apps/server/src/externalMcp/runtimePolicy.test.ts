@@ -40,7 +40,7 @@ describe("external MCP runtime policy", () => {
     ).toThrow(/runtime:full-access/);
   });
 
-  it("rejects raw Auto requests that are outside the external MCP contract", () => {
+  it("rejects Auto execution outside the Codex and Claude Code pickers", () => {
     expect(() =>
       resolveExternalMcpRuntimePolicy({
         requestedRuntimeMode: "auto",

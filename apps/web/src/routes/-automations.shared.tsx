@@ -93,7 +93,6 @@ import {
   normalizeRuntimeModeForProvider,
   providerModelSupportsAutoRuntimeMode,
   providerSupportsAutoRuntimeMode,
-  providerSupportsRuntimeMode,
 } from "~/lib/runtimeMode";
 import { findProviderStatus } from "~/lib/providerAvailability";
 import { cn } from "~/lib/utils";
@@ -1422,12 +1421,7 @@ export function AutomationDialog({
                   value={form.runtimeMode}
                   onValueChange={(value) => setField("runtimeMode", value as RuntimeMode)}
                 >
-                  {providerSupportsRuntimeMode(
-                    form.modelSelection.provider,
-                    "approval-required",
-                  ) ? (
-                    <MenuRadioItem value="approval-required">Approval required</MenuRadioItem>
-                  ) : null}
+                  <MenuRadioItem value="approval-required">Approval required</MenuRadioItem>
                   {selectedModelSupportsAuto ? (
                     <MenuRadioItem value="auto">
                       <CentralIcon

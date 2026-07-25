@@ -700,14 +700,16 @@ function asRuntimeRequestId(value: ApprovalRequestId): RuntimeRequestId {
   return RuntimeRequestId.makeUnsafe(value);
 }
 
-function permissionModeForRuntimeMode(runtimeMode: ProviderSession["runtimeMode"]): PermissionMode {
-  switch (runtimeMode) {
-    case "approval-required":
-      return "default";
-    case "auto":
-      return "auto";
-    case "full-access":
-      return "bypassPermissions";
+function toPermissionMode(value: unknown): PermissionMode | undefined {
+  switch (value) {
+    case "default":
+    case "acceptEdits":
+    case "bypassPermissions":
+    case "plan":
+    case "dontAsk":
+      return value;
+    default:
+      return undefined;
   }
 }
 
@@ -4590,7 +4592,11 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         );
         const effectiveEffort = getEffectiveClaudeCodeEffort(effort);
         const ultracode = effort === "ultracode" && hasEffortLevel(caps, "xhigh");
-        const permissionMode = permissionModeForRuntimeMode(input.runtimeMode);
+        const permissionMode =
+          input.runtimeMode === "auto"
+            ? "auto"
+            : (toPermissionMode(providerOptions?.permissionMode) ??
+              (input.runtimeMode === "full-access" ? "bypassPermissions" : undefined));
         const settings = {
           // Native 1M models otherwise compact near their full model limit. Keep
           // Synara's safer 200k budget explicit unless the thread opts into 1M.
@@ -4649,7 +4655,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           // Only `max` effort is spawn-fixed; every other level rides in
           // `settings.effortLevel` so it can change live mid-session.
           ...(effectiveEffort === "max" ? { effort: "max" as const } : {}),
-          permissionMode,
+          ...(permissionMode ? { permissionMode } : {}),
           ...(permissionMode === "bypassPermissions"
             ? { allowDangerouslySkipPermissions: true }
             : {}),

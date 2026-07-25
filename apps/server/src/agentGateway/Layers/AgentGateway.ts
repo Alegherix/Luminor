@@ -25,6 +25,7 @@ import {
   type ServerProviderStatus,
   type TurnDispatchMode,
 } from "@synara/contracts";
+import { runtimeModeEscalatesPrivilege } from "@synara/shared/runtimeMode";
 import { Effect, Layer, Option } from "effect";
 
 import { GitCore } from "../../git/Services/GitCore.ts";
@@ -71,7 +72,6 @@ import { makeAgentGatewayAutomationTools } from "../automationTools.ts";
 import { makeThreadReadTools } from "../threadReadTools.ts";
 import { makeThreadDiagnosticTools } from "../threadDiagnosticTools.ts";
 import { pruneProjectedArchivedManagedWorktrees } from "../../managedWorktrees.ts";
-import { runtimeModeEscalatesPrivilege } from "../runtimeModePolicy.ts";
 
 const AGENT_GATEWAY_INSTRUCTIONS = SYNARA_GATEWAY_HARNESS_POLICY;
 
@@ -235,7 +235,7 @@ export const makeAgentGateway = Effect.gen(function* () {
                 },
                 runtimeMode: {
                   type: "string",
-                  enum: ["approval-required", "auto", "full-access"],
+                  enum: ["approval-required", "full-access"],
                 },
               },
               required: ["prompt", "target"],
@@ -292,10 +292,7 @@ export const makeAgentGateway = Effect.gen(function* () {
             description:
               "Local Git revision, #PR, or GitHub pull-request URL for a detached worktree. Defaults to the selected checkout's HEAD.",
           },
-          runtimeMode: {
-            type: "string",
-            enum: ["approval-required", "auto", "full-access"],
-          },
+          runtimeMode: { type: "string", enum: ["approval-required", "full-access"] },
         },
         required: ["requestId", "prompt"],
         additionalProperties: false,
