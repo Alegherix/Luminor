@@ -17,7 +17,11 @@ import {
 } from "@synara/contracts";
 import { buildPromptThreadTitleFallback } from "@synara/shared/chatThreads";
 import { parseGitHubRepositoryNameWithOwnerFromPullRequestUrl } from "@synara/shared/githubRepository";
-import { runtimeModeEscalatesPrivilege } from "@synara/shared/runtimeMode";
+import {
+  providerSupportsAutoRuntimeMode,
+  runtimeModeEscalatesPrivilege,
+  unsupportedAutoRuntimeModeMessage,
+} from "@synara/shared/runtimeMode";
 import { Cause, Effect, Option, Semaphore } from "effect";
 
 import type { ServerConfigShape } from "../config.ts";
@@ -531,6 +535,20 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
               new ToolInputError(
                 `Your thread runs in "${caller!.runtimeMode}" mode, so created threads cannot use higher-privileged "${runtimeMode}".`,
               ),
+            );
+          }
+          if (runtimeMode === "auto" && !providerSupportsAutoRuntimeMode(target.provider)) {
+            return yield* Effect.fail(
+              new ToolInputError(unsupportedAutoRuntimeModeMessage(target.provider)),
+            );
+          }
+          if (
+            runtimeMode === "auto" &&
+            target.provider === "claudeAgent" &&
+            target.supportsAutoMode === false
+          ) {
+            return yield* Effect.fail(
+              new ToolInputError(`Claude model "${target.model}" does not support Auto mode.`),
             );
           }
           const title = spec.title ?? buildPromptThreadTitleFallback(spec.prompt);

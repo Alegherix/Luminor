@@ -2107,15 +2107,36 @@ export default function ChatView({
     customModelsByProvider,
     availableModelOptionsByProvider: modelOptionsByProvider,
   });
-  const selectedRuntimeModel = useMemo(
-    () =>
-      resolveRuntimeModelDescriptor({
-        provider: selectedProvider,
-        model: selectedModel,
-        runtimeModels: runtimeModelsByProvider[selectedProvider],
-      }),
-    [runtimeModelsByProvider, selectedModel, selectedProvider],
-  );
+  const draftModelSelectionForSelectedProvider =
+    composerDraft.modelSelectionByProvider[selectedProvider] ?? null;
+  const persistedClaudeSupportsAutoMode =
+    selectedProvider === "claudeAgent"
+      ? draftModelSelectionForSelectedProvider?.provider === "claudeAgent" &&
+        draftModelSelectionForSelectedProvider.model === selectedModel
+        ? draftModelSelectionForSelectedProvider.supportsAutoMode
+        : activeThread?.modelSelection.provider === "claudeAgent" &&
+            activeThread.modelSelection.model === selectedModel
+          ? activeThread.modelSelection.supportsAutoMode
+          : undefined
+      : undefined;
+  const selectedRuntimeModel = useMemo(() => {
+    const discovered = resolveRuntimeModelDescriptor({
+      provider: selectedProvider,
+      model: selectedModel,
+      runtimeModels: runtimeModelsByProvider[selectedProvider],
+    });
+    if (discovered) {
+      return discovered;
+    }
+    return selectedProvider === "claudeAgent" &&
+      typeof persistedClaudeSupportsAutoMode === "boolean"
+      ? {
+          slug: selectedModel,
+          name: selectedModel,
+          supportsAutoMode: persistedClaudeSupportsAutoMode,
+        }
+      : undefined;
+  }, [persistedClaudeSupportsAutoMode, runtimeModelsByProvider, selectedModel, selectedProvider]);
   const composerProviderState = useMemo(
     () =>
       getComposerProviderState({
@@ -2129,8 +2150,6 @@ export default function ChatView({
   );
   const selectedPromptEffort = composerProviderState.promptEffort;
   const selectedModelOptionsForDispatch = composerProviderState.modelOptionsForDispatch;
-  const draftModelSelectionForSelectedProvider =
-    composerDraft.modelSelectionByProvider[selectedProvider] ?? null;
   const selectedModelSelection = useMemo<ModelSelection>(() => {
     if (selectedProvider === "pi" && draftModelSelectionForSelectedProvider?.provider === "pi") {
       return buildModelSelection(
@@ -2139,12 +2158,18 @@ export default function ChatView({
         selectedModelOptionsForDispatch ?? draftModelSelectionForSelectedProvider.options,
       );
     }
-    return buildModelSelection(selectedProvider, selectedModel, selectedModelOptionsForDispatch);
+    return buildModelSelection(
+      selectedProvider,
+      selectedModel,
+      selectedModelOptionsForDispatch,
+      selectedProvider === "claudeAgent" ? selectedRuntimeModel?.supportsAutoMode : undefined,
+    );
   }, [
     draftModelSelectionForSelectedProvider,
     selectedModel,
     selectedModelOptionsForDispatch,
     selectedProvider,
+    selectedRuntimeModel,
   ]);
   const providerOptionsForDispatch = useMemo(() => getProviderStartOptions(settings), [settings]);
   const selectedModelForPicker =
@@ -4572,7 +4597,10 @@ export default function ChatView({
         (input.modelSelection.model !== serverThread.modelSelection.model ||
           input.modelSelection.provider !== serverThread.modelSelection.provider ||
           JSON.stringify(input.modelSelection.options ?? null) !==
-            JSON.stringify(serverThread.modelSelection.options ?? null))
+            JSON.stringify(serverThread.modelSelection.options ?? null) ||
+          (input.modelSelection.provider === "claudeAgent" &&
+            serverThread.modelSelection.provider === "claudeAgent" &&
+            input.modelSelection.supportsAutoMode !== serverThread.modelSelection.supportsAutoMode))
       ) {
         await api.orchestration.dispatchCommand({
           type: "thread.meta.update",
@@ -5591,15 +5619,17 @@ export default function ChatView({
         availableOptions: modelOptionsByProvider[provider],
         fallback: () => resolveAppModelSelection(provider, customModelsByProvider, model),
       });
-      const nextModelSelection: ModelSelection = {
-        provider,
-        model: resolvedModel,
-      };
       const runtimeModel = resolveRuntimeModelDescriptor({
         provider,
         model: resolvedModel,
         runtimeModels: runtimeModelsByProvider[provider],
       });
+      const nextModelSelection = buildModelSelection(
+        provider,
+        resolvedModel,
+        undefined,
+        provider === "claudeAgent" ? runtimeModel?.supportsAutoMode : undefined,
+      );
       const nextRuntimeMode =
         runtimeMode === "auto" && !providerModelSupportsAutoRuntimeMode(provider, runtimeModel)
           ? "approval-required"
@@ -7441,6 +7471,9 @@ export default function ChatView({
           targetProjectDefaultModelSelectionForSend?.model ||
           DEFAULT_MODEL_BY_PROVIDER.codex,
         selectedModelSelectionForSend.options,
+        selectedModelSelectionForSend.provider === "claudeAgent"
+          ? selectedModelSelectionForSend.supportsAutoMode
+          : undefined,
       );
 
       if (isLocalDraftThread) {

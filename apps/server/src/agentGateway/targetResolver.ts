@@ -679,6 +679,12 @@ export function resolveAgentGatewayTarget(input: {
       if (error instanceof AgentGatewayTargetError) return yield* Effect.fail(error);
       throw error;
     }
-    return input.target;
+    return input.target.provider === "claudeAgent" &&
+      typeof descriptor!.supportsAutoMode === "boolean"
+      ? {
+          ...input.target,
+          supportsAutoMode: descriptor!.supportsAutoMode,
+        }
+      : input.target;
   });
 }

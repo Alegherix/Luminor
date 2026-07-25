@@ -90,6 +90,7 @@ export const ClaudeModelSelection = Schema.Struct({
   provider: Schema.Literal("claudeAgent"),
   model: TrimmedNonEmptyString,
   options: Schema.optional(ClaudeModelOptions),
+  supportsAutoMode: Schema.optional(Schema.Boolean),
 });
 export type ClaudeModelSelection = typeof ClaudeModelSelection.Type;
 

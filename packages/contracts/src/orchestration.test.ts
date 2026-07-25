@@ -574,10 +574,17 @@ it.effect("decodes thread.meta-updated payloads with explicit provider", () =>
       modelSelection: {
         provider: "claudeAgent",
         model: "claude-opus-4-6",
+        supportsAutoMode: false,
       },
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
     assert.strictEqual(parsed.modelSelection?.provider, "claudeAgent");
+    assert.strictEqual(
+      parsed.modelSelection?.provider === "claudeAgent"
+        ? parsed.modelSelection.supportsAutoMode
+        : undefined,
+      false,
+    );
   }),
 );
 

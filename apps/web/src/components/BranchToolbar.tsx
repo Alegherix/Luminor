@@ -208,9 +208,7 @@ export function RuntimeUsageControls({
               onValueChange={(value) => {
                 if (
                   !value ||
-                  (value !== "full-access" &&
-                    value !== "auto" &&
-                    value !== "approval-required") ||
+                  (value !== "full-access" && value !== "auto" && value !== "approval-required") ||
                   (value === "auto" && !autoModeAvailable) ||
                   value === runtimeMode
                 ) {
@@ -235,10 +233,7 @@ export function RuntimeUsageControls({
                   <span className="inline-flex items-start gap-2">
                     <CentralIcon
                       name="shield-code"
-                      className={cn(
-                        "mt-0.5 size-4 shrink-0",
-                        RUNTIME_AUTO_ICON_ACCENT_CLASS_NAME,
-                      )}
+                      className={cn("mt-0.5 size-4 shrink-0", RUNTIME_AUTO_ICON_ACCENT_CLASS_NAME)}
                     />
                     <span className="flex flex-col">
                       <span>Auto</span>

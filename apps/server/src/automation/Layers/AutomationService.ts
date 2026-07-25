@@ -759,15 +759,26 @@ export const AutomationServiceLive = Layer.effect(
     const validateAutoRuntimeMode = (input: {
       readonly modelSelection: AutomationDefinition["modelSelection"];
       readonly runtimeMode: AutomationDefinition["runtimeMode"];
-    }) =>
-      input.runtimeMode !== "auto" ||
-      providerSupportsAutoRuntimeMode(input.modelSelection.provider)
-        ? Effect.void
-        : Effect.fail(
+    }) => {
+      if (input.runtimeMode !== "auto") {
+        return Effect.void;
+      }
+      if (!providerSupportsAutoRuntimeMode(input.modelSelection.provider)) {
+        return Effect.fail(
+          new AutomationServiceError({
+            message: unsupportedAutoRuntimeModeMessage(input.modelSelection.provider),
+          }),
+        );
+      }
+      return input.modelSelection.provider === "claudeAgent" &&
+        input.modelSelection.supportsAutoMode === false
+        ? Effect.fail(
             new AutomationServiceError({
-              message: unsupportedAutoRuntimeModeMessage(input.modelSelection.provider),
+              message: `Claude model "${input.modelSelection.model}" does not support Auto mode.`,
             }),
-          );
+          )
+        : Effect.void;
+    };
 
     // Run-path backstop for the fast-interval policy. validateSchedulePolicy enforces this at
     // create/update; this guards the run path it never covers. Effect.try converts a throwing

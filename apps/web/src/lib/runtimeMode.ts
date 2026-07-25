@@ -9,10 +9,7 @@ import {
   providerSupportsAutoRuntimeMode,
 } from "@synara/shared/runtimeMode";
 
-export {
-  normalizeRuntimeModeForProvider,
-  providerSupportsAutoRuntimeMode,
-};
+export { normalizeRuntimeModeForProvider, providerSupportsAutoRuntimeMode };
 
 export function providerModelSupportsAutoRuntimeMode(
   provider: ProviderKind,

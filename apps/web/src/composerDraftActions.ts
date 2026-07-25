@@ -808,10 +808,20 @@ export const createComposerDraftStoreState =
           if (opts) {
             const model = current?.model ?? getDefaultModel(provider);
             if (!model) continue;
-            nextMap[provider] = makeModelSelection(provider, model, opts);
+            nextMap[provider] = makeModelSelection(
+              provider,
+              model,
+              opts,
+              current?.provider === "claudeAgent" ? current.supportsAutoMode : undefined,
+            );
           } else if (current?.options) {
             // Remove options but keep the selection
-            nextMap[provider] = buildModelSelection(provider, current.model);
+            nextMap[provider] = buildModelSelection(
+              provider,
+              current.model,
+              undefined,
+              current.provider === "claudeAgent" ? current.supportsAutoMode : undefined,
+            );
           }
         }
         if (Equal.equals(base.modelSelectionByProvider, nextMap)) {
@@ -864,11 +874,18 @@ export const createComposerDraftStoreState =
             normalizedProvider,
             nextModel,
             providerOpts,
+            currentForProvider?.provider === "claudeAgent"
+              ? currentForProvider.supportsAutoMode
+              : undefined,
           );
         } else if (currentForProvider?.options) {
           nextMap[normalizedProvider] = buildModelSelection(
             normalizedProvider,
             currentForProvider.model,
+            undefined,
+            currentForProvider.provider === "claudeAgent"
+              ? currentForProvider.supportsAutoMode
+              : undefined,
           );
         }
 
@@ -886,12 +903,19 @@ export const createComposerDraftStoreState =
           }
           if (providerOpts) {
             nextStickyMap[normalizedProvider] = stripNonStickyModelOptions(
-              makeModelSelection(normalizedProvider, stickyBase.model, providerOpts),
+              makeModelSelection(
+                normalizedProvider,
+                stickyBase.model,
+                providerOpts,
+                stickyBase.provider === "claudeAgent" ? stickyBase.supportsAutoMode : undefined,
+              ),
             );
           } else if (stickyBase.options) {
             nextStickyMap[normalizedProvider] = buildModelSelection(
               normalizedProvider,
               stickyBase.model,
+              undefined,
+              stickyBase.provider === "claudeAgent" ? stickyBase.supportsAutoMode : undefined,
             );
           }
           nextStickyActiveProvider = base.activeProvider ?? normalizedProvider;

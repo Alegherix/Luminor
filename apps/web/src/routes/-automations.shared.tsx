@@ -88,6 +88,7 @@ import {
 } from "~/lib/automationForm";
 import { SkillCubeIcon, WorktreeIcon } from "~/lib/icons";
 import { CentralIcon } from "~/lib/central-icons";
+import { resolveRuntimeModelDescriptor } from "~/components/chat/runtimeModelCapabilities";
 import { resolveProviderDiscoveryCwd } from "~/lib/providerDiscovery";
 import {
   normalizeRuntimeModeForProvider,
@@ -854,17 +855,29 @@ export function AutomationModelPicker({
     activeProjectCwd: projectCwd,
     serverCwd: serverConfigQuery.data?.cwd ?? null,
   });
-  const { modelOptionsByProvider, loadingModelProviders, selectedRuntimeModel } =
-    useProviderModelCatalog({
-      selectedProvider: value.provider,
-      discoveryEnabled: open,
-      cwd: providerModelDiscoveryCwd,
-      modelHintByProvider,
-    });
+  const {
+    modelOptionsByProvider,
+    loadingModelProviders,
+    runtimeModelsByProvider,
+    selectedRuntimeModel,
+  } = useProviderModelCatalog({
+    selectedProvider: value.provider,
+    discoveryEnabled: open,
+    cwd: providerModelDiscoveryCwd,
+    modelHintByProvider,
+  });
   const providerStatus = findProviderStatus(providerStatuses, value.provider);
+  const persistedRuntimeModel =
+    value.provider === "claudeAgent" && typeof value.supportsAutoMode === "boolean"
+      ? {
+          slug: value.model,
+          name: value.model,
+          supportsAutoMode: value.supportsAutoMode,
+        }
+      : undefined;
   const autoModeSupported = providerModelSupportsAutoRuntimeMode(
     value.provider,
-    selectedRuntimeModel,
+    selectedRuntimeModel ?? persistedRuntimeModel,
     providerStatus,
   );
   useEffect(() => {
@@ -884,7 +897,14 @@ export function AutomationModelPicker({
       providerOrder={settings.providerOrder}
       open={open}
       onOpenChange={setOpen}
-      onProviderModelChange={(provider, model) => onChange(buildModelSelection(provider, model))}
+      onProviderModelChange={(provider, model) => {
+        const runtimeModel = resolveRuntimeModelDescriptor({
+          provider,
+          model,
+          runtimeModels: runtimeModelsByProvider[provider],
+        });
+        onChange(buildModelSelection(provider, model, undefined, runtimeModel?.supportsAutoMode));
+      }}
     />
   );
 }
@@ -921,7 +941,9 @@ export function AutomationDialog({
   const projectThreads = threads.filter((thread) => thread.projectId === form.projectId);
   const selectedProject = projects.find((project) => project.id === form.projectId);
   const [selectedModelSupportsAuto, setSelectedModelSupportsAuto] = useState(() =>
-    providerSupportsAutoRuntimeMode(form.modelSelection.provider),
+    form.modelSelection.provider === "claudeAgent"
+      ? form.modelSelection.supportsAutoMode !== false
+      : providerSupportsAutoRuntimeMode(form.modelSelection.provider),
   );
   const handleAutoModeSupportChange = useCallback(
     (supported: boolean) => {

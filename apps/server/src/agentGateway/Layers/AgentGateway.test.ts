@@ -231,6 +231,7 @@ function makeHarnessLayer(
     readonly dispatchDelayMs?: number;
     readonly interruptedOperations?: ReadonlyArray<AgentGatewayOperationRecord>;
     readonly providerStatuses?: ReadonlyArray<ServerProviderStatus>;
+    readonly claudeSupportsAutoMode?: boolean;
     readonly existingBranches?: ReadonlyArray<string>;
     readonly existingWorktrees?: Readonly<Record<string, string>>;
     readonly verifiedOwnershipTokens?: ReadonlyArray<string>;
@@ -734,7 +735,15 @@ function makeHarnessLayer(
             ],
           },
         ],
-        claudeAgent: [{ slug: "claude-sonnet-5", name: "Claude Sonnet 5" }],
+        claudeAgent: [
+          {
+            slug: "claude-sonnet-5",
+            name: "Claude Sonnet 5",
+            ...(typeof options.claudeSupportsAutoMode === "boolean"
+              ? { supportsAutoMode: options.claudeSupportsAutoMode }
+              : {}),
+          },
+        ],
         cursor: [{ slug: "auto", name: "Auto" }],
         antigravity: [
           {
@@ -1397,6 +1406,24 @@ describe("AgentGateway", () => {
       assert.property(createThreadProperties, "baseRef");
       assert.notProperty(createThreadProperties, "baseBranch");
       assert.notProperty(createThreadProperties, "branchName");
+      assert.deepEqual(
+        (createThreadProperties?.runtimeMode as { enum?: string[] } | undefined)?.enum,
+        ["approval-required", "auto", "full-access"],
+      );
+      const createThreadsTool = tools.find((tool) => tool.name === "synara_create_threads");
+      const createThreadsItems = (
+        createThreadsTool?.inputSchema.properties?.threads as
+          | {
+              items?: {
+                properties?: Record<string, unknown>;
+              };
+            }
+          | undefined
+      )?.items;
+      assert.deepEqual(
+        (createThreadsItems?.properties?.runtimeMode as { enum?: string[] } | undefined)?.enum,
+        ["approval-required", "auto", "full-access"],
+      );
 
       const createAutomation = tools.find((tool) => tool.name === "synara_create_automation");
       assert.include(createAutomation?.description ?? "", "self-contained brief");
@@ -4156,6 +4183,92 @@ describe("AgentGateway", () => {
       });
       assert.isTrue(isToolError(response.result));
       assert.include(toolErrorText(response.result), "approval-required");
+      assert.equal(harness.dispatched.length, 0);
+    }).pipe(Effect.provide(gatewayLayer));
+  });
+
+  it.effect("allows an Auto caller to create an Auto child for a supported provider", () => {
+    const { gatewayLayer, makeHarness } = makeHarnessLayer([
+      makeThreadShell("thread-parent", { runtimeMode: "auto" }),
+    ]);
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness;
+      const response = yield* harness.callTool({
+        token: "token-parent",
+        name: "synara_create_thread",
+        args: {
+          requestId: "create-auto-child",
+          prompt: "work with reviewed approvals",
+          provider: "codex",
+          runtimeMode: "auto",
+        },
+      });
+      assert.isFalse(isToolError(response.result), toolErrorText(response.result));
+      const create = harness.dispatched[0]!;
+      assert.equal(create.type, "thread.create");
+      if (create.type === "thread.create") {
+        assert.equal(create.runtimeMode, "auto");
+        assert.equal(create.modelSelection.provider, "codex");
+      }
+    }).pipe(Effect.provide(gatewayLayer));
+  });
+
+  it.effect("rejects Auto for unsupported providers before creating a worktree", () => {
+    const { gatewayLayer, makeHarness } = makeHarnessLayer([
+      makeThreadShell("thread-parent", { runtimeMode: "auto" }),
+    ]);
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness;
+      const response = yield* harness.callTool({
+        token: "token-parent",
+        name: "synara_create_threads",
+        args: {
+          requestId: "reject-unsupported-auto-provider",
+          threads: [
+            {
+              prompt: "must not mutate",
+              target: { provider: "droid", model: "claude-opus-4-8" },
+              environment: "worktree",
+              runtimeMode: "auto",
+            },
+          ],
+        },
+      });
+
+      assert.isTrue(isToolError(response.result));
+      assert.include(toolErrorText(response.result), "does not support Auto runtime mode");
+      assert.equal(harness.worktreeCreates.length, 0);
+      assert.equal(harness.dispatched.length, 0);
+    }).pipe(Effect.provide(gatewayLayer));
+  });
+
+  it.effect("rejects unsupported Claude Auto models before creating a worktree", () => {
+    const { gatewayLayer, makeHarness } = makeHarnessLayer(
+      [makeThreadShell("thread-parent", { runtimeMode: "auto" })],
+      [],
+      { claudeSupportsAutoMode: false },
+    );
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness;
+      const response = yield* harness.callTool({
+        token: "token-parent",
+        name: "synara_create_threads",
+        args: {
+          requestId: "reject-unsupported-claude-auto-model",
+          threads: [
+            {
+              prompt: "must not mutate",
+              target: { provider: "claudeAgent", model: "claude-sonnet-5" },
+              environment: "worktree",
+              runtimeMode: "auto",
+            },
+          ],
+        },
+      });
+
+      assert.isTrue(isToolError(response.result));
+      assert.include(toolErrorText(response.result), "does not support Auto mode");
+      assert.equal(harness.worktreeCreates.length, 0);
       assert.equal(harness.dispatched.length, 0);
     }).pipe(Effect.provide(gatewayLayer));
   });

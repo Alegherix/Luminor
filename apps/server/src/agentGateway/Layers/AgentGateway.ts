@@ -235,7 +235,7 @@ export const makeAgentGateway = Effect.gen(function* () {
                 },
                 runtimeMode: {
                   type: "string",
-                  enum: ["approval-required", "full-access"],
+                  enum: ["approval-required", "auto", "full-access"],
                 },
               },
               required: ["prompt", "target"],
@@ -292,7 +292,10 @@ export const makeAgentGateway = Effect.gen(function* () {
             description:
               "Local Git revision, #PR, or GitHub pull-request URL for a detached worktree. Defaults to the selected checkout's HEAD.",
           },
-          runtimeMode: { type: "string", enum: ["approval-required", "full-access"] },
+          runtimeMode: {
+            type: "string",
+            enum: ["approval-required", "auto", "full-access"],
+          },
         },
         required: ["requestId", "prompt"],
         additionalProperties: false,

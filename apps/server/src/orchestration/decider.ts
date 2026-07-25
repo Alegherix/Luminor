@@ -71,17 +71,28 @@ const WORKSPACE_OWNING_PROJECT_KIND_SET = new Set<ProjectKind>(["project", "stud
 
 function validateAutoRuntimeMode(
   command: OrchestrationCommand,
-  provider: OrchestrationThread["modelSelection"]["provider"],
+  modelSelection: OrchestrationThread["modelSelection"],
   runtimeMode: OrchestrationThread["runtimeMode"],
 ) {
-  return runtimeMode !== "auto" || providerSupportsAutoRuntimeMode(provider)
-    ? Effect.void
-    : Effect.fail(
+  if (runtimeMode !== "auto") {
+    return Effect.void;
+  }
+  if (!providerSupportsAutoRuntimeMode(modelSelection.provider)) {
+    return Effect.fail(
+      new OrchestrationCommandInvariantError({
+        commandType: command.type,
+        detail: unsupportedAutoRuntimeModeMessage(modelSelection.provider),
+      }),
+    );
+  }
+  return modelSelection.provider === "claudeAgent" && modelSelection.supportsAutoMode === false
+    ? Effect.fail(
         new OrchestrationCommandInvariantError({
           commandType: command.type,
-          detail: unsupportedAutoRuntimeModeMessage(provider),
+          detail: `Claude model "${modelSelection.model}" does not support Auto mode.`,
         }),
-      );
+      )
+    : Effect.void;
 }
 
 const defaultMetadata: Omit<OrchestrationEvent, "sequence" | "type" | "payload"> = {
@@ -883,11 +894,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
-      yield* validateAutoRuntimeMode(
-        command,
-        command.modelSelection.provider,
-        command.runtimeMode,
-      );
+      yield* validateAutoRuntimeMode(command, command.modelSelection, command.runtimeMode);
       return {
         ...withEventBase({
           aggregateKind: "thread",
@@ -945,11 +952,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
-      yield* validateAutoRuntimeMode(
-        command,
-        command.modelSelection.provider,
-        command.runtimeMode,
-      );
+      yield* validateAutoRuntimeMode(command, command.modelSelection, command.runtimeMode);
 
       const sourceThread = yield* requireThread({
         readModel,
@@ -1046,11 +1049,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
-      yield* validateAutoRuntimeMode(
-        command,
-        command.modelSelection.provider,
-        command.runtimeMode,
-      );
+      yield* validateAutoRuntimeMode(command, command.modelSelection, command.runtimeMode);
 
       const sourceThread = yield* requireThread({
         readModel,
@@ -1202,11 +1201,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
       const project = readModel.projects.find((candidate) => candidate.id === thread.projectId);
       if (command.modelSelection !== undefined) {
-        yield* validateAutoRuntimeMode(
-          command,
-          command.modelSelection.provider,
-          thread.runtimeMode,
-        );
+        yield* validateAutoRuntimeMode(command, command.modelSelection, thread.runtimeMode);
       }
       const occurredAt = nowIso();
       return {
@@ -1501,11 +1496,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
-      yield* validateAutoRuntimeMode(
-        command,
-        thread.modelSelection.provider,
-        command.runtimeMode,
-      );
+      yield* validateAutoRuntimeMode(command, thread.modelSelection, command.runtimeMode);
       const occurredAt = nowIso();
       return {
         ...withEventBase({
@@ -1561,7 +1552,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       const sourceProposedPlan = command.sourceProposedPlan;
       yield* validateAutoRuntimeMode(
         command,
-        command.modelSelection?.provider ?? targetThread.modelSelection.provider,
+        command.modelSelection ?? targetThread.modelSelection,
         command.runtimeMode,
       );
       const sourceThread = sourceProposedPlan
@@ -1694,7 +1685,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       }
       yield* validateAutoRuntimeMode(
         command,
-        command.modelSelection?.provider ?? thread.modelSelection.provider,
+        command.modelSelection ?? thread.modelSelection,
         command.runtimeMode,
       );
       return {
@@ -1969,7 +1960,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       }
       yield* validateAutoRuntimeMode(
         command,
-        command.modelSelection?.provider ?? thread.modelSelection.provider,
+        command.modelSelection ?? thread.modelSelection,
         command.runtimeMode,
       );
       const editTarget = resolveTailUserMessageEditTarget({
