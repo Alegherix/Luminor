@@ -1588,6 +1588,53 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
     const sessionLifecycleLocks = new Map<ThreadId, Semaphore.Semaphore>();
     let cachedModels: ProviderListModelsResult | null = null;
     let cachedAgents: ProviderListAgentsResult | null = null;
+    const verifyClaudeAutoModelSupport = (input: {
+      readonly queryRuntime: ClaudeQueryRuntime;
+      readonly selectedModel: string | undefined;
+      readonly apiModelId: string | undefined;
+      readonly operation: "startSession" | "sendTurn";
+    }) =>
+      Effect.gen(function* () {
+        const requestedModel = input.selectedModel ?? input.apiModelId ?? "selected model";
+        const discoveredModels = yield* Effect.tryPromise({
+          try: () => input.queryRuntime.supportedModels(),
+          catch: (cause) =>
+            new ProviderAdapterValidationError({
+              provider: PROVIDER,
+              operation: input.operation,
+              issue: toMessage(
+                cause,
+                `Could not verify that Claude model "${requestedModel}" supports Auto mode.`,
+              ),
+            }),
+        }).pipe(
+          Effect.timeout(Duration.seconds(5)),
+          Effect.mapError((cause) =>
+            cause instanceof ProviderAdapterValidationError
+              ? cause
+              : new ProviderAdapterValidationError({
+                  provider: PROVIDER,
+                  operation: input.operation,
+                  issue: `Could not verify that Claude model "${requestedModel}" supports Auto mode before the model discovery timeout.`,
+                }),
+          ),
+        );
+        cachedModels = {
+          models: discoveredModels.map(mapClaudeModelInfo),
+          source: "sdk",
+          cached: false,
+        };
+        const selectedModel = discoveredModels.find(
+          (model) => model.value === input.selectedModel || model.value === input.apiModelId,
+        );
+        if (selectedModel?.supportsAutoMode === false) {
+          return yield* new ProviderAdapterValidationError({
+            provider: PROVIDER,
+            operation: input.operation,
+            issue: `Claude model "${selectedModel.displayName}" does not support Auto mode.`,
+          });
+        }
+      });
     const runtimeEventQueue = yield* Queue.bounded<ProviderRuntimeEvent>(
       PROVIDER_ADAPTER_RUNTIME_EVENT_BUFFER_CAPACITY,
     );
@@ -4727,44 +4774,12 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
 
         return yield* Effect.gen(function* () {
           if (input.runtimeMode === "auto") {
-            const discoveredModels = yield* Effect.tryPromise({
-              try: () => queryRuntime.supportedModels(),
-              catch: (cause) =>
-                new ProviderAdapterValidationError({
-                  provider: PROVIDER,
-                  operation: "startSession",
-                  issue: toMessage(
-                    cause,
-                    `Could not verify that Claude model "${effectiveClaudeModel}" supports Auto mode.`,
-                  ),
-                }),
-            }).pipe(
-              Effect.timeout(Duration.seconds(5)),
-              Effect.mapError((cause) =>
-                cause instanceof ProviderAdapterValidationError
-                  ? cause
-                  : new ProviderAdapterValidationError({
-                      provider: PROVIDER,
-                      operation: "startSession",
-                      issue: `Could not verify that Claude model "${effectiveClaudeModel}" supports Auto mode before the model discovery timeout.`,
-                    }),
-              ),
-            );
-            cachedModels = {
-              models: discoveredModels.map(mapClaudeModelInfo),
-              source: "sdk",
-              cached: false,
-            };
-            const selectedModel = discoveredModels.find(
-              (model) => model.value === effectiveClaudeModel || model.value === apiModelId,
-            );
-            if (selectedModel?.supportsAutoMode === false) {
-              return yield* new ProviderAdapterValidationError({
-                provider: PROVIDER,
-                operation: "startSession",
-                issue: `Claude model "${selectedModel.displayName}" does not support Auto mode.`,
-              });
-            }
+            yield* verifyClaudeAutoModelSupport({
+              queryRuntime,
+              selectedModel: effectiveClaudeModel,
+              apiModelId,
+              operation: "startSession",
+            });
           } else if (!cachedModels) {
             // Populate model cache in the background from the first non-Auto session.
             queryRuntime
@@ -5013,6 +5028,14 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         if (modelSelection?.model) {
           const apiModelId = resolveApiModelId(modelSelection);
           if (apiModelId !== context.currentApiModelId) {
+            if (context.session.runtimeMode === "auto") {
+              yield* verifyClaudeAutoModelSupport({
+                queryRuntime: context.query,
+                selectedModel: modelSelection.model,
+                apiModelId,
+                operation: "sendTurn",
+              });
+            }
             yield* Effect.tryPromise({
               try: () => context.query.setModel(apiModelId),
               catch: (cause) => toRequestError(input.threadId, "turn/setModel", cause),

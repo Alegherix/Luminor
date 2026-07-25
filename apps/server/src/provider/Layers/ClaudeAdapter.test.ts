@@ -6773,6 +6773,79 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
     );
   });
 
+  it.effect("rejects unsupported live model switches before changing an Auto session", () => {
+    const query = new FakeClaudeQuery();
+    (
+      query as unknown as {
+        supportedModels: () => Promise<
+          Array<{ value: string; displayName: string; supportsAutoMode: boolean }>
+        >;
+      }
+    ).supportedModels = async () => [
+      {
+        value: "claude-opus-4-6",
+        displayName: "Claude Opus 4.6",
+        supportsAutoMode: true,
+      },
+      {
+        value: "claude-haiku-4-5",
+        displayName: "Claude Haiku 4.5",
+        supportsAutoMode: false,
+      },
+      {
+        value: "claude-fable-5",
+        displayName: "Claude Fable 5",
+        supportsAutoMode: true,
+      },
+    ];
+    const layer = makeClaudeAdapterLive({ createQuery: () => query }).pipe(
+      Layer.provideMerge(ServerConfig.layerTest("/tmp/claude-adapter-test", "/tmp")),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        runtimeMode: "auto",
+        modelSelection: {
+          provider: "claudeAgent",
+          model: "claude-opus-4-6",
+        },
+      });
+
+      const unsupportedSwitch = yield* Effect.exit(
+        adapter.sendTurn({
+          threadId: session.threadId,
+          input: "switch to Haiku",
+          modelSelection: {
+            provider: "claudeAgent",
+            model: "claude-haiku-4-5",
+          },
+          attachments: [],
+        }),
+      );
+
+      assert.ok(Exit.isFailure(unsupportedSwitch));
+      assert.deepEqual(query.setModelCalls, []);
+
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "switch to Fable",
+        modelSelection: {
+          provider: "claudeAgent",
+          model: "claude-fable-5",
+        },
+        attachments: [],
+      });
+      assert.deepEqual(query.setModelCalls, ["claude-fable-5"]);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(layer),
+    );
+  });
+
   it.effect("updates the auto-compact budget live without changing the Claude model id", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {

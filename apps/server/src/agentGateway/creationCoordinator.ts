@@ -17,6 +17,7 @@ import {
 } from "@synara/contracts";
 import { buildPromptThreadTitleFallback } from "@synara/shared/chatThreads";
 import { parseGitHubRepositoryNameWithOwnerFromPullRequestUrl } from "@synara/shared/githubRepository";
+import { runtimeModeEscalatesPrivilege } from "@synara/shared/runtimeMode";
 import { Cause, Effect, Option, Semaphore } from "effect";
 
 import type { ServerConfigShape } from "../config.ts";
@@ -516,23 +517,22 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
               ),
             );
           }
-          if (
-            context.kind === "provider-session" &&
-            spec.runtimeMode === "full-access" &&
-            caller!.runtimeMode !== "full-access"
-          ) {
-            return yield* Effect.fail(
-              new ToolInputError(
-                `Your thread runs in "${caller!.runtimeMode}" mode, so created threads cannot use "full-access".`,
-              ),
-            );
-          }
           const runtimeMode =
             externalPolicy?.runtimeMode ??
             spec.runtimeMode ??
             (context.kind === "external-client" || caller!.runtimeMode === "auto"
               ? "approval-required"
               : caller!.runtimeMode);
+          if (
+            context.kind === "provider-session" &&
+            runtimeModeEscalatesPrivilege(caller!.runtimeMode, runtimeMode)
+          ) {
+            return yield* Effect.fail(
+              new ToolInputError(
+                `Your thread runs in "${caller!.runtimeMode}" mode, so created threads cannot use higher-privileged "${runtimeMode}".`,
+              ),
+            );
+          }
           const title = spec.title ?? buildPromptThreadTitleFallback(spec.prompt);
           let worktreeRef: string | null = null;
           let copyChangesFrom: string | null = null;
