@@ -102,6 +102,10 @@ interface PendingApprovalRequest {
   requestedPermissions?: Record<string, unknown>;
 }
 
+function isPermissionApprovalRequest(request: PendingApprovalRequest): boolean {
+  return request.method === "item/permissions/requestApproval";
+}
+
 interface PendingUserInputRequest {
   requestId: ApprovalRequestId;
   jsonRpcId: string | number;
@@ -1707,9 +1711,11 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   private async resolveRemainingSessionApprovalRequests(
     context: CodexSessionContext,
   ): Promise<void> {
-    const remainingRequests = Array.from(context.pendingApprovals.values());
-    context.pendingApprovals.clear();
+    const remainingRequests = Array.from(context.pendingApprovals.values()).filter(
+      (request) => !isPermissionApprovalRequest(request),
+    );
     for (const pendingRequest of remainingRequests) {
+      context.pendingApprovals.delete(pendingRequest.requestId);
       await this.resolveApprovalRequest(context, pendingRequest, "acceptForSession");
     }
   }
@@ -1726,7 +1732,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     }
 
     context.pendingApprovals.delete(requestId);
-    const isPermissionRequest = pendingRequest.method === "item/permissions/requestApproval";
+    const isPermissionRequest = isPermissionApprovalRequest(pendingRequest);
     if (decision === "acceptForSession" && !isPermissionRequest) {
       context.sessionApprovalOverride = CODEX_ALWAYS_ALLOW_SESSION_TURN_OVERRIDES;
     }
@@ -2693,7 +2699,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         ...(providerParentThreadId ? { providerParentThreadId } : {}),
         ...(requestedPermissions ? { requestedPermissions } : {}),
       };
-      if (context.sessionApprovalOverride) {
+      if (context.sessionApprovalOverride && !isPermissionApprovalRequest(pendingRequest)) {
         await this.resolveApprovalRequest(context, pendingRequest, "acceptForSession");
         return;
       }

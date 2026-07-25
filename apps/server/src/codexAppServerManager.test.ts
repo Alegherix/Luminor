@@ -2427,6 +2427,83 @@ describe("respondToRequest", () => {
       emitEvent.mock.calls.some(([event]) => (event as { kind?: string }).kind === "request"),
     ).toBe(false);
   });
+
+  it("keeps later permission-profile requests interactive during an always-allowed session", async () => {
+    const { manager, context, writeMessage, emitEvent } = createPendingApprovalHarness();
+    const permissions = {
+      network: { enabled: true },
+      fileSystem: { read: ["/tmp/example"] },
+    };
+
+    await manager.respondToRequest(
+      asThreadId("thread_1"),
+      ApprovalRequestId.makeUnsafe("req-approval-1"),
+      "acceptForSession",
+    );
+    writeMessage.mockClear();
+    emitEvent.mockClear();
+
+    await handleServerRequestForTest(manager, context, {
+      id: 100,
+      method: "item/permissions/requestApproval",
+      params: {
+        turnId: "turn_2",
+        itemId: "item_permissions",
+        permissions,
+      },
+    });
+
+    expect(context.pendingApprovals.size).toBe(1);
+    expect(Array.from(context.pendingApprovals.values())[0]).toEqual(
+      expect.objectContaining({
+        method: "item/permissions/requestApproval",
+        requestedPermissions: permissions,
+      }),
+    );
+    expect(writeMessage).not.toHaveBeenCalled();
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "request",
+        method: "item/permissions/requestApproval",
+        requestKind: "permissions",
+      }),
+    );
+  });
+
+  it("does not sweep a pending permission-profile request into always allow", async () => {
+    const { manager, context, writeMessage } = createPendingApprovalHarness();
+    const permissions = {
+      network: { enabled: true },
+    };
+
+    await handleServerRequestForTest(manager, context, {
+      id: 101,
+      method: "item/permissions/requestApproval",
+      params: {
+        turnId: "turn_1",
+        itemId: "item_permissions",
+        permissions,
+      },
+    });
+    const permissionRequest = Array.from(context.pendingApprovals.values()).find(
+      (request) => request.method === "item/permissions/requestApproval",
+    );
+
+    await manager.respondToRequest(
+      asThreadId("thread_1"),
+      ApprovalRequestId.makeUnsafe("req-approval-1"),
+      "acceptForSession",
+    );
+
+    expect(permissionRequest).toBeDefined();
+    expect(context.pendingApprovals.get(permissionRequest!.requestId)).toBe(permissionRequest);
+    expect(writeMessage).not.toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        id: 101,
+      }),
+    );
+  });
 });
 
 describe("respondToUserInput", () => {
