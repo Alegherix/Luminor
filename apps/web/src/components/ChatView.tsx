@@ -17,6 +17,7 @@ import {
   type ProviderMentionReference,
   type ProviderNativeCommandDescriptor,
   type ProviderPluginDescriptor,
+  type ProviderRequestKind,
   type ProviderSkillDescriptor,
   type ProviderSkillReference,
   type ProviderStartOptions,
@@ -3644,12 +3645,7 @@ export default function ChatView({
       },
       worktreePath: activeThreadWorktreePath,
     });
-  }, [
-    activeProjectCwd,
-    activeThreadWorktreePath,
-    isStudioContainer,
-    threadWorkspaceCwd,
-  ]);
+  }, [activeProjectCwd, activeThreadWorktreePath, isStudioContainer, threadWorkspaceCwd]);
   const isGitRepo = resolveGitRepoUiState({
     isStudioContainer,
     queriedIsRepo: branchesQuery.data?.isRepo,
@@ -4562,6 +4558,16 @@ export default function ChatView({
         return;
       }
 
+      if (input.runtimeMode !== serverThread.runtimeMode) {
+        await api.orchestration.dispatchCommand({
+          type: "thread.runtime-mode.set",
+          commandId: newCommandId(),
+          threadId: input.threadId,
+          runtimeMode: input.runtimeMode,
+          createdAt: input.createdAt,
+        });
+      }
+
       if (
         input.modelSelection !== undefined &&
         (input.modelSelection.model !== serverThread.modelSelection.model ||
@@ -4574,16 +4580,6 @@ export default function ChatView({
           commandId: newCommandId(),
           threadId: input.threadId,
           modelSelection: input.modelSelection,
-        });
-      }
-
-      if (input.runtimeMode !== serverThread.runtimeMode) {
-        await api.orchestration.dispatchCommand({
-          type: "thread.runtime-mode.set",
-          commandId: newCommandId(),
-          threadId: input.threadId,
-          runtimeMode: input.runtimeMode,
-          createdAt: input.createdAt,
         });
       }
 
@@ -7723,6 +7719,7 @@ export default function ChatView({
       requestId: ApprovalRequestId,
       decision: ProviderApprovalDecision,
       lifecycleGeneration?: string,
+      requestKind?: ProviderRequestKind,
     ) => {
       const api = readNativeApi();
       if (!api || !activeThreadId) return;
@@ -7734,7 +7731,11 @@ export default function ChatView({
       // Durably persist "always allow" client-side so the next turn (after an
       // idle-stop or runtime restart) keeps full-access instead of asking again.
       // The server's session override only covers the current live turn.
-      const durableRuntimeMode = resolveRuntimeModeAfterApprovalDecision(runtimeMode, decision);
+      const durableRuntimeMode = resolveRuntimeModeAfterApprovalDecision(
+        runtimeMode,
+        decision,
+        requestKind,
+      );
       if (durableRuntimeMode) {
         setComposerDraftRuntimeMode(activeThreadId, durableRuntimeMode);
       }

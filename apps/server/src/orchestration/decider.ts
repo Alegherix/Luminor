@@ -1967,6 +1967,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           detail: checkpointRevertInProgressDetail(command.threadId),
         });
       }
+      yield* validateProviderRuntimeMode(
+        command,
+        command.modelSelection?.provider ?? thread.modelSelection.provider,
+        command.runtimeMode,
+      );
       const editTarget = resolveTailUserMessageEditTarget({
         messages: thread.messages,
         messageId: command.messageId,

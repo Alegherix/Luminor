@@ -1732,11 +1732,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     }
     await this.resolveApprovalRequest(context, pendingRequest, decision);
     if (decision === "cancel" && isPermissionRequest) {
-      await this.interruptTurn(
-        threadId,
-        pendingRequest.turnId,
-        pendingRequest.providerThreadId,
-      );
+      await this.interruptTurn(threadId, pendingRequest.turnId, pendingRequest.providerThreadId);
     }
     if (decision === "acceptForSession" && !isPermissionRequest) {
       await this.resolveRemainingSessionApprovalRequests(context);
@@ -2680,6 +2676,10 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     let requestId: ApprovalRequestId | undefined;
     if (requestKind) {
       requestId = ApprovalRequestId.makeUnsafe(randomUUID());
+      const requestedPermissions =
+        request.method === "item/permissions/requestApproval"
+          ? this.readObject(request.params, "permissions")
+          : undefined;
       const pendingRequest: PendingApprovalRequest = {
         requestId,
         jsonRpcId: request.id,
@@ -2691,9 +2691,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         ...(rawRoute.itemId ? { itemId: rawRoute.itemId } : {}),
         ...(providerThreadId ? { providerThreadId } : {}),
         ...(providerParentThreadId ? { providerParentThreadId } : {}),
-        ...(request.method === "item/permissions/requestApproval"
-          ? { requestedPermissions: this.readObject(request.params, "permissions") }
-          : {}),
+        ...(requestedPermissions ? { requestedPermissions } : {}),
       };
       if (context.sessionApprovalOverride) {
         await this.resolveApprovalRequest(context, pendingRequest, "acceptForSession");

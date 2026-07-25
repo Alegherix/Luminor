@@ -35,6 +35,7 @@ async function mountApprovalPanel(input?: { approval?: PendingApproval; isRespon
       _requestId: ApprovalRequestId,
       _decision: ProviderApprovalDecision,
       _lifecycleGeneration?: string,
+      _requestKind?: ProviderRequestKind,
     ) => undefined,
   );
   const screen = await render(
@@ -71,6 +72,7 @@ describe("ComposerPendingApprovalPanel", () => {
         APPROVAL_REQUEST_ID,
         decision,
         LIFECYCLE_GENERATION,
+        "command",
       );
     } finally {
       await mounted.cleanup();

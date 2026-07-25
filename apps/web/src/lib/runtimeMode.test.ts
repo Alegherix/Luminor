@@ -49,4 +49,17 @@ describe("runtime mode provider support", () => {
       ),
     ).toBe(false);
   });
+
+  it("hides Auto when the installed Codex CLI lacks native review support", () => {
+    expect(
+      providerModelSupportsAutoRuntimeMode("codex", undefined, {
+        provider: "codex",
+        status: "ready",
+        available: true,
+        authStatus: "authenticated",
+        supportsAutoRuntimeMode: false,
+        checkedAt: new Date(0).toISOString(),
+      }),
+    ).toBe(false);
+  });
 });

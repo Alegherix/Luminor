@@ -2837,9 +2837,7 @@ function startBackend(): void {
   const backendOutputCapture = captureBackendProcessOutput({
     stdout: child.stdout,
     stderr: child.stderr,
-    ...(backendLogDestination
-      ? { writeLog: (chunk) => backendLogDestination.write(chunk) }
-      : {}),
+    ...(backendLogDestination ? { writeLog: (chunk) => backendLogDestination.write(chunk) } : {}),
     writeStdout: (chunk) => {
       process.stdout.write(chunk);
     },

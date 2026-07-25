@@ -44,8 +44,10 @@ import {
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import {
+  compareCodexCliVersions,
   formatCodexCliUpgradeMessage,
   isCodexCliVersionSupported,
+  MINIMUM_CODEX_AUTO_REVIEW_CLI_VERSION,
   parseCodexCliVersion,
 } from "../codexCliVersion";
 import { ServerConfig } from "../../config";
@@ -936,6 +938,9 @@ export const makeCheckCodexProviderStatus = (
         message: formatCodexCliUpgradeMessage(parsedVersion),
       };
     }
+    const supportsAutoRuntimeMode =
+      parsedVersion !== null &&
+      compareCodexCliVersions(parsedVersion, MINIMUM_CODEX_AUTO_REVIEW_CLI_VERSION) >= 0;
 
     // Probe 2: `codex login status` — is the user authenticated?
     //
@@ -950,6 +955,7 @@ export const makeCheckCodexProviderStatus = (
         available: true,
         authStatus: "unknown" as const,
         version: parsedVersion,
+        supportsAutoRuntimeMode,
         checkedAt,
         message: "Using a custom Codex model provider; OpenAI login check skipped.",
       } satisfies ServerProviderStatus;
@@ -968,6 +974,7 @@ export const makeCheckCodexProviderStatus = (
         available: true,
         authStatus: "unknown" as const,
         version: parsedVersion,
+        supportsAutoRuntimeMode,
         checkedAt,
         message:
           error instanceof Error
@@ -983,6 +990,7 @@ export const makeCheckCodexProviderStatus = (
         available: true,
         authStatus: "unknown" as const,
         version: parsedVersion,
+        supportsAutoRuntimeMode,
         checkedAt,
         message: "Could not verify Codex authentication status. Timed out while running command.",
       };
@@ -1009,6 +1017,7 @@ export const makeCheckCodexProviderStatus = (
       available: true,
       authStatus: parsed.authStatus,
       version: parsedVersion,
+      supportsAutoRuntimeMode,
       ...(codexAuthType ? { authType: codexAuthType } : {}),
       ...(codexLabel ? { authLabel: codexLabel } : {}),
       ...(parsed.voiceTranscriptionAvailable !== undefined

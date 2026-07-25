@@ -462,7 +462,7 @@ export function projectProviderRuntimeActivities(
                     ? "File-change approval requested"
                     : requestKind === "permissions"
                       ? "Permission approval requested"
-                    : "Approval requested",
+                      : "Approval requested",
           payload: toActivityPayload({
             requestId:
               event.requestId === undefined

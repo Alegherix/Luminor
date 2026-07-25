@@ -243,9 +243,7 @@ function createPendingUserInputHarness() {
   return { manager, context, requireSession, writeMessage, emitEvent };
 }
 
-function createPendingApprovalHarness(
-  runtimeMode: RuntimeMode = "approval-required",
-) {
+function createPendingApprovalHarness(runtimeMode: RuntimeMode = "approval-required") {
   const manager = new CodexAppServerManager();
   const context = {
     lifecycleGeneration: "generation-request-a",

@@ -1863,6 +1863,12 @@ describe("resolveRuntimeModeAfterApprovalDecision", () => {
     expect(resolveRuntimeModeAfterApprovalDecision("approval-required", "accept")).toBeNull();
     expect(resolveRuntimeModeAfterApprovalDecision("approval-required", "decline")).toBeNull();
   });
+
+  it("does not widen a permission-profile grant to full access", () => {
+    expect(
+      resolveRuntimeModeAfterApprovalDecision("auto", "acceptForSession", "permissions"),
+    ).toBeNull();
+  });
 });
 
 describe("resolveQueuedSteerGateTransition", () => {

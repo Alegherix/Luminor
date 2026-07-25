@@ -700,9 +700,7 @@ function asRuntimeRequestId(value: ApprovalRequestId): RuntimeRequestId {
   return RuntimeRequestId.makeUnsafe(value);
 }
 
-function permissionModeForRuntimeMode(
-  runtimeMode: ProviderSession["runtimeMode"],
-): PermissionMode {
+function permissionModeForRuntimeMode(runtimeMode: ProviderSession["runtimeMode"]): PermissionMode {
   switch (runtimeMode) {
     case "approval-required":
       return "default";
@@ -1665,7 +1663,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
                 failedCommandDiscoveryProcessOwners.delete(owner);
               }),
             ),
-        ),
+          ),
         { discard: true },
       );
     const teardownCommandDiscoveryProcess = (owner: ClaudeProcessOwner) =>
@@ -4446,6 +4444,11 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
                 } satisfies PermissionResult;
               }
 
+              // In native Auto mode the SDK calls canUseTool only for the
+              // classifier's interactive "ask" outcome. Auto-allowed calls
+              // bypass this hook, while auto-denied calls arrive as
+              // permission_denied stream messages. Keep this prompt so risky
+              // calls still reach the user instead of becoming unrestricted.
               const requestId = ApprovalRequestId.makeUnsafe(yield* Random.nextUUIDv4);
               const requestType = classifyRequestType(toolName);
               const detail = summarizeToolRequest(toolName, toolInput);
@@ -4720,27 +4723,41 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           if (input.runtimeMode === "auto") {
             const discoveredModels = yield* Effect.tryPromise({
               try: () => queryRuntime.supportedModels(),
-              catch: (cause) => cause,
-            }).pipe(
-              Effect.timeout(Duration.seconds(5)),
-              Effect.orElseSucceed(() => null),
-            );
-            if (discoveredModels) {
-              cachedModels = {
-                models: discoveredModels.map(mapClaudeModelInfo),
-                source: "sdk",
-                cached: false,
-              };
-              const selectedModel = discoveredModels.find(
-                (model) => model.value === effectiveClaudeModel || model.value === apiModelId,
-              );
-              if (selectedModel?.supportsAutoMode === false) {
-                return yield* new ProviderAdapterValidationError({
+              catch: (cause) =>
+                new ProviderAdapterValidationError({
                   provider: PROVIDER,
                   operation: "startSession",
-                  issue: `Claude model "${selectedModel.displayName}" does not support Auto mode.`,
-                });
-              }
+                  issue: toMessage(
+                    cause,
+                    `Could not verify that Claude model "${effectiveClaudeModel}" supports Auto mode.`,
+                  ),
+                }),
+            }).pipe(
+              Effect.timeout(Duration.seconds(5)),
+              Effect.mapError((cause) =>
+                cause instanceof ProviderAdapterValidationError
+                  ? cause
+                  : new ProviderAdapterValidationError({
+                      provider: PROVIDER,
+                      operation: "startSession",
+                      issue: `Could not verify that Claude model "${effectiveClaudeModel}" supports Auto mode before the model discovery timeout.`,
+                    }),
+              ),
+            );
+            cachedModels = {
+              models: discoveredModels.map(mapClaudeModelInfo),
+              source: "sdk",
+              cached: false,
+            };
+            const selectedModel = discoveredModels.find(
+              (model) => model.value === effectiveClaudeModel || model.value === apiModelId,
+            );
+            if (selectedModel?.supportsAutoMode === false) {
+              return yield* new ProviderAdapterValidationError({
+                provider: PROVIDER,
+                operation: "startSession",
+                issue: `Claude model "${selectedModel.displayName}" does not support Auto mode.`,
+              });
             }
           } else if (!cachedModels) {
             // Populate model cache in the background from the first non-Auto session.

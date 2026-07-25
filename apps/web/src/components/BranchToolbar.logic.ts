@@ -46,7 +46,7 @@ export function resolveDraftEnvModeAfterBranchChange(input: {
 export function resolveFixedLocalWorkspacePatch(input: {
   currentWorkingDirectory: string | null;
   patch: ThreadWorkspacePatch;
-}): ThreadWorkspacePatch {
+}) {
   const workingDirectory =
     input.patch.workingDirectory !== undefined
       ? input.patch.workingDirectory
@@ -61,7 +61,7 @@ export function resolveFixedLocalWorkspacePatch(input: {
     associatedWorktreeBranch: null,
     associatedWorktreeRef: null,
     createBranchFlowCompleted: false,
-  };
+  } satisfies ThreadWorkspacePatch;
 }
 
 export function resolveBranchToolbarValue(input: {

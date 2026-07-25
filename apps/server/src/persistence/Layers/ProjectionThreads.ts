@@ -99,7 +99,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           ${row.envMode},
           ${row.branch},
           ${row.worktreePath},
-          ${row.workingDirectory},
+          ${row.workingDirectory ?? null},
           ${row.associatedWorktreePath},
           ${row.associatedWorktreeBranch},
           ${row.associatedWorktreeRef},

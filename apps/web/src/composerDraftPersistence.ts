@@ -522,7 +522,9 @@ function normalizePersistedQueuedTurns(
     )
       ? candidate.sourceProposedPlan
       : undefined;
-    const runtimeMode = Schema.is(RuntimeMode)(candidate.runtimeMode) ? candidate.runtimeMode : null;
+    const runtimeMode = Schema.is(RuntimeMode)(candidate.runtimeMode)
+      ? candidate.runtimeMode
+      : null;
     if (
       id.length === 0 ||
       createdAt.length === 0 ||

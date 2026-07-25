@@ -25,9 +25,8 @@ export function providerModelSupportsAutoRuntimeMode(
     return false;
   }
   return (
-    provider !== "claudeAgent" ||
-    (providerStatus?.supportsAutoRuntimeMode !== false &&
-      runtimeModel?.supportsAutoMode !== false)
+    providerStatus?.supportsAutoRuntimeMode !== false &&
+    (provider !== "claudeAgent" || runtimeModel?.supportsAutoMode !== false)
   );
 }
 

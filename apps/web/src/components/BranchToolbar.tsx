@@ -158,8 +158,7 @@ export function RuntimeUsageControls({
     providerModelSupportsAutoRuntimeMode(provider, runtimeModel, providerStatus);
   const supervisedModeAvailable =
     provider === undefined || providerSupportsRuntimeMode(provider, "approval-required");
-  const runtimePresentation =
-    RUNTIME_MODE_PRESENTATION[runtimeMode ?? "approval-required"];
+  const runtimePresentation = RUNTIME_MODE_PRESENTATION[runtimeMode ?? "approval-required"];
 
   return (
     <div
@@ -180,9 +179,7 @@ export function RuntimeUsageControls({
                   COMPOSER_PICKER_TRIGGER_TEXT_CLASS_NAME,
                   runtimeMode === "full-access" && RUNTIME_FULL_ACCESS_ACCENT_CLASS_NAME,
                 )}
-                title={
-                  `${runtimePresentation.label}: ${runtimePresentation.description} Click to change permissions.`
-                }
+                title={`${runtimePresentation.label}: ${runtimePresentation.description} Click to change permissions.`}
               />
             }
           >
@@ -214,9 +211,7 @@ export function RuntimeUsageControls({
               onValueChange={(value) => {
                 if (
                   !value ||
-                  (value !== "full-access" &&
-                    value !== "auto" &&
-                    value !== "approval-required") ||
+                  (value !== "full-access" && value !== "auto" && value !== "approval-required") ||
                   (provider !== undefined && !providerSupportsRuntimeMode(provider, value)) ||
                   (value === "auto" && !autoModeAvailable) ||
                   value === runtimeMode
@@ -244,10 +239,7 @@ export function RuntimeUsageControls({
                   <span className="inline-flex items-start gap-2">
                     <CentralIcon
                       name="shield-code"
-                      className={cn(
-                        "mt-0.5 size-4 shrink-0",
-                        RUNTIME_AUTO_ICON_ACCENT_CLASS_NAME,
-                      )}
+                      className={cn("mt-0.5 size-4 shrink-0", RUNTIME_AUTO_ICON_ACCENT_CLASS_NAME)}
                     />
                     <span className="flex flex-col">
                       <span>Auto</span>
@@ -463,19 +455,16 @@ export default function BranchToolbar({
 
   const canHandoffToWorktree = Boolean(
     !usesFixedLocalWorkspace &&
-      hasServerThread &&
-      envLocked &&
-      !activeWorktreePath &&
-      effectiveEnvMode === "local",
+    hasServerThread &&
+    envLocked &&
+    !activeWorktreePath &&
+    effectiveEnvMode === "local",
   );
   const canHandoffToLocal = Boolean(
     !usesFixedLocalWorkspace && hasServerThread && activeWorktreePath,
   );
   const canSwitchToWorktree = Boolean(
-    !usesFixedLocalWorkspace &&
-      !envLocked &&
-      !activeWorktreePath &&
-      effectiveEnvMode === "local",
+    !usesFixedLocalWorkspace && !envLocked && !activeWorktreePath && effectiveEnvMode === "local",
   );
   const canSwitchToLocal = Boolean(
     !usesFixedLocalWorkspace && !envLocked && effectiveEnvMode === "worktree",

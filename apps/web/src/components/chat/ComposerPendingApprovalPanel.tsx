@@ -22,6 +22,7 @@ interface ComposerPendingApprovalPanelProps {
     requestId: ApprovalRequestId,
     decision: ProviderApprovalDecision,
     lifecycleGeneration?: string,
+    requestKind?: PendingApproval["requestKind"],
   ) => Promise<void>;
 }
 
@@ -101,7 +102,7 @@ export const ComposerPendingApprovalPanel = function ComposerPendingApprovalPane
     const action = APPROVAL_ACTIONS[digit - 1];
     if (!action) return;
     event.preventDefault();
-    void onRespond(requestId, action.decision, approval.lifecycleGeneration);
+    void onRespond(requestId, action.decision, approval.lifecycleGeneration, approval.requestKind);
   };
 
   return (
@@ -124,7 +125,10 @@ export const ComposerPendingApprovalPanel = function ComposerPendingApprovalPane
           </span>
         ) : null}
       </div>
-      <ApprovalDetail parsed={parsed} permissionProfile={approval.permissionProfile} />
+      <ApprovalDetail
+        parsed={parsed}
+        {...(approval.permissionProfile ? { permissionProfile: approval.permissionProfile } : {})}
+      />
       <div className="mt-2.5 space-y-0.5">
         {APPROVAL_ACTIONS.map((action, index) => (
           <ComposerChoiceRow
@@ -135,7 +139,12 @@ export const ComposerPendingApprovalPanel = function ComposerPendingApprovalPane
             tone={action.tone}
             disabled={isResponding}
             onSelect={() =>
-              void onRespond(requestId, action.decision, approval.lifecycleGeneration)
+              void onRespond(
+                requestId,
+                action.decision,
+                approval.lifecycleGeneration,
+                approval.requestKind,
+              )
             }
           />
         ))}

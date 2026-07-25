@@ -2,12 +2,7 @@
 // Purpose: Constructs the ComposerDraftStoreState actions while preserving granular thread identity.
 // Exports: Zustand state creator consumed by the public facade.
 
-import {
-  type ModelSelection,
-  type ProviderKind,
-  RuntimeMode,
-  ThreadId,
-} from "@synara/contracts";
+import { type ModelSelection, type ProviderKind, RuntimeMode, ThreadId } from "@synara/contracts";
 import { getDefaultModel, normalizeModelSlug } from "@synara/shared/model";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";

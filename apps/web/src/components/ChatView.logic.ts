@@ -5,6 +5,7 @@ import {
   type ModelSlug,
   type ProviderApprovalDecision,
   type ProviderKind,
+  type ProviderRequestKind,
   type RuntimeMode,
   type ServerProviderAuthStatus,
   type ThreadId as ThreadIdType,
@@ -99,7 +100,14 @@ const ALWAYS_ALLOW_RUNTIME_MODE: RuntimeMode = "full-access";
 export function resolveRuntimeModeAfterApprovalDecision(
   currentRuntimeMode: RuntimeMode,
   decision: ProviderApprovalDecision,
+  requestKind?: ProviderRequestKind,
 ): RuntimeMode | null {
+  // Permission-profile grants are narrower than a runtime-mode override.
+  // Their acceptForSession decision is persisted by the provider for only
+  // that permission set and must not silently broaden the whole thread.
+  if (requestKind === "permissions") {
+    return null;
+  }
   if (decision === "acceptForSession" && currentRuntimeMode !== ALWAYS_ALLOW_RUNTIME_MODE) {
     return ALWAYS_ALLOW_RUNTIME_MODE;
   }
