@@ -11,6 +11,7 @@ import {
   type DroidModelOptions,
   type ProviderListModelsResult,
   type ProviderModelDescriptor,
+  type RuntimeMode,
 } from "@synara/contracts";
 import { Effect, Layer, Scope, ServiceMap } from "effect";
 import * as AcpErrors from "./AcpErrors.ts";
@@ -207,7 +208,7 @@ export function applyDroidAcpModelSelection<E>(input: {
 export function applyDroidAcpInteractionMode<E>(input: {
   readonly runtime: Pick<AcpSessionRuntimeShape, "setConfigOption" | "setMode">;
   readonly interactionMode?: "default" | "plan";
-  readonly runtimeMode?: "approval-required" | "full-access";
+  readonly runtimeMode?: RuntimeMode;
   readonly mapError: (context: DroidAcpModeSelectionErrorContext) => E;
 }): Effect.Effect<void, E> {
   const modeId =

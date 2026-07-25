@@ -22,6 +22,10 @@ import {
 } from "@synara/shared/threadWorkspace";
 import { doThreadMarkerRangesOverlap } from "@synara/shared/threadMarkers";
 import {
+  providerSupportsRuntimeMode,
+  runtimeModeCompatibilityMessage,
+} from "@synara/shared/runtimeMode";
+import {
   collectTailTurnIds,
   resolveTailUserMessageEditTarget,
 } from "@synara/shared/conversationEdit";
@@ -64,6 +68,21 @@ const STUDIO_PROJECT_KIND_SET = new Set<ProjectKind>(["studio"]);
 // Kinds that claim exclusive ownership of a workspace root. Chat containers are excluded: they
 // use placeholder roots (e.g. the home dir) that legitimately coexist with real projects.
 const WORKSPACE_OWNING_PROJECT_KIND_SET = new Set<ProjectKind>(["project", "studio"]);
+
+function validateProviderRuntimeMode(
+  command: OrchestrationCommand,
+  provider: OrchestrationThread["modelSelection"]["provider"],
+  runtimeMode: OrchestrationThread["runtimeMode"],
+) {
+  return providerSupportsRuntimeMode(provider, runtimeMode)
+    ? Effect.void
+    : Effect.fail(
+        new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: runtimeModeCompatibilityMessage(provider, runtimeMode),
+        }),
+      );
+}
 
 const defaultMetadata: Omit<OrchestrationEvent, "sequence" | "type" | "payload"> = {
   eventId: crypto.randomUUID() as OrchestrationEvent["eventId"],
@@ -864,6 +883,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
+      yield* validateProviderRuntimeMode(
+        command,
+        command.modelSelection.provider,
+        command.runtimeMode,
+      );
       return {
         ...withEventBase({
           aggregateKind: "thread",
@@ -921,6 +945,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
+      yield* validateProviderRuntimeMode(
+        command,
+        command.modelSelection.provider,
+        command.runtimeMode,
+      );
 
       const sourceThread = yield* requireThread({
         readModel,
@@ -1017,6 +1046,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
+      yield* validateProviderRuntimeMode(
+        command,
+        command.modelSelection.provider,
+        command.runtimeMode,
+      );
 
       const sourceThread = yield* requireThread({
         readModel,
@@ -1167,6 +1201,13 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         threadId: command.threadId,
       });
       const project = readModel.projects.find((candidate) => candidate.id === thread.projectId);
+      if (command.modelSelection !== undefined) {
+        yield* validateProviderRuntimeMode(
+          command,
+          command.modelSelection.provider,
+          thread.runtimeMode,
+        );
+      }
       const occurredAt = nowIso();
       return {
         ...withEventBase({
@@ -1455,11 +1496,16 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
     }
 
     case "thread.runtime-mode.set": {
-      yield* requireThread({
+      const thread = yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
       });
+      yield* validateProviderRuntimeMode(
+        command,
+        thread.modelSelection.provider,
+        command.runtimeMode,
+      );
       const occurredAt = nowIso();
       return {
         ...withEventBase({
@@ -1513,6 +1559,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         });
       }
       const sourceProposedPlan = command.sourceProposedPlan;
+      yield* validateProviderRuntimeMode(
+        command,
+        command.modelSelection?.provider ?? targetThread.modelSelection.provider,
+        command.runtimeMode,
+      );
       const sourceThread = sourceProposedPlan
         ? yield* requireThread({
             readModel,
@@ -1641,6 +1692,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           detail: checkpointRevertInProgressDetail(command.threadId),
         });
       }
+      yield* validateProviderRuntimeMode(
+        command,
+        command.modelSelection?.provider ?? thread.modelSelection.provider,
+        command.runtimeMode,
+      );
       return {
         ...withEventBase({
           aggregateKind: "thread",

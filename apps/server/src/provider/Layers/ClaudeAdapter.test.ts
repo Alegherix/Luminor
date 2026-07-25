@@ -54,6 +54,7 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   public readonly setMaxThinkingTokensCalls: Array<number | null> = [];
   public readonly applyFlagSettingsCalls: Array<Record<string, unknown>> = [];
   public getContextUsageCalls = 0;
+  public iteratorNextCalls = 0;
   private contextUsageResponse: SDKControlGetContextUsageResponse | undefined;
   private contextUsageNeverResolves = false;
   public closeCalls = 0;
@@ -162,6 +163,7 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   [Symbol.asyncIterator](): AsyncIterator<SDKMessage> {
     return {
       next: () => {
+        this.iteratorNextCalls += 1;
         if (this.queue.length > 0) {
           const value = this.queue.shift();
           if (value) {
@@ -431,6 +433,25 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect("derives auto permission mode without bypassing permission safeguards", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        runtimeMode: "auto",
+      });
+
+      const createInput = harness.getLastCreateQueryInput();
+      assert.equal(createInput?.options.permissionMode, "auto");
+      assert.equal(createInput?.options.allowDangerouslySkipPermissions, undefined);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("loads Claude filesystem settings sources for SDK sessions", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
@@ -443,7 +464,7 @@ describe("ClaudeAdapterLive", () => {
 
       const createInput = harness.getLastCreateQueryInput();
       assert.deepEqual(createInput?.options.settingSources, ["user", "project", "local"]);
-      assert.equal(createInput?.options.permissionMode, undefined);
+      assert.equal(createInput?.options.permissionMode, "default");
       assert.equal(createInput?.options.allowDangerouslySkipPermissions, undefined);
       const systemPrompt = createInput?.options.systemPrompt;
       if (
@@ -468,7 +489,7 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("keeps explicit claude permission mode over runtime-derived defaults", () => {
+  it.effect("keeps the picker runtime mode authoritative over provider options", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
@@ -484,8 +505,8 @@ describe("ClaudeAdapterLive", () => {
       });
 
       const createInput = harness.getLastCreateQueryInput();
-      assert.equal(createInput?.options.permissionMode, "plan");
-      assert.equal(createInput?.options.allowDangerouslySkipPermissions, undefined);
+      assert.equal(createInput?.options.permissionMode, "bypassPermissions");
+      assert.equal(createInput?.options.allowDangerouslySkipPermissions, true);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
@@ -2242,6 +2263,50 @@ describe("ClaudeAdapterLive", () => {
         const detail = firstNotice.payload.detail as Record<string, unknown>;
         assert.equal(detail.subtype, "background_tasks_changed");
       }
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("surfaces Claude Auto permission denials as a specific warning", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const warningFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter((event) => event.type === "runtime.warning"),
+        Stream.runHead,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        runtimeMode: "auto",
+      });
+
+      harness.query.emit({
+        type: "system",
+        subtype: "permission_denied",
+        tool_name: "Bash",
+        tool_use_id: "tool-denied-1",
+        decision_reason_type: "classifier",
+        decision_reason: "The command could modify system settings.",
+        message: "Permission denied",
+        session_id: "sdk-session-denial",
+        uuid: "denial-1",
+      } as unknown as SDKMessage);
+
+      const warning = yield* Fiber.join(warningFiber);
+      assert.equal(warning._tag, "Some");
+      if (warning._tag !== "Some" || warning.value.type !== "runtime.warning") return;
+      assert.equal(
+        warning.value.payload.message,
+        "Bash was denied: The command could modify system settings.",
+      );
+      assert.equal(
+        (warning.value.payload.detail as Record<string, unknown>).tool_use_id,
+        "tool-denied-1",
+      );
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
@@ -7349,6 +7414,52 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
       assert.equal(query.closeCalls, 1);
       assert.equal(yield* adapter.hasSession(THREAD_ID), false);
       assert.equal((yield* adapter.listSessions()).length, 0);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(layer),
+    );
+  });
+
+  it.effect("rejects Auto when the Claude SDK marks the selected model unsupported", () => {
+    const query = new FakeClaudeQuery();
+    (
+      query as unknown as {
+        supportedModels: () => Promise<
+          Array<{ value: string; displayName: string; supportsAutoMode: boolean }>
+        >;
+      }
+    ).supportedModels = async () => {
+      assert.ok(query.iteratorNextCalls > 0, "model discovery must follow iterator startup");
+      return [
+        {
+          value: "claude-haiku-4-5",
+          displayName: "Claude Haiku 4.5",
+          supportsAutoMode: false,
+        },
+      ];
+    };
+    const layer = makeClaudeAdapterLive({ createQuery: () => query }).pipe(
+      Layer.provideMerge(ServerConfig.layerTest("/tmp/claude-adapter-test", "/tmp")),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const result = yield* Effect.exit(
+        adapter.startSession({
+          threadId: THREAD_ID,
+          provider: "claudeAgent",
+          runtimeMode: "auto",
+          modelSelection: {
+            provider: "claudeAgent",
+            model: "claude-haiku-4-5",
+          },
+        }),
+      );
+
+      assert.ok(Exit.isFailure(result));
+      assert.equal(query.closeCalls, 1);
+      assert.equal(yield* adapter.hasSession(THREAD_ID), false);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(layer),

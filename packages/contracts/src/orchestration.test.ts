@@ -29,15 +29,23 @@ import {
   ThreadCreatedPayload,
   ThreadTurnDiff,
   ThreadTurnStartRequestedPayload,
+  RuntimeMode,
 } from "./orchestration";
 
 const decodeTurnDiffInput = Schema.decodeUnknownEffect(OrchestrationGetTurnDiffInput);
 const decodeFullThreadDiffInput = Schema.decodeUnknownEffect(OrchestrationGetFullThreadDiffInput);
 const decodeThreadTurnDiff = Schema.decodeUnknownEffect(ThreadTurnDiff);
+const decodeRuntimeMode = Schema.decodeUnknownEffect(RuntimeMode);
 const decodeProjectCreateCommand = Schema.decodeUnknownEffect(ProjectCreateCommand);
 const decodeProjectCreatedPayload = Schema.decodeUnknownEffect(ProjectCreatedPayload);
 const decodeProjectMetaUpdatedPayload = Schema.decodeUnknownEffect(ProjectMetaUpdatedPayload);
 const decodeThreadTurnStartCommand = Schema.decodeUnknownEffect(ThreadTurnStartCommand);
+
+it.effect("decodes the AI-reviewed auto runtime mode", () =>
+  Effect.gen(function* () {
+    assert.strictEqual(yield* decodeRuntimeMode("auto"), "auto");
+  }),
+);
 const decodeThreadTurnStartRequestedPayload = Schema.decodeUnknownEffect(
   ThreadTurnStartRequestedPayload,
 );

@@ -17,6 +17,10 @@ import {
 } from "@synara/contracts";
 import { buildPromptThreadTitleFallback } from "@synara/shared/chatThreads";
 import { parseGitHubRepositoryNameWithOwnerFromPullRequestUrl } from "@synara/shared/githubRepository";
+import {
+  providerSupportsRuntimeMode,
+  runtimeModeCompatibilityMessage,
+} from "@synara/shared/runtimeMode";
 import { Cause, Effect, Option, Semaphore } from "effect";
 
 import type { ServerConfigShape } from "../config.ts";
@@ -48,6 +52,7 @@ import {
 } from "./targetResolver.ts";
 import { ToolInputError, errorText } from "./toolInput.ts";
 import { GatewayToolError, gatewayToolErrorResult } from "./toolRuntime.ts";
+import { runtimeModeEscalatesPrivilege } from "./runtimeModePolicy.ts";
 
 const CREATION_REPLAY_WAIT_MS = 60_000;
 
@@ -518,12 +523,12 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
           }
           if (
             context.kind === "provider-session" &&
-            spec.runtimeMode === "full-access" &&
-            caller!.runtimeMode !== "full-access"
+            spec.runtimeMode !== undefined &&
+            runtimeModeEscalatesPrivilege(caller!.runtimeMode, spec.runtimeMode)
           ) {
             return yield* Effect.fail(
               new ToolInputError(
-                'Your thread runs in "approval-required" mode, so created threads cannot use "full-access".',
+                `Your thread runs in "${caller!.runtimeMode}" mode, so created threads cannot use higher-privileged "${spec.runtimeMode}".`,
               ),
             );
           }
@@ -531,6 +536,11 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
             externalPolicy?.runtimeMode ??
             spec.runtimeMode ??
             (context.kind === "external-client" ? "approval-required" : caller!.runtimeMode);
+          if (!providerSupportsRuntimeMode(target.provider, runtimeMode)) {
+            return yield* Effect.fail(
+              new ToolInputError(runtimeModeCompatibilityMessage(target.provider, runtimeMode)),
+            );
+          }
           const title = spec.title ?? buildPromptThreadTitleFallback(spec.prompt);
           let worktreeRef: string | null = null;
           let copyChangesFrom: string | null = null;

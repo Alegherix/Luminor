@@ -271,6 +271,10 @@ import { useProviderModelCatalog } from "../hooks/useProviderModelCatalog";
 import { useThreadHandoff } from "../hooks/useThreadHandoff";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import BranchToolbar, { RuntimeUsageControls } from "./BranchToolbar";
+import {
+  normalizeRuntimeModeForProvider,
+  providerModelSupportsAutoRuntimeMode,
+} from "../lib/runtimeMode";
 import { SynaraLogo } from "./SynaraLogo";
 import { ThreadWorktreeHandoffDialog } from "./ThreadWorktreeHandoffDialog";
 import {
@@ -3588,6 +3592,26 @@ export default function ChatView({
     () => findProviderStatus(providerStatuses, selectedProvider),
     [selectedProvider, providerStatuses],
   );
+  useEffect(() => {
+    if (
+      activeThread &&
+      runtimeMode === "auto" &&
+      !providerModelSupportsAutoRuntimeMode(
+        selectedProvider,
+        selectedRuntimeModel,
+        activeProviderStatus,
+      )
+    ) {
+      setComposerDraftRuntimeMode(activeThread.id, "approval-required");
+    }
+  }, [
+    activeProviderStatus,
+    activeThread,
+    runtimeMode,
+    selectedProvider,
+    selectedRuntimeModel,
+    setComposerDraftRuntimeMode,
+  ]);
   const activeProviderHealthBannerDismissalKey = useMemo(
     () => getProviderHealthBannerDismissalKey(activeProviderStatus),
     [activeProviderStatus],
@@ -5576,6 +5600,18 @@ export default function ChatView({
         provider,
         model: resolvedModel,
       };
+      const runtimeModel = resolveRuntimeModelDescriptor({
+        provider,
+        model: resolvedModel,
+        runtimeModels: runtimeModelsByProvider[provider],
+      });
+      const nextRuntimeMode =
+        runtimeMode === "auto" && !providerModelSupportsAutoRuntimeMode(provider, runtimeModel)
+          ? "approval-required"
+          : normalizeRuntimeModeForProvider(runtimeMode, provider);
+      if (nextRuntimeMode !== runtimeMode) {
+        setComposerDraftRuntimeMode(activeThread.id, nextRuntimeMode);
+      }
       setComposerDraftModelSelectionAndSticky(activeThread.id, nextModelSelection);
       if (provider === "cursor") {
         setComposerDraftProviderModelOptions(activeThread.id, provider, undefined, {
@@ -5587,12 +5623,15 @@ export default function ChatView({
     },
     [
       activeThread,
+      customModelsByProvider,
       lockedProvider,
+      modelOptionsByProvider,
+      runtimeMode,
+      runtimeModelsByProvider,
       scheduleComposerFocus,
+      setComposerDraftRuntimeMode,
       setComposerDraftModelSelectionAndSticky,
       setComposerDraftProviderModelOptions,
-      customModelsByProvider,
-      modelOptionsByProvider,
     ],
   );
 
@@ -9869,6 +9908,9 @@ export default function ChatView({
   };
 
   const runtimeUsageControlsProps = {
+    provider: selectedProvider,
+    runtimeModel: selectedRuntimeModel,
+    providerStatus: activeProviderStatus,
     runtimeMode,
     onRuntimeModeChange: handleRuntimeModeChange,
     contextWindow: runtimeUsageContextWindow,

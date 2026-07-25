@@ -56,6 +56,9 @@ export function normalizeProviderStatusForLocalConfig(input: {
       ...(status.voiceTranscriptionAvailable !== undefined
         ? { voiceTranscriptionAvailable: status.voiceTranscriptionAvailable }
         : {}),
+      ...(status.supportsAutoRuntimeMode !== undefined
+        ? { supportsAutoRuntimeMode: status.supportsAutoRuntimeMode }
+        : {}),
     };
   }
 

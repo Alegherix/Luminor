@@ -277,6 +277,7 @@ interface ClaudeSessionContext {
   readonly lifecycleGeneration?: string;
   readonly promptQueue: Queue.Queue<PromptQueueItem>;
   readonly query: ClaudeQueryRuntime;
+  readonly messageStream?: AsyncIterable<SDKMessage>;
   readonly processOwner: ClaudeProcessOwner;
   stopDeferred?: Deferred.Deferred<void, ProviderAdapterProcessError>;
   streamFiber: Fiber.Fiber<void, Error> | undefined;
@@ -389,6 +390,55 @@ interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
   readonly supportedModels: () => Promise<ModelInfo[]>;
   readonly supportedAgents: () => Promise<AgentInfo[]>;
   readonly close: () => void;
+}
+
+function prestartClaudeMessageStream(queryRuntime: ClaudeQueryRuntime): AsyncIterable<SDKMessage> {
+  // SDK discovery waits for a handshake that only starts on the first iterator read.
+  // Keep that read for the real stream consumer, while making cancellation win the
+  // race so session teardown never waits on an unread first message.
+  const iterator = queryRuntime[Symbol.asyncIterator]();
+  const firstResult = iterator.next();
+  void firstResult.catch(() => undefined);
+  const doneResult: IteratorResult<SDKMessage> = { done: true, value: undefined };
+  let resolveClosed!: (result: IteratorResult<SDKMessage>) => void;
+  const closedResult = new Promise<IteratorResult<SDKMessage>>((resolve) => {
+    resolveClosed = resolve;
+  });
+  let firstResultPending = true;
+  let closed = false;
+
+  const raceWithClose = (
+    result: Promise<IteratorResult<SDKMessage>>,
+  ): Promise<IteratorResult<SDKMessage>> => {
+    void result.catch(() => undefined);
+    return Promise.race([result, closedResult]);
+  };
+
+  const messageIterator: AsyncIterableIterator<SDKMessage> = {
+    next: () => {
+      if (closed) {
+        return Promise.resolve(doneResult);
+      }
+      const result = firstResultPending ? firstResult : iterator.next();
+      firstResultPending = false;
+      return raceWithClose(result);
+    },
+    return: async () => {
+      if (!closed) {
+        closed = true;
+        resolveClosed(doneResult);
+        const returnResult = iterator.return?.();
+        if (returnResult) {
+          void returnResult.catch(() => undefined);
+        }
+      }
+      return doneResult;
+    },
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  };
+  return messageIterator;
 }
 
 export type ClaudeOwnedProcess = ClaudeSpawnedProcess & ProcessExitHandle;
@@ -650,17 +700,27 @@ function asRuntimeRequestId(value: ApprovalRequestId): RuntimeRequestId {
   return RuntimeRequestId.makeUnsafe(value);
 }
 
-function toPermissionMode(value: unknown): PermissionMode | undefined {
-  switch (value) {
-    case "default":
-    case "acceptEdits":
-    case "bypassPermissions":
-    case "plan":
-    case "dontAsk":
-      return value;
-    default:
-      return undefined;
+function permissionModeForRuntimeMode(
+  runtimeMode: ProviderSession["runtimeMode"],
+): PermissionMode {
+  switch (runtimeMode) {
+    case "approval-required":
+      return "default";
+    case "auto":
+      return "auto";
+    case "full-access":
+      return "bypassPermissions";
   }
+}
+
+function mapClaudeModelInfo(model: ModelInfo): ProviderListModelsResult["models"][number] {
+  return {
+    slug: model.value,
+    name: model.displayName,
+    ...(typeof model.supportsAutoMode === "boolean"
+      ? { supportsAutoMode: model.supportsAutoMode }
+      : {}),
+  };
 }
 
 function readClaudeResumeState(resumeCursor: unknown): ClaudeResumeState | undefined {
@@ -3497,6 +3557,18 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               },
             });
             return;
+          case "permission_denied": {
+            const reason =
+              message.decision_reason?.trim() ||
+              message.message?.trim() ||
+              "Claude's automatic permission reviewer denied this action.";
+            yield* emitRuntimeWarning(
+              context,
+              `${message.tool_name} was denied: ${reason}`,
+              message,
+            );
+            return;
+          }
           case "status":
             yield* offerRuntimeEvent(context, {
               ...base,
@@ -3924,7 +3996,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
       });
 
     const runSdkStream = (context: ClaudeSessionContext): Effect.Effect<void, Error> =>
-      Stream.fromAsyncIterable(context.query, (cause) =>
+      Stream.fromAsyncIterable(context.messageStream ?? context.query, (cause) =>
         toError(cause, "Claude runtime stream failed."),
       ).pipe(
         Stream.takeWhile(() => !context.stopped),
@@ -4515,9 +4587,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         );
         const effectiveEffort = getEffectiveClaudeCodeEffort(effort);
         const ultracode = effort === "ultracode" && hasEffortLevel(caps, "xhigh");
-        const permissionMode =
-          toPermissionMode(providerOptions?.permissionMode) ??
-          (input.runtimeMode === "full-access" ? "bypassPermissions" : undefined);
+        const permissionMode = permissionModeForRuntimeMode(input.runtimeMode);
         const settings = {
           // Native 1M models otherwise compact near their full model limit. Keep
           // Synara's safer 200k budget explicit unless the thread opts into 1M.
@@ -4576,7 +4646,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           // Only `max` effort is spawn-fixed; every other level rides in
           // `settings.effortLevel` so it can change live mid-session.
           ...(effectiveEffort === "max" ? { effort: "max" as const } : {}),
-          ...(permissionMode ? { permissionMode } : {}),
+          permissionMode,
           ...(permissionMode === "bypassPermissions"
             ? { allowDangerouslySkipPermissions: true }
             : {}),
@@ -4640,18 +4710,45 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             ]).pipe(Effect.asVoid),
           ),
         );
+        const messageStream =
+          input.runtimeMode === "auto" ? prestartClaudeMessageStream(queryRuntime) : undefined;
 
         let installationContext: ClaudeSessionContext | undefined;
         let installationComplete = false;
 
         return yield* Effect.gen(function* () {
-          // Populate model cache in background from first session
-          if (!cachedModels) {
+          if (input.runtimeMode === "auto") {
+            const discoveredModels = yield* Effect.tryPromise({
+              try: () => queryRuntime.supportedModels(),
+              catch: (cause) => cause,
+            }).pipe(
+              Effect.timeout(Duration.seconds(5)),
+              Effect.orElseSucceed(() => null),
+            );
+            if (discoveredModels) {
+              cachedModels = {
+                models: discoveredModels.map(mapClaudeModelInfo),
+                source: "sdk",
+                cached: false,
+              };
+              const selectedModel = discoveredModels.find(
+                (model) => model.value === effectiveClaudeModel || model.value === apiModelId,
+              );
+              if (selectedModel?.supportsAutoMode === false) {
+                return yield* new ProviderAdapterValidationError({
+                  provider: PROVIDER,
+                  operation: "startSession",
+                  issue: `Claude model "${selectedModel.displayName}" does not support Auto mode.`,
+                });
+              }
+            }
+          } else if (!cachedModels) {
+            // Populate model cache in the background from the first non-Auto session.
             queryRuntime
               .supportedModels()
               .then((models) => {
                 cachedModels = {
-                  models: models.map((m) => ({ slug: m.value, name: m.displayName })),
+                  models: models.map(mapClaudeModelInfo),
                   source: "sdk",
                   cached: false,
                 };
@@ -4711,6 +4808,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               : {}),
             promptQueue,
             query: queryRuntime,
+            ...(messageStream ? { messageStream } : {}),
             processOwner,
             streamFiber: undefined,
             startedAt,
@@ -5455,7 +5553,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               .supportedModels()
               .then((models) => {
                 cachedModels = {
-                  models: models.map((m) => ({ slug: m.value, name: m.displayName })),
+                  models: models.map(mapClaudeModelInfo),
                   source: "sdk",
                   cached: false,
                 };

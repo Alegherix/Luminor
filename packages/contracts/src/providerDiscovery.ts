@@ -277,6 +277,7 @@ export const ProviderModelDescriptor = Schema.Struct({
   defaultReasoningEffort: Schema.optional(TrimmedNonEmptyString),
   supportsFastMode: Schema.optional(Schema.Boolean),
   supportsThinkingToggle: Schema.optional(Schema.Boolean),
+  supportsAutoMode: Schema.optional(Schema.Boolean),
   contextWindowOptions: Schema.optional(Schema.Array(ProviderContextWindowDescriptor)),
   defaultContextWindow: Schema.optional(TrimmedNonEmptyString),
 });

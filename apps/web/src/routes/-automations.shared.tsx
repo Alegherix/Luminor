@@ -17,7 +17,7 @@ import {
   type ThreadId,
 } from "@synara/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useAppSettings } from "~/appSettings";
 import type { Thread } from "~/types";
@@ -26,6 +26,7 @@ import {
   ComposerPickerMenuSubPopup,
 } from "~/components/chat/ComposerPickerMenuPopup";
 import { ProviderModelPicker } from "~/components/chat/ProviderModelPicker";
+import { RUNTIME_AUTO_ICON_ACCENT_CLASS_NAME } from "~/components/chat/composerPickerStyles";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogPopup, DialogTitle } from "~/components/ui/dialog";
@@ -88,6 +89,13 @@ import {
 import { SkillCubeIcon, WorktreeIcon } from "~/lib/icons";
 import { CentralIcon } from "~/lib/central-icons";
 import { resolveProviderDiscoveryCwd } from "~/lib/providerDiscovery";
+import {
+  normalizeRuntimeModeForProvider,
+  providerModelSupportsAutoRuntimeMode,
+  providerSupportsAutoRuntimeMode,
+  providerSupportsRuntimeMode,
+} from "~/lib/runtimeMode";
+import { findProviderStatus } from "~/lib/providerAvailability";
 import { cn } from "~/lib/utils";
 import { serverConfigQueryOptions } from "~/lib/serverReactQuery";
 import { ensureNativeApi } from "~/nativeApi";
@@ -828,10 +836,12 @@ export function AutomationModelPicker({
   value,
   projectCwd,
   onChange,
+  onAutoModeSupportChange,
 }: {
   readonly value: ModelSelection;
   readonly projectCwd: string | null;
   readonly onChange: (value: ModelSelection) => void;
+  readonly onAutoModeSupportChange?: (supported: boolean) => void;
 }) {
   const { settings } = useAppSettings();
   const serverConfigQuery = useQuery(serverConfigQueryOptions());
@@ -845,12 +855,22 @@ export function AutomationModelPicker({
     activeProjectCwd: projectCwd,
     serverCwd: serverConfigQuery.data?.cwd ?? null,
   });
-  const { modelOptionsByProvider, loadingModelProviders } = useProviderModelCatalog({
-    selectedProvider: value.provider,
-    discoveryEnabled: open,
-    cwd: providerModelDiscoveryCwd,
-    modelHintByProvider,
-  });
+  const { modelOptionsByProvider, loadingModelProviders, selectedRuntimeModel } =
+    useProviderModelCatalog({
+      selectedProvider: value.provider,
+      discoveryEnabled: open,
+      cwd: providerModelDiscoveryCwd,
+      modelHintByProvider,
+    });
+  const providerStatus = findProviderStatus(providerStatuses, value.provider);
+  const autoModeSupported = providerModelSupportsAutoRuntimeMode(
+    value.provider,
+    selectedRuntimeModel,
+    providerStatus,
+  );
+  useEffect(() => {
+    onAutoModeSupportChange?.(autoModeSupported);
+  }, [autoModeSupported, onAutoModeSupportChange]);
 
   return (
     <ProviderModelPicker
@@ -901,6 +921,18 @@ export function AutomationDialog({
     onFormChange({ ...form, [key]: value });
   const projectThreads = threads.filter((thread) => thread.projectId === form.projectId);
   const selectedProject = projects.find((project) => project.id === form.projectId);
+  const [selectedModelSupportsAuto, setSelectedModelSupportsAuto] = useState(() =>
+    providerSupportsAutoRuntimeMode(form.modelSelection.provider),
+  );
+  const handleAutoModeSupportChange = useCallback(
+    (supported: boolean) => {
+      setSelectedModelSupportsAuto(supported);
+      if (!supported && form.runtimeMode === "auto") {
+        onFormChange({ ...form, runtimeMode: "approval-required" });
+      }
+    },
+    [form, onFormChange],
+  );
   const schedule = scheduleFromForm(form);
   const fastIntervalLimitMessage = automationFastIntervalLimitMessage(form);
   const hasBlockingWarning = hasBlockingAutomationDraftWarnings(warnings, acknowledgedWarningIds);
@@ -927,15 +959,17 @@ export function AutomationDialog({
     const targetStillMatches =
       form.targetThreadId.length > 0 &&
       threads.some((thread) => thread.id === form.targetThreadId && thread.projectId === projectId);
+    const modelSelection = modelSelectionForProjectChange(
+      projects,
+      form.projectId,
+      projectId,
+      form.modelSelection,
+    );
     onFormChange({
       ...form,
       projectId,
-      modelSelection: modelSelectionForProjectChange(
-        projects,
-        form.projectId,
-        projectId,
-        form.modelSelection,
-      ),
+      modelSelection,
+      runtimeMode: normalizeRuntimeModeForProvider(form.runtimeMode, modelSelection.provider),
       targetThreadId: targetStillMatches ? form.targetThreadId : "",
     });
   };
@@ -1102,7 +1136,14 @@ export function AutomationDialog({
             <AutomationModelPicker
               value={form.modelSelection}
               projectCwd={selectedProject?.cwd ?? null}
-              onChange={(value) => setField("modelSelection", value)}
+              onChange={(value) => {
+                onFormChange({
+                  ...form,
+                  modelSelection: value,
+                  runtimeMode: normalizeRuntimeModeForProvider(form.runtimeMode, value.provider),
+                });
+              }}
+              onAutoModeSupportChange={handleAutoModeSupportChange}
             />
 
             <Menu>
@@ -1362,14 +1403,40 @@ export function AutomationDialog({
                   />
                 }
               >
-                <CentralIcon name="brain" className="size-4" />
+                <CentralIcon
+                  name={
+                    form.runtimeMode === "auto"
+                      ? "shield-code"
+                      : form.runtimeMode === "full-access"
+                        ? "shield-access"
+                        : "brain"
+                  }
+                  className={cn(
+                    "size-4",
+                    form.runtimeMode === "auto" && RUNTIME_AUTO_ICON_ACCENT_CLASS_NAME,
+                  )}
+                />
               </MenuTrigger>
               <ComposerPickerMenuPopup align="start" className="w-48">
                 <MenuRadioGroup
                   value={form.runtimeMode}
                   onValueChange={(value) => setField("runtimeMode", value as RuntimeMode)}
                 >
-                  <MenuRadioItem value="approval-required">Approval required</MenuRadioItem>
+                  {providerSupportsRuntimeMode(
+                    form.modelSelection.provider,
+                    "approval-required",
+                  ) ? (
+                    <MenuRadioItem value="approval-required">Approval required</MenuRadioItem>
+                  ) : null}
+                  {selectedModelSupportsAuto ? (
+                    <MenuRadioItem value="auto">
+                      <CentralIcon
+                        name="shield-code"
+                        className={cn("size-4", RUNTIME_AUTO_ICON_ACCENT_CLASS_NAME)}
+                      />
+                      Auto
+                    </MenuRadioItem>
+                  ) : null}
                   <MenuRadioItem value="full-access">Full access</MenuRadioItem>
                 </MenuRadioGroup>
               </ComposerPickerMenuPopup>

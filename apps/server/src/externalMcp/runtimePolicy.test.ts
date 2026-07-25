@@ -40,6 +40,15 @@ describe("external MCP runtime policy", () => {
     ).toThrow(/runtime:full-access/);
   });
 
+  it("rejects raw Auto requests that are outside the external MCP contract", () => {
+    expect(() =>
+      resolveExternalMcpRuntimePolicy({
+        requestedRuntimeMode: "auto",
+        capabilities: new Set(["tasks:create", "runtime:full-access"]),
+      }),
+    ).toThrow(/Auto execution is not available/);
+  });
+
   it("allows each elevated runtime choice only with the matching scope", () => {
     expect(
       resolveExternalMcpRuntimePolicy({

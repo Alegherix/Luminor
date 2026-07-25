@@ -168,6 +168,36 @@ describe("provider runtime activity projection", () => {
       },
     });
 
+    const permissionApproval = projectProviderRuntimeActivities(
+      runtimeEvent({
+        type: "request.opened",
+        eventId: "permission-approval-request",
+        requestId: ApprovalRequestId.makeUnsafe("permission-request-1"),
+        payload: {
+          requestType: "permissions_approval",
+          detail: "Needs package metadata",
+          args: {
+            permissions: {
+              network: { enabled: true },
+              fileSystem: { read: ["/tmp/example"] },
+            },
+          },
+        },
+      }),
+    )[0];
+    expect(permissionApproval).toMatchObject({
+      kind: "approval.requested",
+      summary: "Permission approval requested",
+      payload: {
+        requestKind: "permissions",
+        detail: "Needs package metadata",
+        permissionProfile: {
+          network: { enabled: true },
+          fileSystem: { read: ["/tmp/example"] },
+        },
+      },
+    });
+
     const userInput = [
       runtimeEvent({
         type: "user-input.requested",

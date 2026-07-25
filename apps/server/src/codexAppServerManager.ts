@@ -38,8 +38,10 @@ import { prepareWindowsSafeProcess } from "@synara/shared/windowsProcess";
 import { Effect, ServiceMap } from "effect";
 
 import {
+  compareCodexCliVersions,
   formatCodexCliUpgradeMessage,
   isCodexCliVersionSupported,
+  MINIMUM_CODEX_AUTO_REVIEW_CLI_VERSION,
   parseCodexCliVersion,
 } from "./provider/codexCliVersion";
 import {
@@ -88,7 +90,8 @@ interface PendingApprovalRequest {
   method:
     | "item/commandExecution/requestApproval"
     | "item/fileChange/requestApproval"
-    | "item/fileRead/requestApproval";
+    | "item/fileRead/requestApproval"
+    | "item/permissions/requestApproval";
   requestKind: ProviderRequestKind;
   threadId: ThreadId;
   turnId?: TurnId;
@@ -96,6 +99,7 @@ interface PendingApprovalRequest {
   itemId?: ProviderItemId;
   providerThreadId?: string;
   providerParentThreadId?: string;
+  requestedPermissions?: Record<string, unknown>;
 }
 
 interface PendingUserInputRequest {
@@ -121,12 +125,14 @@ interface CodexUserInputAnswer {
 }
 
 type CodexApprovalPolicy = "untrusted" | "on-failure" | "on-request" | "never";
+type CodexApprovalsReviewer = "user" | "auto_review";
 type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
 type CodexTurnSandboxPolicy = {
   readonly type: "readOnly" | "workspaceWrite" | "dangerFullAccess";
 };
 type CodexSessionApprovalOverride = {
   readonly approvalPolicy: "never";
+  readonly approvalsReviewer: "user";
   readonly sandboxPolicy: {
     readonly type: "dangerFullAccess";
   };
@@ -526,18 +532,27 @@ In Default mode, strongly prefer making reasonable assumptions and executing the
 // Maps Synara's simple runtime toggle to Codex thread-level permission overrides.
 function mapCodexRuntimeMode(runtimeMode: RuntimeMode): {
   readonly approvalPolicy: CodexApprovalPolicy;
+  readonly approvalsReviewer: CodexApprovalsReviewer;
   readonly sandbox: CodexSandboxMode;
 } {
   switch (runtimeMode) {
     case "approval-required":
       return {
         approvalPolicy: "untrusted",
+        approvalsReviewer: "user",
         sandbox: "read-only",
+      };
+    case "auto":
+      return {
+        approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
+        sandbox: "workspace-write",
       };
     case "full-access":
     default:
       return {
         approvalPolicy: "never",
+        approvalsReviewer: "user",
         sandbox: "danger-full-access",
       };
   }
@@ -546,18 +561,27 @@ function mapCodexRuntimeMode(runtimeMode: RuntimeMode): {
 // turn/start uses sandboxPolicy objects, so keep this separate from thread/start.
 function mapCodexRuntimeModeToTurnOverrides(runtimeMode: RuntimeMode): {
   readonly approvalPolicy: CodexApprovalPolicy;
+  readonly approvalsReviewer: CodexApprovalsReviewer;
   readonly sandboxPolicy: CodexTurnSandboxPolicy;
 } {
   switch (runtimeMode) {
     case "approval-required":
       return {
         approvalPolicy: "untrusted",
+        approvalsReviewer: "user",
         sandboxPolicy: { type: "readOnly" },
+      };
+    case "auto":
+      return {
+        approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
+        sandboxPolicy: { type: "workspaceWrite" },
       };
     case "full-access":
     default:
       return {
         approvalPolicy: "never",
+        approvalsReviewer: "user",
         sandboxPolicy: { type: "dangerFullAccess" },
       };
   }
@@ -565,6 +589,7 @@ function mapCodexRuntimeModeToTurnOverrides(runtimeMode: RuntimeMode): {
 
 const CODEX_ALWAYS_ALLOW_SESSION_TURN_OVERRIDES: CodexSessionApprovalOverride = {
   approvalPolicy: "never",
+  approvalsReviewer: "user",
   sandboxPolicy: { type: "dangerFullAccess" },
 };
 
@@ -572,6 +597,7 @@ const CODEX_ALWAYS_ALLOW_SESSION_TURN_OVERRIDES: CodexSessionApprovalOverride = 
 // as live session state instead of relying on one native approval reply.
 function resolveCodexTurnOverrides(context: CodexSessionContext): {
   readonly approvalPolicy: CodexApprovalPolicy;
+  readonly approvalsReviewer: CodexApprovalsReviewer;
   readonly sandboxPolicy: CodexTurnSandboxPolicy;
 } {
   return (
@@ -874,6 +900,9 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       await this.assertSupportedCodexCliVersion({
         binaryPath: codexBinaryPath,
         cwd: resolvedCwd,
+        ...(input.runtimeMode === "auto"
+          ? { minimumVersion: MINIMUM_CODEX_AUTO_REVIEW_CLI_VERSION }
+          : {}),
         ...(codexHomePath ? { homePath: codexHomePath } : {}),
       });
       gatewaySessionLease = this.agentGatewayMcp?.acquireSessionLease(threadId);
@@ -1098,6 +1127,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       effort?: string;
       summary: "auto" | "none";
       approvalPolicy?: CodexApprovalPolicy;
+      approvalsReviewer?: CodexApprovalsReviewer;
       sandboxPolicy?: CodexTurnSandboxPolicy;
       collaborationMode?: {
         mode: "default" | "plan";
@@ -1435,6 +1465,9 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       await this.assertSupportedCodexCliVersion({
         binaryPath: codexBinaryPath,
         cwd: resolvedCwd,
+        ...(input.runtimeMode === "auto"
+          ? { minimumVersion: MINIMUM_CODEX_AUTO_REVIEW_CLI_VERSION }
+          : {}),
         ...(codexHomePath ? { homePath: codexHomePath } : {}),
       });
       gatewaySessionLease = this.agentGatewayMcp?.acquireSessionLease(threadId);
@@ -1631,11 +1664,19 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     pendingRequest: PendingApprovalRequest,
     decision: ProviderApprovalDecision,
   ): Promise<void> {
+    const result =
+      pendingRequest.method === "item/permissions/requestApproval"
+        ? {
+            permissions:
+              decision === "accept" || decision === "acceptForSession"
+                ? (pendingRequest.requestedPermissions ?? {})
+                : {},
+            ...(decision === "acceptForSession" ? { scope: "session" as const } : {}),
+          }
+        : { decision };
     await this.writeMessage(context, {
       id: pendingRequest.jsonRpcId,
-      result: {
-        decision,
-      },
+      result,
     });
 
     this.emitEvent({
@@ -1685,11 +1726,19 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     }
 
     context.pendingApprovals.delete(requestId);
-    if (decision === "acceptForSession") {
+    const isPermissionRequest = pendingRequest.method === "item/permissions/requestApproval";
+    if (decision === "acceptForSession" && !isPermissionRequest) {
       context.sessionApprovalOverride = CODEX_ALWAYS_ALLOW_SESSION_TURN_OVERRIDES;
     }
     await this.resolveApprovalRequest(context, pendingRequest, decision);
-    if (decision === "acceptForSession") {
+    if (decision === "cancel" && isPermissionRequest) {
+      await this.interruptTurn(
+        threadId,
+        pendingRequest.turnId,
+        pendingRequest.providerThreadId,
+      );
+    }
+    if (decision === "acceptForSession" && !isPermissionRequest) {
       await this.resolveRemainingSessionApprovalRequests(context);
     }
   }
@@ -2634,12 +2683,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       const pendingRequest: PendingApprovalRequest = {
         requestId,
         jsonRpcId: request.id,
-        method:
-          requestKind === "command"
-            ? "item/commandExecution/requestApproval"
-            : requestKind === "file-read"
-              ? "item/fileRead/requestApproval"
-              : "item/fileChange/requestApproval",
+        method: request.method as PendingApprovalRequest["method"],
         requestKind,
         threadId: context.session.threadId,
         ...(rawRoute.turnId ? { turnId: rawRoute.turnId } : {}),
@@ -2647,6 +2691,9 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         ...(rawRoute.itemId ? { itemId: rawRoute.itemId } : {}),
         ...(providerThreadId ? { providerThreadId } : {}),
         ...(providerParentThreadId ? { providerParentThreadId } : {}),
+        ...(request.method === "item/permissions/requestApproval"
+          ? { requestedPermissions: this.readObject(request.params, "permissions") }
+          : {}),
       };
       if (context.sessionApprovalOverride) {
         await this.resolveApprovalRequest(context, pendingRequest, "acceptForSession");
@@ -2919,6 +2966,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     readonly binaryPath: string;
     readonly cwd: string;
     readonly homePath?: string;
+    readonly minimumVersion?: string;
   }): Promise<void> {
     await assertSupportedCodexCliVersion(input);
   }
@@ -2942,6 +2990,10 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
 
     if (method === "item/fileChange/requestApproval") {
       return "file-change";
+    }
+
+    if (method === "item/permissions/requestApproval") {
+      return "permissions";
     }
 
     return undefined;
@@ -3044,7 +3096,9 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         this.readString(this.readObject(params, "msg"), "turnId"),
     );
     const itemId = toProviderItemId(
-      this.readString(params, "itemId") ?? this.readString(this.readObject(params, "item"), "id"),
+      this.readString(params, "itemId") ??
+        this.readString(params, "targetItemId") ??
+        this.readString(this.readObject(params, "item"), "id"),
     );
 
     if (turnId) {
@@ -3316,6 +3370,7 @@ async function assertSupportedCodexCliVersion(input: {
   readonly binaryPath: string;
   readonly cwd: string;
   readonly homePath?: string;
+  readonly minimumVersion?: string;
 }): Promise<void> {
   // Prefer an explicit cwd check before spawning. A missing working directory
   // produces ENOENT that is otherwise misreported as a missing Codex binary.
@@ -3359,8 +3414,14 @@ async function assertSupportedCodexCliVersion(input: {
   }
 
   const parsedVersion = parseCodexCliVersion(`${stdout}\n${stderr}`);
-  if (parsedVersion && !isCodexCliVersionSupported(parsedVersion)) {
-    throw new Error(formatCodexCliUpgradeMessage(parsedVersion));
+  const minimumVersion = input.minimumVersion;
+  if (
+    parsedVersion &&
+    (minimumVersion
+      ? compareCodexCliVersions(parsedVersion, minimumVersion) < 0
+      : !isCodexCliVersionSupported(parsedVersion))
+  ) {
+    throw new Error(formatCodexCliUpgradeMessage(parsedVersion, minimumVersion));
   }
 }
 

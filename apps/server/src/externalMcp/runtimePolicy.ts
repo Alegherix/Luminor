@@ -14,6 +14,12 @@ export function resolveExternalMcpRuntimePolicy(input: {
 }): ExternalMcpRuntimePolicy {
   const environment = input.requestedEnvironment ?? "worktree";
   const runtimeMode = input.requestedRuntimeMode ?? "approval-required";
+  if (runtimeMode === "auto") {
+    throw new GatewayToolError(
+      "capability_denied",
+      "Auto execution is not available to external MCP clients.",
+    );
+  }
   if (environment === "local" && !input.capabilities.has("runtime:local")) {
     throw new GatewayToolError(
       "capability_denied",

@@ -1024,6 +1024,7 @@ export const checkCodexProviderStatus = makeCheckCodexProviderStatus();
 // ── Claude Agent health check ───────────────────────────────────────
 
 const CLAUDE_AUTH_FALSE_NEGATIVE_RETRY_DELAY_MS = 1_000;
+const CLAUDE_AUTO_MODE_MINIMUM_VERSION = "2.1.83";
 
 export const makeCheckClaudeProviderStatus = (
   resolveSubscriptionType?: Effect.Effect<string | undefined>,
@@ -1087,6 +1088,10 @@ export const makeCheckClaudeProviderStatus = (
     }
     const version = versionProbe.result;
     const parsedVersion = parseGenericCliVersion(`${version.stdout}\n${version.stderr}`);
+    const supportsAutoRuntimeMode =
+      parsedVersion === null
+        ? undefined
+        : compareSemverVersions(parsedVersion, CLAUDE_AUTO_MODE_MINIMUM_VERSION) >= 0;
 
     // Probe 2: `claude auth status` — is the user authenticated? The command can
     // redeem a single-use rotating OAuth refresh token, so it is serialized with
@@ -1111,6 +1116,7 @@ export const makeCheckClaudeProviderStatus = (
         available: true,
         authStatus: "unknown" as const,
         version: parsedVersion,
+        ...(supportsAutoRuntimeMode !== undefined ? { supportsAutoRuntimeMode } : {}),
         checkedAt,
         message:
           error instanceof Error
@@ -1126,6 +1132,7 @@ export const makeCheckClaudeProviderStatus = (
         available: true,
         authStatus: "unknown" as const,
         version: parsedVersion,
+        ...(supportsAutoRuntimeMode !== undefined ? { supportsAutoRuntimeMode } : {}),
         checkedAt,
         message: "Could not verify Claude authentication status. Timed out while running command.",
       };
@@ -1199,6 +1206,7 @@ export const makeCheckClaudeProviderStatus = (
       available: true,
       authStatus: effectiveParsed.authStatus,
       version: parsedVersion,
+      ...(supportsAutoRuntimeMode !== undefined ? { supportsAutoRuntimeMode } : {}),
       ...(authMetadata ? { authType: authMetadata.type, authLabel: authMetadata.label } : {}),
       checkedAt,
       ...(effectiveParsed.message ? { message: effectiveParsed.message } : {}),

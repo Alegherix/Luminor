@@ -13,7 +13,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-import { ApprovalRequestId, ThreadId } from "@synara/contracts";
+import { ApprovalRequestId, ThreadId, type RuntimeMode } from "@synara/contracts";
 
 import {
   buildCodexProcessEnv,
@@ -39,15 +39,23 @@ import { CodexJsonlFramer, CodexJsonlWriter } from "./codexAppServerTransport";
 import { ensureIsolatedScratchWorkspace } from "./scratchWorkspaces";
 import { SYNARA_HARNESS_POLICY_MARKER } from "./agentGateway/harnessPolicy.ts";
 import { acquireAgentGatewaySessionLease } from "./agentGateway/sessionLease.ts";
+import { MINIMUM_CODEX_AUTO_REVIEW_CLI_VERSION } from "./provider/codexCliVersion.ts";
 
 const asThreadId = (value: string): ThreadId => ThreadId.makeUnsafe(value);
 const fullAccessTurnOverrides = {
   approvalPolicy: "never",
+  approvalsReviewer: "user",
   sandboxPolicy: { type: "dangerFullAccess" },
 } as const;
 const approvalRequiredTurnOverrides = {
   approvalPolicy: "untrusted",
+  approvalsReviewer: "user",
   sandboxPolicy: { type: "readOnly" },
+} as const;
+const autoTurnOverrides = {
+  approvalPolicy: "on-request",
+  approvalsReviewer: "auto_review",
+  sandboxPolicy: { type: "workspaceWrite" },
 } as const;
 
 describe("Codex Synara harness policy", () => {
@@ -100,7 +108,7 @@ describe("Codex Synara harness policy", () => {
   });
 });
 
-function createSendTurnHarness(runtimeMode: "approval-required" | "full-access" = "full-access") {
+function createSendTurnHarness(runtimeMode: RuntimeMode = "full-access") {
   const manager = new CodexAppServerManager();
   const context = {
     session: {
@@ -236,7 +244,7 @@ function createPendingUserInputHarness() {
 }
 
 function createPendingApprovalHarness(
-  runtimeMode: "approval-required" | "full-access" = "approval-required",
+  runtimeMode: RuntimeMode = "approval-required",
 ) {
   const manager = new CodexAppServerManager();
   const context = {
@@ -274,6 +282,7 @@ function createPendingApprovalHarness(
       | undefined
       | {
           approvalPolicy: "never";
+          approvalsReviewer: "user";
           sandboxPolicy: { type: "dangerFullAccess" };
         },
     collabReceiverTurns: new Map(),
@@ -347,6 +356,7 @@ function createCollabNotificationHarness() {
       | undefined
       | {
           approvalPolicy: "never";
+          approvalsReviewer: "user";
           sandboxPolicy: { type: "dangerFullAccess" };
         },
     collabReceiverTurns: new Map<string, string>(),
@@ -1315,6 +1325,40 @@ describe("startSession", () => {
       await manager.stopAll();
     }
   });
+
+  it("requires a Codex CLI version with AI approval-review support for auto mode", async () => {
+    const manager = new CodexAppServerManager();
+    const versionCheck = vi
+      .spyOn(
+        manager as unknown as {
+          assertSupportedCodexCliVersion: (input: {
+            binaryPath: string;
+            cwd: string;
+            homePath?: string;
+            minimumVersion?: string;
+          }) => void;
+        },
+        "assertSupportedCodexCliVersion",
+      )
+      .mockImplementation((input) => {
+        expect(input.minimumVersion).toBe(MINIMUM_CODEX_AUTO_REVIEW_CLI_VERSION);
+        throw new Error("Codex Auto version gate");
+      });
+
+    try {
+      await expect(
+        manager.startSession({
+          threadId: asThreadId("thread-auto-version"),
+          provider: "codex",
+          runtimeMode: "auto",
+        }),
+      ).rejects.toThrow("Codex Auto version gate");
+      expect(versionCheck).toHaveBeenCalledTimes(1);
+    } finally {
+      versionCheck.mockRestore();
+      await manager.stopAll();
+    }
+  });
 });
 
 describe("sendTurn", () => {
@@ -1398,6 +1442,29 @@ describe("sendTurn", () => {
         {
           type: "text",
           text: "Check this before changing files",
+          text_elements: [],
+        },
+      ],
+      model: "gpt-5.3-codex",
+    });
+  });
+
+  it("routes Codex approvals through the AI reviewer in auto mode", async () => {
+    const { manager, context, sendRequest } = createSendTurnHarness("auto");
+
+    await manager.sendTurn({
+      threadId: asThreadId("thread_1"),
+      input: "Make the routine workspace changes",
+    });
+
+    expect(sendRequest).toHaveBeenCalledWith(context, "turn/start", {
+      threadId: "thread_1",
+      ...autoTurnOverrides,
+      summary: "auto",
+      input: [
+        {
+          type: "text",
+          text: "Make the routine workspace changes",
           text_elements: [],
         },
       ],
@@ -2699,6 +2766,52 @@ describe("collab child conversation routing", () => {
     );
   });
 
+  it("responds to permission-profile approvals with the requested native permissions", async () => {
+    const { manager, context, emitEvent, writeMessage } = createCollabNotificationHarness();
+    const permissions = {
+      network: { enabled: true },
+      fileSystem: { read: ["/tmp/example"] },
+    };
+
+    await handleServerRequestForTest(manager, context, {
+      id: 45,
+      method: "item/permissions/requestApproval",
+      params: {
+        threadId: "provider_parent",
+        turnId: "turn_permissions",
+        itemId: "call_permissions",
+        reason: "Needs package metadata",
+        permissions,
+      },
+    });
+
+    const pendingRequest = Array.from(context.pendingApprovals.values())[0];
+    expect(pendingRequest).toEqual(
+      expect.objectContaining({
+        method: "item/permissions/requestApproval",
+        requestKind: "permissions",
+        requestedPermissions: permissions,
+      }),
+    );
+    await manager.respondToRequest(
+      asThreadId("thread_1"),
+      pendingRequest.requestId,
+      "acceptForSession",
+    );
+
+    expect(writeMessage).toHaveBeenCalledWith(context, {
+      id: 45,
+      result: { permissions, scope: "session" },
+    });
+    expect(context.sessionApprovalOverride).toBeUndefined();
+    expect(emitEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        method: "item/requestApproval/decision",
+        requestKind: "permissions",
+      }),
+    );
+  });
+
   it("preserves an unmapped child user-input route through the answered event", async () => {
     const { manager, context, emitEvent, writeMessage } = createCollabNotificationHarness();
 
@@ -2756,6 +2869,7 @@ describe("collab child conversation routing", () => {
     const { manager, context, emitEvent, writeMessage } = createCollabNotificationHarness();
     context.sessionApprovalOverride = {
       approvalPolicy: "never",
+      approvalsReviewer: "user",
       sandboxPolicy: { type: "dangerFullAccess" },
     };
 
