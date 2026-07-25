@@ -16,6 +16,8 @@ export default Effect.gen(function* () {
     `;
   }
 
+  // Naturally re-runnable: a normalized Studio thread no longer matches the
+  // predicate, and COALESCE keeps an already-adopted working directory.
   yield* sql`
     UPDATE projection_threads
     SET working_directory = COALESCE(working_directory, worktree_path),

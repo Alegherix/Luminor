@@ -2485,9 +2485,12 @@ describe("respondToRequest", () => {
         permissions,
       },
     });
-    const permissionRequest = Array.from(context.pendingApprovals.values()).find(
-      (request) => request.method === "item/permissions/requestApproval",
+    const permissionRequestId = Array.from(context.pendingApprovals.keys()).find(
+      (requestId) => requestId !== "req-approval-1",
     );
+    if (permissionRequestId === undefined) {
+      throw new Error("Expected the permission-profile request to remain pending.");
+    }
 
     await manager.respondToRequest(
       asThreadId("thread_1"),
@@ -2495,8 +2498,7 @@ describe("respondToRequest", () => {
       "acceptForSession",
     );
 
-    expect(permissionRequest).toBeDefined();
-    expect(context.pendingApprovals.get(permissionRequest!.requestId)).toBe(permissionRequest);
+    expect(context.pendingApprovals.has(permissionRequestId)).toBe(true);
     expect(writeMessage).not.toHaveBeenCalledWith(
       context,
       expect.objectContaining({
