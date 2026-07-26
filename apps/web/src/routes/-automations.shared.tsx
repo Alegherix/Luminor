@@ -16,6 +16,7 @@ import {
   type RuntimeMode,
   type ThreadId,
 } from "@synara/contracts";
+import { automationRequiresTargetThread } from "@synara/shared/automationMode";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 
@@ -65,8 +66,8 @@ import {
   formatNextRun,
   formatSchedule,
   formFromDefinition,
-  groupHeartbeatAutomationsByTargetThread,
-  heartbeatAutomationsForThread,
+  groupAutomationsByContinuedThread,
+  automationsForThread,
   isFormSubmittable,
   isoFromDatetimeLocal,
   modelSelectionForProjectChange,
@@ -127,8 +128,8 @@ export {
   formatNextRun,
   formatSchedule,
   formFromDefinition,
-  groupHeartbeatAutomationsByTargetThread,
-  heartbeatAutomationsForThread,
+  groupAutomationsByContinuedThread,
+  automationsForThread,
   isFormSubmittable,
   isoFromDatetimeLocal,
   modelSelectionForProjectChange,
@@ -915,8 +916,8 @@ export function AutomationDialog({
   form,
   projects,
   threads,
-  warnings = [],
-  acknowledgedWarningIds = new Set(),
+  warnings: warningsProp,
+  acknowledgedWarningIds: acknowledgedWarningIdsProp,
   onOpenChange,
   onFormChange,
   onToggleWarning,
@@ -936,6 +937,9 @@ export function AutomationDialog({
   readonly onSubmit: () => void;
   readonly busy: boolean;
 }) {
+  const warnings: readonly AutomationDraftWarning[] = warningsProp ?? [];
+  const acknowledgedWarningIds: ReadonlySet<AutomationDraftWarningId> =
+    acknowledgedWarningIdsProp ?? new Set<AutomationDraftWarningId>();
   const setField = <K extends keyof AutomationFormState>(key: K, value: AutomationFormState[K]) =>
     onFormChange({ ...form, [key]: value });
   const projectThreads = threads.filter((thread) => thread.projectId === form.projectId);
@@ -1111,7 +1115,9 @@ export function AutomationDialog({
 
         <div className="flex flex-wrap items-center gap-2 px-4 pb-4 pt-1">
           <div className="flex flex-1 flex-wrap items-center gap-0.5">
-            {form.mode === "standalone" ? (
+            {/* Heartbeat runs inherit the target thread's environment; every other mode
+                opens its own thread and therefore picks one. */}
+            {automationRequiresTargetThread(form.mode) ? null : (
               <Menu>
                 <MenuTrigger render={<Button variant="ghost" size="sm" className={CHIP_CLASS} />}>
                   <WorktreeIcon className="size-4" />
@@ -1133,7 +1139,7 @@ export function AutomationDialog({
                   </MenuRadioGroup>
                 </ComposerPickerMenuPopup>
               </Menu>
-            ) : null}
+            )}
 
             <Menu>
               <MenuTrigger render={<Button variant="ghost" size="sm" className={CHIP_CLASS} />}>
@@ -1336,10 +1342,13 @@ export function AutomationDialog({
                     onValueChange={(value) => setField("mode", value as AutomationMode)}
                   >
                     <MenuRadioItem value="standalone">Standalone</MenuRadioItem>
+                    <MenuRadioItem value="dedicated">Dedicated thread</MenuRadioItem>
                     <MenuRadioItem value="heartbeat">Heartbeat</MenuRadioItem>
                   </MenuRadioGroup>
                 </MenuGroup>
-                {form.mode === "heartbeat" ? (
+                {/* Only heartbeat continues a thread the user picks; a dedicated automation
+                    creates and keeps its own. */}
+                {automationRequiresTargetThread(form.mode) ? (
                   <>
                     <MenuSeparator />
                     <MenuGroup>
@@ -1361,27 +1370,27 @@ export function AutomationDialog({
                         </MenuRadioGroup>
                       )}
                     </MenuGroup>
-                    <MenuSeparator />
-                    <MenuGroup>
-                      <MenuGroupLabel>Stop when</MenuGroupLabel>
-                      <div className="px-2 py-1">
-                        <input
-                          value={form.stopWhen}
-                          onChange={(event) => setField("stopWhen", event.target.value)}
-                          placeholder="PR is ready to merge"
-                          className="w-full rounded-md border border-border bg-transparent px-2 py-1.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        />
-                      </div>
-                    </MenuGroup>
-                    <MenuSeparator />
-                    <MenuCheckboxItem
-                      checked={form.stopOnError}
-                      onCheckedChange={(checked) => setField("stopOnError", checked)}
-                    >
-                      Stop on error
-                    </MenuCheckboxItem>
                   </>
                 ) : null}
+                <MenuSeparator />
+                <MenuGroup>
+                  <MenuGroupLabel>Stop when</MenuGroupLabel>
+                  <div className="px-2 py-1">
+                    <input
+                      value={form.stopWhen}
+                      onChange={(event) => setField("stopWhen", event.target.value)}
+                      placeholder="PR is ready to merge"
+                      className="w-full rounded-md border border-border bg-transparent px-2 py-1.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                  </div>
+                </MenuGroup>
+                <MenuSeparator />
+                <MenuCheckboxItem
+                  checked={form.stopOnError}
+                  onCheckedChange={(checked) => setField("stopOnError", checked)}
+                >
+                  Stop on error
+                </MenuCheckboxItem>
                 <MenuSeparator />
                 <MenuGroup>
                   <MenuGroupLabel>Max iterations</MenuGroupLabel>

@@ -199,7 +199,7 @@ function makeThreadDetailForRun(input: {
   };
 }
 
-function heartbeatCompletionPolicy(stopWhen: string) {
+function aiCompletionPolicy(stopWhen: string) {
   return {
     type: "ai-evaluated" as const,
     stopWhen,
@@ -207,8 +207,8 @@ function heartbeatCompletionPolicy(stopWhen: string) {
   };
 }
 
-// Completes a heartbeat turn and exposes the transcript used by AI stop-condition checks.
-function completeHeartbeatRun(input: {
+// Completes an automation turn and exposes the transcript used by AI stop-condition checks.
+function completeAutomationRun(input: {
   readonly run: AutomationRun;
   readonly threadId: ThreadId;
   readonly turnId: TurnId;
@@ -220,7 +220,7 @@ function completeHeartbeatRun(input: {
     const projectionTurns = yield* ProjectionTurnRepository;
     const messageId = input.run.messageId;
     if (messageId === null) {
-      throw new Error("Expected heartbeat run to have a pending message id.");
+      throw new Error("Expected the automation run to have a pending message id.");
     }
     yield* projectionTurns.upsertByTurnId({
       threadId: input.threadId,
@@ -749,7 +749,7 @@ layer("AutomationService", (it) => {
         heartbeatCooldownSeconds: 0,
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({ run, threadId: targetThreadId, turnId: automationTurnId });
+      yield* completeAutomationRun({ run, threadId: targetThreadId, turnId: automationTurnId });
 
       const memory = yield* service.updateMemory({
         automationId: null,
@@ -856,6 +856,79 @@ layer("AutomationService", (it) => {
       assert.strictEqual(result.run.messageId, turnStart.message.messageId);
       assert.strictEqual(result.run.threadCreateCommandId, threadCreate.commandId);
       assert.strictEqual(result.run.turnStartCommandId, turnStart.commandId);
+    }),
+  );
+
+  it.effect("keeps a dedicated automation inside the one thread it owns", () =>
+    Effect.gen(function* () {
+      resetHarness();
+      const service = yield* AutomationService;
+      const created = yield* service.create({
+        ...createInput("local"),
+        mode: "dedicated",
+        heartbeatCooldownSeconds: 0,
+      });
+      // A dedicated automation starts without a thread: the server assigns its own.
+      assert.strictEqual(created.targetThreadId, null);
+
+      const first = yield* service.runNow({ automationId: created.id });
+      const threadCreate = dispatchedCommands[0];
+      if (threadCreate?.type !== "thread.create") {
+        assert.fail("Expected the first dedicated run to open a thread.");
+      }
+      // The thread outlives this run, so it is titled for the automation, not the occurrence.
+      assert.strictEqual(threadCreate.title, "Nightly maintenance");
+      const dedicatedThreadId = threadCreate.threadId;
+      assert.strictEqual(first.run.threadId, dedicatedThreadId);
+
+      yield* waitForAutomationList({
+        service,
+        description: "the dedicated automation to claim its thread",
+        predicate: (listed) =>
+          listed.definitions.find((entry) => entry.id === created.id)?.targetThreadId ===
+          dedicatedThreadId,
+      });
+
+      yield* completeAutomationRun({
+        run: first.run,
+        threadId: dedicatedThreadId,
+        turnId: TurnId.makeUnsafe("turn-dedicated-first"),
+      });
+      yield* service.reconcileThread({ threadId: dedicatedThreadId });
+      yield* waitForAutomationList({
+        service,
+        description: "the first dedicated run to finish",
+        predicate: (listed) =>
+          listed.runs.find((entry) => entry.id === first.run.id)?.status === "succeeded",
+      });
+
+      const second = yield* service.runNow({ automationId: created.id });
+
+      // The second run continues the claimed thread instead of opening a new one.
+      assert.strictEqual(second.run.threadId, dedicatedThreadId);
+      assert.strictEqual(second.run.threadCreateCommandId, null);
+      assert.strictEqual(
+        dispatchedCommands.filter((command) => command.type === "thread.create").length,
+        1,
+      );
+    }),
+  );
+
+  it.effect("ignores a caller-supplied thread for a dedicated automation", () =>
+    Effect.gen(function* () {
+      resetHarness();
+      const service = yield* AutomationService;
+      const foreignThreadId = ThreadId.makeUnsafe("someone-elses-thread");
+      threadShell = Option.some(makeThreadShell({ id: foreignThreadId }));
+
+      const created = yield* service.create({
+        ...createInput("local"),
+        mode: "dedicated",
+        targetThreadId: foreignThreadId,
+      });
+
+      // Only heartbeat may be pointed at an existing thread; dedicated always opens its own.
+      assert.strictEqual(created.targetThreadId, null);
     }),
   );
 
@@ -1974,7 +2047,7 @@ layer("AutomationService", (it) => {
         heartbeatCooldownSeconds: 0,
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2016,7 +2089,7 @@ layer("AutomationService", (it) => {
         heartbeatCooldownSeconds: 0,
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2057,7 +2130,7 @@ layer("AutomationService", (it) => {
             heartbeatCooldownSeconds: 0,
           });
           const { run } = yield* service.runNow({ automationId: created.id });
-          yield* completeHeartbeatRun({
+          yield* completeAutomationRun({
             run,
             threadId: targetThreadId,
             turnId: automationTurnId,
@@ -2262,10 +2335,10 @@ layer("AutomationService", (it) => {
         ...createInput("local"),
         mode: "heartbeat",
         targetThreadId,
-        completionPolicy: heartbeatCompletionPolicy("the PR is ready to merge"),
+        completionPolicy: aiCompletionPolicy("the PR is ready to merge"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2290,6 +2363,78 @@ layer("AutomationService", (it) => {
     }),
   );
 
+  it.effect("disables a standalone automation when the AI stop condition matches", () =>
+    Effect.gen(function* () {
+      resetHarness();
+      const service = yield* AutomationService;
+      const automationTurnId = TurnId.makeUnsafe("turn-standalone-stop");
+      completionEvaluation = {
+        stopMatched: true,
+        confidence: 0.94,
+        reason: "The assistant reports the PR is merged.",
+      };
+
+      const created = yield* service.create({
+        ...createInput("local"),
+        mode: "standalone",
+        completionPolicy: aiCompletionPolicy("the PR is merged"),
+      });
+      // The stop clause must survive creation: it used to be coerced away for standalone.
+      assert.deepStrictEqual(created.completionPolicy, aiCompletionPolicy("the PR is merged"));
+
+      const { run } = yield* service.runNow({ automationId: created.id });
+      const runThreadId = run.threadId;
+      assert.isNotNull(runThreadId);
+      yield* completeAutomationRun({
+        run,
+        threadId: runThreadId!,
+        turnId: automationTurnId,
+        assistantText: "The PR is merged, nothing left to watch.",
+      });
+
+      yield* service.reconcileThread({ threadId: runThreadId! });
+
+      const listed = yield* waitForAutomationList({
+        service,
+        description: "matched standalone stop evaluation",
+        predicate: (listed) =>
+          listed.definitions.find((entry) => entry.id === created.id)?.enabled === false &&
+          listed.runs.find((entry) => entry.id === run.id)?.result?.completionEvaluation
+            ?.stopMatched === true,
+      });
+      const updatedDefinition = listed.definitions.find((entry) => entry.id === created.id);
+      const updatedRun = listed.runs.find((entry) => entry.id === run.id);
+      assert.strictEqual(updatedDefinition?.enabled, false);
+      assert.strictEqual(updatedRun?.result?.completionEvaluation?.stopMatched, true);
+    }),
+  );
+
+  it.effect("keeps a stop clause when an automation switches to standalone", () =>
+    Effect.gen(function* () {
+      resetHarness();
+      const service = yield* AutomationService;
+      const targetThreadId = ThreadId.makeUnsafe("stop-clause-mode-switch-thread");
+      threadShell = Option.some(makeThreadShell({ id: targetThreadId }));
+
+      const created = yield* service.create({
+        ...createInput("local"),
+        mode: "heartbeat",
+        targetThreadId,
+        completionPolicy: aiCompletionPolicy("the PR is merged"),
+      });
+      const updated = yield* service.update({
+        id: created.id,
+        mode: "standalone",
+        targetThreadId: null,
+      });
+
+      assert.strictEqual(updated.mode, "standalone");
+      assert.deepStrictEqual(updated.completionPolicy, aiCompletionPolicy("the PR is merged"));
+      // An untouched policy must not bump the version, or in-flight runs go stale for nothing.
+      assert.strictEqual(updated.completionPolicyVersion, created.completionPolicyVersion);
+    }),
+  );
+
   it.effect("records a timed-out stop check and keeps the heartbeat alive", () =>
     Effect.gen(function* () {
       resetHarness();
@@ -2309,10 +2454,10 @@ layer("AutomationService", (it) => {
         ...createInput("local"),
         mode: "heartbeat",
         targetThreadId,
-        completionPolicy: heartbeatCompletionPolicy("the PR is ready"),
+        completionPolicy: aiCompletionPolicy("the PR is ready"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2372,10 +2517,10 @@ layer("AutomationService", (it) => {
         ...createInput("local"),
         mode: "heartbeat",
         targetThreadId,
-        completionPolicy: heartbeatCompletionPolicy("the PR is ready"),
+        completionPolicy: aiCompletionPolicy("the PR is ready"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2429,10 +2574,10 @@ layer("AutomationService", (it) => {
         ...createInput("local"),
         mode: "heartbeat",
         targetThreadId,
-        completionPolicy: heartbeatCompletionPolicy("there are no actionable issues"),
+        completionPolicy: aiCompletionPolicy("there are no actionable issues"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2487,10 +2632,10 @@ layer("AutomationService", (it) => {
         mode: "heartbeat",
         targetThreadId,
         maxIterations: 1,
-        completionPolicy: heartbeatCompletionPolicy("the PR is ready"),
+        completionPolicy: aiCompletionPolicy("the PR is ready"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2531,10 +2676,10 @@ layer("AutomationService", (it) => {
         ...createInput("local"),
         mode: "heartbeat",
         targetThreadId,
-        completionPolicy: heartbeatCompletionPolicy("the PR is ready"),
+        completionPolicy: aiCompletionPolicy("the PR is ready"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2592,10 +2737,10 @@ layer("AutomationService", (it) => {
         ...createInput("local"),
         mode: "heartbeat",
         targetThreadId,
-        completionPolicy: heartbeatCompletionPolicy("the PR is ready"),
+        completionPolicy: aiCompletionPolicy("the PR is ready"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2645,10 +2790,10 @@ layer("AutomationService", (it) => {
         ...createInput("local"),
         mode: "heartbeat",
         targetThreadId,
-        completionPolicy: heartbeatCompletionPolicy("the PR is ready"),
+        completionPolicy: aiCompletionPolicy("the PR is ready"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2691,7 +2836,7 @@ layer("AutomationService", (it) => {
       assert.strictEqual(updatedDefinition?.name, edited.name);
       assert.deepStrictEqual(
         updatedDefinition?.completionPolicy,
-        heartbeatCompletionPolicy("the PR is ready"),
+        aiCompletionPolicy("the PR is ready"),
       );
       assert.strictEqual(updatedRun?.result?.completionEvaluation?.stopMatched, false);
       assert.notInclude(updatedRun?.result?.summary ?? "", "Stopped:");
@@ -2716,10 +2861,10 @@ layer("AutomationService", (it) => {
         ...createInput("local"),
         mode: "heartbeat",
         targetThreadId,
-        completionPolicy: heartbeatCompletionPolicy("the PR is ready"),
+        completionPolicy: aiCompletionPolicy("the PR is ready"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2774,10 +2919,10 @@ layer("AutomationService", (it) => {
         ...createInput("local"),
         mode: "heartbeat",
         targetThreadId,
-        completionPolicy: heartbeatCompletionPolicy("the PR is ready"),
+        completionPolicy: aiCompletionPolicy("the PR is ready"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2823,10 +2968,10 @@ layer("AutomationService", (it) => {
           provider: "claudeAgent",
           model: "claude-opus-4-8",
         },
-        completionPolicy: heartbeatCompletionPolicy("the PR is ready"),
+        completionPolicy: aiCompletionPolicy("the PR is ready"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2865,10 +3010,10 @@ layer("AutomationService", (it) => {
         ...createInput("local"),
         mode: "heartbeat",
         targetThreadId,
-        completionPolicy: heartbeatCompletionPolicy("there are no actionable issues"),
+        completionPolicy: aiCompletionPolicy("there are no actionable issues"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2921,9 +3066,9 @@ layer("AutomationService", (it) => {
       const { run } = yield* service.runNow({ automationId: created.id });
       yield* service.update({
         id: created.id,
-        completionPolicy: heartbeatCompletionPolicy("the PR is ready"),
+        completionPolicy: aiCompletionPolicy("the PR is ready"),
       });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -2939,7 +3084,7 @@ layer("AutomationService", (it) => {
       assert.strictEqual(updatedDefinition?.enabled, true);
       assert.deepStrictEqual(
         updatedDefinition?.completionPolicy,
-        heartbeatCompletionPolicy("the PR is ready"),
+        aiCompletionPolicy("the PR is ready"),
       );
       assert.isUndefined(updatedRun?.result?.completionEvaluation);
       assert.strictEqual(completionEvaluationInputs.length, 0);
@@ -2964,10 +3109,10 @@ layer("AutomationService", (it) => {
         ...createInput("local"),
         mode: "heartbeat",
         targetThreadId,
-        completionPolicy: heartbeatCompletionPolicy("there are no actionable issues"),
+        completionPolicy: aiCompletionPolicy("there are no actionable issues"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -3026,10 +3171,10 @@ layer("AutomationService", (it) => {
         ...createInput("local"),
         mode: "heartbeat",
         targetThreadId,
-        completionPolicy: heartbeatCompletionPolicy("the PR is ready"),
+        completionPolicy: aiCompletionPolicy("the PR is ready"),
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -3074,10 +3219,10 @@ layer("AutomationService", (it) => {
           ...createInput("local"),
           mode: "heartbeat",
           targetThreadId,
-          completionPolicy: heartbeatCompletionPolicy("the PR is ready"),
+          completionPolicy: aiCompletionPolicy("the PR is ready"),
         });
         const { run } = yield* service.runNow({ automationId: created.id });
-        yield* completeHeartbeatRun({
+        yield* completeAutomationRun({
           run,
           threadId: targetThreadId,
           turnId: automationTurnId,
@@ -3126,7 +3271,7 @@ layer("AutomationService", (it) => {
         targetThreadId,
       });
       const { run } = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -3349,7 +3494,7 @@ layer("AutomationService", (it) => {
           mode: "heartbeat",
           targetThreadId,
           schedule: { type: "interval", everySeconds: 15 },
-          completionPolicy: heartbeatCompletionPolicy("the condition is met"),
+          completionPolicy: aiCompletionPolicy("the condition is met"),
           acknowledgedRisks: ["fast-interval", "local-checkout"],
         })
         .pipe(Effect.flip);
@@ -4085,7 +4230,7 @@ layer("AutomationService", (it) => {
         heartbeatCooldownSeconds: 60,
       });
       const first = yield* service.runNow({ automationId: created.id });
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run: first.run,
         threadId: targetThreadId,
         turnId: automationTurnId,
@@ -4112,7 +4257,7 @@ layer("AutomationService", (it) => {
       assert.strictEqual(second.run.status, "running");
       assert.isNull(second.run.deferredUntil);
 
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run: second.run,
         threadId: targetThreadId,
         turnId: TurnId.makeUnsafe("cooldown-self-turn-2"),
@@ -4431,7 +4576,7 @@ layer("AutomationService", (it) => {
           schedule: { type: "interval", everySeconds: 300 },
           mode: "heartbeat",
           targetThreadId,
-          completionPolicy: heartbeatCompletionPolicy("there are no actionable issues"),
+          completionPolicy: aiCompletionPolicy("there are no actionable issues"),
         },
         now: "2026-06-16T10:00:00.000Z",
       });
@@ -4447,7 +4592,7 @@ layer("AutomationService", (it) => {
       ).length;
       assert.strictEqual(dispatchedBefore, 1);
 
-      yield* completeHeartbeatRun({
+      yield* completeAutomationRun({
         run: firstRun!,
         threadId: targetThreadId,
         turnId: automationTurnId,
