@@ -327,7 +327,10 @@ function createSnapshotForTargetUser(options: {
           status: options.sessionStatus ?? "ready",
           providerName: "codex",
           runtimeMode: "full-access",
-          activeTurnId: null,
+          activeTurnId:
+            options.sessionStatus === "running"
+              ? TurnId.makeUnsafe("turn-browser-fixture-active")
+              : null,
           lastError: null,
           updatedAt: NOW_ISO,
         },
@@ -5976,9 +5979,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
         { timeout: 8_000, interval: 16 },
       );
 
-      useStore
-        .getState()
-        .syncServerReadModel(createSnapshotWithInlineToolOverflow({ active: false }));
+      const settledSnapshot = createSnapshotWithInlineToolOverflow({ active: false });
+      useStore.getState().syncServerReadModel({
+        ...settledSnapshot,
+        snapshotSequence: fixture.snapshot.snapshotSequence + 1,
+      });
 
       // The first settled paint keeps the live layout: no "Worked for" fold yet.
       expect(document.querySelector("[data-settled-turn-collapse-transition='true']")).toBeNull();
