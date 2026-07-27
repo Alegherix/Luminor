@@ -164,6 +164,7 @@ interface GatewayHarness {
     readonly assistantMessageId?: string | null;
   }) => void;
   readonly setProviderStatuses: (statuses: ReadonlyArray<ServerProviderStatus>) => void;
+  readonly getProviderHealthRefreshCount: () => number;
   readonly getOperationStatus: (callerTurnId: string) => string | null;
   readonly getOperationErrorCode: (callerTurnId: string) => string | null;
   readonly getWaitReadCounts: () => {
@@ -804,9 +805,13 @@ function makeHarnessLayer(
         checkedAt: NOW,
       }),
     );
+  let providerHealthRefreshCount = 0;
   const providerHealthLayer = Layer.succeed(ProviderHealth, {
     getStatuses: Effect.sync(() => providerStatuses),
-    refresh: Effect.sync(() => providerStatuses),
+    refresh: Effect.sync(() => {
+      providerHealthRefreshCount += 1;
+      return providerStatuses;
+    }),
     updateProvider: () => Effect.die("Provider updates are not used by gateway tests."),
     streamChanges: Stream.empty,
   } as unknown as (typeof ProviderHealth)["Service"]);
@@ -1156,6 +1161,7 @@ function makeHarnessLayer(
       setProviderStatuses: (statuses) => {
         providerStatuses = statuses;
       },
+      getProviderHealthRefreshCount: () => providerHealthRefreshCount,
       getOperationStatus: (callerTurnId) =>
         [...operationsByScope.values()].find((operation) => operation.callerTurnId === callerTurnId)
           ?.status ?? null,
@@ -4227,6 +4233,50 @@ describe("AgentGateway", () => {
         assert.equal(create.runtimeMode, "auto");
         assert.equal(create.modelSelection.provider, "codex");
       }
+    }).pipe(Effect.provide(gatewayLayer));
+  });
+
+  it.effect("rejects provider-health Auto incompatibility before creating a worktree", () => {
+    const { gatewayLayer, makeHarness } = makeHarnessLayer(
+      [makeThreadShell("thread-parent", { runtimeMode: "auto" })],
+      [],
+      {
+        providerStatuses: [
+          {
+            provider: "codex",
+            status: "ready",
+            available: true,
+            authStatus: "authenticated",
+            supportsAutoRuntimeMode: false,
+            checkedAt: NOW,
+            message: "Upgrade Codex CLI to use Auto mode.",
+          },
+        ],
+      },
+    );
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness;
+      const response = yield* harness.callTool({
+        token: "token-parent",
+        name: "synara_create_threads",
+        args: {
+          requestId: "reject-health-unsupported-auto",
+          threads: [
+            {
+              prompt: "must not mutate",
+              target: { provider: "codex", model: "gpt-5.5" },
+              environment: "worktree",
+              runtimeMode: "auto",
+            },
+          ],
+        },
+      });
+
+      assert.isTrue(isToolError(response.result));
+      assert.include(toolErrorText(response.result), "Upgrade Codex CLI");
+      assert.equal(harness.getProviderHealthRefreshCount(), 1);
+      assert.equal(harness.worktreeCreates.length, 0);
+      assert.equal(harness.dispatched.length, 0);
     }).pipe(Effect.provide(gatewayLayer));
   });
 

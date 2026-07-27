@@ -1631,7 +1631,10 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               ),
             }),
         }).pipe(
-          Effect.timeout(Duration.seconds(5)),
+          // ProviderService gives session startup 60 seconds. Let cold startup
+          // discovery use nearly that budget while retaining cleanup headroom;
+          // live model switches keep their short bound.
+          Effect.timeout(Duration.seconds(input.operation === "startSession" ? 55 : 5)),
           Effect.mapError((cause) =>
             cause instanceof ProviderAdapterValidationError
               ? cause

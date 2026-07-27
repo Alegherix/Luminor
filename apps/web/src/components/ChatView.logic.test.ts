@@ -6,6 +6,7 @@ import {
   buildComposerMenuSelectionKey,
   buildTranscriptAutoFollowSignal,
   commitAfterRuntimeModePersistence,
+  persistModelSelectionBeforeRuntimeMode,
   createLocalDispatchSnapshot,
   createWorktreeSetupSnapshot,
   derivePromptHistoryFromMessages,
@@ -1941,6 +1942,77 @@ describe("commitAfterRuntimeModePersistence", () => {
 
     expect(committed).toBe(true);
     expect(calls).toEqual(["persist", "commit"]);
+  });
+});
+
+describe("persistModelSelectionBeforeRuntimeMode", () => {
+  const previousModel = {
+    provider: "droid",
+    model: "claude-opus-4-8",
+  } as const;
+  const autoCapableModel = {
+    provider: "codex",
+    model: "gpt-5.6-sol",
+  } as const;
+
+  it("persists a newly selected model before enabling Auto", async () => {
+    const calls: Array<string> = [];
+
+    await persistModelSelectionBeforeRuntimeMode({
+      currentModelSelection: previousModel,
+      nextModelSelection: autoCapableModel,
+      currentRuntimeMode: "approval-required",
+      nextRuntimeMode: "auto",
+      persistModelSelection: async () => {
+        calls.push("model");
+      },
+      persistRuntimeMode: async () => {
+        calls.push("runtime");
+      },
+    });
+
+    expect(calls).toEqual(["model", "runtime"]);
+  });
+
+  it("does not enable Auto when persisting the selected model fails", async () => {
+    const calls: Array<string> = [];
+
+    await expect(
+      persistModelSelectionBeforeRuntimeMode({
+        currentModelSelection: previousModel,
+        nextModelSelection: autoCapableModel,
+        currentRuntimeMode: "approval-required",
+        nextRuntimeMode: "auto",
+        persistModelSelection: async () => {
+          calls.push("model");
+          throw new Error("model persistence failed");
+        },
+        persistRuntimeMode: async () => {
+          calls.push("runtime");
+        },
+      }),
+    ).rejects.toThrow("model persistence failed");
+
+    expect(calls).toEqual(["model"]);
+  });
+
+  it("downgrades from Auto before persisting an incompatible model", async () => {
+    const calls: Array<string> = [];
+
+    await persistModelSelectionBeforeRuntimeMode({
+      currentModelSelection: autoCapableModel,
+      nextModelSelection: previousModel,
+      currentRuntimeMode: "auto",
+      nextRuntimeMode: "approval-required",
+      persistModelSelection: async () => {
+        calls.push("model");
+      },
+      persistRuntimeMode: async () => {
+        calls.push("runtime");
+      },
+    });
+
+    expect(calls).toEqual(["runtime", "model"]);
   });
 });
 

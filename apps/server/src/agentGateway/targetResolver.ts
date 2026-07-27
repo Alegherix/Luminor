@@ -48,6 +48,7 @@ export interface AgentGatewayProviderAvailability {
   /** Undefined means health has not produced a trustworthy snapshot yet. */
   readonly available?: boolean;
   readonly authStatus?: ServerProviderAuthStatus;
+  readonly supportsAutoRuntimeMode?: boolean;
   readonly message?: string;
 }
 

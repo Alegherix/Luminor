@@ -169,6 +169,7 @@ import {
   derivePromptHistoryFromMessages,
   enrichSubagentWorkEntries,
   hasFileUndoSettled,
+  persistModelSelectionBeforeRuntimeMode,
   promptStillMatchesActiveHistoryBrowse,
   type PendingFileUndo,
   type PromptHistoryNavigationState,
@@ -4599,12 +4600,26 @@ export default function ChatView({
           return false;
         }
         try {
-          await api.orchestration.dispatchCommand({
-            type: "thread.runtime-mode.set",
-            commandId: newCommandId(),
-            threadId,
-            runtimeMode: mode,
-            createdAt: new Date().toISOString(),
+          await persistModelSelectionBeforeRuntimeMode({
+            currentModelSelection: serverThread.modelSelection,
+            ...(mode === "auto" ? { nextModelSelection: selectedModelSelection } : {}),
+            currentRuntimeMode: serverThread.runtimeMode,
+            nextRuntimeMode: mode,
+            persistModelSelection: (modelSelection) =>
+              api.orchestration.dispatchCommand({
+                type: "thread.meta.update",
+                commandId: newCommandId(),
+                threadId,
+                modelSelection,
+              }),
+            persistRuntimeMode: (runtimeMode) =>
+              api.orchestration.dispatchCommand({
+                type: "thread.runtime-mode.set",
+                commandId: newCommandId(),
+                threadId,
+                runtimeMode,
+                createdAt: new Date().toISOString(),
+              }),
           });
         } catch (error) {
           toastManager.add({
@@ -4626,6 +4641,7 @@ export default function ChatView({
       isLocalDraftThread,
       runtimeMode,
       scheduleComposerFocus,
+      selectedModelSelection,
       serverThread,
       setComposerDraftRuntimeMode,
       setDraftThreadContext,
@@ -4736,33 +4752,27 @@ export default function ChatView({
         return;
       }
 
-      if (input.runtimeMode !== serverThread.runtimeMode) {
-        await api.orchestration.dispatchCommand({
-          type: "thread.runtime-mode.set",
-          commandId: newCommandId(),
-          threadId: input.threadId,
-          runtimeMode: input.runtimeMode,
-          createdAt: input.createdAt,
-        });
-      }
-
-      if (
-        input.modelSelection !== undefined &&
-        (input.modelSelection.model !== serverThread.modelSelection.model ||
-          input.modelSelection.provider !== serverThread.modelSelection.provider ||
-          JSON.stringify(input.modelSelection.options ?? null) !==
-            JSON.stringify(serverThread.modelSelection.options ?? null) ||
-          (input.modelSelection.provider === "claudeAgent" &&
-            serverThread.modelSelection.provider === "claudeAgent" &&
-            input.modelSelection.supportsAutoMode !== serverThread.modelSelection.supportsAutoMode))
-      ) {
-        await api.orchestration.dispatchCommand({
-          type: "thread.meta.update",
-          commandId: newCommandId(),
-          threadId: input.threadId,
-          modelSelection: input.modelSelection,
-        });
-      }
+      await persistModelSelectionBeforeRuntimeMode({
+        currentModelSelection: serverThread.modelSelection,
+        ...(input.modelSelection !== undefined ? { nextModelSelection: input.modelSelection } : {}),
+        currentRuntimeMode: serverThread.runtimeMode,
+        nextRuntimeMode: input.runtimeMode,
+        persistModelSelection: (modelSelection) =>
+          api.orchestration.dispatchCommand({
+            type: "thread.meta.update",
+            commandId: newCommandId(),
+            threadId: input.threadId,
+            modelSelection,
+          }),
+        persistRuntimeMode: (runtimeMode) =>
+          api.orchestration.dispatchCommand({
+            type: "thread.runtime-mode.set",
+            commandId: newCommandId(),
+            threadId: input.threadId,
+            runtimeMode,
+            createdAt: input.createdAt,
+          }),
+      });
 
       if (input.interactionMode !== serverThread.interactionMode) {
         await api.orchestration.dispatchCommand({

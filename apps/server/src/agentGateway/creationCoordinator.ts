@@ -103,6 +103,10 @@ interface CreationCoordinatorDependencies {
     ReadonlyMap<ProviderKind, AgentGatewayProviderAvailability>,
     unknown
   >;
+  readonly refreshProviderAvailabilities: Effect.Effect<
+    ReadonlyMap<ProviderKind, AgentGatewayProviderAvailability>,
+    unknown
+  >;
   readonly requireThreadShell: (
     threadId: string,
   ) => Effect.Effect<OrchestrationThreadShell, ToolInputError>;
@@ -185,6 +189,7 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
     externalMcpRepository,
     serverConfig,
     loadProviderAvailabilities,
+    refreshProviderAvailabilities,
     requireThreadShell,
   } = dependencies;
   const lockIndex = yield* Semaphore.make(1);
@@ -466,7 +471,14 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
         );
       }
       const callerIsolatedInWorktree = caller?.envMode === "worktree";
-      const providerAvailabilities = yield* loadProviderAvailabilities;
+      const requestsAutoRuntime =
+        context.kind === "provider-session" &&
+        input.threads.some((spec) => spec.runtimeMode === "auto");
+      // Auto capability can change after a CLI upgrade while Synara is open.
+      // Refresh once for the whole batch before any git or dispatch side effects.
+      const providerAvailabilities = yield* requestsAutoRuntime
+        ? refreshProviderAvailabilities
+        : loadProviderAvailabilities;
 
       const prepared = yield* Effect.forEach(input.threads, (spec, index) =>
         Effect.gen(function* () {
@@ -494,12 +506,11 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
               }),
             ),
           );
+          const providerAvailability = providerAvailabilities.get(spec.target.provider);
           const target = yield* resolveAgentGatewayTarget({
             target: spec.target,
             discovery: providerDiscovery,
-            ...(providerAvailabilities.get(spec.target.provider) !== undefined
-              ? { availability: providerAvailabilities.get(spec.target.provider)! }
-              : {}),
+            ...(providerAvailability !== undefined ? { availability: providerAvailability } : {}),
             cwd: project.workspaceRoot,
           });
           const externalPolicy =
@@ -540,6 +551,14 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
           if (runtimeMode === "auto" && !providerSupportsAutoRuntimeMode(target.provider)) {
             return yield* Effect.fail(
               new ToolInputError(unsupportedAutoRuntimeModeMessage(target.provider)),
+            );
+          }
+          if (runtimeMode === "auto" && providerAvailability?.supportsAutoRuntimeMode === false) {
+            return yield* Effect.fail(
+              new ToolInputError(
+                providerAvailability.message ??
+                  `${target.provider} does not support Auto runtime mode in the installed version.`,
+              ),
             );
           }
           if (
