@@ -6,6 +6,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import type {
   Options as ClaudeQueryOptions,
   HookInput,
+  ModelInfo,
   PermissionMode,
   PermissionResult,
   SDKControlGetContextUsageResponse,
@@ -147,8 +148,18 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
     return [];
   };
 
-  readonly supportedModels = async (): Promise<[]> => {
-    return [];
+  readonly supportedModels = async (): Promise<Array<ModelInfo>> => {
+    return [
+      {
+        value: "claude-sonnet-5",
+        displayName: "Claude Sonnet 5",
+        description: "Default supported test model",
+        supportsEffort: true,
+        supportsAdaptiveThinking: true,
+        supportsFastMode: false,
+        supportsAutoMode: true,
+      },
+    ];
   };
 
   readonly supportedAgents = async (): Promise<[]> => {
@@ -7525,7 +7536,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
 
   it.effect("closes an uninstalled Claude query when post-spawn setup fails", () => {
     const query = new FakeClaudeQuery();
-    (query as { supportedModels: () => Promise<[]> }).supportedModels = () => {
+    (query as unknown as { supportedModels: () => Promise<[]> }).supportedModels = () => {
       throw new Error("simulated post-spawn setup failure");
     };
     const layer = makeClaudeAdapterLive({ createQuery: () => query }).pipe(
@@ -7586,6 +7597,95 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
           modelSelection: {
             provider: "claudeAgent",
             model: "claude-haiku-4-5",
+          },
+        }),
+      );
+
+      assert.ok(Exit.isFailure(result));
+      assert.equal(query.closeCalls, 1);
+      assert.equal(yield* adapter.hasSession(THREAD_ID), false);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(layer),
+    );
+  });
+
+  it.effect("matches Auto capability through Claude's resolved model id", () => {
+    const query = new FakeClaudeQuery();
+    (
+      query as unknown as {
+        supportedModels: () => Promise<
+          Array<{
+            value: string;
+            resolvedModel: string;
+            displayName: string;
+            supportsAutoMode: boolean;
+          }>
+        >;
+      }
+    ).supportedModels = async () => [
+      {
+        value: "sonnet",
+        resolvedModel: "claude-sonnet-5",
+        displayName: "Claude Sonnet 5",
+        supportsAutoMode: false,
+      },
+    ];
+    const layer = makeClaudeAdapterLive({ createQuery: () => query }).pipe(
+      Layer.provideMerge(ServerConfig.layerTest("/tmp/claude-adapter-test", "/tmp")),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const result = yield* Effect.exit(
+        adapter.startSession({
+          threadId: THREAD_ID,
+          provider: "claudeAgent",
+          runtimeMode: "auto",
+          modelSelection: {
+            provider: "claudeAgent",
+            model: "claude-sonnet-5",
+          },
+        }),
+      );
+
+      assert.ok(Exit.isFailure(result));
+      assert.equal(query.closeCalls, 1);
+      assert.equal(yield* adapter.hasSession(THREAD_ID), false);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(layer),
+    );
+  });
+
+  it.effect("rejects Auto when the selected Claude model omits capability metadata", () => {
+    const query = new FakeClaudeQuery();
+    (
+      query as unknown as {
+        supportedModels: () => Promise<Array<{ value: string; displayName: string }>>;
+      }
+    ).supportedModels = async () => [
+      {
+        value: "claude-sonnet-5",
+        displayName: "Claude Sonnet 5",
+      },
+    ];
+    const layer = makeClaudeAdapterLive({ createQuery: () => query }).pipe(
+      Layer.provideMerge(ServerConfig.layerTest("/tmp/claude-adapter-test", "/tmp")),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const result = yield* Effect.exit(
+        adapter.startSession({
+          threadId: THREAD_ID,
+          provider: "claudeAgent",
+          runtimeMode: "auto",
+          modelSelection: {
+            provider: "claudeAgent",
+            model: "claude-sonnet-5",
           },
         }),
       );

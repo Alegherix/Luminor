@@ -728,6 +728,7 @@ function toPermissionMode(value: unknown): PermissionMode | undefined {
 function mapClaudeModelInfo(model: ModelInfo): ProviderListModelsResult["models"][number] {
   return {
     slug: model.value,
+    ...(model.resolvedModel ? { resolvedModel: model.resolvedModel } : {}),
     name: model.displayName,
     ...(typeof model.supportsAutoMode === "boolean"
       ? { supportsAutoMode: model.supportsAutoMode }
@@ -1646,14 +1647,23 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           source: "sdk",
           cached: false,
         };
-        const selectedModel = discoveredModels.find(
-          (model) => model.value === input.selectedModel || model.value === input.apiModelId,
+        const requestedModels = new Set(
+          [input.selectedModel, input.apiModelId].filter(
+            (model): model is string => model !== undefined,
+          ),
         );
-        if (selectedModel?.supportsAutoMode === false) {
+        const selectedModel = discoveredModels.find(
+          (model) =>
+            requestedModels.has(model.value) ||
+            (model.resolvedModel !== undefined && requestedModels.has(model.resolvedModel)),
+        );
+        if (selectedModel?.supportsAutoMode !== true) {
           return yield* new ProviderAdapterValidationError({
             provider: PROVIDER,
             operation: input.operation,
-            issue: `Claude model "${selectedModel.displayName}" does not support Auto mode.`,
+            issue: selectedModel
+              ? `Claude model "${selectedModel.displayName}" does not support Auto mode.`
+              : `Could not verify that Claude model "${requestedModel}" supports Auto mode.`,
           });
         }
       });

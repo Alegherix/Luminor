@@ -785,6 +785,42 @@ describe("codex CLI version gate", () => {
     }
   });
 
+  it("fails closed for Auto when the Codex CLI version cannot be parsed", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-version-auto-unknown-"));
+    const homePath = path.join(dir, "codex-home");
+    mkdirSync(homePath, { recursive: true });
+    vi.stubEnv("SYNARA_HOME", path.join(dir, "runtime"));
+
+    const isWindows = process.platform === "win32";
+    const binaryPath = path.join(dir, isWindows ? "codex.cmd" : "codex.sh");
+    writeFileSync(
+      binaryPath,
+      isWindows
+        ? "@echo off\r\necho codex-cli development\r\n"
+        : '#!/bin/sh\necho "codex-cli development"\n',
+      { mode: 0o755 },
+    );
+
+    const { assertSupportedCodexCliVersion, reset } = __codexCliVersionGateTesting;
+    reset();
+    try {
+      // Preserve compatibility with custom development builds for ordinary sessions.
+      await assertSupportedCodexCliVersion({ binaryPath, cwd: dir, homePath });
+      await expect(
+        assertSupportedCodexCliVersion({
+          binaryPath,
+          cwd: dir,
+          homePath,
+          minimumVersion: MINIMUM_CODEX_AUTO_REVIEW_CLI_VERSION,
+        }),
+      ).rejects.toThrow(`Auto mode requires v${MINIMUM_CODEX_AUTO_REVIEW_CLI_VERSION} or newer`);
+    } finally {
+      reset();
+      vi.unstubAllEnvs();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("re-probes when the binary behind an unchanged path is replaced", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-version-swap-"));
     const homePath = path.join(dir, "codex-home");

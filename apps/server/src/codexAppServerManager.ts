@@ -3797,6 +3797,11 @@ async function runCodexCliVersionGate(input: {
 
   const parsedVersion = parseCodexCliVersion(`${stdout}\n${stderr}`);
   const minimumVersion = input.minimumVersion;
+  if (minimumVersion && !parsedVersion) {
+    throw new Error(
+      `Could not determine the installed Codex CLI version. Auto mode requires v${minimumVersion} or newer.`,
+    );
+  }
   if (
     parsedVersion &&
     (minimumVersion

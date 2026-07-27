@@ -165,6 +165,7 @@ import { useDiffRouteSearch } from "../hooks/useDiffRouteSearch";
 import {
   buildThreadBreadcrumbs,
   buildTranscriptAutoFollowSignal,
+  commitAfterRuntimeModePersistence,
   derivePromptHistoryFromMessages,
   enrichSubagentWorkEntries,
   hasFileUndoSettled,
@@ -4584,35 +4585,42 @@ export default function ChatView({
     [activeProject, persistProjectScripts],
   );
 
-  const handleRuntimeModeChange = useCallback(
-    (mode: RuntimeMode) => {
-      if (mode === runtimeMode) return;
+  const persistRuntimeModeChange = useCallback(
+    async (mode: RuntimeMode): Promise<boolean> => {
+      if (mode === runtimeMode) return true;
+      if (serverThread) {
+        const api = readNativeApi();
+        if (!api) {
+          toastManager.add({
+            type: "error",
+            title: "Could not update access mode",
+            description: "Synara is not connected to the server.",
+          });
+          return false;
+        }
+        try {
+          await api.orchestration.dispatchCommand({
+            type: "thread.runtime-mode.set",
+            commandId: newCommandId(),
+            threadId,
+            runtimeMode: mode,
+            createdAt: new Date().toISOString(),
+          });
+        } catch (error) {
+          toastManager.add({
+            type: "error",
+            title: "Could not update access mode",
+            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+          });
+          return false;
+        }
+      }
       setComposerDraftRuntimeMode(threadId, mode);
       if (isLocalDraftThread) {
         setDraftThreadContext(threadId, { runtimeMode: mode });
       }
-      if (serverThread) {
-        const api = readNativeApi();
-        if (api) {
-          void api.orchestration
-            .dispatchCommand({
-              type: "thread.runtime-mode.set",
-              commandId: newCommandId(),
-              threadId,
-              runtimeMode: mode,
-              createdAt: new Date().toISOString(),
-            })
-            .catch((error) => {
-              toastManager.add({
-                type: "error",
-                title: "Could not update access mode",
-                description:
-                  error instanceof Error ? error.message : "An unexpected error occurred.",
-              });
-            });
-        }
-      }
       scheduleComposerFocus();
+      return true;
     },
     [
       isLocalDraftThread,
@@ -4623,6 +4631,12 @@ export default function ChatView({
       setDraftThreadContext,
       threadId,
     ],
+  );
+  const handleRuntimeModeChange = useCallback(
+    (mode: RuntimeMode) => {
+      void persistRuntimeModeChange(mode);
+    },
+    [persistRuntimeModeChange],
   );
 
   useEffect(() => {
@@ -5763,7 +5777,7 @@ export default function ChatView({
   }, [activeThreadId, markWorkflowRunDismissed, workflowRunState]);
 
   const onProviderModelSelect = useCallback(
-    (provider: ProviderKind, model: ModelSlug) => {
+    async (provider: ProviderKind, model: ModelSlug) => {
       if (!activeThread) return;
       if (lockedProvider !== null && provider !== lockedProvider) {
         scheduleComposerFocus();
@@ -5789,15 +5803,25 @@ export default function ChatView({
         runtimeMode === "auto" && !providerModelSupportsAutoRuntimeMode(provider, runtimeModel)
           ? "approval-required"
           : normalizeRuntimeModeForProvider(runtimeMode, provider);
-      if (nextRuntimeMode !== runtimeMode) {
-        setComposerDraftRuntimeMode(activeThread.id, nextRuntimeMode);
-      }
-      setComposerDraftModelSelectionAndSticky(activeThread.id, nextModelSelection);
-      if (provider === "cursor") {
-        setComposerDraftProviderModelOptions(activeThread.id, provider, undefined, {
-          persistSticky: true,
-          model: resolvedModel,
-        });
+      // Commit the canonical downgrade before storing an incompatible model.
+      // On failure the Auto draft remains visible so compatibility checks can retry.
+      const didCommitSelection = await commitAfterRuntimeModePersistence({
+        currentRuntimeMode: runtimeMode,
+        nextRuntimeMode,
+        persistRuntimeMode: persistRuntimeModeChange,
+        commit: () => {
+          setComposerDraftModelSelectionAndSticky(activeThread.id, nextModelSelection);
+          if (provider === "cursor") {
+            setComposerDraftProviderModelOptions(activeThread.id, provider, undefined, {
+              persistSticky: true,
+              model: resolvedModel,
+            });
+          }
+        },
+      });
+      if (!didCommitSelection) {
+        scheduleComposerFocus();
+        return;
       }
       scheduleComposerFocus();
     },
@@ -5806,10 +5830,10 @@ export default function ChatView({
       customModelsByProvider,
       lockedProvider,
       modelOptionsByProvider,
+      persistRuntimeModeChange,
       runtimeMode,
       runtimeModelsByProvider,
       scheduleComposerFocus,
-      setComposerDraftRuntimeMode,
       setComposerDraftModelSelectionAndSticky,
       setComposerDraftProviderModelOptions,
     ],
@@ -7942,9 +7966,9 @@ export default function ChatView({
       setRespondingRequestKeys((existing) =>
         existing.includes(requestKey) ? existing : [...existing, requestKey],
       );
-      // Durably persist "always allow" client-side so the next turn (after an
-      // idle-stop or runtime restart) keeps full-access instead of asking again.
-      // The server's session override only covers the current live turn.
+      // Persist supervised "always allow" client-side so the next turn (after an
+      // idle-stop or runtime restart) uses full access. Auto remains the durable
+      // thread policy; its server-side override applies only to the live session.
       const durableRuntimeMode = resolveRuntimeModeAfterApprovalDecision(
         runtimeMode,
         decision,

@@ -5,6 +5,7 @@ import {
   appendVoiceTranscriptToPrompt,
   buildComposerMenuSelectionKey,
   buildTranscriptAutoFollowSignal,
+  commitAfterRuntimeModePersistence,
   createLocalDispatchSnapshot,
   createWorktreeSetupSnapshot,
   derivePromptHistoryFromMessages,
@@ -1891,6 +1892,10 @@ describe("resolveRuntimeModeAfterApprovalDecision", () => {
     expect(resolveRuntimeModeAfterApprovalDecision("full-access", "acceptForSession")).toBeNull();
   });
 
+  it("keeps Auto as the durable policy after a session-scoped approval", () => {
+    expect(resolveRuntimeModeAfterApprovalDecision("auto", "acceptForSession")).toBeNull();
+  });
+
   it("leaves runtime mode untouched for one-off accept and decline decisions", () => {
     expect(resolveRuntimeModeAfterApprovalDecision("approval-required", "accept")).toBeNull();
     expect(resolveRuntimeModeAfterApprovalDecision("approval-required", "decline")).toBeNull();
@@ -1900,6 +1905,42 @@ describe("resolveRuntimeModeAfterApprovalDecision", () => {
     expect(
       resolveRuntimeModeAfterApprovalDecision("auto", "acceptForSession", "permissions"),
     ).toBeNull();
+  });
+});
+
+describe("commitAfterRuntimeModePersistence", () => {
+  it("does not commit an incompatible model when the canonical downgrade fails", async () => {
+    const calls: Array<string> = [];
+
+    const committed = await commitAfterRuntimeModePersistence({
+      currentRuntimeMode: "auto",
+      nextRuntimeMode: "approval-required",
+      persistRuntimeMode: async () => {
+        calls.push("persist");
+        return false;
+      },
+      commit: () => calls.push("commit"),
+    });
+
+    expect(committed).toBe(false);
+    expect(calls).toEqual(["persist"]);
+  });
+
+  it("commits the model only after the canonical downgrade succeeds", async () => {
+    const calls: Array<string> = [];
+
+    const committed = await commitAfterRuntimeModePersistence({
+      currentRuntimeMode: "auto",
+      nextRuntimeMode: "approval-required",
+      persistRuntimeMode: async () => {
+        calls.push("persist");
+        return true;
+      },
+      commit: () => calls.push("commit"),
+    });
+
+    expect(committed).toBe(true);
+    expect(calls).toEqual(["persist", "commit"]);
   });
 });
 

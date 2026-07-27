@@ -97,14 +97,14 @@ export function hasFileUndoSettled(input: {
   });
 }
 
-const ALWAYS_ALLOW_RUNTIME_MODE: RuntimeMode = "full-access";
-
 /**
  * "Always allow" (acceptForSession) only auto-approves the live provider turn.
  * Because the client is the source of truth for runtime mode (it sends it with
- * every turn), the choice must also flip the thread to full-access so it survives
- * idle-stop and runtime restarts instead of reverting to approval-required on the
- * next turn. Returns the runtime mode to persist, or null when nothing changes.
+ * every turn), a supervised thread must also flip to full-access so the choice
+ * survives idle-stop and runtime restarts. Auto is different: its AI reviewer
+ * remains the durable policy, while acceptForSession applies only to the current
+ * live provider session. Returns the runtime mode to persist, or null when
+ * nothing changes.
  */
 export function resolveRuntimeModeAfterApprovalDecision(
   currentRuntimeMode: RuntimeMode,
@@ -117,10 +117,26 @@ export function resolveRuntimeModeAfterApprovalDecision(
   if (requestKind === "permissions") {
     return null;
   }
-  if (decision === "acceptForSession" && currentRuntimeMode !== ALWAYS_ALLOW_RUNTIME_MODE) {
-    return ALWAYS_ALLOW_RUNTIME_MODE;
+  if (decision === "acceptForSession" && currentRuntimeMode === "approval-required") {
+    return "full-access";
   }
   return null;
+}
+
+export async function commitAfterRuntimeModePersistence(input: {
+  currentRuntimeMode: RuntimeMode;
+  nextRuntimeMode: RuntimeMode;
+  persistRuntimeMode: (mode: RuntimeMode) => Promise<boolean>;
+  commit: () => void;
+}): Promise<boolean> {
+  if (
+    input.nextRuntimeMode !== input.currentRuntimeMode &&
+    !(await input.persistRuntimeMode(input.nextRuntimeMode))
+  ) {
+    return false;
+  }
+  input.commit();
+  return true;
 }
 
 export function shouldRenderProviderHealthBanner(input: {
