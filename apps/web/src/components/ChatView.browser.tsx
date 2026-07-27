@@ -1882,6 +1882,73 @@ describe("ChatView timeline estimator parity (full app)", () => {
     document.body.innerHTML = "";
   });
 
+  it("dispatches a rapid access-mode reversal while the server projection is stale", async () => {
+    const baseSnapshot = createSnapshotForTargetUser({
+      targetMessageId: "msg-user-runtime-reversal" as MessageId,
+      targetText: "runtime reversal",
+    });
+    const snapshot: OrchestrationReadModel = {
+      ...baseSnapshot,
+      threads: baseSnapshot.threads.map((thread) => ({
+        ...thread,
+        runtimeMode: "approval-required",
+        session: thread.session
+          ? {
+              ...thread.session,
+              runtimeMode: "approval-required",
+            }
+          : null,
+      })),
+    };
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot,
+    });
+
+    try {
+      const supervisedTrigger = await waitForElement(
+        () => document.querySelector<HTMLButtonElement>('button[title^="Supervised:"]'),
+        "Unable to find the Supervised access-mode trigger.",
+      );
+      supervisedTrigger.click();
+      const autoOption = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll<HTMLElement>('[data-slot="menu-radio-item"]')).find(
+            (item) => item.textContent?.trim().startsWith("Auto"),
+          ) ?? null,
+        "Unable to find the Auto access-mode option.",
+      );
+      autoOption.click();
+
+      const autoTrigger = await waitForElement(
+        () => document.querySelector<HTMLButtonElement>('button[title^="Auto:"]'),
+        "Auto did not become the acknowledged composer access mode.",
+      );
+      autoTrigger.click();
+      const supervisedOption = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll<HTMLElement>('[data-slot="menu-radio-item"]')).find(
+            (item) => item.textContent?.trim().startsWith("Supervised"),
+          ) ?? null,
+        "Unable to find the Supervised access-mode option.",
+      );
+      supervisedOption.click();
+
+      await vi.waitFor(
+        () => {
+          const runtimeModes = wsRequests
+            .map(readDispatchedCommand)
+            .filter((command) => command?.type === "thread.runtime-mode.set")
+            .map((command) => command?.runtimeMode);
+          expect(runtimeModes).toEqual(["auto", "approval-required"]);
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
   it.each(TEXT_VIEWPORT_MATRIX)(
     "[geometry:linux] keeps long user message estimate close at the $name viewport",
     async (viewport) => {

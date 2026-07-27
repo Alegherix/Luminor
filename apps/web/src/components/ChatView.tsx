@@ -4603,7 +4603,10 @@ export default function ChatView({
           await persistModelSelectionBeforeRuntimeMode({
             currentModelSelection: serverThread.modelSelection,
             ...(mode === "auto" ? { nextModelSelection: selectedModelSelection } : {}),
-            currentRuntimeMode: serverThread.runtimeMode,
+            // The command response can arrive before the matching projection
+            // event. Compare against the acknowledged composer state so a
+            // rapid reversal still dispatches even when serverThread is stale.
+            currentRuntimeMode: runtimeMode,
             nextRuntimeMode: mode,
             persistModelSelection: (modelSelection) =>
               api.orchestration.dispatchCommand({
