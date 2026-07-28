@@ -34,10 +34,18 @@ export function autoRuntimeModeSelectionIssue(input: {
   if (!providerSupportsAutoRuntimeMode(input.modelSelection.provider)) {
     return unsupportedAutoRuntimeModeMessage(input.modelSelection.provider);
   }
-  return input.modelSelection.provider === "claudeAgent" &&
-    input.modelSelection.supportsAutoMode === false
-    ? `Claude model "${input.modelSelection.model}" does not support Auto mode.`
-    : null;
+  if (
+    input.modelSelection.provider === "claudeAgent" &&
+    input.modelSelection.supportsAutoMode !== true
+  ) {
+    // Fail closed on an unknown capability: the Claude adapter refuses to
+    // start Auto sessions without a confirmed flag, so persisting Auto here
+    // would only defer the failure to runtime.
+    return input.modelSelection.supportsAutoMode === false
+      ? `Claude model "${input.modelSelection.model}" does not support Auto mode.`
+      : `Claude model "${input.modelSelection.model}" has not been verified to support Auto mode.`;
+  }
+  return null;
 }
 
 export function runtimeModeEscalatesPrivilege(

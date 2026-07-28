@@ -305,6 +305,10 @@ interface ClaudeSessionContext {
   currentApiModelId: string | undefined;
   resumeSessionId: string | undefined;
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
+  // "Always allow this session": later canUseTool prompts auto-allow for the
+  // rest of this live session only. Never persisted — a restart falls back to
+  // the thread's durable runtime mode, matching Codex session overrides.
+  approvalsAlwaysAllowedForSession: boolean;
   readonly pendingUserInputs: Map<ApprovalRequestId, PendingUserInput>;
   readonly turns: Array<{
     id: TurnId;
@@ -2664,6 +2668,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           currentApiModelId: undefined,
           resumeSessionId: undefined,
           pendingApprovals: new Map(),
+          approvalsAlwaysAllowedForSession: false,
           pendingUserInputs: new Map(),
           turns: [],
           inFlightTools: new Map(),
@@ -4603,7 +4608,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               }
 
               const runtimeMode = input.runtimeMode ?? "full-access";
-              if (runtimeMode === "full-access") {
+              if (runtimeMode === "full-access" || context.approvalsAlwaysAllowedForSession) {
                 return {
                   behavior: "allow",
                   updatedInput: toolInput,
@@ -4715,6 +4720,12 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               });
 
               if (decision === "accept" || decision === "acceptForSession") {
+                if (decision === "acceptForSession") {
+                  // The SDK's permission suggestions only cover some requests;
+                  // the live override keeps "always allow" meaningful for the
+                  // rest of the session either way.
+                  context.approvalsAlwaysAllowedForSession = true;
+                }
                 return {
                   behavior: "allow",
                   updatedInput: toolInput,
@@ -5006,6 +5017,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             currentApiModelId: apiModelId,
             resumeSessionId: sessionId,
             pendingApprovals,
+            approvalsAlwaysAllowedForSession: false,
             pendingUserInputs,
             turns: [],
             inFlightTools,
