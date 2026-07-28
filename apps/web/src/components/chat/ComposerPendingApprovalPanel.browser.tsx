@@ -92,4 +92,19 @@ describe("ComposerPendingApprovalPanel", () => {
       await mounted.cleanup();
     }
   });
+
+  it("hides session approval when the provider cannot persist it", async () => {
+    const mounted = await mountApprovalPanel({
+      approval: makeApproval({ sessionApprovalAvailable: false }),
+    });
+
+    try {
+      await expect.element(page.getByRole("button", { name: /Approve once/u })).toBeInTheDocument();
+      await expect
+        .element(page.getByRole("button", { name: /Always allow this session/u }))
+        .not.toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
 });

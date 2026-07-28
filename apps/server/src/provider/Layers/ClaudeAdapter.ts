@@ -6,7 +6,7 @@
  *
  * @module ClaudeAdapterLive
  */
-import { spawn as spawnChildProcess } from "node:child_process";
+import { execFile, spawn as spawnChildProcess } from "node:child_process";
 import type {
   AgentInfo,
   CanUseTool,
@@ -139,6 +139,11 @@ import {
   type ClaudeWorkflowRuntimeState,
 } from "../claudeWorkflowRuntime.ts";
 import { positiveFiniteNumber } from "../tokenUsage.ts";
+import {
+  isClaudeAutoModeCliVersionSupported,
+  MINIMUM_CLAUDE_AUTO_MODE_CLI_VERSION,
+} from "../claudeCliVersion.ts";
+import { parseGenericCliVersion } from "../providerMaintenance.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
@@ -467,6 +472,40 @@ function spawnOwnedClaudeCodeProcess(options: ClaudeSpawnOptions): ClaudeOwnedPr
   }) as unknown as ClaudeOwnedProcess;
 }
 
+async function readInstalledClaudeCliVersion(input: {
+  readonly binaryPath: string;
+  readonly cwd?: string;
+  readonly env: NodeJS.ProcessEnv;
+}): Promise<string | null> {
+  const prepared = prepareWindowsSafeProcess(input.binaryPath, ["--version"], {
+    cwd: input.cwd,
+    env: input.env,
+  });
+  return new Promise((resolve, reject) => {
+    execFile(
+      prepared.command,
+      prepared.args,
+      {
+        ...(input.cwd ? { cwd: input.cwd } : {}),
+        env: input.env,
+        shell: prepared.shell,
+        ...(prepared.windowsVerbatimArguments ? { windowsVerbatimArguments: true } : {}),
+        windowsHide: true,
+        timeout: 10_000,
+        maxBuffer: 64 * 1024,
+        encoding: "utf8",
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(parseGenericCliVersion(`${stdout}\n${stderr}`));
+      },
+    );
+  });
+}
+
 export interface ClaudeAdapterLiveOptions {
   // Async because the default implementation lazily imports the Claude Agent
   // SDK; test doubles may still return a runtime synchronously.
@@ -480,6 +519,11 @@ export interface ClaudeAdapterLiveOptions {
   readonly workflowRuntimePollIntervalMs?: number;
   readonly spawnClaudeCodeProcess?: (options: ClaudeSpawnOptions) => ClaudeOwnedProcess;
   readonly teardownProcessTree?: typeof teardownProviderProcessTree;
+  readonly readClaudeCliVersion?: (input: {
+    readonly binaryPath: string;
+    readonly cwd?: string;
+    readonly env: NodeJS.ProcessEnv;
+  }) => Promise<string | null>;
 }
 
 function mapSupportedCommands(commands: SlashCommand[]): ProviderListCommandsResult {
@@ -1604,6 +1648,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
     };
     const spawnClaudeProcess = options?.spawnClaudeCodeProcess ?? spawnOwnedClaudeCodeProcess;
     const teardownProcessTree = options?.teardownProcessTree ?? teardownProviderProcessTree;
+    const readClaudeCliVersion = options?.readClaudeCliVersion ?? readInstalledClaudeCliVersion;
 
     const sessions = new Map<ThreadId, ClaudeSessionContext>();
     const failedStartupProcessOwners = new Map<ThreadId, ClaudeProcessOwner>();
@@ -4578,7 +4623,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
                 requestType,
                 detail,
                 decision: decisionDeferred,
-                ...(callbackOptions.suggestions
+                ...(callbackOptions.suggestions && callbackOptions.suggestions.length > 0
                   ? { suggestions: callbackOptions.suggestions }
                   : {}),
               };
@@ -4600,6 +4645,9 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
                   args: {
                     toolName,
                     input: toolInput,
+                    sessionApprovalAvailable:
+                      callbackOptions.suggestions !== undefined &&
+                      callbackOptions.suggestions.length > 0,
                     ...(callbackOptions.toolUseID ? { toolUseId: callbackOptions.toolUseID } : {}),
                   },
                 },
@@ -4734,6 +4782,33 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         };
         const claudeSubagents = buildClaudeSdkSubagents();
         const claudeSdkEnv = yield* resolveClaudeSdkEnv;
+        if (input.runtimeMode === "auto") {
+          const binaryPath = providerOptions?.binaryPath ?? "claude";
+          const installedVersion = yield* Effect.tryPromise({
+            try: () =>
+              readClaudeCliVersion({
+                binaryPath,
+                ...(input.cwd ? { cwd: input.cwd } : {}),
+                env: claudeSdkEnv,
+              }),
+            catch: (cause) =>
+              new ProviderAdapterValidationError({
+                provider: PROVIDER,
+                operation: "startSession",
+                issue: `Could not verify Auto mode support for Claude CLI at "${binaryPath}": ${toMessage(cause, "version probe failed")}`,
+              }),
+          });
+          if (!isClaudeAutoModeCliVersionSupported(installedVersion)) {
+            return yield* new ProviderAdapterValidationError({
+              provider: PROVIDER,
+              operation: "startSession",
+              issue:
+                installedVersion === null
+                  ? `Could not determine whether Claude CLI at "${binaryPath}" supports Auto mode.`
+                  : `Claude CLI ${installedVersion} at "${binaryPath}" does not support Auto mode; upgrade to ${MINIMUM_CLAUDE_AUTO_MODE_CLI_VERSION} or newer.`,
+            });
+          }
+        }
         const failedStartupProcessOwner = failedStartupProcessOwners.get(threadId);
         if (failedStartupProcessOwner) {
           // A prior createQuery failure may have happened after spawning. Do

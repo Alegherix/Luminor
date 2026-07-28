@@ -1493,7 +1493,7 @@ export function makeDroidAdapter(
           return yield* new ProviderAdapterValidationError({
             provider: PROVIDER,
             operation: "sendTurn",
-            issue: "Droid does not support Auto runtime mode.",
+            issue: "Auto runtime mode is available only to Codex and Claude.",
           });
         }
         // Selection changes normally arrive via a session restart, but a turn

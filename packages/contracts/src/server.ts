@@ -55,6 +55,7 @@ export const ServerProviderStatus = Schema.Struct({
   authLabel: Schema.optional(TrimmedNonEmptyString),
   voiceTranscriptionAvailable: Schema.optional(Schema.Boolean),
   supportsAutoRuntimeMode: Schema.optional(Schema.Boolean),
+  autoRuntimeModeBinaryPath: Schema.optional(TrimmedNonEmptyString),
   version: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   checkedAt: IsoDateTime,
   message: Schema.optional(TrimmedNonEmptyString),

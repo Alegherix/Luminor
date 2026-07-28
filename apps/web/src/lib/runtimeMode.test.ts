@@ -62,4 +62,22 @@ describe("runtime mode provider support", () => {
       }),
     ).toBe(false);
   });
+
+  it("hides Auto until exact CLI and Claude model capability are known", () => {
+    expect(providerModelSupportsAutoRuntimeMode("codex", undefined, null)).toBe(false);
+    expect(
+      providerModelSupportsAutoRuntimeMode(
+        "claudeAgent",
+        { slug: "claude-test", name: "Claude Test" },
+        {
+          provider: "claudeAgent",
+          status: "ready",
+          available: true,
+          authStatus: "authenticated",
+          supportsAutoRuntimeMode: true,
+          checkedAt: new Date(0).toISOString(),
+        },
+      ),
+    ).toBe(false);
+  });
 });

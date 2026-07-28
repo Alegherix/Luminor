@@ -19,7 +19,7 @@ export function resolveExternalMcpRuntimePolicy(input: {
   if (runtimeMode === "auto") {
     throw new GatewayToolError(
       "capability_denied",
-      "Auto execution is not available to external MCP clients.",
+      "Auto execution is available only to Codex and Claude sessions.",
     );
   }
   if (environment === "local" && !input.capabilities.has("runtime:local")) {

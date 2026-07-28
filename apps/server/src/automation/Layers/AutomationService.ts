@@ -32,10 +32,7 @@ import {
   automationRequiresTargetThread,
 } from "@synara/shared/automationMode";
 import { providerStartOptionsFromServerSettings } from "@synara/shared/serverSettings";
-import {
-  providerSupportsAutoRuntimeMode,
-  unsupportedAutoRuntimeModeMessage,
-} from "@synara/shared/runtimeMode";
+import { autoRuntimeModeSelectionIssue } from "@synara/shared/runtimeMode";
 import { Cause, Effect, Layer, Option, PubSub, Queue, Stream } from "effect";
 
 import { GitCore } from "../../git/Services/GitCore.ts";
@@ -792,24 +789,10 @@ export const AutomationServiceLive = Layer.effect(
       readonly modelSelection: AutomationDefinition["modelSelection"];
       readonly runtimeMode: AutomationDefinition["runtimeMode"];
     }) => {
-      if (input.runtimeMode !== "auto") {
-        return Effect.void;
-      }
-      if (!providerSupportsAutoRuntimeMode(input.modelSelection.provider)) {
-        return Effect.fail(
-          new AutomationServiceError({
-            message: unsupportedAutoRuntimeModeMessage(input.modelSelection.provider),
-          }),
-        );
-      }
-      return input.modelSelection.provider === "claudeAgent" &&
-        input.modelSelection.supportsAutoMode === false
-        ? Effect.fail(
-            new AutomationServiceError({
-              message: `Claude model "${input.modelSelection.model}" does not support Auto mode.`,
-            }),
-          )
-        : Effect.void;
+      const issue = autoRuntimeModeSelectionIssue(input);
+      return issue === null
+        ? Effect.void
+        : Effect.fail(new AutomationServiceError({ message: issue }));
     };
 
     // Run-path backstop for the fast-interval policy. validateSchedulePolicy enforces this at

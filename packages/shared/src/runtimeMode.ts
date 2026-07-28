@@ -15,6 +15,31 @@ export function unsupportedAutoRuntimeModeMessage(provider: ProviderKind): strin
   return `Provider "${provider}" does not support Auto runtime mode. Auto is available only for Codex and Claude Code.`;
 }
 
+/**
+ * Human-readable reason an Auto-mode model selection is invalid, or null when
+ * the selection may run in Auto. Shared by orchestration and automations so
+ * both enforce the identical policy.
+ */
+export function autoRuntimeModeSelectionIssue(input: {
+  readonly runtimeMode: RuntimeMode;
+  readonly modelSelection: {
+    readonly provider: ProviderKind;
+    readonly model: string;
+    readonly supportsAutoMode?: boolean | undefined;
+  };
+}): string | null {
+  if (input.runtimeMode !== "auto") {
+    return null;
+  }
+  if (!providerSupportsAutoRuntimeMode(input.modelSelection.provider)) {
+    return unsupportedAutoRuntimeModeMessage(input.modelSelection.provider);
+  }
+  return input.modelSelection.provider === "claudeAgent" &&
+    input.modelSelection.supportsAutoMode === false
+    ? `Claude model "${input.modelSelection.model}" does not support Auto mode.`
+    : null;
+}
+
 export function runtimeModeEscalatesPrivilege(
   callerRuntimeMode: RuntimeMode,
   targetRuntimeMode: RuntimeMode,

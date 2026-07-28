@@ -139,6 +139,55 @@ export async function commitAfterRuntimeModePersistence(input: {
   return true;
 }
 
+export interface RuntimeModePersistenceQueue {
+  syncAcknowledgedMode: (mode: RuntimeMode) => void;
+  persist: (
+    mode: RuntimeMode,
+    operation: (currentMode: RuntimeMode, nextMode: RuntimeMode) => Promise<boolean>,
+  ) => Promise<boolean>;
+}
+
+/**
+ * Serializes access-mode writes for one thread. Equality is checked only when a
+ * queued choice starts, after earlier choices have settled, so Auto → Full
+ * access → Auto cannot drop the final Auto choice against a stale render.
+ */
+export function createRuntimeModePersistenceQueue(
+  initialMode: RuntimeMode,
+): RuntimeModePersistenceQueue {
+  let acknowledgedMode = initialMode;
+  let pendingCount = 0;
+  let tail: Promise<void> = Promise.resolve();
+
+  return {
+    syncAcknowledgedMode(mode) {
+      if (pendingCount === 0) {
+        acknowledgedMode = mode;
+      }
+    },
+    persist(mode, operation) {
+      pendingCount += 1;
+      const result = tail.then(async () => {
+        if (mode === acknowledgedMode) {
+          return true;
+        }
+        const persisted = await operation(acknowledgedMode, mode);
+        if (persisted) {
+          acknowledgedMode = mode;
+        }
+        return persisted;
+      });
+      tail = result.then(
+        () => undefined,
+        () => undefined,
+      );
+      return result.finally(() => {
+        pendingCount -= 1;
+      });
+    },
+  };
+}
+
 export function modelSelectionsEqual(left: ModelSelection, right: ModelSelection): boolean {
   return (
     left.provider === right.provider &&

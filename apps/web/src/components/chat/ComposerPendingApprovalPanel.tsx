@@ -84,6 +84,10 @@ export const ComposerPendingApprovalPanel = function ComposerPendingApprovalPane
 }: ComposerPendingApprovalPanelProps) {
   const parsed = parseApprovalDetail(approval.detail);
   const requestId = approval.requestId;
+  const actions =
+    approval.sessionApprovalAvailable === false
+      ? APPROVAL_ACTIONS.filter((action) => action.decision !== "acceptForSession")
+      : APPROVAL_ACTIONS;
 
   // Digit shortcuts bubble from focused controls inside this card only; a bare
   // number key elsewhere in the app must never approve a tool request.
@@ -98,8 +102,8 @@ export const ComposerPendingApprovalPanel = function ComposerPendingApprovalPane
       return;
     }
     const digit = Number.parseInt(event.key, 10);
-    if (Number.isNaN(digit) || digit < 1 || digit > APPROVAL_ACTIONS.length) return;
-    const action = APPROVAL_ACTIONS[digit - 1];
+    if (Number.isNaN(digit) || digit < 1 || digit > actions.length) return;
+    const action = actions[digit - 1];
     if (!action) return;
     event.preventDefault();
     void onRespond(requestId, action.decision, approval.lifecycleGeneration, approval.requestKind);
@@ -130,7 +134,7 @@ export const ComposerPendingApprovalPanel = function ComposerPendingApprovalPane
         {...(approval.permissionProfile ? { permissionProfile: approval.permissionProfile } : {})}
       />
       <div className="mt-2.5 space-y-0.5">
-        {APPROVAL_ACTIONS.map((action, index) => (
+        {actions.map((action, index) => (
           <ComposerChoiceRow
             key={action.decision}
             shortcut={index + 1}

@@ -136,6 +136,7 @@ describe("derivePendingApprovals", () => {
           requestId: "permission-request-1",
           requestKind: "permissions",
           detail: "Needs package metadata",
+          sessionApprovalAvailable: false,
           permissionProfile: {
             network: { enabled: true },
             fileSystem: { read: ["/tmp/example"] },
@@ -150,6 +151,7 @@ describe("derivePendingApprovals", () => {
         requestKind: "permissions",
         createdAt: "2026-02-23T00:00:01.000Z",
         detail: "Needs package metadata",
+        sessionApprovalAvailable: false,
         permissionProfile: {
           network: { enabled: true },
           fileSystem: { read: ["/tmp/example"] },

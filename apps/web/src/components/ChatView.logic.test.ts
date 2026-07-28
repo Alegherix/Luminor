@@ -1,4 +1,11 @@
-import { CheckpointRef, EventId, ThreadId, TurnId, type ModelSlug } from "@synara/contracts";
+import {
+  CheckpointRef,
+  EventId,
+  ThreadId,
+  TurnId,
+  type ModelSlug,
+  type RuntimeMode,
+} from "@synara/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -6,6 +13,7 @@ import {
   buildComposerMenuSelectionKey,
   buildTranscriptAutoFollowSignal,
   commitAfterRuntimeModePersistence,
+  createRuntimeModePersistenceQueue,
   persistModelSelectionBeforeRuntimeMode,
   createLocalDispatchSnapshot,
   createWorktreeSetupSnapshot,
@@ -1942,6 +1950,52 @@ describe("commitAfterRuntimeModePersistence", () => {
 
     expect(committed).toBe(true);
     expect(calls).toEqual(["persist", "commit"]);
+  });
+});
+
+describe("createRuntimeModePersistenceQueue", () => {
+  it("persists the final rapid selection after an opposite update is already in flight", async () => {
+    let releaseFirst: (() => void) | undefined;
+    const firstBlocked = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const calls: Array<[RuntimeMode, RuntimeMode]> = [];
+    const queue = createRuntimeModePersistenceQueue("auto");
+    const persist = async (currentMode: RuntimeMode, nextMode: RuntimeMode) => {
+      calls.push([currentMode, nextMode]);
+      if (calls.length === 1) {
+        await firstBlocked;
+      }
+      return true;
+    };
+
+    const fullAccess = queue.persist("full-access", persist);
+    await Promise.resolve();
+    const auto = queue.persist("auto", persist);
+    expect(calls).toEqual([["auto", "full-access"]]);
+
+    releaseFirst?.();
+    await expect(Promise.all([fullAccess, auto])).resolves.toEqual([true, true]);
+    expect(calls).toEqual([
+      ["auto", "full-access"],
+      ["full-access", "auto"],
+    ]);
+  });
+
+  it("keeps the acknowledged mode when an earlier queued write fails", async () => {
+    const calls: Array<[RuntimeMode, RuntimeMode]> = [];
+    const queue = createRuntimeModePersistenceQueue("auto");
+    const failed = queue.persist("full-access", async (currentMode, nextMode) => {
+      calls.push([currentMode, nextMode]);
+      return false;
+    });
+    const finalAuto = queue.persist("auto", async (currentMode, nextMode) => {
+      calls.push([currentMode, nextMode]);
+      return true;
+    });
+
+    await expect(Promise.all([failed, finalAuto])).resolves.toEqual([false, true]);
+    expect(calls).toEqual([["auto", "full-access"]]);
   });
 });
 

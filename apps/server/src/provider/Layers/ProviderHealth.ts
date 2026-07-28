@@ -100,6 +100,7 @@ import {
   resolveProviderMaintenanceCapabilitiesEffect,
   type PackageManagedProviderMaintenanceDefinition,
 } from "../providerMaintenance";
+import { isClaudeAutoModeCliVersionSupported } from "../claudeCliVersion.ts";
 import { collectUint8StreamText } from "../../stream/collectUint8StreamText";
 import { buildCodexProcessEnv } from "../../codexProcessEnv.ts";
 
@@ -875,10 +876,10 @@ export const makeCheckCodexProviderStatus = (
   ServerProviderStatus,
   never,
   ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
-> =>
-  Effect.gen(function* () {
+> => {
+  const executable = nonEmptyTrimmed(binaryPath) ?? "codex";
+  return Effect.gen(function* () {
     const checkedAt = new Date().toISOString();
-    const executable = nonEmptyTrimmed(binaryPath) ?? "codex";
     const probeEnv = yield* Effect.promise(() => makeCodexProbeEnv(homePath));
 
     // Probe 1: `codex --version` — is the CLI reachable?
@@ -1028,24 +1029,29 @@ export const makeCheckCodexProviderStatus = (
       checkedAt,
       ...(parsed.message ? { message: parsed.message } : {}),
     } satisfies ServerProviderStatus;
-  });
+  }).pipe(
+    Effect.map((status) => ({
+      ...status,
+      autoRuntimeModeBinaryPath: executable,
+    })),
+  );
+};
 
 export const checkCodexProviderStatus = makeCheckCodexProviderStatus();
 
 // ── Claude Agent health check ───────────────────────────────────────
 
 const CLAUDE_AUTH_FALSE_NEGATIVE_RETRY_DELAY_MS = 1_000;
-const CLAUDE_AUTO_MODE_MINIMUM_VERSION = "2.1.83";
 
 export const makeCheckClaudeProviderStatus = (
   resolveSubscriptionType?: Effect.Effect<string | undefined>,
   binaryPath?: string,
   homeDir?: string,
   options?: { readonly falseNegativeRetryDelayMs?: number },
-): Effect.Effect<ServerProviderStatus, never, ChildProcessSpawner.ChildProcessSpawner> =>
-  Effect.gen(function* () {
+): Effect.Effect<ServerProviderStatus, never, ChildProcessSpawner.ChildProcessSpawner> => {
+  const executable = nonEmptyTrimmed(binaryPath) ?? "claude";
+  return Effect.gen(function* () {
     const checkedAt = new Date().toISOString();
-    const executable = nonEmptyTrimmed(binaryPath) ?? "claude";
     const claudeEnv = buildClaudeProcessEnv(
       homeDir ? { env: process.env, homeDir } : { env: process.env },
     );
@@ -1099,10 +1105,7 @@ export const makeCheckClaudeProviderStatus = (
     }
     const version = versionProbe.result;
     const parsedVersion = parseGenericCliVersion(`${version.stdout}\n${version.stderr}`);
-    const supportsAutoRuntimeMode =
-      parsedVersion === null
-        ? undefined
-        : compareSemverVersions(parsedVersion, CLAUDE_AUTO_MODE_MINIMUM_VERSION) >= 0;
+    const supportsAutoRuntimeMode = isClaudeAutoModeCliVersionSupported(parsedVersion);
 
     // Probe 2: `claude auth status` — is the user authenticated? The command can
     // redeem a single-use rotating OAuth refresh token, so it is serialized with
@@ -1127,7 +1130,7 @@ export const makeCheckClaudeProviderStatus = (
         available: true,
         authStatus: "unknown" as const,
         version: parsedVersion,
-        ...(supportsAutoRuntimeMode !== undefined ? { supportsAutoRuntimeMode } : {}),
+        supportsAutoRuntimeMode,
         checkedAt,
         message:
           error instanceof Error
@@ -1143,7 +1146,7 @@ export const makeCheckClaudeProviderStatus = (
         available: true,
         authStatus: "unknown" as const,
         version: parsedVersion,
-        ...(supportsAutoRuntimeMode !== undefined ? { supportsAutoRuntimeMode } : {}),
+        supportsAutoRuntimeMode,
         checkedAt,
         message: "Could not verify Claude authentication status. Timed out while running command.",
       };
@@ -1217,12 +1220,18 @@ export const makeCheckClaudeProviderStatus = (
       available: true,
       authStatus: effectiveParsed.authStatus,
       version: parsedVersion,
-      ...(supportsAutoRuntimeMode !== undefined ? { supportsAutoRuntimeMode } : {}),
+      supportsAutoRuntimeMode,
       ...(authMetadata ? { authType: authMetadata.type, authLabel: authMetadata.label } : {}),
       checkedAt,
       ...(effectiveParsed.message ? { message: effectiveParsed.message } : {}),
     } satisfies ServerProviderStatus;
-  });
+  }).pipe(
+    Effect.map((status) => ({
+      ...status,
+      autoRuntimeModeBinaryPath: executable,
+    })),
+  );
+};
 
 export const checkClaudeProviderStatus = makeCheckClaudeProviderStatus();
 
@@ -1924,6 +1933,8 @@ export function providerStatusesEqual(
       (status.authType ?? null) === (next.authType ?? null) &&
       (status.authLabel ?? null) === (next.authLabel ?? null) &&
       status.voiceTranscriptionAvailable === next.voiceTranscriptionAvailable &&
+      status.supportsAutoRuntimeMode === next.supportsAutoRuntimeMode &&
+      (status.autoRuntimeModeBinaryPath ?? null) === (next.autoRuntimeModeBinaryPath ?? null) &&
       (status.version ?? null) === (next.version ?? null) &&
       (status.message ?? null) === (next.message ?? null) &&
       JSON.stringify(comparableProviderVersionAdvisory(status.versionAdvisory)) ===

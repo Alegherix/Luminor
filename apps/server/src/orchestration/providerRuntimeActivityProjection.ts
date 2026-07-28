@@ -453,6 +453,15 @@ function requestedPermissionProfile(
     : undefined;
 }
 
+function sessionApprovalAvailable(
+  event: Extract<ProviderRuntimeEvent, { type: "request.opened" }>,
+): boolean | undefined {
+  const args = asObject(event.payload.args);
+  return typeof args?.sessionApprovalAvailable === "boolean"
+    ? args.sessionApprovalAvailable
+    : undefined;
+}
+
 export function projectProviderRuntimeActivities(
   event: ProviderRuntimeEvent,
 ): ReadonlyArray<OrchestrationThreadActivity> {
@@ -523,6 +532,8 @@ export function projectProviderRuntimeActivities(
       const requestKind = requestKindFromCanonicalRequestType(event.payload.requestType);
       const permissionProfile =
         event.type === "request.opened" ? requestedPermissionProfile(event) : undefined;
+      const canApproveForSession =
+        event.type === "request.opened" ? sessionApprovalAvailable(event) : undefined;
       const requestId = nonEmptyTrimmed(event.requestId);
       return [
         {
@@ -555,6 +566,9 @@ export function projectProviderRuntimeActivities(
               ? { detail: truncateDetail(event.payload.detail) }
               : {}),
             ...(permissionProfile ? { permissionProfile } : {}),
+            ...(canApproveForSession !== undefined
+              ? { sessionApprovalAvailable: canApproveForSession }
+              : {}),
             ...(event.type === "request.resolved" && event.payload.decision
               ? { decision: event.payload.decision }
               : {}),

@@ -3182,6 +3182,37 @@ describe("collab child conversation routing", () => {
     );
   });
 
+  it("returns protocol-valid turn scope and omits null permission categories", async () => {
+    const { manager, context, writeMessage } = createCollabNotificationHarness();
+
+    await handleServerRequestForTest(manager, context, {
+      id: 46,
+      method: "item/permissions/requestApproval",
+      params: {
+        threadId: "provider_parent",
+        turnId: "turn_permissions_nullable",
+        itemId: "call_permissions_nullable",
+        permissions: {
+          network: null,
+          fileSystem: { read: ["/tmp/example"] },
+        },
+      },
+    });
+
+    const pendingRequest = Array.from(context.pendingApprovals.values())[0];
+    await manager.respondToRequest(asThreadId("thread_1"), pendingRequest.requestId, "accept");
+
+    expect(writeMessage).toHaveBeenCalledWith(context, {
+      id: 46,
+      result: {
+        permissions: {
+          fileSystem: { read: ["/tmp/example"] },
+        },
+        scope: "turn",
+      },
+    });
+  });
+
   it("preserves an unmapped child user-input route through the answered event", async () => {
     const { manager, context, emitEvent, writeMessage } = createCollabNotificationHarness();
 

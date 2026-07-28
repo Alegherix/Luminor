@@ -340,7 +340,11 @@ describe("provider runtime activity projection", () => {
         eventId: "approval-request",
         lifecycleGeneration: "generation-1",
         requestId: ApprovalRequestId.makeUnsafe("request-1"),
-        payload: { requestType: "command_execution_approval", detail: "pwd" },
+        payload: {
+          requestType: "command_execution_approval",
+          detail: "pwd",
+          args: { sessionApprovalAvailable: false },
+        },
       }),
     )[0];
     expect(approval).toMatchObject({
@@ -352,6 +356,7 @@ describe("provider runtime activity projection", () => {
         requestKind: "command",
         requestType: "command_execution_approval",
         detail: "pwd",
+        sessionApprovalAvailable: false,
       },
     });
 

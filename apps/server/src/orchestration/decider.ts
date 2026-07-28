@@ -21,10 +21,7 @@ import {
   workspaceRootsEqual,
 } from "@synara/shared/threadWorkspace";
 import { doThreadMarkerRangesOverlap } from "@synara/shared/threadMarkers";
-import {
-  providerSupportsAutoRuntimeMode,
-  unsupportedAutoRuntimeModeMessage,
-} from "@synara/shared/runtimeMode";
+import { autoRuntimeModeSelectionIssue } from "@synara/shared/runtimeMode";
 import {
   collectTailTurnIds,
   resolveTailUserMessageEditTarget,
@@ -74,25 +71,15 @@ function validateAutoRuntimeMode(
   modelSelection: OrchestrationThread["modelSelection"],
   runtimeMode: OrchestrationThread["runtimeMode"],
 ) {
-  if (runtimeMode !== "auto") {
-    return Effect.void;
-  }
-  if (!providerSupportsAutoRuntimeMode(modelSelection.provider)) {
-    return Effect.fail(
-      new OrchestrationCommandInvariantError({
-        commandType: command.type,
-        detail: unsupportedAutoRuntimeModeMessage(modelSelection.provider),
-      }),
-    );
-  }
-  return modelSelection.provider === "claudeAgent" && modelSelection.supportsAutoMode === false
-    ? Effect.fail(
+  const issue = autoRuntimeModeSelectionIssue({ runtimeMode, modelSelection });
+  return issue === null
+    ? Effect.void
+    : Effect.fail(
         new OrchestrationCommandInvariantError({
           commandType: command.type,
-          detail: `Claude model "${modelSelection.model}" does not support Auto mode.`,
+          detail: issue,
         }),
-      )
-    : Effect.void;
+      );
 }
 
 const defaultMetadata: Omit<OrchestrationEvent, "sequence" | "type" | "payload"> = {

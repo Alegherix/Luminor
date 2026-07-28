@@ -166,6 +166,7 @@ import {
   buildThreadBreadcrumbs,
   buildTranscriptAutoFollowSignal,
   commitAfterRuntimeModePersistence,
+  createRuntimeModePersistenceQueue,
   derivePromptHistoryFromMessages,
   enrichSubagentWorkEntries,
   hasFileUndoSettled,
@@ -1749,6 +1750,20 @@ export default function ChatView({
   }, [activeThread, pendingFileUndo]);
   const runtimeMode =
     composerDraft.runtimeMode ?? activeThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE;
+  const runtimeModePersistenceQueuesRef = useRef(
+    new Map<ThreadId, ReturnType<typeof createRuntimeModePersistenceQueue>>(),
+  );
+  useEffect(() => {
+    const existing = runtimeModePersistenceQueuesRef.current.get(threadId);
+    if (existing) {
+      existing.syncAcknowledgedMode(runtimeMode);
+      return;
+    }
+    runtimeModePersistenceQueuesRef.current.set(
+      threadId,
+      createRuntimeModePersistenceQueue(runtimeMode),
+    );
+  }, [runtimeMode, threadId]);
   const interactionMode =
     composerDraft.interactionMode ?? activeThread?.interactionMode ?? DEFAULT_INTERACTION_MODE;
   const isServerThread = serverThread !== undefined;
@@ -4588,34 +4603,35 @@ export default function ChatView({
 
   const persistRuntimeModeChange = useCallback(
     async (mode: RuntimeMode): Promise<boolean> => {
-      if (mode === runtimeMode) return true;
-      if (serverThread) {
-        const api = readNativeApi();
-        if (!api) {
-          toastManager.add({
-            type: "error",
-            title: "Could not update access mode",
-            description: "Synara is not connected to the server.",
-          });
-          return false;
-        }
-        try {
-          await persistModelSelectionBeforeRuntimeMode({
+      let queue = runtimeModePersistenceQueuesRef.current.get(threadId);
+      if (!queue) {
+        queue = createRuntimeModePersistenceQueue(runtimeMode);
+        runtimeModePersistenceQueuesRef.current.set(threadId, queue);
+      }
+      return queue.persist(mode, async (currentMode, nextMode) => {
+        if (serverThread) {
+          const api = readNativeApi();
+          if (!api) {
+            toastManager.add({
+              type: "error",
+              title: "Could not update access mode",
+              description: "Synara is not connected to the server.",
+            });
+            return false;
+          }
+          const persistenceInput = {
             currentModelSelection: serverThread.modelSelection,
-            ...(mode === "auto" ? { nextModelSelection: selectedModelSelection } : {}),
-            // The command response can arrive before the matching projection
-            // event. Compare against the acknowledged composer state so a
-            // rapid reversal still dispatches even when serverThread is stale.
-            currentRuntimeMode: runtimeMode,
-            nextRuntimeMode: mode,
-            persistModelSelection: (modelSelection) =>
+            ...(nextMode === "auto" ? { nextModelSelection: selectedModelSelection } : {}),
+            currentRuntimeMode: currentMode,
+            nextRuntimeMode: nextMode,
+            persistModelSelection: (modelSelection: ModelSelection) =>
               api.orchestration.dispatchCommand({
                 type: "thread.meta.update",
                 commandId: newCommandId(),
                 threadId,
                 modelSelection,
               }),
-            persistRuntimeMode: (runtimeMode) =>
+            persistRuntimeMode: (runtimeMode: RuntimeMode) =>
               api.orchestration.dispatchCommand({
                 type: "thread.runtime-mode.set",
                 commandId: newCommandId(),
@@ -4623,22 +4639,25 @@ export default function ChatView({
                 runtimeMode,
                 createdAt: new Date().toISOString(),
               }),
-          });
-        } catch (error) {
-          toastManager.add({
-            type: "error",
-            title: "Could not update access mode",
-            description: error instanceof Error ? error.message : "An unexpected error occurred.",
-          });
-          return false;
+          };
+          try {
+            await persistModelSelectionBeforeRuntimeMode(persistenceInput);
+          } catch (error) {
+            toastManager.add({
+              type: "error",
+              title: "Could not update access mode",
+              description: error instanceof Error ? error.message : "An unexpected error occurred.",
+            });
+            return false;
+          }
         }
-      }
-      setComposerDraftRuntimeMode(threadId, mode);
-      if (isLocalDraftThread) {
-        setDraftThreadContext(threadId, { runtimeMode: mode });
-      }
-      scheduleComposerFocus();
-      return true;
+        setComposerDraftRuntimeMode(threadId, nextMode);
+        if (isLocalDraftThread) {
+          setDraftThreadContext(threadId, { runtimeMode: nextMode });
+        }
+        scheduleComposerFocus();
+        return true;
+      });
     },
     [
       isLocalDraftThread,
@@ -5812,8 +5831,10 @@ export default function ChatView({
         undefined,
         provider === "claudeAgent" ? runtimeModel?.supportsAutoMode : undefined,
       );
+      const providerStatus = findProviderStatus(providerStatuses, provider);
       const nextRuntimeMode =
-        runtimeMode === "auto" && !providerModelSupportsAutoRuntimeMode(provider, runtimeModel)
+        runtimeMode === "auto" &&
+        !providerModelSupportsAutoRuntimeMode(provider, runtimeModel, providerStatus)
           ? "approval-required"
           : normalizeRuntimeModeForProvider(runtimeMode, provider);
       // Commit the canonical downgrade before storing an incompatible model.
@@ -5844,6 +5865,7 @@ export default function ChatView({
       lockedProvider,
       modelOptionsByProvider,
       persistRuntimeModeChange,
+      providerStatuses,
       runtimeMode,
       runtimeModelsByProvider,
       scheduleComposerFocus,

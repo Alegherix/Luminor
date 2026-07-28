@@ -29,14 +29,22 @@ import {
   type AgentGatewayCredentialsShape,
 } from "../../agentGateway/Services/AgentGatewayCredentials.ts";
 import { ServerConfig } from "../../config.ts";
+import { MINIMUM_CLAUDE_AUTO_MODE_CLI_VERSION } from "../claudeCliVersion.ts";
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../Errors.ts";
 import { ClaudeAdapter } from "../Services/ClaudeAdapter.ts";
 import {
   buildEmbeddedClaudeSystemPromptAppend,
-  makeClaudeAdapterLive,
+  makeClaudeAdapterLive as makeClaudeAdapterLiveBase,
   type ClaudeAdapterLiveOptions,
   type ClaudeOwnedProcess,
 } from "./ClaudeAdapter.ts";
+
+function makeClaudeAdapterLive(options?: ClaudeAdapterLiveOptions) {
+  return makeClaudeAdapterLiveBase({
+    readClaudeCliVersion: async () => MINIMUM_CLAUDE_AUTO_MODE_CLI_VERSION,
+    ...options,
+  });
+}
 
 class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   private readonly queue: Array<SDKMessage> = [];
@@ -460,6 +468,47 @@ describe("ClaudeAdapterLive", () => {
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("rejects Auto on an unsupported selected Claude binary before session startup", () => {
+    const query = new FakeClaudeQuery();
+    let createQueryCalls = 0;
+    const layer = makeClaudeAdapterLiveBase({
+      readClaudeCliVersion: async ({ binaryPath }) => {
+        assert.equal(binaryPath, "/custom/bin/claude");
+        return "2.1.110";
+      },
+      createQuery: () => {
+        createQueryCalls += 1;
+        return query;
+      },
+    }).pipe(
+      Layer.provideMerge(ServerConfig.layerTest("/tmp/claude-adapter-test", "/tmp")),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const result = yield* Effect.exit(
+        adapter.startSession({
+          threadId: THREAD_ID,
+          provider: "claudeAgent",
+          runtimeMode: "auto",
+          providerOptions: {
+            claudeAgent: {
+              binaryPath: "/custom/bin/claude",
+            },
+          },
+        }),
+      );
+
+      assert.ok(Exit.isFailure(result));
+      assert.equal(createQueryCalls, 0);
+      assert.equal(yield* adapter.hasSession(THREAD_ID), false);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(layer),
     );
   });
 
@@ -6391,6 +6440,12 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
       assert.deepEqual(requested.value.providerRefs, {
         providerItemId: ProviderItemId.makeUnsafe("tool-use-1"),
       });
+      assert.deepEqual(requested.value.payload.args, {
+        toolName: "Bash",
+        input: { command: "pwd" },
+        sessionApprovalAvailable: true,
+        toolUseId: "tool-use-1",
+      });
       const runtimeRequestId = requested.value.requestId;
       assert.equal(typeof runtimeRequestId, "string");
       if (runtimeRequestId === undefined) {
@@ -6539,6 +6594,10 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
         return;
       }
       assert.equal(agentRequested.value.payload.requestType, "dynamic_tool_call");
+      assert.equal(
+        (agentRequested.value.payload.args as Record<string, unknown>).sessionApprovalAvailable,
+        false,
+      );
 
       yield* adapter.respondToRequest(
         session.threadId,

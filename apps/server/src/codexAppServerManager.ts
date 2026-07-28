@@ -1828,14 +1828,21 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     pendingRequest: PendingApprovalRequest,
     decision: ProviderApprovalDecision,
   ): Promise<void> {
+    const requestedPermissions = pendingRequest.requestedPermissions ?? {};
+    const grantedPermissions = {
+      ...(requestedPermissions.network !== null && requestedPermissions.network !== undefined
+        ? { network: requestedPermissions.network }
+        : {}),
+      ...(requestedPermissions.fileSystem !== null && requestedPermissions.fileSystem !== undefined
+        ? { fileSystem: requestedPermissions.fileSystem }
+        : {}),
+    };
     const result =
       pendingRequest.method === "item/permissions/requestApproval"
         ? {
             permissions:
-              decision === "accept" || decision === "acceptForSession"
-                ? (pendingRequest.requestedPermissions ?? {})
-                : {},
-            ...(decision === "acceptForSession" ? { scope: "session" as const } : {}),
+              decision === "accept" || decision === "acceptForSession" ? grantedPermissions : {},
+            scope: decision === "acceptForSession" ? ("session" as const) : ("turn" as const),
           }
         : { decision };
     await this.writeMessage(context, {

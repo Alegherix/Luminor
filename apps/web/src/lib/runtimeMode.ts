@@ -20,8 +20,8 @@ export function providerModelSupportsAutoRuntimeMode(
     return false;
   }
   return (
-    providerStatus?.supportsAutoRuntimeMode !== false &&
-    (provider !== "claudeAgent" || runtimeModel?.supportsAutoMode !== false)
+    providerStatus?.supportsAutoRuntimeMode === true &&
+    (provider !== "claudeAgent" || runtimeModel?.supportsAutoMode === true)
   );
 }
 

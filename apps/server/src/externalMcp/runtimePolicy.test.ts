@@ -40,13 +40,13 @@ describe("external MCP runtime policy", () => {
     ).toThrow(/runtime:full-access/);
   });
 
-  it("rejects Auto execution outside the Codex and Claude Code pickers", () => {
+  it("rejects Auto execution outside Codex and Claude sessions", () => {
     expect(() =>
       resolveExternalMcpRuntimePolicy({
         requestedRuntimeMode: "auto",
         capabilities: new Set(["tasks:create", "runtime:full-access"]),
       }),
-    ).toThrow(/Auto execution is not available/);
+    ).toThrow(/only to Codex and Claude sessions/);
   });
 
   it("allows each elevated runtime choice only with the matching scope", () => {

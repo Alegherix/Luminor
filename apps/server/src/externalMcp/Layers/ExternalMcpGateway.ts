@@ -220,9 +220,6 @@ export const makeExternalMcpGateway = Effect.gen(function* () {
     externalMcpRepository: externalRepository,
     serverConfig,
     loadProviderAvailabilities,
-    // External clients cannot request Auto, so their creation policy does not
-    // need an additional provider refresh.
-    refreshProviderAvailabilities: loadProviderAvailabilities,
     requireThreadShell,
   });
 

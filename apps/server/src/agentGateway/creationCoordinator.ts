@@ -17,11 +17,7 @@ import {
 } from "@synara/contracts";
 import { buildPromptThreadTitleFallback } from "@synara/shared/chatThreads";
 import { parseGitHubRepositoryNameWithOwnerFromPullRequestUrl } from "@synara/shared/githubRepository";
-import {
-  providerSupportsAutoRuntimeMode,
-  runtimeModeEscalatesPrivilege,
-  unsupportedAutoRuntimeModeMessage,
-} from "@synara/shared/runtimeMode";
+import { runtimeModeEscalatesPrivilege } from "@synara/shared/runtimeMode";
 import { Cause, Effect, Option, Semaphore } from "effect";
 
 import type { ServerConfigShape } from "../config.ts";
@@ -100,10 +96,6 @@ interface CreationCoordinatorDependencies {
   readonly externalMcpRepository?: ExternalMcpRepositoryShape;
   readonly serverConfig: ServerConfigShape;
   readonly loadProviderAvailabilities: Effect.Effect<
-    ReadonlyMap<ProviderKind, AgentGatewayProviderAvailability>,
-    unknown
-  >;
-  readonly refreshProviderAvailabilities: Effect.Effect<
     ReadonlyMap<ProviderKind, AgentGatewayProviderAvailability>,
     unknown
   >;
@@ -189,7 +181,6 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
     externalMcpRepository,
     serverConfig,
     loadProviderAvailabilities,
-    refreshProviderAvailabilities,
     requireThreadShell,
   } = dependencies;
   const lockIndex = yield* Semaphore.make(1);
@@ -471,14 +462,7 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
         );
       }
       const callerIsolatedInWorktree = caller?.envMode === "worktree";
-      const requestsAutoRuntime =
-        context.kind === "provider-session" &&
-        input.threads.some((spec) => spec.runtimeMode === "auto");
-      // Auto capability can change after a CLI upgrade while Synara is open.
-      // Refresh once for the whole batch before any git or dispatch side effects.
-      const providerAvailabilities = yield* requestsAutoRuntime
-        ? refreshProviderAvailabilities
-        : loadProviderAvailabilities;
+      const providerAvailabilities = yield* loadProviderAvailabilities;
 
       const prepared = yield* Effect.forEach(input.threads, (spec, index) =>
         Effect.gen(function* () {
@@ -546,28 +530,6 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
               new ToolInputError(
                 `Your thread runs in "${caller!.runtimeMode}" mode, so created threads cannot use higher-privileged "${runtimeMode}".`,
               ),
-            );
-          }
-          if (runtimeMode === "auto" && !providerSupportsAutoRuntimeMode(target.provider)) {
-            return yield* Effect.fail(
-              new ToolInputError(unsupportedAutoRuntimeModeMessage(target.provider)),
-            );
-          }
-          if (runtimeMode === "auto" && providerAvailability?.supportsAutoRuntimeMode === false) {
-            return yield* Effect.fail(
-              new ToolInputError(
-                providerAvailability.message ??
-                  `${target.provider} does not support Auto runtime mode in the installed version.`,
-              ),
-            );
-          }
-          if (
-            runtimeMode === "auto" &&
-            target.provider === "claudeAgent" &&
-            target.supportsAutoMode === false
-          ) {
-            return yield* Effect.fail(
-              new ToolInputError(`Claude model "${target.model}" does not support Auto mode.`),
             );
           }
           const title = spec.title ?? buildPromptThreadTitleFallback(spec.prompt);

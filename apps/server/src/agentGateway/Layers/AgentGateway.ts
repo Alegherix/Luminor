@@ -91,36 +91,33 @@ export const makeAgentGateway = Effect.gen(function* () {
   const providerRuntimeEvents = yield* ProviderRuntimeEventRepository;
   const diagnostics = yield* ThreadDiagnosticsQuery;
   const serverConfig = yield* ServerConfig;
-  const loadProviderAvailabilitiesFrom = (statusesEffect: typeof providerHealth.getStatuses) =>
-    Effect.gen(function* () {
-      const [settings, statuses] = yield* Effect.all([serverSettings.getSettings, statusesEffect]);
-      const statusByProvider = new Map<ProviderKind, ServerProviderStatus>(
-        statuses.map((status) => [status.provider, status]),
-      );
-      return new Map<ProviderKind, AgentGatewayProviderAvailability>(
-        PROVIDER_KINDS.map((provider) => {
-          const status = statusByProvider.get(provider);
-          return [
-            provider,
-            {
-              enabled: settings.providers[provider].enabled,
-              ...(status
-                ? {
-                    available: status.available,
-                    authStatus: status.authStatus,
-                    ...(status.supportsAutoRuntimeMode !== undefined
-                      ? { supportsAutoRuntimeMode: status.supportsAutoRuntimeMode }
-                      : {}),
-                    ...(status.message ? { message: status.message } : {}),
-                  }
-                : {}),
-            },
-          ];
-        }),
-      );
-    });
-  const loadProviderAvailabilities = loadProviderAvailabilitiesFrom(providerHealth.getStatuses);
-  const refreshProviderAvailabilities = loadProviderAvailabilitiesFrom(providerHealth.refresh);
+  const loadProviderAvailabilities = Effect.gen(function* () {
+    const [settings, statuses] = yield* Effect.all([
+      serverSettings.getSettings,
+      providerHealth.getStatuses,
+    ]);
+    const statusByProvider = new Map<ProviderKind, ServerProviderStatus>(
+      statuses.map((status) => [status.provider, status]),
+    );
+    return new Map<ProviderKind, AgentGatewayProviderAvailability>(
+      PROVIDER_KINDS.map((provider) => {
+        const status = statusByProvider.get(provider);
+        return [
+          provider,
+          {
+            enabled: settings.providers[provider].enabled,
+            ...(status
+              ? {
+                  available: status.available,
+                  authStatus: status.authStatus,
+                  ...(status.message ? { message: status.message } : {}),
+                }
+              : {}),
+          },
+        ];
+      }),
+    );
+  });
 
   yield* recoverInterruptedAgentGatewayOperations({
     operationRepository,
@@ -199,7 +196,6 @@ export const makeAgentGateway = Effect.gen(function* () {
     operationRepository,
     serverConfig,
     loadProviderAvailabilities,
-    refreshProviderAvailabilities,
     requireThreadShell,
   });
 
@@ -239,7 +235,7 @@ export const makeAgentGateway = Effect.gen(function* () {
                 },
                 runtimeMode: {
                   type: "string",
-                  enum: ["approval-required", "auto", "full-access"],
+                  enum: ["approval-required", "full-access"],
                 },
               },
               required: ["prompt", "target"],
@@ -298,7 +294,7 @@ export const makeAgentGateway = Effect.gen(function* () {
           },
           runtimeMode: {
             type: "string",
-            enum: ["approval-required", "auto", "full-access"],
+            enum: ["approval-required", "full-access"],
           },
         },
         required: ["requestId", "prompt"],

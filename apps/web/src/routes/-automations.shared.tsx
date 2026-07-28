@@ -910,6 +910,22 @@ export function AutomationModelPicker({
   );
 }
 
+export function reconcileAutomationFormAutoModeSupport(
+  form: AutomationFormState,
+  supported: boolean,
+): AutomationFormState {
+  const modelSelection =
+    form.modelSelection.provider === "claudeAgent" &&
+    form.modelSelection.supportsAutoMode !== supported
+      ? { ...form.modelSelection, supportsAutoMode: supported }
+      : form.modelSelection;
+  const runtimeMode =
+    !supported && form.runtimeMode === "auto" ? "approval-required" : form.runtimeMode;
+  return modelSelection !== form.modelSelection || runtimeMode !== form.runtimeMode
+    ? { ...form, modelSelection, runtimeMode }
+    : form;
+}
+
 export function AutomationDialog({
   open,
   editing,
@@ -952,8 +968,9 @@ export function AutomationDialog({
   const handleAutoModeSupportChange = useCallback(
     (supported: boolean) => {
       setSelectedModelSupportsAuto(supported);
-      if (!supported && form.runtimeMode === "auto") {
-        onFormChange({ ...form, runtimeMode: "approval-required" });
+      const reconciled = reconcileAutomationFormAutoModeSupport(form, supported);
+      if (reconciled !== form) {
+        onFormChange(reconciled);
       }
     },
     [form, onFormChange],

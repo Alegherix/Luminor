@@ -19,6 +19,7 @@ export interface PendingApproval {
   createdAt: string;
   detail?: string;
   permissionProfile?: Record<string, unknown>;
+  sessionApprovalAvailable?: boolean;
 }
 
 export interface PendingUserInput {
@@ -231,6 +232,10 @@ export function derivePendingApprovals(
         !Array.isArray(payload.permissionProfile)
           ? (payload.permissionProfile as Record<string, unknown>)
           : undefined;
+      const sessionApprovalAvailable =
+        typeof payload?.sessionApprovalAvailable === "boolean"
+          ? payload.sessionApprovalAvailable
+          : undefined;
       return {
         requestId,
         ...(lifecycleGeneration !== undefined ? { lifecycleGeneration } : {}),
@@ -238,6 +243,7 @@ export function derivePendingApprovals(
         createdAt: activity.createdAt,
         ...(detail ? { detail } : {}),
         ...(permissionProfile ? { permissionProfile } : {}),
+        ...(sessionApprovalAvailable !== undefined ? { sessionApprovalAvailable } : {}),
       };
     },
   });
