@@ -1734,7 +1734,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
-  it.effect("creates cross-repo PRs with the fork owner selector and default base branch", () =>
+  it.effect("uses the local base template when a cross-repo origin ref is absent", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("synara-git-manager-");
       yield* initRepo(repoDir);
@@ -1745,6 +1745,12 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       );
       yield* runGit(repoDir, ["add", ".github/pull_request_template.md"]);
       yield* runGit(repoDir, ["commit", "-m", "Add local base template"]);
+      yield* runGit(repoDir, [
+        "remote",
+        "add",
+        "origin",
+        "git@github.com:example-org/sample-repo.git",
+      ]);
       const forkDir = yield* createBareRemote();
       yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
       yield* runGit(repoDir, ["checkout", "-b", "statemachine"]);

@@ -181,7 +181,9 @@ function selectTemplate(input: {
 
     let selectedTemplate: string | undefined;
     for (const entry of input.candidates) {
-      const template = yield* readTemplateBlob({ ...input, entry });
+      const template = yield* readTemplateBlob({ ...input, entry }).pipe(
+        Effect.catch(() => Effect.succeed(Option.none())),
+      );
       if (Option.isNone(template)) {
         continue;
       }

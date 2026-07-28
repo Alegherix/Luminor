@@ -219,6 +219,23 @@ it.effect("skips unusable directory entries and uses the one valid template", ()
   ),
 );
 
+it.effect("skips unreadable template blobs and uses the valid candidate", () =>
+  runWithTempDirectory((cwd) =>
+    Effect.gen(function* () {
+      yield* writeTemplate(cwd, ".github/PULL_REQUEST_TEMPLATE/a-valid.md", "valid");
+      yield* writeTemplate(
+        cwd,
+        ".github/PULL_REQUEST_TEMPLATE/z-too-large.md",
+        "x".repeat(120_000),
+      );
+      yield* commitTemplates(cwd);
+
+      const template = yield* detectTemplate(cwd);
+      assert.strictEqual(Option.getOrUndefined(template), "valid");
+    }),
+  ),
+);
+
 it.effect("does not guess between multiple directory templates", () =>
   runWithTempDirectory((cwd) =>
     Effect.gen(function* () {
