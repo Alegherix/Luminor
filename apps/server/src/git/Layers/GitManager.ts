@@ -1288,8 +1288,7 @@ export const makeGitManager = Effect.gen(function* () {
       const remoteBaseRef = targetRemoteName
         ? `refs/remotes/${targetRemoteName}/${baseBranch}`
         : null;
-      const useRemoteBaseRef =
-        remoteBaseRef !== null && (yield* gitRefExists(cwd, remoteBaseRef));
+      const useRemoteBaseRef = remoteBaseRef !== null && (yield* gitRefExists(cwd, remoteBaseRef));
       const prTemplateTreeish = useRemoteBaseRef ? remoteBaseRef : baseBranch;
       const prTemplate = Option.getOrUndefined(
         yield* detectPrTemplate(cwd, prTemplateTreeish, gitCore.execute),
