@@ -305,9 +305,9 @@ interface ClaudeSessionContext {
   currentApiModelId: string | undefined;
   resumeSessionId: string | undefined;
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
-  // "Always allow this session": later canUseTool prompts auto-allow for the
-  // rest of this live session only. Never persisted — a restart falls back to
-  // the thread's durable runtime mode, matching Codex session overrides.
+  // Supervised-mode "Always allow this session": later canUseTool prompts
+  // auto-allow for this live session only. Auto must keep routing every SDK
+  // "ask" outcome through its reviewer/user boundary.
   approvalsAlwaysAllowedForSession: boolean;
   readonly pendingUserInputs: Map<ApprovalRequestId, PendingUserInput>;
   readonly turns: Array<{
@@ -4720,10 +4720,11 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               });
 
               if (decision === "accept" || decision === "acceptForSession") {
-                if (decision === "acceptForSession") {
+                if (decision === "acceptForSession" && runtimeMode !== "auto") {
                   // The SDK's permission suggestions only cover some requests;
-                  // the live override keeps "always allow" meaningful for the
-                  // rest of the session either way.
+                  // supervised mode preserves its live "always allow" fallback.
+                  // Auto stays reviewer-gated and applies only SDK-provided
+                  // permission suggestions below.
                   context.approvalsAlwaysAllowedForSession = true;
                 }
                 return {

@@ -6365,7 +6365,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
     );
   });
 
-  it.effect("bridges Auto's SDK ask outcome through canUseTool", () => {
+  it.effect("keeps Auto reviewer-gated after accepting one request for the session", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
@@ -6455,7 +6455,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
       yield* adapter.respondToRequest(
         session.threadId,
         ApprovalRequestId.makeUnsafe(runtimeRequestId),
-        "accept",
+        "acceptForSession",
       );
 
       const resolved = yield* Stream.runHead(adapter.streamEvents);
@@ -6468,13 +6468,52 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
         return;
       }
       assert.equal(resolved.value.requestId, requested.value.requestId);
-      assert.equal(resolved.value.payload.decision, "accept");
+      assert.equal(resolved.value.payload.decision, "acceptForSession");
       assert.deepEqual(resolved.value.providerRefs, {
         providerItemId: ProviderItemId.makeUnsafe("tool-use-1"),
       });
 
       const permissionResult = yield* Effect.promise(() => permissionPromise);
-      assert.equal((permissionResult as PermissionResult).behavior, "allow");
+      const allowedPermissionResult = permissionResult as {
+        readonly behavior?: string;
+        readonly updatedPermissions?: unknown;
+      } | null;
+      assert.equal(allowedPermissionResult?.behavior, "allow");
+      assert.deepEqual(allowedPermissionResult?.updatedPermissions, [
+        {
+          type: "setMode",
+          mode: "default",
+          destination: "session",
+        },
+      ]);
+
+      const secondPermissionPromise = canUseTool(
+        "Bash",
+        { command: "git status" },
+        {
+          signal: new AbortController().signal,
+          toolUseID: "tool-use-2",
+          requestId: "request-tool-use-2",
+        },
+      );
+      const secondRequested = yield* Stream.runHead(adapter.streamEvents);
+      assert.equal(secondRequested._tag, "Some");
+      if (secondRequested._tag !== "Some" || secondRequested.value.type !== "request.opened") {
+        return;
+      }
+      assert.equal(secondRequested.value.payload.detail, "Bash: git status");
+      const secondRuntimeRequestId = secondRequested.value.requestId;
+      if (secondRuntimeRequestId === undefined) {
+        return;
+      }
+      yield* adapter.respondToRequest(
+        session.threadId,
+        ApprovalRequestId.makeUnsafe(secondRuntimeRequestId),
+        "decline",
+      );
+      yield* Stream.runHead(adapter.streamEvents);
+      const secondPermissionResult = yield* Effect.promise(() => secondPermissionPromise);
+      assert.equal((secondPermissionResult as PermissionResult).behavior, "deny");
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
