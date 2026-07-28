@@ -1703,7 +1703,6 @@ export default function GitActionsControl({
               }
             />
           }
-          disabled={showPanelPullRow ? isGitActionRunning : undefined}
         >
           {showPanelPullRow ? (
             <EnvironmentRowChevron />
