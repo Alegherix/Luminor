@@ -20,9 +20,7 @@ import {
   SYNARA_GATEWAY_MAX_THREADS_PER_OPERATION,
   MessageId,
   ThreadId,
-  type ProviderKind,
   type RuntimeMode,
-  type ServerProviderStatus,
   type TurnDispatchMode,
 } from "@synara/contracts";
 import { runtimeModeEscalatesPrivilege } from "@synara/shared/runtimeMode";
@@ -44,11 +42,9 @@ import { AgentGatewayCredentials } from "../Services/AgentGatewayCredentials.ts"
 import { AgentGatewayOperationRepository } from "../Services/AgentGatewayOperationRepository.ts";
 import { ProviderDiscoveryService } from "../../provider/Services/ProviderDiscoveryService.ts";
 import { ProviderHealth } from "../../provider/Services/ProviderHealth.ts";
+import { loadProviderAvailabilities as loadProviderAvailabilitiesFor } from "../../provider/providerAvailability.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
-import {
-  AGENT_GATEWAY_TARGET_OPTIONS_DESCRIPTION,
-  type AgentGatewayProviderAvailability,
-} from "../targetResolver.ts";
+import { AGENT_GATEWAY_TARGET_OPTIONS_DESCRIPTION } from "../targetResolver.ts";
 import { mcpToolResultError, mcpToolResultJson } from "../protocol.ts";
 import { gatewayIsoNow as isoNow } from "../creationUtils.ts";
 import {
@@ -103,32 +99,9 @@ export const makeAgentGateway = Effect.gen(function* () {
     yield* Effect.serviceOption(BrowserAutomationHost),
     () => makeBrowserAutomationHost({}),
   );
-  const loadProviderAvailabilities = Effect.gen(function* () {
-    const [settings, statuses] = yield* Effect.all([
-      serverSettings.getSettings,
-      providerHealth.getStatuses,
-    ]);
-    const statusByProvider = new Map<ProviderKind, ServerProviderStatus>(
-      statuses.map((status) => [status.provider, status]),
-    );
-    return new Map<ProviderKind, AgentGatewayProviderAvailability>(
-      PROVIDER_KINDS.map((provider) => {
-        const status = statusByProvider.get(provider);
-        return [
-          provider,
-          {
-            enabled: settings.providers[provider].enabled,
-            ...(status
-              ? {
-                  available: status.available,
-                  authStatus: status.authStatus,
-                  ...(status.message ? { message: status.message } : {}),
-                }
-              : {}),
-          },
-        ];
-      }),
-    );
+  const loadProviderAvailabilities = loadProviderAvailabilitiesFor({
+    settings: serverSettings,
+    providerHealth,
   });
 
   yield* recoverInterruptedAgentGatewayOperations({
