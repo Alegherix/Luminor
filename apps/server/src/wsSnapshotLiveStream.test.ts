@@ -126,13 +126,14 @@ describe("makeCursorSafeSnapshotLiveStream", () => {
             snapshotSequence: (snapshot) => snapshot.snapshotSequence,
             getHighWaterSequence: Effect.succeed(1),
             replay: () => Stream.empty,
-          }).pipe(Stream.take(2), Stream.runCollect);
+          }).pipe(Stream.take(3), Stream.runCollect);
         }),
       ),
     );
 
     expect(Array.from(items)).toEqual([
       { kind: "snapshot", snapshot: { snapshotSequence: 1 } },
+      { kind: "synchronized", sequence: 1 },
       { kind: "event", event: event(2) },
     ]);
     // A short deadline: when the attach ordering regresses, this test fails by
