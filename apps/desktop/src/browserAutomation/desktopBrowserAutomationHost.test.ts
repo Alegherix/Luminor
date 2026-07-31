@@ -180,6 +180,11 @@ const createWebContents = () => {
     if (method === "Page.createIsolatedWorld") return { executionContextId: 12 };
     if (method === "Runtime.callFunctionOn") {
       const declaration = String(params?.functionDeclaration ?? "");
+      // The prepare-editable step embeds the classifier too, so match it
+      // before the bare classification probe.
+      if (declaration.includes("document.activeElement !== this")) {
+        return { result: { value: { ok: true } } };
+      }
       if (declaration.includes("classifyCredentialInput")) return { result: { value: false } };
       if (declaration.includes("const timeoutMs =") && declaration.includes("receivesEvents")) {
         const actionOptions = (
@@ -201,9 +206,6 @@ const createWebContents = () => {
             },
           },
         };
-      }
-      if (declaration.includes("document.activeElement !== this")) {
-        return { result: { value: true } };
       }
       if (declaration.includes("const raw = this.isContentEditable")) {
         return { result: { value: { kind: "text", length: 5, value: "hello" } } };

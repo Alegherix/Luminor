@@ -51,6 +51,21 @@ class HarnessElement extends HarnessNode {
   get children(): readonly HarnessElement[] {
     return stateOf(this).children;
   }
+
+  // Selector support is limited to the comma-separated tag lists the
+  // classifier actually queries ("input, textarea").
+  querySelectorAll(selector: string): HarnessElement[] {
+    const tags = new Set(selector.split(",").map((part) => part.trim().toLowerCase()));
+    const matches: HarnessElement[] = [];
+    const walk = (node: HarnessElement): void => {
+      for (const child of stateOf(node).children) {
+        if (tags.has(stateOf(child).localName)) matches.push(child);
+        walk(child);
+      }
+    };
+    walk(this);
+    return matches;
+  }
 }
 
 class HarnessHTMLElement extends HarnessElement {
@@ -144,6 +159,18 @@ describe("credential input classifier", () => {
     });
   });
 
+  it("matches credential autocomplete tokens inside space-separated token lists", () => {
+    expect(
+      classify(element("input", { autocomplete: "section-a username webauthn", name: "user" })),
+    ).toEqual({ reason: "credential-autocomplete", field: "user" });
+    expect(classify(element("input", { autocomplete: "billing new-password" }))).toEqual({
+      reason: "credential-autocomplete",
+    });
+    expect(
+      classify(element("input", { autocomplete: "shipping street-address", name: "street" })),
+    ).toBe(false);
+  });
+
   it("blocks OTP and code fields by keyword without type=password", () => {
     expect(classify(element("input", { name: "otp" }))).toMatchObject({
       reason: "credential-keyword",
@@ -192,6 +219,30 @@ describe("credential input classifier", () => {
     expect(classify(accountSearch)).toBe(false);
     expect(classify(security)).toBe(false);
     expect(classify(verification)).toBe(false);
+  });
+
+  it("classifies identifier fields in large benign forms instead of blocking on size", () => {
+    const form = element("form");
+    const email = element("input", { type: "email", name: "email" });
+    append(form, email);
+    // Wrapper nodes around every field would have exhausted a node-count
+    // budget; only real fields may count against the scan budget.
+    for (let index = 0; index < 240; index += 1) {
+      const wrapper = element("div");
+      append(wrapper, element("input", { name: `item-${index}` }));
+      append(form, wrapper);
+    }
+    expect(classify(email)).toBe(false);
+  });
+
+  it("still fails closed when a form holds more fields than the scan budget", () => {
+    const form = element("form");
+    const email = element("input", { type: "email", name: "email" });
+    append(form, email);
+    for (let index = 0; index < 260; index += 1) {
+      append(form, element("input", { name: `bulk-${index}` }));
+    }
+    expect(classify(email)).toEqual({ reason: "identifier-in-auth-context", field: "email" });
   });
 
   it("blocks an email field when the surrounding form contains a password field", () => {
@@ -260,6 +311,31 @@ describe("composed credential expressions", () => {
     );
   });
 
+  it("descends through open shadow roots to the focused credential field", () => {
+    const password = element("input", { type: "password", name: "pass" });
+    const host = element("div");
+    Object.defineProperty(host, "shadowRoot", { value: { activeElement: password } });
+    expect(evaluateExpression(ACTIVE_CREDENTIAL_INPUT_EXPRESSION, { activeElement: host })).toEqual(
+      { reason: "password-type", field: "pass" },
+    );
+  });
+
+  it("descends into same-origin frames and blocks focus in opaque frames", () => {
+    const password = element("input", { type: "password", name: "pass" });
+    const sameOriginFrame = element("iframe");
+    Object.defineProperty(sameOriginFrame, "contentDocument", {
+      value: { activeElement: password },
+    });
+    expect(
+      evaluateExpression(ACTIVE_CREDENTIAL_INPUT_EXPRESSION, { activeElement: sameOriginFrame }),
+    ).toEqual({ reason: "password-type", field: "pass" });
+
+    const crossOriginFrame = element("iframe");
+    expect(
+      evaluateExpression(ACTIVE_CREDENTIAL_INPUT_EXPRESSION, { activeElement: crossOriginFrame }),
+    ).toEqual({ reason: "opaque-focus" });
+  });
+
   it("surfaces the first credential field on the page through the has-input expression", () => {
     const form = element("form");
     append(
@@ -276,6 +352,33 @@ describe("composed credential expressions", () => {
     expect(
       evaluateExpression(HAS_CREDENTIAL_INPUT_EXPRESSION, { querySelectorAll: () => benign }),
     ).toBe(false);
+  });
+
+  it("finds credential fields inside open shadow roots and same-origin frames", () => {
+    const password = element("input", { type: "password", name: "pass" });
+
+    const host = element("div");
+    Object.defineProperty(host, "shadowRoot", {
+      value: { querySelectorAll: () => [password] },
+    });
+    expect(
+      evaluateExpression(HAS_CREDENTIAL_INPUT_EXPRESSION, { querySelectorAll: () => [host] }),
+    ).toEqual({ reason: "password-type", field: "pass" });
+
+    const frame = element("iframe");
+    Object.defineProperty(frame, "contentDocument", {
+      value: { querySelectorAll: () => [password] },
+    });
+    expect(
+      evaluateExpression(HAS_CREDENTIAL_INPUT_EXPRESSION, { querySelectorAll: () => [frame] }),
+    ).toEqual({ reason: "password-type", field: "pass" });
+  });
+
+  it("fails closed when the page exceeds the scan budget", () => {
+    const oversized = new Array(15001).fill(element("div"));
+    expect(
+      evaluateExpression(HAS_CREDENTIAL_INPUT_EXPRESSION, { querySelectorAll: () => oversized }),
+    ).toEqual({ reason: "detection-error" });
   });
 
   it("fails closed when the page scan itself throws", () => {

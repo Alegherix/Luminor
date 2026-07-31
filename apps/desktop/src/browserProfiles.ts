@@ -7,6 +7,7 @@ import * as FS from "node:fs";
 import * as Path from "node:path";
 
 import type { BrowserProfile } from "@synara/contracts";
+import { describeErrorMessage } from "@synara/shared/errorMessages";
 
 export const PERSONAL_BROWSER_PROFILE_ID = "personal";
 export const TEMPORARY_BROWSER_PROFILE_ID = "temporary";
@@ -36,6 +37,16 @@ interface BrowserProfileStoreState {
 interface MutableBrowserProfileStoreState {
   profiles: StoredCustomBrowserProfile[];
   threadProfileIds: Record<string, string>;
+}
+
+interface LoadedBrowserProfileStoreState {
+  readonly state: BrowserProfileStoreState;
+  /**
+   * Set when the on-disk store must never be overwritten: its bytes could not be
+   * read, so the store cannot know what a write would destroy. Reads degrade to
+   * built-in identities and every mutation fails loudly instead of clobbering.
+   */
+  readonly persistenceBlockedReason: string | null;
 }
 
 export interface BrowserProfileStoreOptions {
@@ -130,6 +141,15 @@ function parseStoredState(value: unknown): BrowserProfileStoreState | null {
   return { profiles, threadProfileIds };
 }
 
+function isFileNotFoundError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | null)?.code === "ENOENT";
+}
+
+function quarantinePathFor(storagePath: string): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `${storagePath}.corrupt-${stamp}-${randomUUID()}`;
+}
+
 function cloneState(state: BrowserProfileStoreState): MutableBrowserProfileStoreState {
   return {
     profiles: state.profiles.map((profile) => ({ ...profile })),
@@ -139,11 +159,14 @@ function cloneState(state: BrowserProfileStoreState): MutableBrowserProfileStore
 
 export class BrowserProfileStore {
   private state: BrowserProfileStoreState;
+  private readonly persistenceBlockedReason: string | null;
   private readonly createId: () => string;
 
   constructor(private readonly options: BrowserProfileStoreOptions = {}) {
     this.createId = options.createId ?? randomUUID;
-    this.state = this.readState();
+    const loaded = this.loadState();
+    this.state = loaded.state;
+    this.persistenceBlockedReason = loaded.persistenceBlockedReason;
   }
 
   list(threadId: string): BrowserProfile[] {
@@ -238,20 +261,53 @@ export class BrowserProfileStore {
     return customProfile(stored);
   }
 
-  private readState(): BrowserProfileStoreState {
+  /**
+   * Only a missing file means "no profiles yet". Every other failure keeps the
+   * existing bytes intact: unreadable content is quarantined to a sibling path
+   * before it can be replaced, and a store we cannot even read blocks writes so
+   * the next mutation reports the problem instead of erasing the user's
+   * identities.
+   */
+  private loadState(): LoadedBrowserProfileStoreState {
     const storagePath = this.options.storagePath;
-    if (!storagePath) return emptyState();
+    if (!storagePath) return { state: emptyState(), persistenceBlockedReason: null };
+    let raw: string;
     try {
-      const raw = FS.readFileSync(storagePath, "utf8");
-      return parseStoredState(JSON.parse(raw)) ?? emptyState();
-    } catch {
-      return emptyState();
+      raw = FS.readFileSync(storagePath, "utf8");
+    } catch (error) {
+      if (isFileNotFoundError(error))
+        return { state: emptyState(), persistenceBlockedReason: null };
+      return {
+        state: emptyState(),
+        persistenceBlockedReason: `it could not be read (${describeErrorMessage(error, "unknown error")})`,
+      };
     }
+    let parsed: BrowserProfileStoreState | null;
+    try {
+      parsed = parseStoredState(JSON.parse(raw));
+    } catch {
+      parsed = null;
+    }
+    if (parsed) return { state: parsed, persistenceBlockedReason: null };
+    try {
+      FS.renameSync(storagePath, quarantinePathFor(storagePath));
+    } catch (error) {
+      return {
+        state: emptyState(),
+        persistenceBlockedReason: `its contents are unusable and the file could not be moved aside (${describeErrorMessage(error, "unknown error")})`,
+      };
+    }
+    return { state: emptyState(), persistenceBlockedReason: null };
   }
 
   private commit(next: BrowserProfileStoreState): void {
     const storagePath = this.options.storagePath;
     if (storagePath) {
+      if (this.persistenceBlockedReason !== null) {
+        throw new Error(
+          `Browser profiles cannot be saved because ${storagePath} is not usable: ${this.persistenceBlockedReason}. Repair or move that file, then restart Synara.`,
+        );
+      }
       const persisted: StoredBrowserProfileState = {
         version: BROWSER_PROFILE_STORE_VERSION,
         profiles: next.profiles,

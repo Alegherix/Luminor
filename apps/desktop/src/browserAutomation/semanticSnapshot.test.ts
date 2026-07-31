@@ -65,6 +65,21 @@ class FakeElement {
     return this.attributes.has(name);
   }
 
+  // Selector support is limited to the comma-separated tag lists the embedded
+  // credential classifier actually queries ("input, textarea").
+  querySelectorAll(selector: string): FakeElement[] {
+    const tags = new Set(selector.split(",").map((part) => part.trim().toLowerCase()));
+    const matches: FakeElement[] = [];
+    const walk = (node: FakeElement): void => {
+      for (const child of node.children) {
+        if (tags.has(child.localName)) matches.push(child);
+        walk(child);
+      }
+    };
+    walk(this);
+    return matches;
+  }
+
   getBoundingClientRect() {
     return { x: 10, y: 10, top: 10, right: 90, bottom: 42, left: 10, width: 80, height: 32 };
   }
@@ -347,6 +362,23 @@ describe("semantic snapshot context", () => {
 
     expect(snapshot.elements[0]).toMatchObject({ role: "textbox", value: "redacted" });
     expect(JSON.stringify(snapshot)).not.toContain("correcto caballo");
+  });
+
+  it("keeps credential text nodes out of the visible-text capture", () => {
+    const root = new FakeElement("main");
+    const secretArea = new FakeElement("textarea", "654321", {
+      "aria-label": "Verification code",
+    });
+    root.append(new FakeElement("span", "Public text"), secretArea);
+    const harness = snapshotHarness(root);
+
+    const snapshot = evaluatePageExpression(
+      harness,
+      BROWSER_SEMANTIC_SNAPSHOT_EXPRESSION,
+    ) as SemanticSnapshotResult;
+
+    expect(snapshot.visibleText).toContain("Public text");
+    expect(snapshot.visibleText).not.toContain("654321");
   });
 
   it("strictly bounds element and text-node traversal on adversarial pages", () => {

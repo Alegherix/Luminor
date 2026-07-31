@@ -319,6 +319,32 @@ export const BROWSER_SEMANTIC_SNAPSHOT_EXPRESSION = String.raw`(() => {
   let collectedTextLength = 0;
   let visitedTextNodes = 0;
   let textTraversalTruncated = false;
+  // Credential surfaces render their content as ordinary text nodes (textarea
+  // default values, contenteditable secrets), so redacting element values is
+  // not enough: the visible-text walk must skip any node whose ancestry
+  // classifies as a credential input. Memoized per element because ancestor
+  // chains overlap heavily across sibling text nodes.
+  const credentialAncestry = new Map();
+  const withinCredentialElement = (element) => {
+    const chain = [];
+    let current = element;
+    let result = false;
+    while (current) {
+      const cached = credentialAncestry.get(current);
+      if (cached !== undefined) {
+        result = cached;
+        break;
+      }
+      chain.push(current);
+      if (isCredentialElement(current)) {
+        result = true;
+        break;
+      }
+      current = composedParent(current);
+    }
+    for (const visited of chain) credentialAncestry.set(visited, result);
+    return result;
+  };
   const collectVisibleText = (root) => {
     if (collectedTextLength >= 9000 || visitedTextNodes >= ${MAX_VISIBLE_TEXT_NODES_VISITED}) return;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -329,6 +355,7 @@ export const BROWSER_SEMANTIC_SNAPSHOT_EXPRESSION = String.raw`(() => {
       const text = clean(node.nodeValue, 512);
       const parent = node.parentElement;
       if (!text || !parent || !visible(parent) || seenText.has(text)) continue;
+      if (withinCredentialElement(parent)) continue;
       const range = document.createRange();
       range.selectNodeContents(node);
       const rect = range.getBoundingClientRect();

@@ -93,6 +93,8 @@ describe("browser text input", () => {
         nodeType: 1,
         isConnected: true,
         isContentEditable: true,
+        localName: "div",
+        getAttribute: () => null,
         focus: vi.fn(),
       };
       vi.stubGlobal("document", {
@@ -101,6 +103,7 @@ describe("browser text input", () => {
       });
       vi.stubGlobal("getSelection", () => selection);
 
+      mocks.evaluateInContext.mockResolvedValue({ value: false });
       mocks.callFunctionOn.mockImplementation(
         async (
           _runtime: unknown,
@@ -108,15 +111,17 @@ describe("browser text input", () => {
           declaration: string,
           options: { readonly arguments?: readonly unknown[] },
         ) => {
-          if (declaration.includes("classifyCredentialInput")) {
-            return { value: false };
-          }
+          // The prepare step embeds the classifier too, so match it before the
+          // bare classification probe.
           if (declaration.includes("this.focus({ preventScroll: true })")) {
             const prepare = Function(`return (${declaration})`)() as (
               this: unknown,
               value: boolean,
-            ) => boolean;
+            ) => { readonly ok?: boolean };
             return { value: prepare.call(element, options.arguments?.[0] === true) };
+          }
+          if (declaration.includes("classifyCredentialInput")) {
+            return { value: false };
           }
           return { value: { kind: "text", length: 5, value: "hello" } };
         },
@@ -181,6 +186,53 @@ describe("browser text input", () => {
     ).rejects.toMatchObject({
       browserError: { code: "BrowserCredentialInputRequired" },
       credentialContext: { reason: "detection-error" },
+    });
+
+    expect(mocks.dispatchTrustedText).not.toHaveBeenCalled();
+  });
+
+  it("blocks typing when a focus handler morphs the field into a credential input", async () => {
+    mocks.callFunctionOn.mockResolvedValueOnce({ value: false }).mockResolvedValueOnce({
+      value: { ok: false, credential: { reason: "password-type", field: "morphed" } },
+    });
+
+    await expect(
+      typeIntoBrowserTarget(
+        runtime,
+        {
+          target: { selector: "#editor" as BrowserCssSelector },
+          text: "hello",
+        },
+        undefined,
+      ),
+    ).rejects.toMatchObject({
+      browserError: { code: "BrowserCredentialInputRequired" },
+      credentialContext: { reason: "password-type", field: "morphed" },
+    });
+
+    expect(mocks.dispatchTrustedText).not.toHaveBeenCalled();
+  });
+
+  it("re-checks the focused element after prepare before dispatching text", async () => {
+    mocks.callFunctionOn
+      .mockResolvedValueOnce({ value: false })
+      .mockResolvedValueOnce({ value: { ok: true } });
+    mocks.evaluateInContext.mockResolvedValueOnce({
+      value: { reason: "credential-keyword", field: "otp" },
+    });
+
+    await expect(
+      typeIntoBrowserTarget(
+        runtime,
+        {
+          target: { selector: "#editor" as BrowserCssSelector },
+          text: "hello",
+        },
+        undefined,
+      ),
+    ).rejects.toMatchObject({
+      browserError: { code: "BrowserCredentialInputRequired" },
+      credentialContext: { reason: "credential-keyword", field: "otp" },
     });
 
     expect(mocks.dispatchTrustedText).not.toHaveBeenCalled();

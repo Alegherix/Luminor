@@ -13,6 +13,7 @@ export interface BrowserCredentialInputMatch {
     | "credential-autocomplete"
     | "credential-keyword"
     | "identifier-in-auth-context"
+    | "opaque-focus"
     | "detection-error";
   readonly field?: string;
 }
@@ -64,13 +65,17 @@ export const CREDENTIAL_INPUT_CLASSIFIER_SNIPPET = String.raw`(() => {
   const getNodeType = protoGetter(nodeCtor, "nodeType");
   const getParentElement = protoGetter(nodeCtor, "parentElement");
   const getLocalName = protoGetter(elementCtor, "localName");
-  const getChildren = protoGetter(elementCtor, "children");
   const getIsContentEditable = protoGetter(htmlElementCtor, "isContentEditable");
   const read = (getter, element, property) => (getter ? getter.call(element) : element[property]);
   const rawAttribute = (element, name) =>
     String((protoGetAttribute ? protoGetAttribute.call(element, name) : element.getAttribute(name)) ?? "");
   const attribute = (element, name) => rawAttribute(element, name).toLowerCase();
   const CREDENTIAL_AUTOCOMPLETE = ["current-password", "new-password", "one-time-code"];
+  // The autocomplete attribute is a space-separated token list (for example
+  // "section-blue shipping username" or "username webauthn"), so credential
+  // tokens must match per-token rather than against the whole attribute.
+  const autocompleteTokensOf = (element) => attribute(element, "autocomplete").split(/\s+/).filter(Boolean);
+  const hasCredentialAutocompleteToken = (tokens) => tokens.some((token) => CREDENTIAL_AUTOCOMPLETE.includes(token));
   const SECRET_PATTERN = /\b(password|passcode|passphrase|pass[-_\s]?word|otp|totp|2fa|mfa|pin|cvv|cvc|one[-_\s]?time|verification[-_\s]?code|security[-_\s]?code|auth[-_\s]?code|passwort|kennwort|wachtwoord|senha|palavra[-_\s]?passe|contraseña|contrasena|contrasenya|mot[-_\s]?de[-_\s]?passe|hasło|haslo|lösenord|losenord|passord|adgangskode|salasana|jelszo|heslo|geslo|sifre|parola|lozinka)\b|jelszó|şifre|парол|密码|密碼|验证码|驗證碼|パスワード|ワンタイム|認証コード|비밀번호|인증번호|인증코드|סיסמה|كلمة المرور|كلمة السر|पासवर्ड|รหัสผ่าน/;
   const IDENTIFIER_PATTERN = /\b(username|user[-_\s]?name|user[-_\s]?id|userid|email|e[-_\s]?mail|login|log[-_\s]?in|sign[-_\s]?in|account|identifier|verification|security|benutzername|nutzername|usuario|utilisateur|identifiant|utente|gebruikersnaam|correo|courriel|kullanici)\b|kullanıcı|użytkownik|логин|пользовател|почт|用户名|账号|帳號|ユーザー|メール|邮箱|아이디|이메일/;
   const AUTH_CONTEXT_PATTERN = /\b(login|log[-_\s]?in|logon|log[-_\s]?on|signin|sign[-_\s]?in|signup|sign[-_\s]?up|register|registration|auth|authenticate|authentication|credential|password|passwort|contraseña|senha|session)\b|парол|密码|密碼|パスワード|비밀번호/;
@@ -86,21 +91,24 @@ export const CREDENTIAL_INPUT_CLASSIFIER_SNIPPET = String.raw`(() => {
     const tag = String(read(getLocalName, element, "localName") ?? "").toLowerCase();
     if (tag !== "input" && tag !== "textarea") return false;
     return attribute(element, "type") === "password" ||
-      CREDENTIAL_AUTOCOMPLETE.includes(attribute(element, "autocomplete")) ||
+      hasCredentialAutocompleteToken(autocompleteTokensOf(element)) ||
       SECRET_PATTERN.test(describedAttributes(element));
   };
+  const protoQuerySelectorAll =
+    elementCtor && typeof elementCtor.prototype.querySelectorAll === "function"
+      ? elementCtor.prototype.querySelectorAll
+      : null;
   const containsSecretField = (container) => {
-    const stack = [container];
-    let visited = 0;
-    while (stack.length > 0) {
-      const current = stack.pop();
-      visited += 1;
-      // A container too large to scan within budget blocks rather than allows.
-      if (visited > 250) return true;
-      if (read(getNodeType, current, "nodeType") === 1 && isSecretElement(current)) return true;
-      const children = read(getChildren, current, "children");
-      const length = children ? Number(children.length) : 0;
-      for (let index = 0; index < length; index += 1) stack.push(children[index]);
+    const fields = protoQuerySelectorAll
+      ? protoQuerySelectorAll.call(container, "input, textarea")
+      : container.querySelectorAll("input, textarea");
+    const length = Number(fields.length);
+    // Only real fields count against the budget, so a large-but-benign form
+    // stays classifiable; a container too field-dense to scan blocks rather
+    // than allows.
+    if (!Number.isFinite(length) || length > 250) return true;
+    for (let index = 0; index < length; index += 1) {
+      if (isSecretElement(fields[index])) return true;
     }
     return false;
   };
@@ -143,11 +151,11 @@ export const CREDENTIAL_INPUT_CLASSIFIER_SNIPPET = String.raw`(() => {
         rawAttribute(element, "aria-label") || rawAttribute(element, "placeholder")
       ).slice(0, 64);
       const match = (reason) => (field ? { reason, field } : { reason });
-      const autocomplete = attribute(element, "autocomplete");
+      const autocompleteTokens = autocompleteTokensOf(element);
       if (attribute(element, "type") === "password") return match("password-type");
-      if (CREDENTIAL_AUTOCOMPLETE.includes(autocomplete)) return match("credential-autocomplete");
+      if (hasCredentialAutocompleteToken(autocompleteTokens)) return match("credential-autocomplete");
       if (SECRET_PATTERN.test(describedAttributes(element))) return match("credential-keyword");
-      if (autocomplete === "username") return match("credential-autocomplete");
+      if (autocompleteTokens.includes("username")) return match("credential-autocomplete");
       if (IDENTIFIER_PATTERN.test(describedAttributes(element)) && inAuthenticationContext(element)) {
         return match("identifier-in-auth-context");
       }
@@ -165,18 +173,79 @@ export const IS_CREDENTIAL_INPUT_FUNCTION = String.raw`function() {
   return classifyCredentialInput(this);
 }`;
 
+// Prototype-captured accessors for walking focus and document scopes across
+// open shadow roots and same-origin frames. Shared by the focused-element and
+// whole-page probes so both traverse the same composed tree. Harness
+// environments without DOM constructors fall back to instance access.
+const SCOPE_ACCESS_SNIPPET = String.raw`
+  const scopeGetter = (ctor, property) => {
+    const descriptor = typeof ctor === "function"
+      ? Object.getOwnPropertyDescriptor(ctor.prototype, property)
+      : null;
+    return descriptor && typeof descriptor.get === "function" ? descriptor.get : null;
+  };
+  const getDocumentActiveElement = scopeGetter(typeof Document === "function" ? Document : null, "activeElement");
+  const getShadowRootActiveElement = scopeGetter(typeof ShadowRoot === "function" ? ShadowRoot : null, "activeElement");
+  const getShadowRootOf = scopeGetter(typeof Element === "function" ? Element : null, "shadowRoot");
+  const getScopeLocalName = scopeGetter(typeof Element === "function" ? Element : null, "localName");
+  const frameContentDocumentGetters = [
+    scopeGetter(typeof HTMLIFrameElement === "function" ? HTMLIFrameElement : null, "contentDocument"),
+    scopeGetter(typeof HTMLFrameElement === "function" ? HTMLFrameElement : null, "contentDocument"),
+    scopeGetter(typeof HTMLObjectElement === "function" ? HTMLObjectElement : null, "contentDocument"),
+  ];
+  const FRAME_TAGS = ["iframe", "frame", "object", "embed", "fencedframe", "portal"];
+  const scopeLocalNameOf = (element) =>
+    String((getScopeLocalName ? getScopeLocalName.call(element) : element.localName) ?? "").toLowerCase();
+  const openShadowRootOf = (element) =>
+    (getShadowRootOf ? getShadowRootOf.call(element) : element.shadowRoot) ?? null;
+  const documentActiveElementOf = (documentLike) =>
+    (getDocumentActiveElement ? getDocumentActiveElement.call(documentLike) : documentLike.activeElement) ?? null;
+  const shadowActiveElementOf = (shadowRoot) =>
+    (getShadowRootActiveElement ? getShadowRootActiveElement.call(shadowRoot) : shadowRoot.activeElement) ?? null;
+  const frameContentDocumentOf = (element) => {
+    for (const getter of frameContentDocumentGetters) {
+      if (getter) {
+        try {
+          const nested = getter.call(element);
+          if (nested) return nested;
+        } catch {}
+      }
+    }
+    try { return element.contentDocument ?? null; } catch { return null; }
+  };
+`;
+
 // Classifies the focused element before trusted key events reach the page. The
 // activeElement read goes through the Document prototype getter so a hostile
-// page cannot present a benign decoy via an own property on document.
+// page cannot present a benign decoy via an own property on document. Trusted
+// keys land on the innermost focused element, so the probe descends through
+// open shadow roots and same-origin frames instead of classifying a host or
+// frame element that would always read as benign; focus inside content it
+// cannot inspect (cross-origin or plugin frames) blocks rather than allows.
 export const ACTIVE_CREDENTIAL_INPUT_EXPRESSION = String.raw`(() => {
   const classifyCredentialInput = ${CREDENTIAL_INPUT_CLASSIFIER_SNIPPET};
   try {
-    const activeElementGetter = typeof Document === "function"
-      ? Object.getOwnPropertyDescriptor(Document.prototype, "activeElement")?.get
-      : undefined;
-    return classifyCredentialInput(
-      activeElementGetter ? activeElementGetter.call(document) : document.activeElement,
-    );
+    ${SCOPE_ACCESS_SNIPPET}
+    let active = documentActiveElementOf(document);
+    for (let hops = 0; hops < 16; hops += 1) {
+      if (!active) return false;
+      const shadowRoot = openShadowRootOf(active);
+      const shadowActive = shadowRoot ? shadowActiveElementOf(shadowRoot) : null;
+      if (shadowActive && shadowActive !== active) {
+        active = shadowActive;
+        continue;
+      }
+      if (FRAME_TAGS.includes(scopeLocalNameOf(active))) {
+        const nestedDocument = frameContentDocumentOf(active);
+        const nestedActive = nestedDocument ? documentActiveElementOf(nestedDocument) : null;
+        if (!nestedActive) return { reason: "opaque-focus" };
+        active = nestedActive;
+        continue;
+      }
+      return classifyCredentialInput(active);
+    }
+    // A focus chain deeper than any legitimate page blocks rather than allows.
+    return { reason: "opaque-focus" };
   } catch {
     return { reason: "detection-error" };
   }
@@ -184,18 +253,52 @@ export const ACTIVE_CREDENTIAL_INPUT_EXPRESSION = String.raw`(() => {
 
 // Classifies the whole page: the first credential field found, or `false`.
 // Guards browser_evaluate so arbitrary page expressions cannot become an
-// alternate input channel on a login or verification page.
+// alternate input channel on a login or verification page. Evaluated
+// expressions can reach open shadow roots and same-origin frames, so the scan
+// covers every scope page script could reach; cross-origin frames stay out of
+// scope because evaluated expressions cannot reach them either.
 export const HAS_CREDENTIAL_INPUT_EXPRESSION = String.raw`(() => {
   const classifyCredentialInput = ${CREDENTIAL_INPUT_CLASSIFIER_SNIPPET};
   try {
-    const querySelectorAll = typeof Document === "function" &&
+    ${SCOPE_ACCESS_SNIPPET}
+    const documentQuerySelectorAll = typeof Document === "function" &&
       typeof Document.prototype.querySelectorAll === "function"
       ? Document.prototype.querySelectorAll
-      : document.querySelectorAll;
-    const fields = querySelectorAll.call(document, "input, textarea, [contenteditable]");
-    for (let index = 0; index < fields.length; index += 1) {
-      const classification = classifyCredentialInput(fields[index]);
-      if (classification !== false) return classification;
+      : null;
+    const fragmentQuerySelectorAll = typeof DocumentFragment === "function" &&
+      typeof DocumentFragment.prototype.querySelectorAll === "function"
+      ? DocumentFragment.prototype.querySelectorAll
+      : null;
+    const queryScope = (scope, isDocument) => {
+      const native = isDocument ? documentQuerySelectorAll : fragmentQuerySelectorAll;
+      return native ? native.call(scope, "*") : scope.querySelectorAll("*");
+    };
+    const scopes = [{ scope: document, isDocument: true }];
+    const seenScopes = new Set([document]);
+    let visited = 0;
+    while (scopes.length > 0) {
+      const { scope, isDocument } = scopes.pop();
+      const elements = queryScope(scope, isDocument);
+      for (let index = 0; index < elements.length; index += 1) {
+        visited += 1;
+        // A page too large to scan within budget blocks rather than allows.
+        if (visited > 15000) return { reason: "detection-error" };
+        const element = elements[index];
+        const classification = classifyCredentialInput(element);
+        if (classification !== false) return classification;
+        const shadowRoot = openShadowRootOf(element);
+        if (shadowRoot && !seenScopes.has(shadowRoot)) {
+          seenScopes.add(shadowRoot);
+          scopes.push({ scope: shadowRoot, isDocument: false });
+        }
+        if (FRAME_TAGS.includes(scopeLocalNameOf(element))) {
+          const nestedDocument = frameContentDocumentOf(element);
+          if (nestedDocument && !seenScopes.has(nestedDocument)) {
+            seenScopes.add(nestedDocument);
+            scopes.push({ scope: nestedDocument, isDocument: true });
+          }
+        }
+      }
     }
     return false;
   } catch {

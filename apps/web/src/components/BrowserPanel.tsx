@@ -7,7 +7,7 @@
 // regions are intentional — list-row and tab semantics, not shadcn Buttons.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconPointer } from "@tabler/icons-react";
 import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
@@ -212,7 +212,16 @@ interface BrowserViewportPerfCounters {
 
 interface BrowserWebviewElement extends HTMLElement {
   getWebContentsId?: () => number;
+  reload?: () => void;
 }
+
+// The persistent profile list is global; only `threadProfile` is thread-scoped.
+// Profile mutations therefore invalidate the shared prefix so panels mounted in
+// other threads never keep a stale list until their staleTime elapses.
+export const browserProfileStateQueryKeys = {
+  all: ["browser-profile-state"] as const,
+  thread: (threadId: ThreadId) => ["browser-profile-state", threadId] as const,
+};
 
 const VIEWPORT_TRANSITION_PROPERTIES = new Set([
   "transform",
@@ -645,9 +654,10 @@ export function BrowserPanel({
   const loading = activeTab?.isLoading ?? false;
   const activeTabIsBlank = isBlankBrowserTabUrl(activeTab);
   const showLocalServersHome = isLiveRuntime && workspaceReady && (!activeTab || activeTabIsBlank);
+  const queryClient = useQueryClient();
   const localServersQuery = useQuery(serverLocalServersQueryOptions(showLocalServersHome));
   const browserProfileStateQuery = useQuery({
-    queryKey: ["browser-profile-state", threadId],
+    queryKey: browserProfileStateQueryKeys.thread(threadId),
     queryFn: () => {
       if (!api) {
         throw new Error("The desktop browser is unavailable.");
@@ -713,6 +723,24 @@ export function BrowserPanel({
     }
   }, []);
 
+  const refreshBrowserProfileState = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: browserProfileStateQueryKeys.all }),
+    [queryClient],
+  );
+
+  // Renderer-owned guests keep serving the pre-clear session until they reload;
+  // main only owns the runtimes it created, so this panel refreshes its own.
+  const reloadRendererBrowserWebview = useCallback((partition: string) => {
+    const webview = browserWebviewRef.current;
+    if (!webview || webview.dataset.profilePartition !== partition) return;
+    try {
+      webview.reload?.();
+    } catch {
+      // A guest that is already tearing down cannot reload; its replacement
+      // attaches with the cleared session anyway.
+    }
+  }, []);
+
   const selectBrowserProfile = useCallback(
     (profileId: string) => {
       if (!api || profileId === activeBrowserProfile?.id) return;
@@ -720,7 +748,7 @@ export function BrowserPanel({
         (state) => {
           if (state) {
             upsertThreadState(state);
-            void browserProfileStateQuery.refetch();
+            void refreshBrowserProfileState();
           }
         },
       );
@@ -728,7 +756,7 @@ export function BrowserPanel({
     [
       activeBrowserProfile?.id,
       api,
-      browserProfileStateQuery,
+      refreshBrowserProfileState,
       runBrowserAction,
       threadId,
       upsertThreadState,
@@ -746,14 +774,14 @@ export function BrowserPanel({
         } else {
           await api.browser.renameProfile({ profileId: profileDialog.profile.id, label });
         }
-        await browserProfileStateQuery.refetch();
+        await refreshBrowserProfileState();
         setLocalError(null);
       } catch (error) {
         setLocalError(formatBrowserActionError(error));
         throw error;
       }
     },
-    [api, browserProfileStateQuery, profileDialog],
+    [api, profileDialog, refreshBrowserProfileState],
   );
 
   const clearActiveBrowserProfileData = useCallback(async () => {
@@ -770,9 +798,17 @@ export function BrowserPanel({
       return true;
     });
     if (cleared) {
+      reloadRendererBrowserWebview(activeBrowserProfile.partition);
+      await refreshBrowserProfileState();
       toastManager.add({ type: "success", title: "Browser data cleared" });
     }
-  }, [activeBrowserProfile, api, runBrowserAction]);
+  }, [
+    activeBrowserProfile,
+    api,
+    refreshBrowserProfileState,
+    reloadRendererBrowserWebview,
+    runBrowserAction,
+  ]);
 
   const deleteActiveBrowserProfile = useCallback(async () => {
     if (!api || !activeBrowserProfile || activeBrowserProfile.builtIn) return;
@@ -786,13 +822,13 @@ export function BrowserPanel({
     });
     if (state) {
       upsertThreadState(state);
-      await browserProfileStateQuery.refetch();
+      await refreshBrowserProfileState();
       toastManager.add({ type: "success", title: "Browser profile deleted" });
     }
   }, [
     activeBrowserProfile,
     api,
-    browserProfileStateQuery,
+    refreshBrowserProfileState,
     runBrowserAction,
     threadId,
     upsertThreadState,
