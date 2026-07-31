@@ -103,7 +103,6 @@ class FakeRendererWebContents extends FakeWebContents {
   session: unknown = browserSession;
   override isDestroyed = () => this.destroyed;
   getType = () => "webview";
-  getURL = () => this.url;
   getTitle = () => "New tab";
   isLoading = () => false;
   canGoBack = () => false;

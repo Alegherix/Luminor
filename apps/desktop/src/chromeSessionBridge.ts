@@ -426,7 +426,7 @@ export class ChromeSessionBridge {
           path: cookieUrl.pathname,
           secure,
           httpOnly: row.is_httponly === 1,
-          ...(expirationDate === undefined ? {} : { expirationDate }),
+          ...(typeof expirationDate === "number" ? { expirationDate } : {}),
           sameSite: sameSiteFromChrome(row.samesite),
         });
       }
