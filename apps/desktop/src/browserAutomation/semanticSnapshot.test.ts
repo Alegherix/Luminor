@@ -12,6 +12,7 @@ const SNAPSHOT_ID = "22222222-2222-4222-8222-222222222222" as BrowserSnapshotId;
 const ELEMENT_REF = "e1" as BrowserElementRef;
 
 class FakeElement {
+  readonly nodeType = 1;
   readonly attributes = new Map<string, string>();
   readonly children: FakeElement[] = [];
   readonly shadowRoot = null;
@@ -283,6 +284,69 @@ describe("semantic snapshot context", () => {
 
     expect(snapshot.elements[0]).toMatchObject({ role: "textbox", value: "redacted" });
     expect(JSON.stringify(snapshot)).not.toContain("654321");
+  });
+
+  it("keeps benign email values visible outside authentication flows", () => {
+    const email = new FakeInputElement({
+      "aria-label": "Email address",
+      type: "email",
+      name: "email",
+      value: "user@example.test",
+    });
+    const form = new FakeElement("form", "", { action: "/subscribe", class: "newsletter" });
+    form.append(email);
+    const harness = snapshotHarness(form);
+
+    const snapshot = evaluatePageExpression(
+      harness,
+      BROWSER_SEMANTIC_SNAPSHOT_EXPRESSION,
+    ) as SemanticSnapshotResult;
+
+    const emailElement = snapshot.elements.find((element) => element.name === "Email address");
+    expect(emailElement).toMatchObject({ role: "textbox", value: "user@example.test" });
+  });
+
+  it("redacts email values when the form also collects a password", () => {
+    const email = new FakeInputElement({
+      "aria-label": "Email address",
+      type: "email",
+      name: "email",
+      value: "user@example.test",
+    });
+    const password = new FakeInputElement({
+      "aria-label": "Password",
+      type: "password",
+      value: "hunter2",
+    });
+    const form = new FakeElement("form", "", { action: "/next" });
+    form.append(email, password);
+    const harness = snapshotHarness(form);
+
+    const snapshot = evaluatePageExpression(
+      harness,
+      BROWSER_SEMANTIC_SNAPSHOT_EXPRESSION,
+    ) as SemanticSnapshotResult;
+
+    const emailElement = snapshot.elements.find((element) => element.name === "Email address");
+    expect(emailElement).toMatchObject({ role: "textbox", value: "redacted" });
+    expect(JSON.stringify(snapshot)).not.toContain("user@example.test");
+    expect(JSON.stringify(snapshot)).not.toContain("hunter2");
+  });
+
+  it("redacts localized password fields without type=password", () => {
+    const localized = new FakeInputElement({
+      "aria-label": "Contraseña",
+      value: "correcto caballo",
+    });
+    const harness = snapshotHarness(localized);
+
+    const snapshot = evaluatePageExpression(
+      harness,
+      BROWSER_SEMANTIC_SNAPSHOT_EXPRESSION,
+    ) as SemanticSnapshotResult;
+
+    expect(snapshot.elements[0]).toMatchObject({ role: "textbox", value: "redacted" });
+    expect(JSON.stringify(snapshot)).not.toContain("correcto caballo");
   });
 
   it("strictly bounds element and text-node traversal on adversarial pages", () => {

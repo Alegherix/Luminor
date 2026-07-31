@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   callFunctionOn: vi.fn(),
+  evaluateInContext: vi.fn(),
   dispatchTrustedDrag: vi.fn(async () => undefined),
+  dispatchTrustedKeySequence: vi.fn(async () => undefined),
   dispatchTrustedText: vi.fn(async () => undefined),
   releaseBrowserTarget: vi.fn(async () => undefined),
   resolveBrowserTarget: vi.fn(async () => ({
@@ -33,7 +35,7 @@ vi.mock("./actionability", () => ({
 
 vi.mock("./cdpRuntime", () => ({
   callFunctionOn: mocks.callFunctionOn,
-  evaluateInContext: vi.fn(),
+  evaluateInContext: mocks.evaluateInContext,
   loadStateForReadyState: vi.fn(),
   observePage: vi.fn(),
   throwIfAborted: vi.fn(),
@@ -48,14 +50,14 @@ vi.mock("./trustedInput", () => ({
   dispatchTrustedClick: vi.fn(),
   dispatchTrustedDrag: mocks.dispatchTrustedDrag,
   dispatchTrustedHover: vi.fn(),
-  dispatchTrustedKeySequence: vi.fn(),
+  dispatchTrustedKeySequence: mocks.dispatchTrustedKeySequence,
   dispatchTrustedScroll: vi.fn(),
   dispatchTrustedText: mocks.dispatchTrustedText,
   withTrustedGuestFocus: vi.fn(async (_runtime, operation: () => Promise<unknown>) => operation()),
 }));
 
 import type { BrowserAutomationVisibleRuntime } from "../browserManager";
-import { dragBrowserTarget, typeIntoBrowserTarget } from "./inputActions";
+import { dragBrowserTarget, pressBrowserKeys, typeIntoBrowserTarget } from "./inputActions";
 
 const runtime = {
   threadId: "thread-input" as BrowserAutomationVisibleRuntime["threadId"],
@@ -106,6 +108,9 @@ describe("browser text input", () => {
           declaration: string,
           options: { readonly arguments?: readonly unknown[] },
         ) => {
+          if (declaration.includes("classifyCredentialInput")) {
+            return { value: false };
+          }
           if (declaration.includes("this.focus({ preventScroll: true })")) {
             const prepare = Function(`return (${declaration})`)() as (
               this: unknown,
@@ -139,7 +144,9 @@ describe("browser text input", () => {
   );
 
   it("requires human entry for password and verification fields", async () => {
-    mocks.callFunctionOn.mockResolvedValueOnce({ value: true });
+    mocks.callFunctionOn.mockResolvedValueOnce({
+      value: { reason: "password-type", field: "current-password" },
+    });
 
     await expect(
       typeIntoBrowserTarget(
@@ -150,10 +157,74 @@ describe("browser text input", () => {
         },
         undefined,
       ),
-    ).rejects.toThrow(/human must enter passwords/i);
+    ).rejects.toMatchObject({
+      browserError: { code: "BrowserCredentialInputRequired" },
+      credentialContext: { reason: "password-type", field: "current-password" },
+    });
 
     expect(mocks.dispatchTrustedText).not.toHaveBeenCalled();
     expect(mocks.releaseBrowserTarget).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed when the credential classification is missing", async () => {
+    mocks.callFunctionOn.mockResolvedValueOnce({ value: undefined });
+
+    await expect(
+      typeIntoBrowserTarget(
+        runtime,
+        {
+          target: { selector: "#editor" as BrowserCssSelector },
+          text: "hello",
+        },
+        undefined,
+      ),
+    ).rejects.toMatchObject({
+      browserError: { code: "BrowserCredentialInputRequired" },
+      credentialContext: { reason: "detection-error" },
+    });
+
+    expect(mocks.dispatchTrustedText).not.toHaveBeenCalled();
+  });
+});
+
+describe("browser key presses", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("emits trusted keys when no credential input is focused", async () => {
+    mocks.evaluateInContext.mockResolvedValueOnce({ value: false });
+
+    await expect(pressBrowserKeys(runtime, { keys: ["Enter"] }, undefined)).resolves.toMatchObject({
+      emitted: ["Enter"],
+      modifiersReleased: true,
+    });
+
+    expect(mocks.dispatchTrustedKeySequence).toHaveBeenCalledWith(runtime, ["Enter"], undefined);
+  });
+
+  it("requires human entry when a credential input is focused", async () => {
+    mocks.evaluateInContext.mockResolvedValueOnce({
+      value: { reason: "credential-keyword", field: "otp" },
+    });
+
+    await expect(pressBrowserKeys(runtime, { keys: ["Enter"] }, undefined)).rejects.toMatchObject({
+      browserError: { code: "BrowserCredentialInputRequired" },
+      credentialContext: { reason: "credential-keyword", field: "otp" },
+    });
+
+    expect(mocks.dispatchTrustedKeySequence).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the focused-element classification is missing", async () => {
+    mocks.evaluateInContext.mockResolvedValueOnce({ value: undefined });
+
+    await expect(pressBrowserKeys(runtime, { keys: ["Enter"] }, undefined)).rejects.toMatchObject({
+      browserError: { code: "BrowserCredentialInputRequired" },
+      credentialContext: { reason: "detection-error" },
+    });
+
+    expect(mocks.dispatchTrustedKeySequence).not.toHaveBeenCalled();
   });
 });
 

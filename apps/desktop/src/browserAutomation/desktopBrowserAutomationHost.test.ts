@@ -110,7 +110,14 @@ const createWebContents = () => {
     }
     if (method === "Runtime.evaluate") {
       const expression = String(params?.expression ?? "");
-      if (expression.includes("isCredentialInput")) return { result: { value: false } };
+      // The semantic snapshot embeds the classifier too, so only bare
+      // credential probes (page scan, focused element) short-circuit here.
+      if (
+        expression.includes("classifyCredentialInput") &&
+        !expression.includes("__synaraBrowserAutomationV1")
+      ) {
+        return { result: { value: false } };
+      }
       if (expression.includes("performance.getEntriesByType")) return { result: { value: 0 } };
       if (
         expression.includes('const key = "__synaraBrowserAutomationV1"') &&
@@ -173,6 +180,7 @@ const createWebContents = () => {
     if (method === "Page.createIsolatedWorld") return { executionContextId: 12 };
     if (method === "Runtime.callFunctionOn") {
       const declaration = String(params?.functionDeclaration ?? "");
+      if (declaration.includes("classifyCredentialInput")) return { result: { value: false } };
       if (declaration.includes("const timeoutMs =") && declaration.includes("receivesEvents")) {
         const actionOptions = (
           params?.arguments as

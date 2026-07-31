@@ -34,8 +34,12 @@ const createRuntime = (state: TargetState): BrowserAutomationVisibleRuntime => {
     }
     if (method === "Runtime.evaluate") {
       const expression = String(params?.expression ?? "");
-      if (expression.includes("isCredentialInput")) {
-        return { result: { value: state.credentialSurface ?? false } };
+      if (expression.includes("classifyCredentialInput")) {
+        return {
+          result: {
+            value: state.credentialSurface ? { reason: "password-type", field: "password" } : false,
+          },
+        };
       }
       if (expression.includes("performance.getEntriesByType")) return { result: { value: 0 } };
       if (expression.includes("document.body?.innerText")) {
@@ -413,6 +417,9 @@ describe("browser_evaluate credential boundary", () => {
         idempotencyKey: "credential-evaluation" as never,
         expression: "document.querySelector('input').value = 'secret'; true",
       }),
-    ).rejects.toThrow(/human must enter passwords/i);
+    ).rejects.toMatchObject({
+      browserError: { code: "BrowserCredentialInputRequired" },
+      credentialContext: { reason: "password-type", field: "password" },
+    });
   });
 });
