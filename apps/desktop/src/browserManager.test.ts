@@ -636,19 +636,17 @@ describe("DesktopBrowserManager repeated workflow characterization", () => {
       site: "accounts.google.com",
       sourceProfileLabel: "Emanuele",
     });
-    showMessageBox
-      .mockResolvedValueOnce({ response: 0 })
-      .mockResolvedValueOnce({ response: 0 });
+    showMessageBox.mockResolvedValueOnce({ response: 0 }).mockResolvedValueOnce({ response: 0 });
 
     const manager = new DesktopBrowserManager({ profileStore, chromeSessionBridge });
     manager.setThreadProfile({ threadId: THREAD_ID, profileId: "personal" });
     const opened = manager.open({ threadId: THREAD_ID });
     const tabId = opened.activeTabId!;
     const popup = new FakePopupWindow();
-    asCharacterizationAccess(manager).registerOAuthPopupWindow(
-      popup as unknown as BrowserWindow,
-      { threadId: THREAD_ID, tabId },
-    );
+    asCharacterizationAccess(manager).registerOAuthPopupWindow(popup as unknown as BrowserWindow, {
+      threadId: THREAD_ID,
+      tabId,
+    });
     const challengeUrl =
       "https://accounts.google.com/v3/signin/challenge/pk?continue=https%3A%2F%2Fx.com%2Fcallback";
     popup.webContents.url = challengeUrl;

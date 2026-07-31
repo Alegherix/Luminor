@@ -50,9 +50,7 @@ function createCookieDatabase(root: string, profileId: string): DatabaseSync {
 }
 
 function chromeTimestamp(unixMilliseconds: number): string {
-  return (
-    chromeEpochOffsetMicroseconds + BigInt(Math.floor(unixMilliseconds)) * 1_000n
-  ).toString();
+  return (chromeEpochOffsetMicroseconds + BigInt(Math.floor(unixMilliseconds)) * 1_000n).toString();
 }
 
 function encryptCookie(password: string, hostKey: string, value: string): Buffer {

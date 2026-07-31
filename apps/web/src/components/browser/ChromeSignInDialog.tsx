@@ -129,15 +129,15 @@ function ChromeSignInDialogContent({
       <DialogHeader>
         <DialogTitle>Use your passkey in Chrome</DialogTitle>
         <DialogDescription>
-          Sign in to {site} in Chrome, then bring that signed-in session back to Synara.
-          Passwords and passkeys never leave Chrome.
+          Sign in to {site} in Chrome, then bring that signed-in session back to Synara. Passwords
+          and passkeys never leave Chrome.
         </DialogDescription>
       </DialogHeader>
       <DialogPanel className="space-y-4">
         <div className="rounded-xl border border-border/70 bg-muted/24 p-3 text-xs leading-relaxed">
           Synara imports only cookies that apply to <span className="font-medium">{site}</span> into
-          the saved identity <span className="font-medium">{targetProfile.label}</span>. Other Chrome
-          sites and browser data are left alone.
+          the saved identity <span className="font-medium">{targetProfile.label}</span>. Other
+          Chrome sites and browser data are left alone.
         </div>
 
         {chromeState === null && error === null ? (
@@ -157,8 +157,8 @@ function ChromeSignInDialogContent({
             >
               <SelectTrigger size="sm">
                 <SelectValue>
-                  {chromeState.profiles.find((profile) => profile.id === selectedProfileId)?.label ??
-                    "Choose a Chrome profile"}
+                  {chromeState.profiles.find((profile) => profile.id === selectedProfileId)
+                    ?.label ?? "Choose a Chrome profile"}
                 </SelectValue>
               </SelectTrigger>
               <ComposerPickerSelectPopup align="start">

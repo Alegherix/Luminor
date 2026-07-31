@@ -407,9 +407,7 @@ function googlePasskeyChallengeUrl(rawUrl: string): string | null {
   try {
     const url = new URL(rawUrl);
     if (url.protocol !== "https:" || url.hostname !== "accounts.google.com") return null;
-    return /(?:^|\/)signin\/challenge\/pk(?:\/|$)/u.test(url.pathname)
-      ? url.toString()
-      : null;
+    return /(?:^|\/)signin\/challenge\/pk(?:\/|$)/u.test(url.pathname) ? url.toString() : null;
   } catch {
     return null;
   }
@@ -698,10 +696,7 @@ export class DesktopBrowserManager {
     if (profile.kind !== "persistent") {
       throw new Error("Chrome sign-in can only be imported into a saved browser identity.");
     }
-    const source = await this.chromeSessionBridge.readSiteCookies(
-      input.chromeProfileId,
-      input.url,
-    );
+    const source = await this.chromeSessionBridge.readSiteCookies(input.chromeProfileId, input.url);
     if (source.cookies.length === 0) {
       throw new Error(
         `No current ${source.site} sign-in was found in ${source.sourceProfileLabel}. Sign in with Chrome, then try the import again.`,
@@ -713,8 +708,7 @@ export class DesktopBrowserManager {
       source.cookies.map((cookie) => profileSession.cookies.set(cookie)),
     );
     const importedCookieCount = writes.filter((write) => write.status === "fulfilled").length;
-    const skippedCookieCount =
-      source.skippedCookieCount + (writes.length - importedCookieCount);
+    const skippedCookieCount = source.skippedCookieCount + (writes.length - importedCookieCount);
     if (importedCookieCount === 0) {
       throw new Error(`Chrome cookies for ${source.site} could not be imported.`);
     }
@@ -1406,9 +1400,7 @@ export class DesktopBrowserManager {
 
       const chromeState = this.chromeSessionBridge.getProfileState();
       const chromeProfileId = chromeState.preferredProfileId;
-      const chromeProfile = chromeState.profiles.find(
-        (profile) => profile.id === chromeProfileId,
-      );
+      const chromeProfile = chromeState.profiles.find((profile) => profile.id === chromeProfileId);
       if (!chromeState.supported || !chromeProfileId || !chromeProfile) return;
 
       const selection = await dialog.showMessageBox(runtime.window, {
@@ -1423,12 +1415,7 @@ export class DesktopBrowserManager {
       });
       if (!this.isPopupRuntimeLive(runtime) || selection.response === 2) return;
       if (selection.response === 1) {
-        await this.importChromePopupSession(
-          runtime,
-          state.profile,
-          chromeProfileId,
-          challengeUrl,
-        );
+        await this.importChromePopupSession(runtime, state.profile, chromeProfileId, challengeUrl);
         return;
       }
 
@@ -1448,12 +1435,7 @@ export class DesktopBrowserManager {
         });
         if (completed.response === 1) continue;
         if (completed.response !== 0) return;
-        await this.importChromePopupSession(
-          runtime,
-          state.profile,
-          chromeProfileId,
-          challengeUrl,
-        );
+        await this.importChromePopupSession(runtime, state.profile, chromeProfileId, challengeUrl);
         return;
       }
     } catch (error) {

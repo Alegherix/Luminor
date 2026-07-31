@@ -211,8 +211,7 @@ function decryptChromeCookie(
   const encrypted = Buffer.from(encryptedValue);
   if (encrypted.length <= CHROME_COOKIE_PREFIX.length) return null;
   if (
-    encrypted.subarray(0, CHROME_COOKIE_PREFIX.length).toString("ascii") !==
-    CHROME_COOKIE_PREFIX
+    encrypted.subarray(0, CHROME_COOKIE_PREFIX.length).toString("ascii") !== CHROME_COOKIE_PREFIX
   ) {
     return null;
   }
@@ -344,9 +343,7 @@ export class ChromeSessionBridge {
     const url = requireWebUrl(rawUrl);
     const hostname = url.hostname.toLocaleLowerCase("en-US");
     const profileState = this.getProfileState();
-    const sourceProfile = profileState.profiles.find(
-      (profile) => profile.id === chromeProfileId,
-    );
+    const sourceProfile = profileState.profiles.find((profile) => profile.id === chromeProfileId);
     if (!sourceProfile) throw new Error("The selected Chrome profile is no longer available.");
     const databasePath = this.resolveCookieDatabase(sourceProfile.id);
     if (!databasePath) throw new Error("The selected Chrome profile has no cookie store.");
