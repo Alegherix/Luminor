@@ -102,6 +102,11 @@ import {
   shouldRefreshIconCache,
 } from "./macIconCacheRefresh";
 import { collectMacUpdateDiagnostics } from "./macUpdateDiagnostics";
+import {
+  configureMacWebAuthn,
+  MAC_WEBAUTHN_ACCESS_GROUP_ENV,
+  MAC_WEBAUTHN_ACCESS_GROUP_PACKAGE_FIELD,
+} from "./macWebAuthn";
 import { openInitialBackendWindow } from "./initialBackendWindowOpen";
 import { isTrustedMediaPermissionRequest } from "./mediaPermissions";
 import {
@@ -957,18 +962,54 @@ function normalizeCommitHash(value: unknown): string | null {
   return trimmed.slice(0, COMMIT_HASH_DISPLAY_LENGTH).toLowerCase();
 }
 
-function resolveEmbeddedCommitHash(): string | null {
+function readEmbeddedPackageField(field: string): unknown {
   const packageJsonPath = Path.join(resolveAppRoot(), "package.json");
   if (!FS.existsSync(packageJsonPath)) {
-    return null;
+    return undefined;
   }
 
   try {
     const raw = FS.readFileSync(packageJsonPath, "utf8");
-    const parsed = JSON.parse(raw) as { synaraCommitHash?: unknown };
-    return normalizeCommitHash(parsed.synaraCommitHash);
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return parsed[field];
   } catch {
-    return null;
+    return undefined;
+  }
+}
+
+function resolveEmbeddedCommitHash(): string | null {
+  return normalizeCommitHash(readEmbeddedPackageField("synaraCommitHash"));
+}
+
+/**
+ * Turns on Electron's WebAuthn Touch ID platform authenticator so browser
+ * profile sessions can create and use passkeys. Without this, Chromium never
+ * services `navigator.credentials` platform-authenticator requests and sign-in
+ * pages waiting on a passkey hang indefinitely.
+ */
+function configureDesktopWebAuthn(): void {
+  const result = configureMacWebAuthn({
+    platform: process.platform,
+    envAccessGroup: process.env[MAC_WEBAUTHN_ACCESS_GROUP_ENV],
+    embeddedAccessGroup: readEmbeddedPackageField(MAC_WEBAUTHN_ACCESS_GROUP_PACKAGE_FIELD),
+    configureWebAuthn: (options) => {
+      app.configureWebAuthn(options);
+    },
+  });
+  if (result.state === "configured") {
+    writeDesktopLogHeader(`webauthn touch id enabled group=${result.keychainAccessGroup}`);
+    return;
+  }
+  if (result.state === "failed") {
+    writeDesktopLogHeader(
+      `webauthn touch id configuration failed group=${result.keychainAccessGroup} error=${
+        result.cause instanceof Error ? result.cause.message : String(result.cause)
+      }`,
+    );
+    return;
+  }
+  if (result.reason === "no-access-group") {
+    writeDesktopLogHeader("webauthn touch id disabled: no keychain access group (unsigned build)");
   }
 }
 
@@ -4341,6 +4382,7 @@ if (hasSingleInstanceLock) {
       configureAppIdentity();
       applyLegacyMacDockIcon();
       refreshMacIconCacheOnVersionChange();
+      configureDesktopWebAuthn();
       configureMediaPermissions();
       initializeDesktopAppSnap();
       configureApplicationMenu();

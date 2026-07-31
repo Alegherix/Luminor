@@ -11,6 +11,7 @@ import {
   NODE_PTY_ASAR_UNPACK_GLOBS,
   validateDesktopNativeBuildHost,
   WINDOWS_INSTALLER_GUID,
+  withMacKeychainAccessGroups,
 } from "./lib/desktop-platform-build-config.ts";
 import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 
@@ -182,6 +183,57 @@ describe("createDesktopPlatformBuildConfig", () => {
     assert.equal(
       BRAND_ASSET_PATHS.productionMacLegacyIconPng,
       "assets/prod/black-macos-legacy-1024.png",
+    );
+  });
+});
+
+describe("withMacKeychainAccessGroups", () => {
+  const plist = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<plist version="1.0">',
+    "  <dict>",
+    "    <key>com.apple.security.cs.allow-jit</key>",
+    "    <true/>",
+    "  </dict>",
+    "</plist>",
+    "",
+  ].join("\n");
+
+  it("adds the access group before the closing dict with matching indentation", () => {
+    const patched = withMacKeychainAccessGroups(plist, "ABCDE12345.com.example.webauthn");
+
+    assert.equal(
+      patched,
+      [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<plist version="1.0">',
+        "  <dict>",
+        "    <key>com.apple.security.cs.allow-jit</key>",
+        "    <true/>",
+        "    <key>keychain-access-groups</key>",
+        "    <array>",
+        "      <string>ABCDE12345.com.example.webauthn</string>",
+        "    </array>",
+        "  </dict>",
+        "</plist>",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("refuses duplicate declarations and groups unsafe for plist embedding", () => {
+    const patched = withMacKeychainAccessGroups(plist, "ABCDE12345.com.example.webauthn");
+    assert.throws(
+      () => withMacKeychainAccessGroups(patched, "ABCDE12345.com.example.webauthn"),
+      /already declares keychain-access-groups/,
+    );
+    assert.throws(
+      () => withMacKeychainAccessGroups(plist, "bad<string>group"),
+      /Refusing to embed/,
+    );
+    assert.throws(
+      () => withMacKeychainAccessGroups("<plist></plist>", "ABCDE12345.com.example.webauthn"),
+      /no closing <\/dict>/,
     );
   });
 });

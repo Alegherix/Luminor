@@ -18,9 +18,14 @@ import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 import {
   createDesktopPlatformBuildConfig,
   MAC_APPSNAP_HELPER_STAGE_PATH,
+  MAC_ENTITLEMENTS_PATH,
   validateDesktopNativeBuildHost,
+  withMacKeychainAccessGroups,
 } from "./lib/desktop-platform-build-config.ts";
-import { SYNARA_PRODUCTION_BUNDLE_ID } from "@synara/shared/desktopIdentity";
+import {
+  SYNARA_PRODUCTION_BUNDLE_ID,
+  synaraMacWebAuthnKeychainAccessGroup,
+} from "@synara/shared/desktopIdentity";
 import { parseBooleanEnvValue } from "./lib/env-bool.ts";
 import { finalizeSignedMacDmg } from "./lib/mac-dmg-finalize.ts";
 import { finalizeMacUpdateZip } from "./lib/mac-update-zip-finalize.ts";
@@ -222,6 +227,7 @@ interface StagePackageJson {
   readonly synaraLockfileSha256: string;
   readonly synaraSourceTag: string | null;
   readonly synaraWindowsPublisherSubject: string | null;
+  readonly synaraMacWebAuthnKeychainAccessGroup: string | null;
   readonly private: true;
   readonly description: string;
   readonly author: string;
@@ -248,6 +254,41 @@ const AzureTrustedSigningOptionsConfig = Config.all({
     Config.withDefault("http://timestamp.acs.microsoft.com"),
   ),
 });
+
+const AppleTeamIdConfig = Config.string("APPLE_TEAM_ID").pipe(Config.option);
+
+// Passkeys (WebAuthn Touch ID) only work when the signed app carries the
+// keychain-access-groups entitlement and the runtime configures the exact
+// same group, so signed macOS builds resolve it once here and thread it into
+// both the entitlements plist and the staged package metadata.
+const resolveMacWebAuthnKeychainAccessGroup = Effect.fn("resolveMacWebAuthnKeychainAccessGroup")(
+  function* (platform: typeof BuildPlatform.Type, signed: boolean) {
+    if (platform !== "mac" || !signed) {
+      return null;
+    }
+    const appleTeamId = yield* AppleTeamIdConfig;
+    return yield* Option.match(appleTeamId, {
+      onNone: () =>
+        new BuildScriptError({
+          message:
+            "Signed macOS builds require APPLE_TEAM_ID so the WebAuthn keychain access group can be embedded in the entitlements.",
+        }),
+      onSome: (teamId) =>
+        Effect.try({
+          try: () =>
+            synaraMacWebAuthnKeychainAccessGroup(teamId.trim(), SYNARA_PRODUCTION_BUNDLE_ID),
+          catch: (cause) =>
+            new BuildScriptError({
+              message:
+                cause instanceof Error
+                  ? cause.message
+                  : "Could not derive the WebAuthn keychain access group from APPLE_TEAM_ID.",
+              cause,
+            }),
+        }),
+    });
+  },
+);
 
 const BuildEnvConfig = Config.all({
   platform: Config.schema(BuildPlatform, "SYNARA_DESKTOP_PLATFORM").pipe(Config.option),
@@ -1002,6 +1043,30 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   yield* assertPlatformBuildResources(options.platform, stageResourcesDir, options.verbose);
 
+  const macWebAuthnKeychainAccessGroup = yield* resolveMacWebAuthnKeychainAccessGroup(
+    options.platform,
+    options.signed,
+  );
+  if (macWebAuthnKeychainAccessGroup !== null) {
+    const stagedEntitlementsPath = path.join(stageAppDir, MAC_ENTITLEMENTS_PATH);
+    const stagedEntitlements = yield* fs.readFileString(stagedEntitlementsPath);
+    const patchedEntitlements = yield* Effect.try({
+      try: () => withMacKeychainAccessGroups(stagedEntitlements, macWebAuthnKeychainAccessGroup),
+      catch: (cause) =>
+        new BuildScriptError({
+          message:
+            cause instanceof Error
+              ? cause.message
+              : "Could not add the WebAuthn keychain access group to the macOS entitlements.",
+          cause,
+        }),
+    });
+    yield* fs.writeFileString(stagedEntitlementsPath, patchedEntitlements);
+    yield* Effect.log(
+      `[desktop-artifact] Added WebAuthn keychain access group ${macWebAuthnKeychainAccessGroup} to macOS entitlements.`,
+    );
+  }
+
   if (options.platform === "mac") {
     yield* stageMacAppSnapHelper(stageAppDir, options.arch, options.verbose);
   }
@@ -1026,6 +1091,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     synaraLockfileSha256: resolvedLockfileSha256,
     synaraSourceTag: options.sourceTag ?? null,
     synaraWindowsPublisherSubject: resolvedBuildConfig.windowsPublisherSubject,
+    synaraMacWebAuthnKeychainAccessGroup: macWebAuthnKeychainAccessGroup,
     private: true,
     description: "Synara desktop build",
     author: "Emanuele Di Pietro",

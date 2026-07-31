@@ -16,6 +16,45 @@ export const WINDOWS_INSTALLER_GUID = "368107a8-afe6-5db5-ab3b-d4f331684868";
 const MAC_DMG_ICON_PATH = "icon.icns";
 export const NODE_PTY_ASAR_UNPACK_GLOBS = ["node_modules/node-pty/**"] as const;
 
+/**
+ * Adds the WebAuthn keychain access group to the staged macOS entitlements so
+ * signed builds can service passkey requests via `app.configureWebAuthn`.
+ * The staged plist is the single source for codesign, so this must run before
+ * electron-builder is invoked.
+ */
+export function withMacKeychainAccessGroups(
+  entitlementsPlist: string,
+  keychainAccessGroup: string,
+): string {
+  if (!/^[A-Za-z0-9.-]+$/.test(keychainAccessGroup)) {
+    throw new Error(
+      `Refusing to embed keychain access group '${keychainAccessGroup}' into an entitlements plist.`,
+    );
+  }
+  if (entitlementsPlist.includes("keychain-access-groups")) {
+    throw new Error(
+      "The macOS entitlements plist already declares keychain-access-groups; refusing to add a second entry.",
+    );
+  }
+  const closingDict = /^([\t ]*)<\/dict>/m.exec(entitlementsPlist);
+  if (closingDict === null || closingDict.index === undefined) {
+    throw new Error("The macOS entitlements plist has no closing </dict> to extend.");
+  }
+  const keyIndent = `${closingDict[1] ?? ""}  `;
+  const insertion = [
+    `${keyIndent}<key>keychain-access-groups</key>`,
+    `${keyIndent}<array>`,
+    `${keyIndent}  <string>${keychainAccessGroup}</string>`,
+    `${keyIndent}</array>`,
+    "",
+  ].join("\n");
+  return (
+    entitlementsPlist.slice(0, closingDict.index) +
+    insertion +
+    entitlementsPlist.slice(closingDict.index)
+  );
+}
+
 export interface DesktopPlatformBuildConfig {
   readonly asarUnpack?: ReadonlyArray<string>;
   readonly dmg?: Record<string, unknown>;
