@@ -71,6 +71,13 @@ export interface CreateDesktopPlatformBuildConfigInput {
   readonly target: string;
   readonly signed?: boolean;
   readonly windowsAzureSignOptions?: Record<string, string>;
+  /**
+   * Path to an `embedded.provisionprofile` authorizing the WebAuthn
+   * keychain-access-groups entitlement. macOS kills apps that claim a
+   * restricted entitlement without a matching profile, so the entitlement is
+   * only ever embedded alongside the profile that authorizes it.
+   */
+  readonly macProvisioningProfile?: string;
 }
 
 export interface DesktopNativeBuildHostInput {
@@ -116,6 +123,9 @@ export function createDesktopPlatformBuildConfig(
       entitlements: MAC_ENTITLEMENTS_PATH,
       entitlementsInherit: MAC_INHERITED_ENTITLEMENTS_PATH,
       binaries: [MAC_APPSNAP_HELPER_BUNDLE_PATH],
+      ...(input.macProvisioningProfile
+        ? { provisioningProfile: input.macProvisioningProfile }
+        : {}),
       // The universal build stages the same pre-lipo'd helper in both app trees.
       // @electron/universal needs this pattern to preserve that existing fat binary.
       x64ArchFiles: MAC_APPSNAP_HELPER_BUNDLE_PATH,

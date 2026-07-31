@@ -16,6 +16,29 @@ import {
 import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 
 describe("createDesktopPlatformBuildConfig", () => {
+  // macOS SIGKILLs apps that claim keychain-access-groups without a profile
+  // authorizing it, so an artifact must never carry one without the other.
+  it("omits the provisioning profile unless one is supplied", () => {
+    const mac = createDesktopPlatformBuildConfig({
+      platform: "mac",
+      target: "dmg",
+      signed: true,
+    }).mac as Record<string, unknown>;
+
+    assert.equal("provisioningProfile" in mac, false);
+  });
+
+  it("embeds the provisioning profile that authorizes the WebAuthn entitlement", () => {
+    const mac = createDesktopPlatformBuildConfig({
+      platform: "mac",
+      target: "dmg",
+      signed: true,
+      macProvisioningProfile: "build/synara.provisionprofile",
+    }).mac as Record<string, unknown>;
+
+    assert.equal(mac.provisioningProfile, "build/synara.provisionprofile");
+  });
+
   it("adds explicit microphone entitlements to macOS builds", () => {
     const config = createDesktopPlatformBuildConfig({
       platform: "mac",

@@ -4,6 +4,18 @@
 // keychain access group is baked into signed builds (entitlements + staged
 // package.json) by scripts/build-desktop-artifact.ts; unsigned dev builds have
 // no usable group and skip configuration unless one is provided via env.
+//
+// Two hard platform limits bound what this can ever deliver:
+//   1. keychain-access-groups is a restricted entitlement. macOS SIGKILLs any
+//      app claiming it without an embedded provisioning profile that authorizes
+//      it, so the build only embeds it alongside SYNARA_MAC_PROVISION_PROFILE.
+//   2. This authenticator stores its OWN device-bound credentials in that
+//      group. It cannot read passkeys from iCloud Keychain, and it has no
+//      cross-device QR flow. Serving passkeys for arbitrary relying parties
+//      (google.com and friends) needs Apple's browser-only entitlement
+//      com.apple.developer.web-browser.public-key-credential, which is granted
+//      by application to shipping web browsers. So a passkey created on a phone
+//      can never be used here; only one enrolled inside Synara itself can.
 
 /** Env override for local/dev runs signed with a custom access group. */
 export const MAC_WEBAUTHN_ACCESS_GROUP_ENV = "SYNARA_MAC_WEBAUTHN_KEYCHAIN_ACCESS_GROUP";
