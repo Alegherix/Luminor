@@ -79,31 +79,3 @@ export function synaraDesktopIdentity(flavor: SynaraDesktopFlavor): SynaraDeskto
 export function synaraBundleId(isDevelopment: boolean): string {
   return synaraDesktopIdentity(isDevelopment ? "development" : "production").bundleId;
 }
-
-// Keychain access group components end up verbatim inside a code-signing
-// entitlements plist, so anything outside Apple identifier characters is a
-// build-input error rather than something to escape.
-const KEYCHAIN_ACCESS_GROUP_COMPONENT_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$/;
-
-/**
- * Keychain access group that stores WebAuthn (passkey) credentials created by
- * Electron's Touch ID platform authenticator. The same value must be passed to
- * `app.configureWebAuthn` at runtime and listed in the app's
- * `keychain-access-groups` code-signing entitlement.
- */
-export function synaraMacWebAuthnKeychainAccessGroup(
-  appleTeamId: string,
-  bundleId: string,
-): string {
-  for (const [label, value] of [
-    ["Apple team ID", appleTeamId],
-    ["bundle ID", bundleId],
-  ] as const) {
-    if (!KEYCHAIN_ACCESS_GROUP_COMPONENT_PATTERN.test(value)) {
-      throw new Error(
-        `Invalid ${label} '${value}' for a WebAuthn keychain access group; expected alphanumeric characters, dots, and hyphens.`,
-      );
-    }
-  }
-  return `${appleTeamId}.${bundleId}.webauthn`;
-}

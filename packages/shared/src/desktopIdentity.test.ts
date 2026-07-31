@@ -12,7 +12,6 @@ import {
   SYNARA_PRODUCTION_BUNDLE_ID,
   synaraBundleId,
   synaraDesktopIdentity,
-  synaraMacWebAuthnKeychainAccessGroup,
 } from "./desktopIdentity";
 
 describe("desktopIdentity", () => {
@@ -57,24 +56,6 @@ describe("desktopIdentity", () => {
     );
     expect(resolveSynaraDesktopFlavor({ isDevelopment: true, requestedFlavor: "canary" })).toBe(
       "canary",
-    );
-  });
-
-  it("builds the WebAuthn keychain access group from team and bundle IDs", () => {
-    expect(synaraMacWebAuthnKeychainAccessGroup("ABCDE12345", SYNARA_PRODUCTION_BUNDLE_ID)).toBe(
-      "ABCDE12345.com.emanueledipietro.synara.webauthn",
-    );
-  });
-
-  it("rejects WebAuthn access group components that cannot appear in an entitlements plist", () => {
-    expect(() => synaraMacWebAuthnKeychainAccessGroup("", SYNARA_PRODUCTION_BUNDLE_ID)).toThrow(
-      /Apple team ID/,
-    );
-    expect(() =>
-      synaraMacWebAuthnKeychainAccessGroup("TEAM<ID>", SYNARA_PRODUCTION_BUNDLE_ID),
-    ).toThrow(/Apple team ID/);
-    expect(() => synaraMacWebAuthnKeychainAccessGroup("ABCDE12345", "com.synara.")).toThrow(
-      /bundle ID/,
     );
   });
 });

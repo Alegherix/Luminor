@@ -18,14 +18,9 @@ import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 import {
   createDesktopPlatformBuildConfig,
   MAC_APPSNAP_HELPER_STAGE_PATH,
-  MAC_ENTITLEMENTS_PATH,
   validateDesktopNativeBuildHost,
-  withMacKeychainAccessGroups,
 } from "./lib/desktop-platform-build-config.ts";
-import {
-  SYNARA_PRODUCTION_BUNDLE_ID,
-  synaraMacWebAuthnKeychainAccessGroup,
-} from "@synara/shared/desktopIdentity";
+import { SYNARA_PRODUCTION_BUNDLE_ID } from "@synara/shared/desktopIdentity";
 import { parseBooleanEnvValue } from "./lib/env-bool.ts";
 import { finalizeSignedMacDmg } from "./lib/mac-dmg-finalize.ts";
 import { finalizeMacUpdateZip } from "./lib/mac-update-zip-finalize.ts";
@@ -227,7 +222,6 @@ interface StagePackageJson {
   readonly synaraLockfileSha256: string;
   readonly synaraSourceTag: string | null;
   readonly synaraWindowsPublisherSubject: string | null;
-  readonly synaraMacWebAuthnKeychainAccessGroup: string | null;
   readonly private: true;
   readonly description: string;
   readonly author: string;
@@ -253,59 +247,6 @@ const AzureTrustedSigningOptionsConfig = Config.all({
   timestampRfc3161: Config.string("AZURE_TRUSTED_SIGNING_TIMESTAMP_RFC3161").pipe(
     Config.withDefault("http://timestamp.acs.microsoft.com"),
   ),
-});
-
-const AppleTeamIdConfig = Config.string("APPLE_TEAM_ID").pipe(Config.option);
-const MacProvisionProfileConfig = Config.string("SYNARA_MAC_PROVISION_PROFILE").pipe(Config.option);
-
-// Passkeys (WebAuthn Touch ID) only work when the signed app carries the
-// keychain-access-groups entitlement and the runtime configures the exact
-// same group, so signed macOS builds resolve it once here and thread it into
-// both the entitlements plist and the staged package metadata.
-//
-// keychain-access-groups is a RESTRICTED entitlement: macOS SIGKILLs any app
-// that claims it without an embedded provisioning profile authorizing it, so a
-// build that injected it unconditionally would ship an app that cannot launch
-// at all. The entitlement is therefore only embedded when
-// SYNARA_MAC_PROVISION_PROFILE points at the profile that authorizes it;
-// without a profile the build stays launchable and passkeys simply stay off
-// (the runtime already skips configuration when no group is embedded).
-const resolveMacWebAuthnSigningInputs = Effect.fn("resolveMacWebAuthnSigningInputs")(function* (
-  platform: typeof BuildPlatform.Type,
-  signed: boolean,
-) {
-  const disabled = { keychainAccessGroup: null, provisioningProfile: null } as const;
-  if (platform !== "mac" || !signed) {
-    return disabled;
-  }
-  const provisioningProfile = Option.getOrUndefined(yield* MacProvisionProfileConfig)?.trim();
-  if (!provisioningProfile) {
-    yield* Effect.logWarning(
-      "[desktop-artifact] SYNARA_MAC_PROVISION_PROFILE is not set; building without the WebAuthn keychain entitlement. Passkeys stay disabled in this artifact (macOS refuses to launch apps that claim keychain-access-groups without a matching provisioning profile).",
-    );
-    return disabled;
-  }
-  const appleTeamId = yield* AppleTeamIdConfig;
-  const keychainAccessGroup = yield* Option.match(appleTeamId, {
-    onNone: () =>
-      new BuildScriptError({
-        message:
-          "Signed macOS builds with SYNARA_MAC_PROVISION_PROFILE require APPLE_TEAM_ID so the WebAuthn keychain access group can be embedded in the entitlements.",
-      }),
-    onSome: (teamId) =>
-      Effect.try({
-        try: () => synaraMacWebAuthnKeychainAccessGroup(teamId.trim(), SYNARA_PRODUCTION_BUNDLE_ID),
-        catch: (cause) =>
-          new BuildScriptError({
-            message:
-              cause instanceof Error
-                ? cause.message
-                : "Could not derive the WebAuthn keychain access group from APPLE_TEAM_ID.",
-            cause,
-          }),
-      }),
-  });
-  return { keychainAccessGroup, provisioningProfile } as const;
 });
 
 const BuildEnvConfig = Config.all({
@@ -781,7 +722,6 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   signed: boolean,
   mockUpdates: boolean,
   mockUpdateServerPort: string | undefined,
-  macProvisioningProfile: string | null,
 ) {
   const buildConfig: Record<string, unknown> = {
     appId: SYNARA_PRODUCTION_BUNDLE_ID,
@@ -823,7 +763,6 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     target,
     signed,
     ...(windowsAzureSignOptions ? { windowsAzureSignOptions } : {}),
-    ...(macProvisioningProfile ? { macProvisioningProfile } : {}),
   } as const;
 
   Object.assign(buildConfig, createDesktopPlatformBuildConfig(platformBuildConfigInput));
@@ -1063,33 +1002,6 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   yield* assertPlatformBuildResources(options.platform, stageResourcesDir, options.verbose);
 
-  const { keychainAccessGroup: macWebAuthnKeychainAccessGroup, provisioningProfile } =
-    yield* resolveMacWebAuthnSigningInputs(options.platform, options.signed);
-  if (provisioningProfile !== null && !(yield* fs.exists(provisioningProfile))) {
-    return yield* new BuildScriptError({
-      message: `SYNARA_MAC_PROVISION_PROFILE points at ${provisioningProfile}, which does not exist. macOS refuses to launch apps that claim keychain-access-groups without the profile that authorizes it.`,
-    });
-  }
-  if (macWebAuthnKeychainAccessGroup !== null) {
-    const stagedEntitlementsPath = path.join(stageAppDir, MAC_ENTITLEMENTS_PATH);
-    const stagedEntitlements = yield* fs.readFileString(stagedEntitlementsPath);
-    const patchedEntitlements = yield* Effect.try({
-      try: () => withMacKeychainAccessGroups(stagedEntitlements, macWebAuthnKeychainAccessGroup),
-      catch: (cause) =>
-        new BuildScriptError({
-          message:
-            cause instanceof Error
-              ? cause.message
-              : "Could not add the WebAuthn keychain access group to the macOS entitlements.",
-          cause,
-        }),
-    });
-    yield* fs.writeFileString(stagedEntitlementsPath, patchedEntitlements);
-    yield* Effect.log(
-      `[desktop-artifact] Added WebAuthn keychain access group ${macWebAuthnKeychainAccessGroup} to macOS entitlements.`,
-    );
-  }
-
   if (options.platform === "mac") {
     yield* stageMacAppSnapHelper(stageAppDir, options.arch, options.verbose);
   }
@@ -1104,7 +1016,6 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     options.signed,
     options.mockUpdates,
     options.mockUpdateServerPort,
-    provisioningProfile,
   );
 
   const stagePackageJson: StagePackageJson = {
@@ -1115,7 +1026,6 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     synaraLockfileSha256: resolvedLockfileSha256,
     synaraSourceTag: options.sourceTag ?? null,
     synaraWindowsPublisherSubject: resolvedBuildConfig.windowsPublisherSubject,
-    synaraMacWebAuthnKeychainAccessGroup: macWebAuthnKeychainAccessGroup,
     private: true,
     description: "Synara desktop build",
     author: "Emanuele Di Pietro",
