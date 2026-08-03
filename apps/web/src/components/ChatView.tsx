@@ -11053,14 +11053,8 @@ export default function ChatView({
                           isTranscribing={isVoiceTranscribing}
                           durationLabel={voiceRecordingDurationLabel}
                           waveformLevels={voiceWaveformLevels}
-                          onCancel={() => {
-                            if (isVoiceRecording) {
-                              void submitComposerVoiceRecording();
-                              return;
-                            }
-                            cancelComposerVoiceRecording();
-                          }}
-                          onSubmit={() => {
+                          onDiscard={cancelComposerVoiceRecording}
+                          onStop={() => {
                             void submitComposerVoiceRecording();
                           }}
                         />

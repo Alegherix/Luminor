@@ -15,8 +15,8 @@ interface ComposerVoiceRecorderBarProps {
   isRecording: boolean;
   isTranscribing: boolean;
   waveformLevels: readonly number[];
-  onCancel: () => void;
-  onSubmit: () => void;
+  onDiscard: () => void;
+  onStop: () => void;
 }
 
 const BAR_WIDTH_PX = 2;
@@ -92,7 +92,7 @@ export function ComposerVoiceRecorderBar(props: ComposerVoiceRecorderBarProps) {
         className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-zinc-200/80 text-zinc-700 transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/15 sm:h-7 sm:w-7"
         aria-label={props.isTranscribing ? "Transcribing voice note" : "Cancel voice recording"}
         disabled={props.disabled || props.isTranscribing}
-        onClick={props.onCancel}
+        onClick={props.onDiscard}
       >
         {props.isTranscribing ? (
           <Loader2Icon aria-hidden="true" className="size-3 animate-spin" />
@@ -108,7 +108,7 @@ export function ComposerVoiceRecorderBar(props: ComposerVoiceRecorderBarProps) {
         className="size-7 rounded-full sm:size-7"
         aria-label={props.isTranscribing ? "Transcribing voice note" : "Stop voice recording"}
         disabled={props.disabled || props.isTranscribing}
-        onClick={props.onSubmit}
+        onClick={props.onStop}
       >
         {props.isTranscribing ? (
           <Loader2Icon aria-hidden="true" className="size-3 animate-spin" />

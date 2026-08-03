@@ -17,16 +17,16 @@ describe("ComposerVoiceRecorderBar", () => {
   });
 
   it("uses the send treatment for stop while keeping cancel separate", async () => {
-    const onCancel = vi.fn();
-    const onSubmit = vi.fn();
+    const onDiscard = vi.fn();
+    const onStop = vi.fn();
     const screen = await render(
       <ComposerVoiceRecorderBar
         durationLabel="0:03"
         isRecording
         isTranscribing={false}
         waveformLevels={[0.2, 0.6, 0.4]}
-        onCancel={onCancel}
-        onSubmit={onSubmit}
+        onDiscard={onDiscard}
+        onStop={onStop}
       />,
     );
 
@@ -39,11 +39,12 @@ describe("ComposerVoiceRecorderBar", () => {
     expect(document.querySelector('button[aria-label="Send voice note"]')).toBeNull();
 
     await page.getByRole("button", { name: "Stop voice recording" }).click();
-    expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(onCancel).not.toHaveBeenCalled();
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(onDiscard).not.toHaveBeenCalled();
 
     await page.getByRole("button", { name: "Cancel voice recording" }).click();
-    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onDiscard).toHaveBeenCalledTimes(1);
+    expect(onStop).toHaveBeenCalledTimes(1);
 
     await screen.unmount();
   });

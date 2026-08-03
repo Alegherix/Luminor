@@ -216,6 +216,15 @@ describe("useComposerVoiceController", () => {
     expect(options.onTranscriptReady).toHaveBeenCalledWith("transcribed once");
   });
 
+  it("discards the active recording without stopping or transcribing it", () => {
+    result.cancelComposerVoiceRecording();
+
+    expect(recorder.cancelRecording).toHaveBeenCalledTimes(1);
+    expect(recorder.stopRecording).not.toHaveBeenCalled();
+    expect(nativeApi.transcribeVoice).not.toHaveBeenCalled();
+    expect(options.onTranscriptReady).not.toHaveBeenCalled();
+  });
+
   it("prewarms persistent voice state after recording starts", async () => {
     recorder.isRecording = false;
     render();
