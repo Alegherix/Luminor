@@ -240,6 +240,35 @@ describe("discoverSkillsCatalog", () => {
     expect(skills.some((skill) => skill.name === "other-tools:other-skill")).toBe(false);
   });
 
+  it("uses one highest-precedence applicable install per Claude plugin ID", async () => {
+    const cwd = path.join(root, "repo", "packages", "web");
+    await mkdir(cwd, { recursive: true });
+    const userInstallPath = claudePluginInstallPath("plugins", "workflow-kit", "1.0.0");
+    const projectInstallPath = claudePluginInstallPath("plugins", "workflow-kit", "2.0.0");
+    await Promise.all([
+      writeSkill(path.join(userInstallPath, "skills", "user-only"), "user-only", "User copy only"),
+      writeSkill(
+        path.join(projectInstallPath, "skills", "project-only"),
+        "project-only",
+        "Project copy only",
+      ),
+    ]);
+    await writeClaudePluginManifest({
+      "workflow-kit@plugins": [
+        { scope: "user", installPath: userInstallPath },
+        {
+          scope: "project",
+          projectPath: path.join(root, "repo"),
+          installPath: projectInstallPath,
+        },
+      ],
+    });
+
+    const skills = await discoverSkillsCatalog({ cwd, homeDir, synaraBaseDir });
+    expect(skills.map((skill) => skill.name)).toContain("workflow-kit:project-only");
+    expect(skills.map((skill) => skill.name)).not.toContain("workflow-kit:user-only");
+  });
+
   it("ignores malformed registrations and install paths outside Claude's plugin cache", async () => {
     const validInstallPath = claudePluginInstallPath("plugins", "valid", "1.0.0");
     const outsideInstallPath = path.join(root, "outside-plugin");

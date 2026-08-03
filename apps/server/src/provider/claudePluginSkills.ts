@@ -154,12 +154,20 @@ export async function discoverClaudePluginSkillRoots(input: {
 
   const roots: ClaudePluginSkillRoot[] = [];
   const seen = new Set<string>();
+  const selectedPluginIds = new Set<string>();
   const cwd = input.cwd?.trim() || null;
   for (const { pluginId, install } of parseInstalledPlugins(manifest)) {
+    if (selectedPluginIds.has(pluginId)) {
+      continue;
+    }
     const namespace = namespaceForPlugin(pluginId);
     if (!namespace || !(await installAppliesToCwd(install, cwd))) {
       continue;
     }
+    // Claude resolves one effective installation per plugin ID. Once the
+    // highest-precedence applicable scope is selected, a lower-precedence copy
+    // must not contribute additional skills even if the selected path is broken.
+    selectedPluginIds.add(pluginId);
     const canonicalInstallPath = await canonicalPath(install.installPath);
     if (!canonicalInstallPath || !pathIsWithin(canonicalCacheRoot, canonicalInstallPath)) {
       continue;
