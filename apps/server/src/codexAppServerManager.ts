@@ -2491,6 +2491,13 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     );
   }
 
+  private isContextInitializedAndRoutable(context: CodexSessionContext): boolean {
+    return (
+      this.isContextRoutable(context) &&
+      (context.session.status === "ready" || context.session.status === "running")
+    );
+  }
+
   private async resolveContextForDiscovery(
     threadId?: string,
     cwd?: string,
@@ -2500,7 +2507,10 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     if (normalizedThreadId) {
       try {
         const session = this.requireSession(ThreadId.makeUnsafe(normalizedThreadId));
-        if (!normalizedCwd || session.session.cwd === normalizedCwd) {
+        if (
+          this.isContextInitializedAndRoutable(session) &&
+          (!normalizedCwd || session.session.cwd === normalizedCwd)
+        ) {
           return session;
         }
       } catch {
@@ -2511,14 +2521,17 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     }
     if (normalizedCwd) {
       for (const activeSession of this.sessions.values()) {
-        if (this.isContextRoutable(activeSession) && activeSession.session.cwd === normalizedCwd) {
+        if (
+          this.isContextInitializedAndRoutable(activeSession) &&
+          activeSession.session.cwd === normalizedCwd
+        ) {
           return activeSession;
         }
       }
       return this.getOrCreateDiscoverySession(normalizedCwd);
     }
     const firstActive = Array.from(this.sessions.values()).find((context) =>
-      this.isContextRoutable(context),
+      this.isContextInitializedAndRoutable(context),
     );
     if (firstActive) {
       return firstActive;
@@ -2563,7 +2576,10 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     const normalizedThreadId = input.threadId?.trim();
     if (normalizedThreadId) {
       try {
-        context = this.requireSession(ThreadId.makeUnsafe(normalizedThreadId));
+        const candidate = this.requireSession(ThreadId.makeUnsafe(normalizedThreadId));
+        if (this.isContextInitializedAndRoutable(candidate)) {
+          context = candidate;
+        }
       } catch {
         // A draft or closed thread can still use a cwd-scoped discovery session.
       }

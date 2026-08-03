@@ -67,7 +67,10 @@ import {
   normalizeCorsOrigin,
   shouldRejectAuthMutationOrigin,
 } from "./trustedOrigins";
-import { voiceUploadAdmissionGate } from "./voiceUploadAdmission";
+import {
+  VOICE_UPLOAD_CAPACITY_ERROR_MESSAGE,
+  voiceUploadAdmissionGate,
+} from "./voiceUploadAdmission";
 
 const PROJECT_FAVICON_CACHE_CONTROL = "public, max-age=3600";
 const SITE_FAVICON_CACHE_CONTROL_SUCCESS = "public, max-age=86400"; // 24 h
@@ -966,7 +969,7 @@ const binaryUploadEffectHandler = Effect.gen(function* () {
     const releaseUpload = voiceUploadAdmissionGate.tryAcquire();
     if (!releaseUpload) {
       return HttpServerResponse.jsonUnsafe(
-        { error: "Too many voice uploads are already in progress. Try again shortly." },
+        { error: VOICE_UPLOAD_CAPACITY_ERROR_MESSAGE },
         { status: 429, headers: corsHeaders },
       );
     }

@@ -106,6 +106,7 @@ import {
 } from "./wsStreamAdmission";
 import { ThreadDiagnosticsQuery } from "./diagnostics/Services/ThreadDiagnosticsQuery";
 import { makeWsRequestAdmission } from "./wsRequestAdmission";
+import { voiceUploadAdmissionGate } from "./voiceUploadAdmission";
 import {
   CurrentWsSessionRole,
   provideWsConnectionSession,
@@ -1457,19 +1458,21 @@ const makeWsRpcHandlersLayer = () =>
           ),
         [WS_METHODS.serverTranscribeVoice]: (input) =>
           rpcEffect(
-            providerAdapterRegistry
-              .getByProvider(input.provider)
-              .pipe(
-                Effect.flatMap((adapter) =>
-                  adapter.transcribeVoice
-                    ? adapter.transcribeVoice(input)
-                    : Effect.fail(
-                        new Error(
-                          `Voice transcription is unavailable for provider '${input.provider}'.`,
+            voiceUploadAdmissionGate.run(
+              providerAdapterRegistry
+                .getByProvider(input.provider)
+                .pipe(
+                  Effect.flatMap((adapter) =>
+                    adapter.transcribeVoice
+                      ? adapter.transcribeVoice(input)
+                      : Effect.fail(
+                          new Error(
+                            `Voice transcription is unavailable for provider '${input.provider}'.`,
+                          ),
                         ),
-                      ),
+                  ),
                 ),
-              ),
+            ),
             "Voice transcription failed",
           ),
         [WS_METHODS.serverGenerateThreadRecap]: (input) =>

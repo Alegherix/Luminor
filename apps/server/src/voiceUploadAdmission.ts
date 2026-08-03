@@ -3,7 +3,11 @@
 // Layer: Server transport utility
 // Exports: VoiceUploadAdmissionGate, voiceUploadAdmissionGate
 
+import { Effect } from "effect";
+
 const MAX_CONCURRENT_VOICE_UPLOADS = 2;
+export const VOICE_UPLOAD_CAPACITY_ERROR_MESSAGE =
+  "Too many voice uploads are already in progress. Try again shortly.";
 
 export class VoiceUploadAdmissionGate {
   private active = 0;
@@ -27,6 +31,21 @@ export class VoiceUploadAdmissionGate {
       released = true;
       this.active -= 1;
     };
+  }
+
+  run<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E | Error, R> {
+    const acquire = Effect.sync(() => this.tryAcquire()).pipe(
+      Effect.flatMap((release) =>
+        release
+          ? Effect.succeed(release)
+          : Effect.fail(new Error(VOICE_UPLOAD_CAPACITY_ERROR_MESSAGE)),
+      ),
+    );
+    return Effect.acquireUseRelease(
+      acquire,
+      () => effect,
+      (release) => Effect.sync(release),
+    );
   }
 }
 

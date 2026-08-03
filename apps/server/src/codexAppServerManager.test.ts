@@ -2305,6 +2305,76 @@ describe("CodexAppServerManager discovery", () => {
     });
   });
 
+  it("uses discovery for voice auth while the requested thread is still connecting", async () => {
+    const manager = new CodexAppServerManager();
+    const connectingContext = {
+      session: {
+        provider: "codex",
+        status: "connecting",
+        threadId: "thread_connecting",
+        runtimeMode: "full-access",
+        cwd: "/repo",
+      },
+      child: {
+        exitCode: null,
+        signalCode: null,
+        killed: false,
+        stdin: new PassThrough(),
+      },
+      stopping: false,
+    };
+    const discoveryContext = { discovery: true };
+    (
+      manager as unknown as {
+        sessions: Map<string, unknown>;
+      }
+    ).sessions.set("thread_connecting", connectingContext);
+    const resolveContextForDiscovery = vi
+      .spyOn(
+        manager as unknown as {
+          resolveContextForDiscovery: (threadId?: string, cwd?: string) => Promise<unknown>;
+        },
+        "resolveContextForDiscovery",
+      )
+      .mockResolvedValue(discoveryContext);
+    const sendRequest = vi
+      .spyOn(
+        manager as unknown as {
+          sendRequest: (...args: unknown[]) => Promise<unknown>;
+        },
+        "sendRequest",
+      )
+      .mockResolvedValue({ authMethod: "chatgpt", authToken: "voice-token" });
+
+    const loadVoiceTranscriptionAuth = (
+      manager as unknown as {
+        loadVoiceTranscriptionAuth: (input: {
+          cwd: string;
+          threadId: string;
+          refreshToken: boolean;
+        }) => Promise<unknown>;
+      }
+    ).loadVoiceTranscriptionAuth.bind(manager);
+
+    await expect(
+      loadVoiceTranscriptionAuth({
+        cwd: "/repo",
+        threadId: "thread_connecting",
+        refreshToken: false,
+      }),
+    ).resolves.toEqual({ authMethod: "chatgpt", token: "voice-token" });
+    expect(resolveContextForDiscovery).toHaveBeenCalledWith(undefined, "/repo");
+    expect(sendRequest).toHaveBeenCalledWith(discoveryContext, "getAuthStatus", {
+      includeToken: true,
+      refreshToken: false,
+    });
+    expect(sendRequest).not.toHaveBeenCalledWith(
+      connectingContext,
+      "getAuthStatus",
+      expect.anything(),
+    );
+  });
+
   it("retries skills/list with cwd when a runtime rejects cwds", async () => {
     const manager = new CodexAppServerManager();
     const context = {
