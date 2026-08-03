@@ -19,6 +19,7 @@ import {
   mergeSkillsIntoCatalog,
   parseSkillFrontmatter,
 } from "./skillsCatalog.ts";
+import { pathIsWithin } from "./claudePluginSkills.ts";
 
 let root: string;
 let homeDir: string;
@@ -77,6 +78,15 @@ disable-model-invocation: true
       description: "Review recent code changes",
       "disable-model-invocation": true,
     });
+  });
+});
+
+describe("pathIsWithin", () => {
+  it("rejects Windows paths on another drive while preserving same-drive containment", () => {
+    expect(pathIsWithin("C:\\plugins", "C:\\plugins", path.win32)).toBe(true);
+    expect(pathIsWithin("C:\\plugins", "C:\\plugins\\workflow-kit", path.win32)).toBe(true);
+    expect(pathIsWithin("C:\\plugins", "C:\\other", path.win32)).toBe(false);
+    expect(pathIsWithin("C:\\plugins", "D:\\plugins\\workflow-kit", path.win32)).toBe(false);
   });
 });
 

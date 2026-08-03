@@ -92,9 +92,18 @@ function namespaceForPlugin(pluginId: string): string | null {
   return namespace.length > 0 ? namespace : null;
 }
 
-function pathIsWithin(parentPath: string, childPath: string): boolean {
-  const relative = nodePath.relative(parentPath, childPath);
-  return relative === "" || (!relative.startsWith(`..${nodePath.sep}`) && relative !== "..");
+type PathContainmentApi = Pick<typeof nodePath, "isAbsolute" | "relative" | "sep">;
+
+export function pathIsWithin(
+  parentPath: string,
+  childPath: string,
+  pathApi: PathContainmentApi = nodePath,
+): boolean {
+  const relative = pathApi.relative(parentPath, childPath);
+  return (
+    relative === "" ||
+    (!pathApi.isAbsolute(relative) && !relative.startsWith(`..${pathApi.sep}`) && relative !== "..")
+  );
 }
 
 async function canonicalPath(path: string): Promise<string | null> {
