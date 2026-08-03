@@ -34,10 +34,7 @@ export function encodeVoiceRecordingWav(
   }
 
   const inputSamplesPerOutputSample = inputSampleRateHz / outputSampleRateHz;
-  const outputSampleCount = Math.max(
-    1,
-    Math.round(inputSampleCount / inputSamplesPerOutputSample),
-  );
+  const outputSampleCount = Math.max(1, Math.round(inputSampleCount / inputSamplesPerOutputSample));
   const dataView = new DataView(new ArrayBuffer(44 + outputSampleCount * 2));
   writeWavHeader(dataView, outputSampleCount, outputSampleRateHz);
   const pcmSamples = IS_LITTLE_ENDIAN
@@ -71,11 +68,7 @@ export function encodeVoiceRecordingWav(
     for (let index = 0; index < outputSampleCount; index += 1) {
       const sourceIndex = index * inputSamplesPerOutputSample;
       const leftIndex = Math.floor(sourceIndex);
-      while (
-        chunk &&
-        leftIndex >= chunkStart + chunk.length &&
-        chunkIndex < chunks.length - 1
-      ) {
+      while (chunk && leftIndex >= chunkStart + chunk.length && chunkIndex < chunks.length - 1) {
         chunkStart += chunk.length;
         chunkIndex += 1;
         chunk = chunks[chunkIndex];
@@ -90,9 +83,7 @@ export function encodeVoiceRecordingWav(
             : (chunk?.[localIndex + 1] ?? chunks[chunkIndex + 1]?.[0] ?? leftValue);
         // The legacy pipeline materialized interpolation into Float32Array before
         // PCM conversion. Preserve that rounding so clips stay byte-for-byte identical.
-        sample = Math.fround(
-          leftValue + (rightValue - leftValue) * (sourceIndex - leftIndex),
-        );
+        sample = Math.fround(leftValue + (rightValue - leftValue) * (sourceIndex - leftIndex));
       }
       const clamped = Math.max(-1, Math.min(1, sample));
       const pcm = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;

@@ -35,9 +35,7 @@ class VoiceRecordingCancelledError extends Error {
   override readonly name = "VoiceRecordingCancelledError";
 }
 
-export function isVoiceRecordingCancelledError(
-  error: unknown,
-): boolean {
+export function isVoiceRecordingCancelledError(error: unknown): boolean {
   return error instanceof VoiceRecordingCancelledError;
 }
 
@@ -188,9 +186,7 @@ export function useVoiceRecorder() {
 
         const rmsLevel = Math.min(
           1,
-          Math.sqrt(
-            sumOfSquares / Math.max(1, monoSamples.length),
-          ) * 3.2,
+          Math.sqrt(sumOfSquares / Math.max(1, monoSamples.length)) * 3.2,
         );
         const now = performance.now();
         if (now - waveformLastEmitAtRef.current >= 45) {

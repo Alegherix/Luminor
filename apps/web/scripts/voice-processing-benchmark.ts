@@ -28,8 +28,7 @@ function makeChunks(
     const length = Math.min(chunkSize, total - offset);
     const chunk = new Float32Array(length);
     for (let index = 0; index < length; index += 1) {
-      chunk[index] =
-        Math.sin(((offset + index) * Math.PI * 2 * 220) / inputSampleRateHz) * 0.5;
+      chunk[index] = Math.sin(((offset + index) * Math.PI * 2 * 220) / inputSampleRateHz) * 0.5;
     }
     chunks.push(chunk);
   }
@@ -110,8 +109,7 @@ function writeAscii(view: DataView, offset: number, value: string): void {
 function summarize(values: readonly number[]): BenchmarkStats {
   const sorted = [...values].sort((left, right) => left - right);
   const mean = values.reduce((total, value) => total + value, 0) / values.length;
-  const variance =
-    values.reduce((total, value) => total + (value - mean) ** 2, 0) / values.length;
+  const variance = values.reduce((total, value) => total + (value - mean) ** 2, 0) / values.length;
   return {
     meanMs: mean,
     medianMs: percentile(sorted, 0.5),

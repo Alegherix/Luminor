@@ -30,6 +30,4 @@ export class VoiceUploadAdmissionGate {
   }
 }
 
-export const voiceUploadAdmissionGate = new VoiceUploadAdmissionGate(
-  MAX_CONCURRENT_VOICE_UPLOADS,
-);
+export const voiceUploadAdmissionGate = new VoiceUploadAdmissionGate(MAX_CONCURRENT_VOICE_UPLOADS);

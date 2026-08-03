@@ -891,10 +891,7 @@ function setRecentCacheEntry<K, V>(
 export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEvents> {
   private readonly sessions = new Map<ThreadId, CodexSessionContext>();
   private readonly discoverySessions = new Map<string, CodexSessionContext>();
-  private readonly discoverySessionStartups = new Map<
-    string,
-    Promise<CodexSessionContext>
-  >();
+  private readonly discoverySessionStartups = new Map<string, Promise<CodexSessionContext>>();
   private readonly discoverySessionIdleTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private voiceAuthCache:
     | {

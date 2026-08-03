@@ -1056,9 +1056,9 @@ describe("wsNativeApi", () => {
       writable: true,
       value: { getWsUrl: () => "ws://127.0.0.1:3773/ws?token=desktop-secret" },
     });
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response("Not Found", { status: 404 }),
-    );
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response("Not Found", { status: 404 }));
     vi.stubGlobal("fetch", fetchMock);
     requestMock.mockResolvedValueOnce({ text: "legacy transport" });
 
