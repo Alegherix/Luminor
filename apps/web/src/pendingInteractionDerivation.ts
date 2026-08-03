@@ -1,8 +1,8 @@
 import {
   ApprovalRequestId,
-  type OrchestrationLatestTurn,
   type OrchestrationPendingInteraction,
   type OrchestrationThreadActivity,
+  type TurnId,
   type UserInputQuestion,
 } from "@synara/contracts";
 import {
@@ -38,7 +38,7 @@ export interface PendingInteractionDerivationOptions {
   // trusts only latest-turn requests; true additionally retains the newest
   // unresolved older request so a background prompt can outlive later turns.
   readonly authoritativeHasPending: boolean | undefined;
-  readonly latestTurn: OrchestrationLatestTurn | null | undefined;
+  readonly latestTurnId: TurnId | undefined;
 }
 
 interface PendingInteractionReplay<T extends { requestId: ApprovalRequestId }> {
@@ -125,7 +125,7 @@ function replayPendingInteractions<T extends { requestId: ApprovalRequestId; cre
 ): T[] {
   const openByInstance = new Map<string, T>();
   const isAggregateFallback = settlements === undefined && options !== undefined;
-  const fallbackLatestTurnId = isAggregateFallback ? options.latestTurn?.turnId : undefined;
+  const fallbackLatestTurnId = isAggregateFallback ? options.latestTurnId : undefined;
   const latestTurnRequestedKeys = new Set<string>();
   const replayActivities =
     !isAggregateFallback || options.authoritativeHasPending !== false ? activities : [];

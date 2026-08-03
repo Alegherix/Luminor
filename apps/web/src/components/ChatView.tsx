@@ -2571,11 +2571,11 @@ export default function ChatView({
     () =>
       derivePendingApprovals(threadActivities, activeThread?.pendingInteractions, {
         authoritativeHasPending: activeThread?.hasPendingApprovals,
-        latestTurn: activeThread?.latestTurn,
+        latestTurnId: activeThread?.latestTurn?.turnId,
       }),
     [
       activeThread?.hasPendingApprovals,
-      activeThread?.latestTurn,
+      activeThread?.latestTurn?.turnId,
       activeThread?.pendingInteractions,
       threadActivities,
     ],
@@ -2584,11 +2584,11 @@ export default function ChatView({
     () =>
       derivePendingUserInputs(threadActivities, activeThread?.pendingInteractions, {
         authoritativeHasPending: activeThread?.hasPendingUserInput,
-        latestTurn: activeThread?.latestTurn,
+        latestTurnId: activeThread?.latestTurn?.turnId,
       }),
     [
       activeThread?.hasPendingUserInput,
-      activeThread?.latestTurn,
+      activeThread?.latestTurn?.turnId,
       activeThread?.pendingInteractions,
       threadActivities,
     ],

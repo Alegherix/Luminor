@@ -2,7 +2,6 @@ import {
   ApprovalRequestId,
   ThreadId,
   TurnId,
-  type OrchestrationLatestTurn,
   type OrchestrationPendingInteraction,
   type OrchestrationThreadActivity,
 } from "@synara/contracts";
@@ -10,20 +9,6 @@ import { describe, expect, it } from "vitest";
 
 import { derivePendingApprovals, derivePendingUserInputs } from "./pendingInteractionDerivation";
 import { makeActivity } from "./storeTestFixtures";
-
-function makeLatestTurn(
-  turnId: string,
-  state: OrchestrationLatestTurn["state"] = "running",
-): OrchestrationLatestTurn {
-  return {
-    turnId: TurnId.makeUnsafe(turnId),
-    state,
-    requestedAt: "2026-02-23T00:00:00.000Z",
-    startedAt: "2026-02-23T00:00:00.000Z",
-    completedAt: state === "running" ? null : "2026-02-23T00:00:03.000Z",
-    assistantMessageId: null,
-  };
-}
 
 function makePendingInteraction(
   interactionKind: OrchestrationPendingInteraction["interactionKind"],
@@ -73,7 +58,7 @@ describe("derivePendingApprovals", () => {
     expect(
       derivePendingApprovals(activities, [makePendingInteraction("approval", "pending")], {
         authoritativeHasPending: false,
-        latestTurn: null,
+        latestTurnId: undefined,
       }),
     ).toHaveLength(1);
   });
@@ -95,7 +80,7 @@ describe("derivePendingApprovals", () => {
     ];
     const options = {
       authoritativeHasPending: false,
-      latestTurn: makeLatestTurn("turn-current"),
+      latestTurnId: TurnId.makeUnsafe("turn-current"),
     };
 
     expect(derivePendingApprovals(activities, undefined, options)).toEqual([]);
@@ -402,7 +387,7 @@ describe("derivePendingUserInputs", () => {
     expect(
       derivePendingUserInputs(activities, [makePendingInteraction("userInput", "pending")], {
         authoritativeHasPending: false,
-        latestTurn: null,
+        latestTurnId: undefined,
       }),
     ).toHaveLength(1);
   });
@@ -431,7 +416,7 @@ describe("derivePendingUserInputs", () => {
     ];
     const options = {
       authoritativeHasPending: false,
-      latestTurn: makeLatestTurn("turn-current"),
+      latestTurnId: TurnId.makeUnsafe("turn-current"),
     };
 
     expect(derivePendingUserInputs(activities, undefined, options)).toEqual([]);
@@ -510,7 +495,7 @@ describe("derivePendingUserInputs", () => {
     expect(
       derivePendingUserInputs(activities, undefined, {
         authoritativeHasPending: true,
-        latestTurn: makeLatestTurn("turn-newer"),
+        latestTurnId: TurnId.makeUnsafe("turn-newer"),
       }).map((pending) => pending.requestId),
     ).toEqual(["req-user-input-background"]);
   });
@@ -552,7 +537,7 @@ describe("derivePendingUserInputs", () => {
     expect(
       derivePendingUserInputs(activities, undefined, {
         authoritativeHasPending: true,
-        latestTurn: makeLatestTurn("turn-current"),
+        latestTurnId: TurnId.makeUnsafe("turn-current"),
       }),
     ).toEqual([]);
   });
