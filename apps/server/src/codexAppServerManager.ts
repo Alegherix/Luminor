@@ -34,6 +34,7 @@ import {
   type ServerVoiceTranscriptionResult,
   type UserInputQuestion,
 } from "@synara/contracts";
+import { prewarmChatGptVoiceTranscriptionConnection } from "@synara/shared/chatGptVoiceTranscription";
 import { getModelSelectionBooleanOptionValue, normalizeModelSlug } from "@synara/shared/model";
 import { decodeSubagentReceiverThreadIds } from "@synara/shared/subagents";
 import { prepareWindowsSafeProcess } from "@synara/shared/windowsProcess";
@@ -316,6 +317,7 @@ const CODEX_DEFAULT_MODEL = "gpt-5.5";
 const CODEX_SPARK_MODEL = "gpt-5.3-codex-spark";
 const CODEX_SPARK_DISABLED_PLAN_TYPES = new Set<CodexPlanType>(["free", "go", "plus"]);
 const CODEX_DISCOVERY_SESSION_IDLE_MS = 10 * 60 * 1000;
+const CODEX_VOICE_AUTH_CACHE_TTL_MS = 60_000;
 const CODEX_PENDING_SETTLE_DEADLINE_MS = 2_000;
 
 // Bounds the best-effort answers written to parked server requests: a child that
@@ -889,7 +891,17 @@ function setRecentCacheEntry<K, V>(
 export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEvents> {
   private readonly sessions = new Map<ThreadId, CodexSessionContext>();
   private readonly discoverySessions = new Map<string, CodexSessionContext>();
+  private readonly discoverySessionStartups = new Map<
+    string,
+    Promise<CodexSessionContext>
+  >();
   private readonly discoverySessionIdleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private voiceAuthCache:
+    | {
+        readonly loadedAt: number;
+        readonly promise: Promise<CodexVoiceTranscriptionAuthContext>;
+      }
+    | undefined;
   private readonly skillsCache = new Map<string, ProviderListSkillsResult>();
   private readonly pluginsCache = new Map<string, ProviderListPluginsResult>();
   private readonly pluginDetailCache = new Map<string, ProviderReadPluginResult>();
@@ -2260,9 +2272,20 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   }
 
   async stopAll(): Promise<void> {
+    const discoveryKeys = new Set([
+      ...this.discoverySessions.keys(),
+      ...this.discoverySessionStartups.keys(),
+    ]);
     const results = await Promise.allSettled([
       ...Array.from(this.sessions.keys(), (threadId) => this.stopSession(threadId)),
-      ...Array.from(this.discoverySessions.keys(), (key) => this.stopDiscoverySession(key)),
+      ...Array.from(discoveryKeys, async (key) => {
+        const startup = this.discoverySessionStartups.get(key);
+        if (this.discoverySessions.has(key)) {
+          await this.stopDiscoverySession(key);
+        }
+        await startup?.catch(() => undefined);
+        await this.stopDiscoverySession(key);
+      }),
     ]);
     const failures = results.flatMap((result) =>
       result.status === "rejected" ? [result.reason] : [],
@@ -2417,6 +2440,19 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     });
   }
 
+  async prewarmVoice(input: {
+    readonly cwd?: string;
+    readonly threadId?: string;
+  }): Promise<{ readonly ready: true }> {
+    void prewarmChatGptVoiceTranscriptionConnection().catch(() => undefined);
+    await this.resolveVoiceTranscriptionAuth({
+      cwd: input.cwd,
+      ...(input.threadId ? { threadId: input.threadId } : {}),
+      refreshToken: false,
+    });
+    return { ready: true };
+  }
+
   getComposerCapabilities(): ProviderComposerCapabilities {
     return {
       provider: "codex",
@@ -2501,14 +2537,53 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     readonly threadId?: string;
     readonly refreshToken: boolean;
   }): Promise<CodexVoiceTranscriptionAuthContext> {
-    // Voice transcription should always resolve auth from a fresh discovery context
-    // instead of reusing a possibly stale thread-bound session token.
-    const context = await this.getOrCreateDiscoverySession(input.cwd?.trim() || process.cwd());
+    const cached = this.voiceAuthCache;
+    if (
+      !input.refreshToken &&
+      cached &&
+      Date.now() - cached.loadedAt < CODEX_VOICE_AUTH_CACHE_TTL_MS
+    ) {
+      return cached.promise;
+    }
+
+    const promise = this.loadVoiceTranscriptionAuth(input);
+    this.voiceAuthCache = { loadedAt: Date.now(), promise };
+    try {
+      return await promise;
+    } catch (error) {
+      if (this.voiceAuthCache?.promise === promise) {
+        this.voiceAuthCache = undefined;
+      }
+      throw error;
+    }
+  }
+
+  private async loadVoiceTranscriptionAuth(input: {
+    readonly cwd?: string;
+    readonly threadId?: string;
+    readonly refreshToken: boolean;
+  }): Promise<CodexVoiceTranscriptionAuthContext> {
+    // Auth is account-scoped, so a live thread session remains reusable even when
+    // a worktree project reports a different cwd from the provider session.
+    let context: CodexSessionContext | undefined;
+    const normalizedThreadId = input.threadId?.trim();
+    if (normalizedThreadId) {
+      try {
+        context = this.requireSession(ThreadId.makeUnsafe(normalizedThreadId));
+      } catch {
+        // A draft or closed thread can still use a cwd-scoped discovery session.
+      }
+    }
+    const authContext = context ?? (await this.resolveContextForDiscovery(undefined, input.cwd));
     const readAuthStatus = async (refreshToken: boolean) => {
-      const response = await this.sendRequest<Record<string, unknown>>(context, "getAuthStatus", {
-        includeToken: true,
-        refreshToken,
-      });
+      const response = await this.sendRequest<Record<string, unknown>>(
+        authContext,
+        "getAuthStatus",
+        {
+          includeToken: true,
+          refreshToken,
+        },
+      );
       const authMethod = this.readString(response, "authMethod");
       return {
         authMethod,
@@ -2536,11 +2611,34 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
 
   private async getOrCreateDiscoverySession(cwd: string): Promise<CodexSessionContext> {
     const normalizedCwd = cwd.trim() || process.cwd();
+    const startup = this.discoverySessionStartups.get(normalizedCwd);
+    if (startup) {
+      return startup;
+    }
     const existing = this.discoverySessions.get(normalizedCwd);
-    if (existing && !existing.stopping && !existing.child.killed) {
+    if (
+      existing &&
+      existing.session.status === "ready" &&
+      !existing.stopping &&
+      !existing.child.killed
+    ) {
       this.scheduleDiscoverySessionIdleStop(normalizedCwd);
       return existing;
     }
+
+    const nextStartup = this.createDiscoverySession(normalizedCwd);
+    this.discoverySessionStartups.set(normalizedCwd, nextStartup);
+    try {
+      return await nextStartup;
+    } finally {
+      if (this.discoverySessionStartups.get(normalizedCwd) === nextStartup) {
+        this.discoverySessionStartups.delete(normalizedCwd);
+      }
+    }
+  }
+
+  private async createDiscoverySession(normalizedCwd: string): Promise<CodexSessionContext> {
+    const existing = this.discoverySessions.get(normalizedCwd);
     if (existing) {
       await this.stopDiscoverySession(normalizedCwd);
     }

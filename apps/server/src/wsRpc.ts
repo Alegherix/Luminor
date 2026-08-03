@@ -1438,6 +1438,23 @@ const makeWsRpcHandlersLayer = () =>
             }),
             "Failed to load server diagnostics",
           ),
+        [WS_METHODS.serverPrewarmVoice]: (input) =>
+          rpcEffect(
+            providerAdapterRegistry
+              .getByProvider(input.provider)
+              .pipe(
+                Effect.flatMap((adapter) =>
+                  adapter.prewarmVoice
+                    ? adapter.prewarmVoice(input)
+                    : Effect.fail(
+                        new Error(
+                          `Voice transcription is unavailable for provider '${input.provider}'.`,
+                        ),
+                      ),
+                ),
+              ),
+            "Voice transcription prewarm failed",
+          ),
         [WS_METHODS.serverTranscribeVoice]: (input) =>
           rpcEffect(
             providerAdapterRegistry
