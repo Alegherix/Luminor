@@ -2184,9 +2184,6 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
           if (claim._tag === "waiting") {
             const settled = yield* Deferred.await(claim.settlement);
             if (settled) {
-              if (!input.suppressLateRuntimeEvents) {
-                context.locallyResolvedPermissionIds.delete(input.requestId);
-              }
               return false;
             }
             continue;
@@ -2581,11 +2578,11 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
           }
 
           case "permission.replied": {
-            if (context.policyResolvedPermissionIds.delete(event.properties.requestID)) {
+            if (context.policyResolvedPermissionIds.has(event.properties.requestID)) {
               // Synara policy resolved this request; nothing was surfaced to the UI.
               break;
             }
-            if (context.locallyResolvedPermissionIds.delete(event.properties.requestID)) {
+            if (context.locallyResolvedPermissionIds.has(event.properties.requestID)) {
               // permission.list already confirmed this reply and projected the resolution.
               break;
             }

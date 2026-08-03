@@ -3715,6 +3715,20 @@ describe("OpenCodeAdapter runtime lifecycle", () => {
             reply: "once",
           },
         });
+        // Reconnect replay can repeat both the reply and the original ask. The settled request id
+        // remains guarded for the lifetime of the adapter session, so neither becomes a second UI
+        // interaction.
+        eventQueue.push({
+          type: "permission.asked",
+          properties: {
+            id: "permission-human-1",
+            sessionID: "opencode-session-1",
+            permission: "websearch",
+            patterns: ["Synara handoff"],
+            metadata: {},
+            always: [],
+          },
+        });
         eventQueue.push({
           type: "session.next.text.delta",
           properties: {
