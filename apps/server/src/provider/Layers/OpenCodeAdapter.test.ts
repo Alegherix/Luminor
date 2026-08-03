@@ -3904,6 +3904,84 @@ describe("OpenCodeAdapter runtime lifecycle", () => {
     expect(runtime.permissionReplyCalls).toEqual([{ requestID: permission.id, reply: "always" }]);
   });
 
+  it("does not block session teardown when permission resolution backpressure is interrupted", async () => {
+    const eventQueue = createSubscribedEventQueue();
+    const permission = {
+      id: "permission-backpressure-1",
+      sessionID: "opencode-session-1",
+      permission: "bash",
+      patterns: ["git status"],
+      metadata: {},
+      always: [],
+    } satisfies PermissionRequest;
+    const runtime = createMockOpenCodeRuntime();
+    const client = runtime.runtime.createOpenCodeSdkClient({
+      baseUrl: "http://127.0.0.1:4099",
+      directory: process.cwd(),
+    }) as unknown as {
+      event: { subscribe: () => Promise<{ stream: AsyncIterable<unknown> }> };
+    };
+    client.event.subscribe = async () => ({ stream: eventQueue.stream });
+
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const adapter = yield* OpenCodeAdapter;
+        const threadId = asThreadId("thread-human-permission-backpressure");
+        const openedFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 4)).pipe(
+          Effect.forkChild,
+        );
+        yield* adapter.startSession({
+          provider: "opencode",
+          threadId,
+          runtimeMode: "approval-required",
+        });
+        yield* adapter.sendTurn({
+          threadId,
+          input: "Inspect status",
+          attachments: [],
+          modelSelection: { provider: "opencode", model: "openai/gpt-5.4" },
+        });
+        eventQueue.push({ type: "permission.asked", properties: permission });
+        yield* Fiber.join(openedFiber);
+
+        // Fill the one-slot runtime event queue, then let permission.replied block on the next
+        // offer. Layer teardown must still interrupt the session event pump.
+        eventQueue.push({
+          type: "session.next.text.delta",
+          properties: {
+            timestamp: 1,
+            sessionID: permission.sessionID,
+            delta: "queued",
+          },
+        });
+        eventQueue.push({
+          type: "permission.replied",
+          properties: {
+            sessionID: permission.sessionID,
+            requestID: permission.id,
+            reply: "once",
+          },
+        });
+        yield* Effect.sleep(25);
+      }).pipe(
+        Effect.provide(
+          makeOpenCodeAdapterLive({
+            runtime: runtime.runtime,
+            runtimeEventBufferCapacity: 1,
+          }).pipe(
+            Layer.provideMerge(
+              ServerConfig.layerTest(process.cwd(), { prefix: "opencode-adapter-test-" }),
+            ),
+            Layer.provideMerge(NodeServices.layer),
+          ),
+        ),
+        Effect.timeout("1 second"),
+      ),
+    );
+
+    expect(exit).toMatchObject({ _tag: "Success" });
+  });
+
   it("fails acknowledgement without consuming a permission that the runtime still lists", async () => {
     const eventQueue = createSubscribedEventQueue();
     let replySubmitted = false;

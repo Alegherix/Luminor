@@ -161,6 +161,7 @@ interface OpenCodeSessionContext {
   readonly openCodeSessionId: string;
   readonly pendingPermissions: Map<string, PermissionRequest>;
   readonly replyingPermissions: Map<string, "once" | "always" | "reject">;
+  readonly settlingPermissions: Map<string, Deferred.Deferred<boolean>>;
   /** Permission request ids resolved by Synara policy and never surfaced to the UI. */
   readonly policyResolvedPermissionIds: Set<string>;
   /** Human replies settled from permission.list while their permission.replied echo is pending. */
@@ -247,6 +248,7 @@ export interface OpenCodeAdapterLiveOptions {
   readonly promptAcceptedRecoveryDelaysMs?: ReadonlyArray<number>;
   readonly promptSubmissionInlineWaitMs?: number;
   readonly permissionReplyAckDelaysMs?: ReadonlyArray<number>;
+  readonly runtimeEventBufferCapacity?: number;
   readonly prematureIdleCompletionGraceMs?: number;
   readonly beforeSessionInstall?: Effect.Effect<void>;
   readonly resolveServerPassword?: (
@@ -1221,7 +1223,7 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
       const managedNativeEventLogger =
         options?.nativeEventLogger === undefined ? nativeEventLogger : undefined;
       const runtimeEvents = yield* Queue.bounded<ProviderRuntimeEvent>(
-        PROVIDER_ADAPTER_RUNTIME_EVENT_BUFFER_CAPACITY,
+        options?.runtimeEventBufferCapacity ?? PROVIDER_ADAPTER_RUNTIME_EVENT_BUFFER_CAPACITY,
       );
       const sessions = new Map<ThreadId, OpenCodeSessionContext>();
 
@@ -2161,38 +2163,77 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
           readonly suppressLateRuntimeEvents: boolean;
         },
       ) {
-        return yield* Effect.uninterruptible(
-          Effect.gen(function* () {
-            const request = yield* Effect.sync(() => {
-              const pending = context.pendingPermissions.get(input.requestId);
-              if (!pending) {
-                return undefined;
-              }
-              context.pendingPermissions.delete(input.requestId);
-              if (input.suppressLateRuntimeEvents) {
-                context.locallyResolvedPermissionIds.add(input.requestId);
-              }
-              return pending;
-            });
+        while (true) {
+          const settlement = yield* Deferred.make<boolean>();
+          const claim = yield* Effect.sync(() => {
+            const request = context.pendingPermissions.get(input.requestId);
             if (!request) {
+              return { _tag: "missing" } as const;
+            }
+            const existing = context.settlingPermissions.get(input.requestId);
+            if (existing) {
+              return { _tag: "waiting", settlement: existing } as const;
+            }
+            context.settlingPermissions.set(input.requestId, settlement);
+            return { _tag: "claimed", request } as const;
+          });
+
+          if (claim._tag === "missing") {
+            return false;
+          }
+          if (claim._tag === "waiting") {
+            const settled = yield* Deferred.await(claim.settlement);
+            if (settled) {
+              if (!input.suppressLateRuntimeEvents) {
+                context.locallyResolvedPermissionIds.delete(input.requestId);
+              }
               return false;
             }
-            yield* emit(context, {
-              ...buildEventBase({
-                threadId: context.session.threadId,
-                turnId: context.activeTurnId,
-                requestId: input.requestId,
-                raw: input.raw,
-              }),
-              type: "request.resolved",
-              payload: {
-                requestType: mapPermissionToRequestType(request.permission),
-                decision: mapPermissionDecision(input.reply),
-              },
-            });
-            return true;
-          }),
-        );
+            continue;
+          }
+
+          return yield* Effect.uninterruptibleMask((restore) =>
+            Effect.gen(function* () {
+              const emitted = yield* restore(
+                emit(context, {
+                  ...buildEventBase({
+                    threadId: context.session.threadId,
+                    turnId: context.activeTurnId,
+                    requestId: input.requestId,
+                    raw: input.raw,
+                  }),
+                  type: "request.resolved",
+                  payload: {
+                    requestType: mapPermissionToRequestType(claim.request.permission),
+                    decision: mapPermissionDecision(input.reply),
+                  },
+                }),
+              ).pipe(Effect.exit);
+
+              if (Exit.isFailure(emitted)) {
+                yield* Effect.sync(() => {
+                  if (context.settlingPermissions.get(input.requestId) === settlement) {
+                    context.settlingPermissions.delete(input.requestId);
+                  }
+                });
+                yield* Deferred.succeed(settlement, false);
+                return yield* Effect.failCause(emitted.cause);
+              }
+
+              yield* Effect.sync(() => {
+                if (context.settlingPermissions.get(input.requestId) === settlement) {
+                  context.settlingPermissions.delete(input.requestId);
+                  context.pendingPermissions.delete(input.requestId);
+                  if (input.suppressLateRuntimeEvents) {
+                    context.locallyResolvedPermissionIds.add(input.requestId);
+                  }
+                }
+              });
+              yield* Deferred.succeed(settlement, true);
+              return true;
+            }),
+          );
+        }
       });
 
       const handleSubscribedEvent = Effect.fn("handleSubscribedEvent")(function* (
@@ -3679,6 +3720,7 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
                   openCodeSessionId: started.openCodeSessionId,
                   pendingPermissions: new Map(),
                   replyingPermissions: new Map(),
+                  settlingPermissions: new Map(),
                   policyResolvedPermissionIds: new Set(),
                   locallyResolvedPermissionIds: new Set(),
                   pendingQuestions: new Map(),
