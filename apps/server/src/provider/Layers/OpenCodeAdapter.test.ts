@@ -3859,11 +3859,7 @@ describe("OpenCodeAdapter runtime lifecycle", () => {
           .pipe(Effect.forkChild);
         yield* Effect.promise(() => listStarted);
         const conflictingResponse = yield* adapter
-          .respondToRequest(
-            threadId,
-            ApprovalRequestId.makeUnsafe(permission.id),
-            "decline",
-          )
+          .respondToRequest(threadId, ApprovalRequestId.makeUnsafe(permission.id), "decline")
           .pipe(Effect.result);
         eventQueue.push({
           type: "permission.replied",
@@ -3905,9 +3901,7 @@ describe("OpenCodeAdapter runtime lifecycle", () => {
       type: "request.resolved",
       payload: { decision: "acceptForSession" },
     });
-    expect(runtime.permissionReplyCalls).toEqual([
-      { requestID: permission.id, reply: "always" },
-    ]);
+    expect(runtime.permissionReplyCalls).toEqual([{ requestID: permission.id, reply: "always" }]);
   });
 
   it("fails acknowledgement without consuming a permission that the runtime still lists", async () => {
@@ -3961,11 +3955,7 @@ describe("OpenCodeAdapter runtime lifecycle", () => {
         yield* Fiber.join(openedFiber);
 
         const firstResponse = yield* adapter
-          .respondToRequest(
-            threadId,
-            ApprovalRequestId.makeUnsafe(permission.id),
-            "accept",
-          )
+          .respondToRequest(threadId, ApprovalRequestId.makeUnsafe(permission.id), "accept")
           .pipe(Effect.result);
         keepPending = false;
         const resolvedFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 1)).pipe(
@@ -4063,11 +4053,7 @@ describe("OpenCodeAdapter runtime lifecycle", () => {
         yield* Fiber.join(openedFiber);
 
         const firstResponse = yield* adapter
-          .respondToRequest(
-            threadId,
-            ApprovalRequestId.makeUnsafe(permission.id),
-            "accept",
-          )
+          .respondToRequest(threadId, ApprovalRequestId.makeUnsafe(permission.id), "accept")
           .pipe(Effect.result);
         listFails = false;
         const resolvedFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 1)).pipe(

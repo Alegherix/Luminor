@@ -3982,81 +3982,81 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
         },
       );
 
-      const acknowledgeHumanPermissionReply = Effect.fn(
-        "acknowledgeHumanPermissionReply",
-      )(function* (
-        context: OpenCodeSessionContext,
-        input: {
-          readonly requestId: string;
-          readonly reply: "once" | "always" | "reject";
-        },
-      ) {
-        let lastListError: unknown;
-        const attemptCount = permissionReplyAckDelaysMs.length + 1;
+      const acknowledgeHumanPermissionReply = Effect.fn("acknowledgeHumanPermissionReply")(
+        function* (
+          context: OpenCodeSessionContext,
+          input: {
+            readonly requestId: string;
+            readonly reply: "once" | "always" | "reject";
+          },
+        ) {
+          let lastListError: unknown;
+          const attemptCount = permissionReplyAckDelaysMs.length + 1;
 
-        for (let attempt = 0; attempt < attemptCount; attempt += 1) {
-          if (!context.pendingPermissions.has(input.requestId)) {
-            // The subscription processed permission.replied while the reply was in flight.
-            return;
-          }
-          if (attempt > 0) {
-            const delayMs = permissionReplyAckDelaysMs[attempt - 1];
-            if (delayMs !== undefined) {
-              yield* Effect.sleep(delayMs);
+          for (let attempt = 0; attempt < attemptCount; attempt += 1) {
+            if (!context.pendingPermissions.has(input.requestId)) {
+              // The subscription processed permission.replied while the reply was in flight.
+              return;
             }
+            if (attempt > 0) {
+              const delayMs = permissionReplyAckDelaysMs[attempt - 1];
+              if (delayMs !== undefined) {
+                yield* Effect.sleep(delayMs);
+              }
+              if (!context.pendingPermissions.has(input.requestId)) {
+                return;
+              }
+            }
+
+            const listExit = yield* Effect.exit(
+              runOpenCodeSdk("permission.list", () => context.client.permission.list()),
+            );
+            if (Exit.isFailure(listExit)) {
+              lastListError = Cause.squash(listExit.cause);
+              continue;
+            }
+            lastListError = undefined;
             if (!context.pendingPermissions.has(input.requestId)) {
               return;
             }
-          }
+            const stillPending = (listExit.value.data ?? []).some(
+              (request) => request.id === input.requestId,
+            );
+            if (stillPending) {
+              continue;
+            }
 
-          const listExit = yield* Effect.exit(
-            runOpenCodeSdk("permission.list", () => context.client.permission.list()),
-          );
-          if (Exit.isFailure(listExit)) {
-            lastListError = Cause.squash(listExit.cause);
-            continue;
-          }
-          lastListError = undefined;
-          if (!context.pendingPermissions.has(input.requestId)) {
+            yield* settlePendingHumanPermission(context, {
+              requestId: input.requestId,
+              reply: input.reply,
+              raw: {
+                type: "permission.reply.acknowledged",
+                properties: {
+                  sessionID: context.openCodeSessionId,
+                  requestID: input.requestId,
+                  reply: input.reply,
+                },
+              },
+              suppressLateRuntimeEvents: true,
+            });
             return;
           }
-          const stillPending = (listExit.value.data ?? []).some(
-            (request) => request.id === input.requestId,
-          );
-          if (stillPending) {
-            continue;
+
+          if (!context.pendingPermissions.has(input.requestId)) {
+            // The final permission.list result was stale and the subscription won the race.
+            return;
           }
 
-          yield* settlePendingHumanPermission(context, {
-            requestId: input.requestId,
-            reply: input.reply,
-            raw: {
-              type: "permission.reply.acknowledged",
-              properties: {
-                sessionID: context.openCodeSessionId,
-                requestID: input.requestId,
-                reply: input.reply,
-              },
-            },
-            suppressLateRuntimeEvents: true,
+          return yield* new ProviderAdapterRequestError({
+            provider,
+            method: "permission.reply.acknowledge",
+            detail: lastListError
+              ? `${adapterConfig.displayName} could not verify that permission ${input.requestId} was resolved: ${openCodeRuntimeErrorDetail(lastListError)}`
+              : `${adapterConfig.displayName} still reports permission ${input.requestId} as pending after ${String(attemptCount)} acknowledgement attempts.`,
+            ...(lastListError !== undefined ? { cause: lastListError } : {}),
           });
-          return;
-        }
-
-        if (!context.pendingPermissions.has(input.requestId)) {
-          // The final permission.list result was stale and the subscription won the race.
-          return;
-        }
-
-        return yield* new ProviderAdapterRequestError({
-          provider,
-          method: "permission.reply.acknowledge",
-          detail: lastListError
-            ? `${adapterConfig.displayName} could not verify that permission ${input.requestId} was resolved: ${openCodeRuntimeErrorDetail(lastListError)}`
-            : `${adapterConfig.displayName} still reports permission ${input.requestId} as pending after ${String(attemptCount)} acknowledgement attempts.`,
-          ...(lastListError !== undefined ? { cause: lastListError } : {}),
-        });
-      });
+        },
+      );
 
       const respondToRequest: OpenCodeAdapterShape["respondToRequest"] = Effect.fn(
         "respondToRequest",
