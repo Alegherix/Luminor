@@ -201,6 +201,9 @@ export function useVoiceRecorder() {
       processorNode.connect(silentGainNode);
       silentGainNode.connect(audioContext.destination);
 
+      // Publish the runtime only while this startup still owns the current
+      // generation. This keeps future async setup additions cancellation-safe.
+      assertStartIsCurrent();
       runtimeRef.current = runtime;
       isStartingRef.current = false;
       waveformLevelsRef.current = [];

@@ -2218,6 +2218,11 @@ describe("CodexAppServerManager discovery", () => {
         getOrCreateDiscoverySession: (cwd: string) => Promise<unknown>;
       }
     ).getOrCreateDiscoverySession("/repo");
+    (
+      manager as unknown as {
+        discoverySessions: Map<string, unknown>;
+      }
+    ).discoverySessions.set("/repo", { status: "connecting" });
     const stopping = manager.stopAll();
     await Promise.resolve();
     expect(stopDiscoverySession).not.toHaveBeenCalled();
@@ -2228,6 +2233,7 @@ describe("CodexAppServerManager discovery", () => {
       undefined,
     ]);
     expect(stopDiscoverySession).toHaveBeenCalledWith("/repo");
+    expect(stopDiscoverySession).toHaveBeenCalledTimes(1);
   });
 
   it("reuses a live thread for voice auth even when the project cwd is a worktree", async () => {

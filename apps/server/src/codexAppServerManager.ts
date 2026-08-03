@@ -2277,9 +2277,6 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       ...Array.from(this.sessions.keys(), (threadId) => this.stopSession(threadId)),
       ...Array.from(discoveryKeys, async (key) => {
         const startup = this.discoverySessionStartups.get(key);
-        if (this.discoverySessions.has(key)) {
-          await this.stopDiscoverySession(key);
-        }
         await startup?.catch(() => undefined);
         await this.stopDiscoverySession(key);
       }),
