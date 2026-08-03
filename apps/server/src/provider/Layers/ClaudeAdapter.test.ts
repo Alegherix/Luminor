@@ -9550,7 +9550,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
         assert.fail("Expected user-input.resolved before turn.completed");
         return;
       }
-      assert.equal(resolvedEvent.requestId, requestId);
+      assert.equal(resolvedEvent.requestId, rawRequestId);
       assert.deepEqual(resolvedEvent.payload.answers, {});
       assert.equal(resolvedEvent.turnId, terminalLifecycle[1]?.turnId);
 
