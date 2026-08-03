@@ -6,6 +6,7 @@ import {
   ProjectId,
   ThreadId,
   TurnId,
+  type OrchestrationPendingInteraction,
 } from "@synara/contracts";
 import {
   buildInputNeededCopy,
@@ -52,6 +53,26 @@ function makeThread(overrides: Partial<Thread>): Thread {
     turnDiffSummaries: [],
     activities: [],
     ...overrides,
+  };
+}
+
+function makeInteraction(
+  interactionKind: OrchestrationPendingInteraction["interactionKind"],
+  requestId: string,
+  status: OrchestrationPendingInteraction["status"],
+): OrchestrationPendingInteraction {
+  return {
+    interactionKind,
+    requestId: ApprovalRequestId.makeUnsafe(requestId),
+    threadId: ThreadId.makeUnsafe("thread-1"),
+    turnId: TurnId.makeUnsafe("turn-1"),
+    lifecycleGeneration: "generation-1",
+    status,
+    decision: null,
+    responseCommandId: null,
+    responseRequestedAt: null,
+    createdAt: "2026-04-05T10:00:04.000Z",
+    resolvedAt: null,
   };
 }
 
@@ -889,6 +910,79 @@ describe("collectInputNeededThreadCandidates", () => {
         [makeThread({ activities: [historicalActivity], hasPendingUserInput: true })],
       ),
     ).toEqual([]);
+  });
+
+  it("notifies when a detailed approval becomes retryable", () => {
+    const activity = {
+      id: EventId.makeUnsafe("activity-retryable-approval"),
+      tone: "approval" as const,
+      kind: "approval.requested",
+      summary: "Command approval requested",
+      payload: {
+        requestId: "retryable-approval",
+        lifecycleGeneration: "generation-1",
+        requestKind: "command",
+      },
+      turnId: TurnId.makeUnsafe("turn-1"),
+      createdAt: "2026-04-05T10:00:04.000Z",
+    };
+
+    expect(
+      collectInputNeededThreadCandidates(
+        [
+          makeThread({
+            activities: [activity],
+            pendingInteractions: [makeInteraction("approval", "retryable-approval", "responding")],
+          }),
+        ],
+        [
+          makeThread({
+            activities: [activity],
+            pendingInteractions: [makeInteraction("approval", "retryable-approval", "retryable")],
+          }),
+        ],
+      ).map((candidate) => candidate.requestId),
+    ).toEqual([ApprovalRequestId.makeUnsafe("retryable-approval")]);
+  });
+
+  it("notifies when detailed user input becomes retryable", () => {
+    const activity = {
+      id: EventId.makeUnsafe("activity-retryable-input"),
+      tone: "info" as const,
+      kind: "user-input.requested",
+      summary: "User input requested",
+      payload: {
+        requestId: "retryable-input",
+        lifecycleGeneration: "generation-1",
+        questions: [
+          {
+            id: "question-retryable",
+            header: "Question",
+            question: "Try again?",
+            options: [{ label: "Yes", description: "Retry" }],
+          },
+        ],
+      },
+      turnId: TurnId.makeUnsafe("turn-1"),
+      createdAt: "2026-04-05T10:00:04.000Z",
+    };
+
+    expect(
+      collectInputNeededThreadCandidates(
+        [
+          makeThread({
+            activities: [activity],
+            pendingInteractions: [makeInteraction("userInput", "retryable-input", "responding")],
+          }),
+        ],
+        [
+          makeThread({
+            activities: [activity],
+            pendingInteractions: [makeInteraction("userInput", "retryable-input", "retryable")],
+          }),
+        ],
+      ).map((candidate) => candidate.requestId),
+    ).toEqual([ApprovalRequestId.makeUnsafe("retryable-input")]);
   });
 });
 

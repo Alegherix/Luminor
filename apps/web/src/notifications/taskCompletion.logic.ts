@@ -697,9 +697,10 @@ export function collectThreadAttentionCandidates(
     })) {
       if (
         previousApprovalIds.has(approval.requestId) ||
-        previousApprovalActivityKeys.has(
-          pendingRequestInstanceKey(approval.requestId, approval.lifecycleGeneration),
-        )
+        (thread.pendingInteractions === undefined &&
+          previousApprovalActivityKeys.has(
+            pendingRequestInstanceKey(approval.requestId, approval.lifecycleGeneration),
+          ))
       ) {
         continue;
       }
@@ -720,9 +721,10 @@ export function collectThreadAttentionCandidates(
     })) {
       if (
         previousUserInputIds.has(request.requestId) ||
-        previousUserInputActivityKeys.has(
-          pendingRequestInstanceKey(request.requestId, request.lifecycleGeneration),
-        )
+        (thread.pendingInteractions === undefined &&
+          previousUserInputActivityKeys.has(
+            pendingRequestInstanceKey(request.requestId, request.lifecycleGeneration),
+          ))
       ) {
         continue;
       }
