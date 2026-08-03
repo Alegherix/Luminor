@@ -8,6 +8,7 @@ import {
   type TerminalCliKind,
   type TerminalVisualState,
 } from "@synara/shared/terminalThreads";
+import { pendingRequestInstanceKey } from "@synara/shared/threadSummary";
 import type { Thread, ThreadSession } from "../types";
 import {
   derivePendingApprovals,
@@ -633,6 +634,28 @@ function approvalSummary(
   }
 }
 
+function requestedActivityInstanceKeys(
+  activities: Thread["activities"],
+  kind: "approval.requested" | "user-input.requested",
+): Set<string> {
+  return new Set(
+    activities.flatMap((activity) => {
+      if (activity.kind !== kind || !activity.payload) return [];
+      const payload = activity.payload as Record<string, unknown>;
+      return typeof payload.requestId === "string"
+        ? [
+            pendingRequestInstanceKey(
+              payload.requestId,
+              typeof payload.lifecycleGeneration === "string"
+                ? payload.lifecycleGeneration
+                : undefined,
+            ),
+          ]
+        : [];
+    }),
+  );
+}
+
 // Compare consecutive activity snapshots and emit only fresh input-needed transitions.
 export function collectThreadAttentionCandidates(
   previousThreads: readonly Thread[],
@@ -659,12 +682,25 @@ export function collectThreadAttentionCandidates(
         latestTurn: previousThread.latestTurn,
       }).map((request) => request.requestId),
     );
+    const previousApprovalActivityKeys = requestedActivityInstanceKeys(
+      previousThread.activities,
+      "approval.requested",
+    );
+    const previousUserInputActivityKeys = requestedActivityInstanceKeys(
+      previousThread.activities,
+      "user-input.requested",
+    );
 
     for (const approval of derivePendingApprovals(thread.activities, thread.pendingInteractions, {
       authoritativeHasPending: thread.hasPendingApprovals,
       latestTurn: thread.latestTurn,
     })) {
-      if (previousApprovalIds.has(approval.requestId)) {
+      if (
+        previousApprovalIds.has(approval.requestId) ||
+        previousApprovalActivityKeys.has(
+          pendingRequestInstanceKey(approval.requestId, approval.lifecycleGeneration),
+        )
+      ) {
         continue;
       }
       candidates.push({
@@ -682,7 +718,12 @@ export function collectThreadAttentionCandidates(
       authoritativeHasPending: thread.hasPendingUserInput,
       latestTurn: thread.latestTurn,
     })) {
-      if (previousUserInputIds.has(request.requestId)) {
+      if (
+        previousUserInputIds.has(request.requestId) ||
+        previousUserInputActivityKeys.has(
+          pendingRequestInstanceKey(request.requestId, request.lifecycleGeneration),
+        )
+      ) {
         continue;
       }
       candidates.push({

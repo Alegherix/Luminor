@@ -78,7 +78,7 @@ describe("derivePendingApprovals", () => {
     ).toHaveLength(1);
   });
 
-  it("does not resurrect historical approvals when aggregate state flips false to true", () => {
+  it("bounds aggregate-only approval replay to the newest turn with requests", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
         id: "approval-legacy-stale",
@@ -109,8 +109,8 @@ describe("derivePendingApprovals", () => {
       derivePendingApprovals(activities, undefined, {
         ...options,
         authoritativeHasPending: true,
-      }),
-    ).toEqual([]);
+      }).map((pending) => pending.requestId),
+    ).toEqual(["req-legacy-stale"]);
 
     const freshActivities = [
       ...activities,
@@ -126,19 +126,31 @@ describe("derivePendingApprovals", () => {
           requestKind: "command",
         },
       }),
+      makeActivity({
+        id: "approval-current-concurrent",
+        createdAt: "2026-02-23T00:00:03.000Z",
+        turnId: "turn-current",
+        kind: "approval.requested",
+        summary: "Command approval requested",
+        tone: "approval",
+        payload: {
+          requestId: "req-current-concurrent",
+          requestKind: "command",
+        },
+      }),
     ];
     expect(
       derivePendingApprovals(freshActivities, undefined, {
         ...options,
         authoritativeHasPending: true,
       }).map((pending) => pending.requestId),
-    ).toEqual(["req-current"]);
+    ).toEqual(["req-current", "req-current-concurrent"]);
     expect(
       derivePendingApprovals(freshActivities, undefined, {
         ...options,
         authoritativeHasPending: undefined,
       }).map((pending) => pending.requestId),
-    ).toEqual(["req-current"]);
+    ).toEqual(["req-current", "req-current-concurrent"]);
   });
 
   it("tracks open approvals and removes resolved ones", () => {
@@ -395,7 +407,7 @@ describe("derivePendingUserInputs", () => {
     ).toHaveLength(1);
   });
 
-  it("does not resurrect historical questions when aggregate state flips false to true", () => {
+  it("uses explicit aggregate input as evidence for the newest unresolved question", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
         id: "user-input-legacy-stale",
@@ -433,8 +445,8 @@ describe("derivePendingUserInputs", () => {
       derivePendingUserInputs(activities, undefined, {
         ...options,
         authoritativeHasPending: true,
-      }),
-    ).toEqual([]);
+      }).map((pending) => pending.requestId),
+    ).toEqual(["req-user-input-legacy-stale"]);
 
     const freshActivities = [
       ...activities,
@@ -472,7 +484,7 @@ describe("derivePendingUserInputs", () => {
     ).toEqual(["req-user-input-current"]);
   });
 
-  it("keeps a latest-turn background question visible after that turn completes", () => {
+  it("keeps the newest unresolved background question visible across later turns", () => {
     const activities = [
       makeActivity({
         id: "user-input-background",
@@ -498,7 +510,7 @@ describe("derivePendingUserInputs", () => {
     expect(
       derivePendingUserInputs(activities, undefined, {
         authoritativeHasPending: true,
-        latestTurn: makeLatestTurn("turn-completed", "completed"),
+        latestTurn: makeLatestTurn("turn-newer"),
       }).map((pending) => pending.requestId),
     ).toEqual(["req-user-input-background"]);
   });
@@ -527,7 +539,6 @@ describe("derivePendingUserInputs", () => {
       makeActivity({
         id: "user-input-current-stale-failure",
         createdAt: "2026-02-23T00:00:02.000Z",
-        turnId: null,
         kind: "provider.user-input.respond.failed",
         summary: "Provider user input response failed",
         tone: "error",

@@ -9519,6 +9519,14 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
       ).pipe(Stream.take(2), Stream.runCollect, Effect.forkChild);
 
       harness.query.emit({
+        type: "system",
+        subtype: "task_updated",
+        task_id: "foreground-agent-terminal",
+        patch: { status: "completed" },
+        session_id: "sdk-session-user-input-terminal",
+        uuid: "task-updated-user-input-terminal",
+      } as unknown as SDKMessage);
+      harness.query.emit({
         type: "result",
         subtype: "success",
         is_error: false,
@@ -9560,7 +9568,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
   });
 
   it.effect(
-    "keeps background-agent questions actionable after the foreground turn completes",
+    "keeps background-agent questions actionable when the background marker arrives late",
     () => {
       const harness = makeHarness();
       return Effect.gen(function* () {
@@ -9578,16 +9586,6 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
           input: "start a background task",
           attachments: [],
         });
-        yield* Stream.take(adapter.streamEvents, 1).pipe(Stream.runDrain);
-
-        harness.query.emit({
-          type: "system",
-          subtype: "task_updated",
-          task_id: "background-agent-1",
-          patch: { is_backgrounded: true },
-          session_id: "sdk-session-background-question",
-          uuid: "task-updated-background-question",
-        } as unknown as SDKMessage);
         yield* Stream.take(adapter.streamEvents, 1).pipe(Stream.runDrain);
 
         const canUseTool = harness.getLastCreateQueryInput()?.options.canUseTool;
@@ -9641,6 +9639,21 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
         const completedEvent = yield* Fiber.join(completedEventFiber);
         assert.equal(completedEvent._tag, "Some");
         assert.equal(completedEvent._tag === "Some" && completedEvent.value.type, "turn.completed");
+
+        harness.query.emit({
+          type: "system",
+          subtype: "task_updated",
+          task_id: "background-agent-1",
+          patch: { is_backgrounded: true },
+          session_id: "sdk-session-background-question",
+          uuid: "task-updated-background-question",
+        } as unknown as SDKMessage);
+        const backgroundedEvent = yield* Stream.runHead(adapter.streamEvents);
+        assert.equal(backgroundedEvent._tag, "Some");
+        assert.equal(
+          backgroundedEvent._tag === "Some" && backgroundedEvent.value.type,
+          "task.updated",
+        );
 
         yield* adapter.respondToUserInput(
           session.threadId,

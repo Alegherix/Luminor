@@ -383,6 +383,10 @@ interface ClaudeSessionContext {
   // Live background-task ids. background_tasks_changed replaces the set while
   // task_updated patches close the ordering window around individual tasks.
   readonly knownBackgroundTaskIds: Set<string>;
+  // Task ids with provider-terminal evidence. Agent-scoped human interactions
+  // are cancelled only on this evidence (or whole-session stop), never merely
+  // because their parent foreground turn completed.
+  readonly terminalTaskIds: Set<string>;
   // Final status per tool-use id whose task already settled (terminal
   // task_updated or task_notification). Late messages still tagged with them
   // must not resurrect a scoped run: the synthetic turn that would start on
@@ -2576,7 +2580,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
     ): boolean =>
       scope.type === "session" ||
       (pending.turnId === scope.turnId &&
-        (pending.agentId === undefined || !context.knownBackgroundTaskIds.has(pending.agentId)));
+        (pending.agentId === undefined || context.terminalTaskIds.has(pending.agentId)));
 
     const settlePendingHumanInteractions = (
       context: ClaudeSessionContext,
@@ -2600,6 +2604,26 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         }
       });
 
+    const settlePendingHumanInteractionsForAgent = (
+      context: ClaudeSessionContext,
+      agentId: string,
+    ): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        for (const [requestId, pending] of context.pendingApprovals) {
+          if (pending.agentId === agentId) {
+            yield* settlePendingApproval(context, requestId, pending, "cancel");
+          }
+        }
+        for (const [requestId, pending] of context.pendingUserInputs) {
+          if (pending.agentId === agentId) {
+            yield* settlePendingUserInput(context, requestId, pending, {
+              answers: {},
+              cancelled: true,
+            });
+          }
+        }
+      });
+
     const completeTurn = (
       context: ClaudeSessionContext,
       status: ProviderRuntimeTurnStatus,
@@ -2607,9 +2631,10 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
       result?: SDKResultMessage,
     ): Effect.Effect<void> =>
       Effect.gen(function* () {
-        // A terminal foreground turn cannot retain its own provider callbacks
-        // once the UI can no longer answer them. Background-agent callbacks
-        // remain actionable until they settle or the whole session stops.
+        // A terminal foreground turn cannot retain its root callbacks once the
+        // UI can no longer answer them. Agent callbacks remain actionable until
+        // their own task has provider-terminal evidence or the session stops;
+        // background membership messages may race the callback itself.
         if (context.turnState) {
           yield* settlePendingHumanInteractions(context, {
             type: "foregroundTurn",
@@ -2916,6 +2941,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           pendingSubagentSteers: new Map(),
           pendingSubagentStops: new Set(),
           knownBackgroundTaskIds: new Set(),
+          terminalTaskIds: new Set(),
           settledSubagentToolUseIds: new Map(),
           liveWorkflowTaskIds: new Set(),
           knownWorkflowTaskIds: new Set(),
@@ -3825,6 +3851,10 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           }
           const isTerminalStatus =
             status === "completed" || status === "failed" || status === "killed";
+          if (isTerminalStatus) {
+            context.terminalTaskIds.add(message.task_id);
+            yield* settlePendingHumanInteractionsForAgent(context, message.task_id);
+          }
           if (isTerminalStatus || isBackgrounded === false) {
             context.knownBackgroundTaskIds.delete(message.task_id);
           } else if (isBackgrounded === true) {
@@ -4029,6 +4059,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             });
             return;
           case "task_started": {
+            context.terminalTaskIds.delete(message.task_id);
             // Subagent tasks get a run entry so later task_progress/notification and
             // stopTask can be keyed by the Task tool_use_id ingestion routes on.
             if (
@@ -4140,6 +4171,8 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           }
           case "task_notification": {
             yield* emitTaskUsageSnapshot(context, message);
+            context.terminalTaskIds.add(message.task_id);
+            yield* settlePendingHumanInteractionsForAgent(context, message.task_id);
             context.knownBackgroundTaskIds.delete(message.task_id);
             const workflowTaskId = context.workflowTaskIdByMemberTaskId.get(message.task_id);
             // Settled workflows: the output file's workflowProgress carries the
@@ -4718,6 +4751,15 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             });
 
             pendingUserInputs.set(requestId, pendingInput);
+            if (
+              callbackOptions.agentID !== undefined &&
+              context.terminalTaskIds.has(callbackOptions.agentID)
+            ) {
+              yield* settlePendingUserInput(context, requestId, pendingInput, {
+                answers: {},
+                cancelled: true,
+              });
+            }
 
             // Handle abort (e.g. turn interrupted while waiting for user input).
             const onAbort = () => {
@@ -4911,6 +4953,12 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               });
 
               pendingApprovals.set(requestId, pendingApproval);
+              if (
+                callbackOptions.agentID !== undefined &&
+                context.terminalTaskIds.has(callbackOptions.agentID)
+              ) {
+                yield* settlePendingApproval(context, requestId, pendingApproval, "cancel");
+              }
 
               const onAbort = () => {
                 Effect.runFork(
@@ -5258,6 +5306,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             pendingSubagentSteers,
             pendingSubagentStops,
             knownBackgroundTaskIds: new Set(),
+            terminalTaskIds: new Set(),
             settledSubagentToolUseIds: new Map(),
             liveWorkflowTaskIds: new Set(),
             knownWorkflowTaskIds: new Set(),
