@@ -9511,7 +9511,12 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
         assert.fail("Expected user-input.requested event");
         return;
       }
-      const requestId = requestedEvent.value.requestId;
+      const rawRequestId = requestedEvent.value.requestId;
+      if (!rawRequestId) {
+        assert.fail("Expected user-input request id");
+        return;
+      }
+      const requestId = ApprovalRequestId.makeUnsafe(rawRequestId);
 
       const terminalLifecycleFiber = yield* Stream.filter(
         adapter.streamEvents,
@@ -9556,7 +9561,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
       } satisfies PermissionResult);
 
       const lateResponse = yield* Effect.exit(
-        adapter.respondToUserInput(session.threadId, ApprovalRequestId.makeUnsafe(requestId), {
+        adapter.respondToUserInput(session.threadId, requestId, {
           Continue: "Yes",
         }),
       );
