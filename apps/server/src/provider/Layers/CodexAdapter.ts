@@ -2143,7 +2143,11 @@ const makeCodexAdapter = (options?: CodexAdapterLiveOptions) =>
 
     const prewarmVoice: NonNullable<CodexAdapterShape["prewarmVoice"]> = (input) =>
       Effect.tryPromise({
-        try: () => manager.prewarmVoice(input),
+        try: () =>
+          manager.prewarmVoice({
+            cwd: input.cwd,
+            ...(input.threadId !== undefined ? { threadId: input.threadId } : {}),
+          }),
         catch: (cause) =>
           new ProviderAdapterRequestError({
             provider: PROVIDER,

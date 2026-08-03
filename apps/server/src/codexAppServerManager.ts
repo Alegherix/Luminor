@@ -2443,8 +2443,8 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   }): Promise<{ readonly ready: true }> {
     void prewarmChatGptVoiceTranscriptionConnection().catch(() => undefined);
     await this.resolveVoiceTranscriptionAuth({
-      cwd: input.cwd,
-      ...(input.threadId ? { threadId: input.threadId } : {}),
+      ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+      ...(input.threadId !== undefined ? { threadId: input.threadId } : {}),
       refreshToken: false,
     });
     return { ready: true };
