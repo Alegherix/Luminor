@@ -270,6 +270,13 @@ describe("ProviderModelPicker", () => {
       expect(pricedRow?.textContent).toContain("0.4×");
       expect(pricedRow?.querySelector('[title="0.4x Factory token rate"]')).not.toBeNull();
       expect(byokRow?.textContent).not.toContain("×");
+      await expect
+        .element(
+          page.getByRole("menuitemradio", {
+            name: "GPT-5.6 Luna 0.4x Factory token rate",
+          }),
+        )
+        .toBeInTheDocument();
     } finally {
       await mounted.cleanup();
     }
