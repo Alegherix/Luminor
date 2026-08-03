@@ -54,6 +54,34 @@ describe("derivePendingApprovals", () => {
     expect(
       derivePendingApprovals(activities, [makePendingInteraction("approval", "retryable")]),
     ).toHaveLength(1);
+    expect(
+      derivePendingApprovals(activities, [makePendingInteraction("approval", "pending")], {
+        authoritativeHasPending: false,
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("does not resurrect historical approvals when the authoritative flag is false", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "approval-legacy-stale",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "approval.requested",
+        summary: "Command approval requested",
+        tone: "approval",
+        payload: {
+          requestId: "req-legacy-stale",
+          requestKind: "command",
+        },
+      }),
+    ];
+
+    expect(
+      derivePendingApprovals(activities, undefined, { authoritativeHasPending: false }),
+    ).toEqual([]);
+    expect(
+      derivePendingApprovals(activities, undefined, { authoritativeHasPending: true }),
+    ).toHaveLength(1);
   });
 
   it("tracks open approvals and removes resolved ones", () => {
@@ -301,6 +329,41 @@ describe("derivePendingUserInputs", () => {
     ).toEqual([]);
     expect(
       derivePendingUserInputs(activities, [makePendingInteraction("userInput", "pending")]),
+    ).toHaveLength(1);
+    expect(
+      derivePendingUserInputs(activities, [makePendingInteraction("userInput", "pending")], {
+        authoritativeHasPending: false,
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("does not resurrect historical questions when the authoritative flag is false", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "user-input-legacy-stale",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "user-input.requested",
+        summary: "User input requested",
+        tone: "info",
+        payload: {
+          requestId: "req-user-input-legacy-stale",
+          questions: [
+            {
+              id: "mode",
+              header: "Mode",
+              question: "Which mode?",
+              options: [{ label: "safe", description: "Use safe mode" }],
+            },
+          ],
+        },
+      }),
+    ];
+
+    expect(
+      derivePendingUserInputs(activities, undefined, { authoritativeHasPending: false }),
+    ).toEqual([]);
+    expect(
+      derivePendingUserInputs(activities, undefined, { authoritativeHasPending: true }),
     ).toHaveLength(1);
   });
 

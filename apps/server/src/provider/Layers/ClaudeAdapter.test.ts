@@ -9460,6 +9460,104 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
     );
   });
 
+  it.effect("settles unanswered AskUserQuestion exactly once before terminal turn state", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        runtimeMode: "full-access",
+      });
+      yield* Stream.take(adapter.streamEvents, 3).pipe(Stream.runDrain);
+
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "ask a question",
+        attachments: [],
+      });
+      yield* Stream.take(adapter.streamEvents, 1).pipe(Stream.runDrain);
+
+      const createInput = harness.getLastCreateQueryInput();
+      const canUseTool = createInput?.options.canUseTool;
+      if (!canUseTool) {
+        assert.fail("Expected canUseTool to be defined");
+        return;
+      }
+
+      const permissionPromise = canUseTool(
+        "AskUserQuestion",
+        {
+          questions: [
+            {
+              question: "Continue?",
+              header: "Continue",
+              options: [{ label: "Yes", description: "Proceed" }],
+              multiSelect: false,
+            },
+          ],
+        },
+        {
+          signal: new AbortController().signal,
+          toolUseID: "tool-ask-terminal",
+          requestId: "request-tool-ask-terminal",
+        },
+      );
+
+      const requestedEvent = yield* Stream.runHead(adapter.streamEvents);
+      if (requestedEvent._tag !== "Some" || requestedEvent.value.type !== "user-input.requested") {
+        assert.fail("Expected user-input.requested event");
+        return;
+      }
+      const requestId = requestedEvent.value.requestId;
+
+      const terminalLifecycleFiber = yield* Stream.filter(
+        adapter.streamEvents,
+        (event) => event.type === "user-input.resolved" || event.type === "turn.completed",
+      ).pipe(Stream.take(2), Stream.runCollect, Effect.forkChild);
+
+      harness.query.emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        errors: [],
+        session_id: "sdk-session-user-input-terminal",
+        uuid: "result-user-input-terminal",
+      } as unknown as SDKMessage);
+
+      const terminalLifecycle = Array.from(yield* Fiber.join(terminalLifecycleFiber));
+      assert.deepEqual(
+        terminalLifecycle.map((event) => event.type),
+        ["user-input.resolved", "turn.completed"],
+      );
+      const resolvedEvent = terminalLifecycle[0];
+      if (resolvedEvent?.type !== "user-input.resolved") {
+        assert.fail("Expected user-input.resolved before turn.completed");
+        return;
+      }
+      assert.equal(resolvedEvent.requestId, requestId);
+      assert.deepEqual(resolvedEvent.payload.answers, {});
+      assert.equal(resolvedEvent.turnId, terminalLifecycle[1]?.turnId);
+
+      const permissionResult = yield* Effect.promise(() => permissionPromise);
+      assert.deepEqual(permissionResult, {
+        behavior: "deny",
+        message: "User cancelled tool execution.",
+      } satisfies PermissionResult);
+
+      const lateResponse = yield* Effect.exit(
+        adapter.respondToUserInput(session.threadId, ApprovalRequestId.makeUnsafe(requestId), {
+          Continue: "Yes",
+        }),
+      );
+      assert.equal(Exit.isFailure(lateResponse), true);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("writes provider-native observability records when enabled", () => {
     const nativeEvents: Array<{
       event?: {

@@ -229,11 +229,24 @@ interface PendingApproval {
   readonly detail?: string;
   readonly suggestions?: ReadonlyArray<PermissionUpdate>;
   readonly decision: Deferred.Deferred<ProviderApprovalDecision>;
+  readonly settled: Deferred.Deferred<void>;
+  readonly turnId?: TurnId;
+  readonly providerItemId?: string;
+  settlementStarted: boolean;
+}
+
+interface PendingUserInputResult {
+  readonly answers: ProviderUserInputAnswers;
+  readonly cancelled: boolean;
 }
 
 interface PendingUserInput {
   readonly questions: ReadonlyArray<UserInputQuestion>;
-  readonly answers: Deferred.Deferred<ProviderUserInputAnswers>;
+  readonly result: Deferred.Deferred<PendingUserInputResult>;
+  readonly settled: Deferred.Deferred<void>;
+  readonly turnId?: TurnId;
+  readonly providerItemId?: string;
+  settlementStarted: boolean;
 }
 
 function coerceClaudeAnswerValue(value: unknown): string {
@@ -2450,6 +2463,119 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         });
       });
 
+    const settlePendingApproval = (
+      context: ClaudeSessionContext,
+      requestId: ApprovalRequestId,
+      pending: PendingApproval,
+      decision: ProviderApprovalDecision,
+    ): Effect.Effect<void> =>
+      Effect.uninterruptible(
+        Effect.gen(function* () {
+          const ownsSettlement = yield* Effect.sync(() => {
+            if (context.pendingApprovals.get(requestId) !== pending) {
+              return false;
+            }
+            if (pending.settlementStarted) {
+              return false;
+            }
+            pending.settlementStarted = true;
+            return true;
+          });
+          if (!ownsSettlement) {
+            yield* Deferred.await(pending.settled);
+            return;
+          }
+
+          const stamp = yield* makeEventStamp();
+          yield* offerRuntimeEvent(context, {
+            type: "request.resolved",
+            eventId: stamp.eventId,
+            provider: PROVIDER,
+            createdAt: stamp.createdAt,
+            threadId: context.session.threadId,
+            ...(pending.turnId ? { turnId: pending.turnId } : {}),
+            requestId: asRuntimeRequestId(requestId),
+            payload: {
+              requestType: pending.requestType,
+              decision,
+            },
+            providerRefs: nativeProviderRefs(context, {
+              providerItemId: pending.providerItemId,
+            }),
+            raw: {
+              source: "claude.sdk.permission",
+              method: "canUseTool/decision",
+              payload: { decision },
+            },
+          });
+          context.pendingApprovals.delete(requestId);
+          yield* Deferred.succeed(pending.decision, decision);
+          yield* Deferred.succeed(pending.settled, undefined);
+        }),
+      );
+
+    const settlePendingUserInput = (
+      context: ClaudeSessionContext,
+      requestId: ApprovalRequestId,
+      pending: PendingUserInput,
+      result: PendingUserInputResult,
+    ): Effect.Effect<void> =>
+      Effect.uninterruptible(
+        Effect.gen(function* () {
+          const ownsSettlement = yield* Effect.sync(() => {
+            if (context.pendingUserInputs.get(requestId) !== pending) {
+              return false;
+            }
+            if (pending.settlementStarted) {
+              return false;
+            }
+            pending.settlementStarted = true;
+            return true;
+          });
+          if (!ownsSettlement) {
+            yield* Deferred.await(pending.settled);
+            return;
+          }
+
+          const answers = remapAnswersToClaudeQuestionText(pending.questions, result.answers);
+          const stamp = yield* makeEventStamp();
+          yield* offerRuntimeEvent(context, {
+            type: "user-input.resolved",
+            eventId: stamp.eventId,
+            provider: PROVIDER,
+            createdAt: stamp.createdAt,
+            threadId: context.session.threadId,
+            ...(pending.turnId ? { turnId: pending.turnId } : {}),
+            requestId: asRuntimeRequestId(requestId),
+            payload: { answers },
+            providerRefs: nativeProviderRefs(context, {
+              providerItemId: pending.providerItemId,
+            }),
+            raw: {
+              source: "claude.sdk.permission",
+              method: "canUseTool/AskUserQuestion/resolved",
+              payload: { answers, cancelled: result.cancelled },
+            },
+          });
+          context.pendingUserInputs.delete(requestId);
+          yield* Deferred.succeed(pending.result, result);
+          yield* Deferred.succeed(pending.settled, undefined);
+        }),
+      );
+
+    const settlePendingHumanInteractions = (context: ClaudeSessionContext): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        for (const [requestId, pending] of context.pendingApprovals) {
+          yield* settlePendingApproval(context, requestId, pending, "cancel");
+        }
+        for (const [requestId, pending] of context.pendingUserInputs) {
+          yield* settlePendingUserInput(context, requestId, pending, {
+            answers: {},
+            cancelled: true,
+          });
+        }
+      });
+
     const completeTurn = (
       context: ClaudeSessionContext,
       status: ProviderRuntimeTurnStatus,
@@ -2457,6 +2583,11 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
       result?: SDKResultMessage,
     ): Effect.Effect<void> =>
       Effect.gen(function* () {
+        // A terminal turn cannot retain provider callbacks that the UI can no
+        // longer answer. Settle them before the terminal event so activity
+        // replay and durable pending state observe one ordered lifecycle.
+        yield* settlePendingHumanInteractions(context);
+
         const liveContextUsage = yield* readClaudeContextUsage(context);
         const resultContextWindow = maxClaudeContextWindowFromModelUsage(result?.modelUsage);
         const liveRawContextWindow = positiveFiniteNumber(liveContextUsage?.rawMaxTokens);
@@ -4319,25 +4450,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         yield* cancelAgentGatewayTurn(context.gatewaySessionLease, context.turnState?.turnId);
         context.gatewaySessionLease?.release();
 
-        for (const [requestId, pending] of context.pendingApprovals) {
-          yield* Deferred.succeed(pending.decision, "cancel");
-          const stamp = yield* makeEventStamp();
-          yield* offerRuntimeEvent(context, {
-            type: "request.resolved",
-            eventId: stamp.eventId,
-            provider: PROVIDER,
-            createdAt: stamp.createdAt,
-            threadId: context.session.threadId,
-            ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
-            requestId: asRuntimeRequestId(requestId),
-            payload: {
-              requestType: pending.requestType,
-              decision: "cancel",
-            },
-            providerRefs: nativeProviderRefs(context),
-          });
-        }
-        context.pendingApprovals.clear();
+        yield* settlePendingHumanInteractions(context);
 
         for (const run of context.subagentRuns.values()) {
           if (run.context.turnState) {
@@ -4529,11 +4642,15 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               }),
             );
 
-            const answersDeferred = yield* Deferred.make<ProviderUserInputAnswers>();
-            let aborted = false;
+            const resultDeferred = yield* Deferred.make<PendingUserInputResult>();
+            const settledDeferred = yield* Deferred.make<void>();
             const pendingInput: PendingUserInput = {
               questions,
-              answers: answersDeferred,
+              result: resultDeferred,
+              settled: settledDeferred,
+              ...(context.turnState ? { turnId: context.turnState.turnId } : {}),
+              ...(callbackOptions.toolUseID ? { providerItemId: callbackOptions.toolUseID } : {}),
+              settlementStarted: false,
             };
 
             // Emit user-input.requested so the UI can present the questions.
@@ -4561,50 +4678,25 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
 
             // Handle abort (e.g. turn interrupted while waiting for user input).
             const onAbort = () => {
-              if (!pendingUserInputs.has(requestId)) {
-                return;
-              }
-              aborted = true;
-              pendingUserInputs.delete(requestId);
-              Effect.runFork(Deferred.succeed(answersDeferred, {} as ProviderUserInputAnswers));
+              Effect.runFork(
+                settlePendingUserInput(context, requestId, pendingInput, {
+                  answers: {},
+                  cancelled: true,
+                }),
+              );
             };
             callbackOptions.signal.addEventListener("abort", onAbort, { once: true });
 
             // Block until the user provides answers.
-            const answers = remapAnswersToClaudeQuestionText(
-              questions,
-              yield* Deferred.await(answersDeferred).pipe(
-                Effect.ensuring(
-                  Effect.sync(() => {
-                    callbackOptions.signal.removeEventListener("abort", onAbort);
-                  }),
-                ),
+            const result = yield* Deferred.await(resultDeferred).pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  callbackOptions.signal.removeEventListener("abort", onAbort);
+                }),
               ),
             );
-            pendingUserInputs.delete(requestId);
 
-            // Emit user-input.resolved so the UI knows the interaction completed.
-            const resolvedStamp = yield* makeEventStamp();
-            yield* offerRuntimeEvent(context, {
-              type: "user-input.resolved",
-              eventId: resolvedStamp.eventId,
-              provider: PROVIDER,
-              createdAt: resolvedStamp.createdAt,
-              threadId: context.session.threadId,
-              ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
-              requestId: asRuntimeRequestId(requestId),
-              payload: { answers },
-              providerRefs: nativeProviderRefs(context, {
-                providerItemId: callbackOptions.toolUseID,
-              }),
-              raw: {
-                source: "claude.sdk.permission",
-                method: "canUseTool/AskUserQuestion/resolved",
-                payload: { answers },
-              },
-            });
-
-            if (aborted) {
+            if (result.cancelled) {
               return {
                 behavior: "deny",
                 message: "User cancelled tool execution.",
@@ -4617,7 +4709,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               behavior: "allow",
               updatedInput: {
                 questions: toolInput.questions,
-                answers,
+                answers: remapAnswersToClaudeQuestionText(questions, result.answers),
               },
             } satisfies PermissionResult;
           });
@@ -4719,10 +4811,15 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               const requestType = classifyRequestType(toolName);
               const detail = summarizeToolRequest(toolName, toolInput);
               const decisionDeferred = yield* Deferred.make<ProviderApprovalDecision>();
+              const settledDeferred = yield* Deferred.make<void>();
               const pendingApproval: PendingApproval = {
                 requestType,
                 detail,
                 decision: decisionDeferred,
+                settled: settledDeferred,
+                ...(context.turnState ? { turnId: context.turnState.turnId } : {}),
+                ...(callbackOptions.toolUseID ? { providerItemId: callbackOptions.toolUseID } : {}),
+                settlementStarted: false,
                 ...(callbackOptions.suggestions && callbackOptions.suggestions.length > 0
                   ? { suggestions: callbackOptions.suggestions }
                   : {}),
@@ -4767,11 +4864,9 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               pendingApprovals.set(requestId, pendingApproval);
 
               const onAbort = () => {
-                if (!pendingApprovals.has(requestId)) {
-                  return;
-                }
-                pendingApprovals.delete(requestId);
-                Effect.runFork(Deferred.succeed(decisionDeferred, "cancel"));
+                Effect.runFork(
+                  settlePendingApproval(context, requestId, pendingApproval, "cancel"),
+                );
               };
 
               callbackOptions.signal.addEventListener("abort", onAbort, {
@@ -4785,34 +4880,6 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
                   }),
                 ),
               );
-              pendingApprovals.delete(requestId);
-
-              const resolvedStamp = yield* makeEventStamp();
-              yield* offerRuntimeEvent(context, {
-                type: "request.resolved",
-                eventId: resolvedStamp.eventId,
-                provider: PROVIDER,
-                createdAt: resolvedStamp.createdAt,
-                threadId: context.session.threadId,
-                ...(context.turnState
-                  ? { turnId: asCanonicalTurnId(context.turnState.turnId) }
-                  : {}),
-                requestId: asRuntimeRequestId(requestId),
-                payload: {
-                  requestType,
-                  decision,
-                },
-                providerRefs: nativeProviderRefs(context, {
-                  providerItemId: callbackOptions.toolUseID,
-                }),
-                raw: {
-                  source: "claude.sdk.permission",
-                  method: "canUseTool/decision",
-                  payload: {
-                    decision,
-                  },
-                },
-              });
 
               if (decision === "accept" || decision === "acceptForSession") {
                 if (decision === "acceptForSession" && runtimeMode !== "auto") {
@@ -5734,8 +5801,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           });
         }
 
-        context.pendingApprovals.delete(requestId);
-        yield* Deferred.succeed(pending.decision, decision);
+        yield* settlePendingApproval(context, requestId, pending, decision);
       });
 
     const respondToUserInput: ClaudeAdapterShape["respondToUserInput"] = (
@@ -5754,8 +5820,10 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           });
         }
 
-        context.pendingUserInputs.delete(requestId);
-        yield* Deferred.succeed(pending.answers, answers);
+        yield* settlePendingUserInput(context, requestId, pending, {
+          answers,
+          cancelled: false,
+        });
       });
 
     const stopSession: ClaudeAdapterShape["stopSession"] = (threadId) =>

@@ -31,6 +31,13 @@ export interface PendingUserInput {
 
 type PendingInteractionKind = OrchestrationPendingInteraction["interactionKind"];
 
+export interface PendingInteractionDerivationOptions {
+  // Snapshot shells can outlive their optional interaction detail. Trust an
+  // explicit false only when no detailed settlements are available; a fresh
+  // activity event creates detail atomically and must remain actionable.
+  readonly authoritativeHasPending?: boolean;
+}
+
 interface PendingInteractionReplay<T extends { requestId: ApprovalRequestId }> {
   interactionKind: PendingInteractionKind;
   requestedActivityKind: string;
@@ -82,8 +89,12 @@ function retainActionableSettlements<T extends { requestId: ApprovalRequestId }>
   openByInstance: Map<string, T>,
   settlements: ReadonlyArray<OrchestrationPendingInteraction> | undefined,
   interactionKind: PendingInteractionKind,
+  options: PendingInteractionDerivationOptions | undefined,
 ): void {
   if (settlements === undefined) {
+    if (options?.authoritativeHasPending === false) {
+      openByInstance.clear();
+    }
     return;
   }
   const actionableKeys = new Set(
@@ -111,6 +122,7 @@ function replayPendingInteractions<T extends { requestId: ApprovalRequestId; cre
   activities: ReadonlyArray<OrchestrationThreadActivity>,
   settlements: ReadonlyArray<OrchestrationPendingInteraction> | undefined,
   replay: PendingInteractionReplay<T>,
+  options?: PendingInteractionDerivationOptions,
 ): T[] {
   const openByInstance = new Map<string, T>();
 
@@ -152,7 +164,7 @@ function replayPendingInteractions<T extends { requestId: ApprovalRequestId; cre
     }
   }
 
-  retainActionableSettlements(openByInstance, settlements, replay.interactionKind);
+  retainActionableSettlements(openByInstance, settlements, replay.interactionKind, options);
   return [...openByInstance.values()].toSorted((left, right) =>
     left.createdAt.localeCompare(right.createdAt),
   );
@@ -208,67 +220,79 @@ function parseUserInputQuestions(
 export function derivePendingApprovals(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
   settlements?: ReadonlyArray<OrchestrationPendingInteraction>,
+  options?: PendingInteractionDerivationOptions,
 ): PendingApproval[] {
-  return replayPendingInteractions(activities, settlements, {
-    interactionKind: "approval",
-    requestedActivityKind: "approval.requested",
-    resolvedActivityKind: "approval.resolved",
-    responseFailedActivityKind: "provider.approval.respond.failed",
-    parseRequested: ({ activity, payload, requestId, lifecycleGeneration }) => {
-      const requestKind =
-        payload?.requestKind === "command" ||
-        payload?.requestKind === "file-read" ||
-        payload?.requestKind === "file-change" ||
-        payload?.requestKind === "permissions"
-          ? payload.requestKind
-          : approvalRequestKindFromRequestType(payload?.requestType);
-      if (!requestKind) {
-        return null;
-      }
-      const detail = typeof payload?.detail === "string" ? payload.detail : undefined;
-      const permissionProfile =
-        payload?.permissionProfile !== null &&
-        typeof payload?.permissionProfile === "object" &&
-        !Array.isArray(payload.permissionProfile)
-          ? (payload.permissionProfile as Record<string, unknown>)
-          : undefined;
-      const sessionApprovalAvailable =
-        typeof payload?.sessionApprovalAvailable === "boolean"
-          ? payload.sessionApprovalAvailable
-          : undefined;
-      return {
-        requestId,
-        ...(lifecycleGeneration !== undefined ? { lifecycleGeneration } : {}),
-        requestKind,
-        createdAt: activity.createdAt,
-        ...(detail ? { detail } : {}),
-        ...(permissionProfile ? { permissionProfile } : {}),
-        ...(sessionApprovalAvailable !== undefined ? { sessionApprovalAvailable } : {}),
-      };
+  return replayPendingInteractions(
+    activities,
+    settlements,
+    {
+      interactionKind: "approval",
+      requestedActivityKind: "approval.requested",
+      resolvedActivityKind: "approval.resolved",
+      responseFailedActivityKind: "provider.approval.respond.failed",
+      parseRequested: ({ activity, payload, requestId, lifecycleGeneration }) => {
+        const requestKind =
+          payload?.requestKind === "command" ||
+          payload?.requestKind === "file-read" ||
+          payload?.requestKind === "file-change" ||
+          payload?.requestKind === "permissions"
+            ? payload.requestKind
+            : approvalRequestKindFromRequestType(payload?.requestType);
+        if (!requestKind) {
+          return null;
+        }
+        const detail = typeof payload?.detail === "string" ? payload.detail : undefined;
+        const permissionProfile =
+          payload?.permissionProfile !== null &&
+          typeof payload?.permissionProfile === "object" &&
+          !Array.isArray(payload.permissionProfile)
+            ? (payload.permissionProfile as Record<string, unknown>)
+            : undefined;
+        const sessionApprovalAvailable =
+          typeof payload?.sessionApprovalAvailable === "boolean"
+            ? payload.sessionApprovalAvailable
+            : undefined;
+        return {
+          requestId,
+          ...(lifecycleGeneration !== undefined ? { lifecycleGeneration } : {}),
+          requestKind,
+          createdAt: activity.createdAt,
+          ...(detail ? { detail } : {}),
+          ...(permissionProfile ? { permissionProfile } : {}),
+          ...(sessionApprovalAvailable !== undefined ? { sessionApprovalAvailable } : {}),
+        };
+      },
     },
-  });
+    options,
+  );
 }
 
 export function derivePendingUserInputs(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
   settlements?: ReadonlyArray<OrchestrationPendingInteraction>,
+  options?: PendingInteractionDerivationOptions,
 ): PendingUserInput[] {
-  return replayPendingInteractions(activities, settlements, {
-    interactionKind: "userInput",
-    requestedActivityKind: "user-input.requested",
-    resolvedActivityKind: "user-input.resolved",
-    responseFailedActivityKind: "provider.user-input.respond.failed",
-    parseRequested: ({ activity, payload, requestId, lifecycleGeneration }) => {
-      const questions = parseUserInputQuestions(payload);
-      if (!questions) {
-        return null;
-      }
-      return {
-        requestId,
-        ...(lifecycleGeneration !== undefined ? { lifecycleGeneration } : {}),
-        createdAt: activity.createdAt,
-        questions,
-      };
+  return replayPendingInteractions(
+    activities,
+    settlements,
+    {
+      interactionKind: "userInput",
+      requestedActivityKind: "user-input.requested",
+      resolvedActivityKind: "user-input.resolved",
+      responseFailedActivityKind: "provider.user-input.respond.failed",
+      parseRequested: ({ activity, payload, requestId, lifecycleGeneration }) => {
+        const questions = parseUserInputQuestions(payload);
+        if (!questions) {
+          return null;
+        }
+        return {
+          requestId,
+          ...(lifecycleGeneration !== undefined ? { lifecycleGeneration } : {}),
+          createdAt: activity.createdAt,
+          questions,
+        };
+      },
     },
-  });
+    options,
+  );
 }

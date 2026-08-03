@@ -648,17 +648,19 @@ export function collectThreadAttentionCandidates(
     }
 
     const previousApprovalIds = new Set(
-      derivePendingApprovals(previousThread.activities, previousThread.pendingInteractions).map(
-        (approval) => approval.requestId,
-      ),
+      derivePendingApprovals(previousThread.activities, previousThread.pendingInteractions, {
+        authoritativeHasPending: previousThread.hasPendingApprovals,
+      }).map((approval) => approval.requestId),
     );
     const previousUserInputIds = new Set(
-      derivePendingUserInputs(previousThread.activities, previousThread.pendingInteractions).map(
-        (request) => request.requestId,
-      ),
+      derivePendingUserInputs(previousThread.activities, previousThread.pendingInteractions, {
+        authoritativeHasPending: previousThread.hasPendingUserInput,
+      }).map((request) => request.requestId),
     );
 
-    for (const approval of derivePendingApprovals(thread.activities, thread.pendingInteractions)) {
+    for (const approval of derivePendingApprovals(thread.activities, thread.pendingInteractions, {
+      authoritativeHasPending: thread.hasPendingApprovals,
+    })) {
       if (previousApprovalIds.has(approval.requestId)) {
         continue;
       }
@@ -673,7 +675,9 @@ export function collectThreadAttentionCandidates(
       });
     }
 
-    for (const request of derivePendingUserInputs(thread.activities, thread.pendingInteractions)) {
+    for (const request of derivePendingUserInputs(thread.activities, thread.pendingInteractions, {
+      authoritativeHasPending: thread.hasPendingUserInput,
+    })) {
       if (previousUserInputIds.has(request.requestId)) {
         continue;
       }
