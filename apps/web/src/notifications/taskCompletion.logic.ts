@@ -673,13 +673,13 @@ export function collectThreadAttentionCandidates(
     const previousApprovalIds = new Set(
       derivePendingApprovals(previousThread.activities, previousThread.pendingInteractions, {
         authoritativeHasPending: previousThread.hasPendingApprovals,
-        latestTurn: previousThread.latestTurn,
+        latestTurnId: previousThread.latestTurn?.turnId,
       }).map((approval) => approval.requestId),
     );
     const previousUserInputIds = new Set(
       derivePendingUserInputs(previousThread.activities, previousThread.pendingInteractions, {
         authoritativeHasPending: previousThread.hasPendingUserInput,
-        latestTurn: previousThread.latestTurn,
+        latestTurnId: previousThread.latestTurn?.turnId,
       }).map((request) => request.requestId),
     );
     const previousApprovalActivityKeys = requestedActivityInstanceKeys(
@@ -693,7 +693,7 @@ export function collectThreadAttentionCandidates(
 
     for (const approval of derivePendingApprovals(thread.activities, thread.pendingInteractions, {
       authoritativeHasPending: thread.hasPendingApprovals,
-      latestTurn: thread.latestTurn,
+      latestTurnId: thread.latestTurn?.turnId,
     })) {
       if (
         previousApprovalIds.has(approval.requestId) ||
@@ -716,7 +716,7 @@ export function collectThreadAttentionCandidates(
 
     for (const request of derivePendingUserInputs(thread.activities, thread.pendingInteractions, {
       authoritativeHasPending: thread.hasPendingUserInput,
-      latestTurn: thread.latestTurn,
+      latestTurnId: thread.latestTurn?.turnId,
     })) {
       if (
         previousUserInputIds.has(request.requestId) ||
