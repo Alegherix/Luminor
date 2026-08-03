@@ -1,5 +1,6 @@
 import {
   ApprovalRequestId,
+  type OrchestrationLatestTurn,
   type OrchestrationPendingInteraction,
   type OrchestrationThreadActivity,
   type UserInputQuestion,
@@ -32,10 +33,11 @@ export interface PendingUserInput {
 type PendingInteractionKind = OrchestrationPendingInteraction["interactionKind"];
 
 export interface PendingInteractionDerivationOptions {
-  // Snapshot shells can outlive their optional interaction detail. Trust an
-  // explicit false only when no detailed settlements are available; a fresh
-  // activity event creates detail atomically and must remain actionable.
-  readonly authoritativeHasPending?: boolean;
+  // Aggregate flags cannot identify a pending request. When detailed
+  // settlements are missing, replay only the latest turn's activity. The turn
+  // may be terminal because background-agent interactions can outlive it.
+  readonly authoritativeHasPending: boolean | undefined;
+  readonly latestTurn: OrchestrationLatestTurn | null | undefined;
 }
 
 interface PendingInteractionReplay<T extends { requestId: ApprovalRequestId }> {
@@ -89,12 +91,8 @@ function retainActionableSettlements<T extends { requestId: ApprovalRequestId }>
   openByInstance: Map<string, T>,
   settlements: ReadonlyArray<OrchestrationPendingInteraction> | undefined,
   interactionKind: PendingInteractionKind,
-  options: PendingInteractionDerivationOptions | undefined,
 ): void {
   if (settlements === undefined) {
-    if (options?.authoritativeHasPending === false) {
-      openByInstance.clear();
-    }
     return;
   }
   const actionableKeys = new Set(
@@ -125,8 +123,18 @@ function replayPendingInteractions<T extends { requestId: ApprovalRequestId; cre
   options?: PendingInteractionDerivationOptions,
 ): T[] {
   const openByInstance = new Map<string, T>();
+  const fallbackLatestTurnId =
+    settlements === undefined && options !== undefined && options.authoritativeHasPending !== false
+      ? options.latestTurn?.turnId
+      : undefined;
+  const replayActivities =
+    settlements !== undefined || options === undefined
+      ? activities
+      : fallbackLatestTurnId !== undefined
+        ? activities
+        : [];
 
-  for (const activity of orderedActivities(activities)) {
+  for (const activity of orderedActivities(replayActivities)) {
     const payload = activityPayload(activity);
     const requestId =
       typeof payload?.requestId === "string"
@@ -138,6 +146,12 @@ function replayPendingInteractions<T extends { requestId: ApprovalRequestId; cre
 
     const lifecycleGeneration = activityLifecycleGeneration(payload);
     if (activity.kind === replay.requestedActivityKind) {
+      // Limit only request creation to the latest turn. Resolution/failure
+      // activities are thread-scoped and may intentionally carry no turn id;
+      // they still have to close a latest-turn request during fallback replay.
+      if (fallbackLatestTurnId !== undefined && activity.turnId !== fallbackLatestTurnId) {
+        continue;
+      }
       const pending = replay.parseRequested({
         activity,
         payload,
@@ -164,7 +178,7 @@ function replayPendingInteractions<T extends { requestId: ApprovalRequestId; cre
     }
   }
 
-  retainActionableSettlements(openByInstance, settlements, replay.interactionKind, options);
+  retainActionableSettlements(openByInstance, settlements, replay.interactionKind);
   return [...openByInstance.values()].toSorted((left, right) =>
     left.createdAt.localeCompare(right.createdAt),
   );

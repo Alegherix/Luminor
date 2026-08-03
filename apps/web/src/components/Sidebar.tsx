@@ -2852,11 +2852,13 @@ export default function Sidebar() {
         threadSummary?.hasPendingApprovals ??
         derivePendingApprovals(thread.activities, thread.pendingInteractions, {
           authoritativeHasPending: thread.hasPendingApprovals,
+          latestTurn: thread.latestTurn,
         }).length > 0;
       const hasPendingUserInput =
         threadSummary?.hasPendingUserInput ??
         derivePendingUserInputs(thread.activities, thread.pendingInteractions, {
           authoritativeHasPending: thread.hasPendingUserInput,
+          latestTurn: thread.latestTurn,
         }).length > 0;
       const canHandoff = canCreateThreadHandoff({
         thread,

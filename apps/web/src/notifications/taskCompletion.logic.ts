@@ -650,16 +650,19 @@ export function collectThreadAttentionCandidates(
     const previousApprovalIds = new Set(
       derivePendingApprovals(previousThread.activities, previousThread.pendingInteractions, {
         authoritativeHasPending: previousThread.hasPendingApprovals,
+        latestTurn: previousThread.latestTurn,
       }).map((approval) => approval.requestId),
     );
     const previousUserInputIds = new Set(
       derivePendingUserInputs(previousThread.activities, previousThread.pendingInteractions, {
         authoritativeHasPending: previousThread.hasPendingUserInput,
+        latestTurn: previousThread.latestTurn,
       }).map((request) => request.requestId),
     );
 
     for (const approval of derivePendingApprovals(thread.activities, thread.pendingInteractions, {
       authoritativeHasPending: thread.hasPendingApprovals,
+      latestTurn: thread.latestTurn,
     })) {
       if (previousApprovalIds.has(approval.requestId)) {
         continue;
@@ -677,6 +680,7 @@ export function collectThreadAttentionCandidates(
 
     for (const request of derivePendingUserInputs(thread.activities, thread.pendingInteractions, {
       authoritativeHasPending: thread.hasPendingUserInput,
+      latestTurn: thread.latestTurn,
     })) {
       if (previousUserInputIds.has(request.requestId)) {
         continue;

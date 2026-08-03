@@ -1,6 +1,8 @@
 import {
   ApprovalRequestId,
   ThreadId,
+  TurnId,
+  type OrchestrationLatestTurn,
   type OrchestrationPendingInteraction,
   type OrchestrationThreadActivity,
 } from "@synara/contracts";
@@ -8,6 +10,20 @@ import { describe, expect, it } from "vitest";
 
 import { derivePendingApprovals, derivePendingUserInputs } from "./pendingInteractionDerivation";
 import { makeActivity } from "./storeTestFixtures";
+
+function makeLatestTurn(
+  turnId: string,
+  state: OrchestrationLatestTurn["state"] = "running",
+): OrchestrationLatestTurn {
+  return {
+    turnId: TurnId.makeUnsafe(turnId),
+    state,
+    requestedAt: "2026-02-23T00:00:00.000Z",
+    startedAt: "2026-02-23T00:00:00.000Z",
+    completedAt: state === "running" ? null : "2026-02-23T00:00:03.000Z",
+    assistantMessageId: null,
+  };
+}
 
 function makePendingInteraction(
   interactionKind: OrchestrationPendingInteraction["interactionKind"],
@@ -57,15 +73,17 @@ describe("derivePendingApprovals", () => {
     expect(
       derivePendingApprovals(activities, [makePendingInteraction("approval", "pending")], {
         authoritativeHasPending: false,
+        latestTurn: null,
       }),
     ).toHaveLength(1);
   });
 
-  it("does not resurrect historical approvals when the authoritative flag is false", () => {
+  it("does not resurrect historical approvals when aggregate state flips false to true", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
         id: "approval-legacy-stale",
         createdAt: "2026-02-23T00:00:01.000Z",
+        turnId: "turn-old",
         kind: "approval.requested",
         summary: "Command approval requested",
         tone: "approval",
@@ -75,13 +93,52 @@ describe("derivePendingApprovals", () => {
         },
       }),
     ];
+    const options = {
+      authoritativeHasPending: false,
+      latestTurn: makeLatestTurn("turn-current"),
+    };
 
+    expect(derivePendingApprovals(activities, undefined, options)).toEqual([]);
     expect(
-      derivePendingApprovals(activities, undefined, { authoritativeHasPending: false }),
+      derivePendingApprovals(activities, undefined, {
+        ...options,
+        authoritativeHasPending: undefined,
+      }),
     ).toEqual([]);
     expect(
-      derivePendingApprovals(activities, undefined, { authoritativeHasPending: true }),
-    ).toHaveLength(1);
+      derivePendingApprovals(activities, undefined, {
+        ...options,
+        authoritativeHasPending: true,
+      }),
+    ).toEqual([]);
+
+    const freshActivities = [
+      ...activities,
+      makeActivity({
+        id: "approval-current",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        turnId: "turn-current",
+        kind: "approval.requested",
+        summary: "Command approval requested",
+        tone: "approval",
+        payload: {
+          requestId: "req-current",
+          requestKind: "command",
+        },
+      }),
+    ];
+    expect(
+      derivePendingApprovals(freshActivities, undefined, {
+        ...options,
+        authoritativeHasPending: true,
+      }).map((pending) => pending.requestId),
+    ).toEqual(["req-current"]);
+    expect(
+      derivePendingApprovals(freshActivities, undefined, {
+        ...options,
+        authoritativeHasPending: undefined,
+      }).map((pending) => pending.requestId),
+    ).toEqual(["req-current"]);
   });
 
   it("tracks open approvals and removes resolved ones", () => {
@@ -333,15 +390,17 @@ describe("derivePendingUserInputs", () => {
     expect(
       derivePendingUserInputs(activities, [makePendingInteraction("userInput", "pending")], {
         authoritativeHasPending: false,
+        latestTurn: null,
       }),
     ).toHaveLength(1);
   });
 
-  it("does not resurrect historical questions when the authoritative flag is false", () => {
+  it("does not resurrect historical questions when aggregate state flips false to true", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
         id: "user-input-legacy-stale",
         createdAt: "2026-02-23T00:00:01.000Z",
+        turnId: "turn-old",
         kind: "user-input.requested",
         summary: "User input requested",
         tone: "info",
@@ -358,13 +417,133 @@ describe("derivePendingUserInputs", () => {
         },
       }),
     ];
+    const options = {
+      authoritativeHasPending: false,
+      latestTurn: makeLatestTurn("turn-current"),
+    };
 
+    expect(derivePendingUserInputs(activities, undefined, options)).toEqual([]);
     expect(
-      derivePendingUserInputs(activities, undefined, { authoritativeHasPending: false }),
+      derivePendingUserInputs(activities, undefined, {
+        ...options,
+        authoritativeHasPending: undefined,
+      }),
     ).toEqual([]);
     expect(
-      derivePendingUserInputs(activities, undefined, { authoritativeHasPending: true }),
-    ).toHaveLength(1);
+      derivePendingUserInputs(activities, undefined, {
+        ...options,
+        authoritativeHasPending: true,
+      }),
+    ).toEqual([]);
+
+    const freshActivities = [
+      ...activities,
+      makeActivity({
+        id: "user-input-current",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        turnId: "turn-current",
+        kind: "user-input.requested",
+        summary: "User input requested",
+        tone: "info",
+        payload: {
+          requestId: "req-user-input-current",
+          questions: [
+            {
+              id: "mode",
+              header: "Mode",
+              question: "Which mode?",
+              options: [{ label: "safe", description: "Use safe mode" }],
+            },
+          ],
+        },
+      }),
+    ];
+    expect(
+      derivePendingUserInputs(freshActivities, undefined, {
+        ...options,
+        authoritativeHasPending: true,
+      }).map((pending) => pending.requestId),
+    ).toEqual(["req-user-input-current"]);
+    expect(
+      derivePendingUserInputs(freshActivities, undefined, {
+        ...options,
+        authoritativeHasPending: undefined,
+      }).map((pending) => pending.requestId),
+    ).toEqual(["req-user-input-current"]);
+  });
+
+  it("keeps a latest-turn background question visible after that turn completes", () => {
+    const activities = [
+      makeActivity({
+        id: "user-input-background",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        turnId: "turn-completed",
+        kind: "user-input.requested",
+        summary: "User input requested",
+        tone: "info",
+        payload: {
+          requestId: "req-user-input-background",
+          questions: [
+            {
+              id: "environment",
+              header: "Environment",
+              question: "Which environment?",
+              options: [{ label: "staging", description: "Use staging" }],
+            },
+          ],
+        },
+      }),
+    ];
+
+    expect(
+      derivePendingUserInputs(activities, undefined, {
+        authoritativeHasPending: true,
+        latestTurn: makeLatestTurn("turn-completed", "completed"),
+      }).map((pending) => pending.requestId),
+    ).toEqual(["req-user-input-background"]);
+  });
+
+  it("clears a latest-turn question with a thread-scoped stale response failure", () => {
+    const activities = [
+      makeActivity({
+        id: "user-input-current-stale",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        turnId: "turn-current",
+        kind: "user-input.requested",
+        summary: "User input requested",
+        tone: "info",
+        payload: {
+          requestId: "req-user-input-current-stale",
+          questions: [
+            {
+              id: "environment",
+              header: "Environment",
+              question: "Which environment?",
+              options: [{ label: "staging", description: "Use staging" }],
+            },
+          ],
+        },
+      }),
+      makeActivity({
+        id: "user-input-current-stale-failure",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        turnId: null,
+        kind: "provider.user-input.respond.failed",
+        summary: "Provider user input response failed",
+        tone: "error",
+        payload: {
+          requestId: "req-user-input-current-stale",
+          detail: "Unknown pending user-input request: req-user-input-current-stale",
+        },
+      }),
+    ];
+
+    expect(
+      derivePendingUserInputs(activities, undefined, {
+        authoritativeHasPending: true,
+        latestTurn: makeLatestTurn("turn-current"),
+      }),
+    ).toEqual([]);
   });
 
   it("tracks open structured prompts and removes resolved ones", () => {

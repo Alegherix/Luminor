@@ -229,9 +229,10 @@ interface PendingApproval {
   readonly detail?: string;
   readonly suggestions?: ReadonlyArray<PermissionUpdate>;
   readonly decision: Deferred.Deferred<ProviderApprovalDecision>;
-  readonly settled: Deferred.Deferred<void>;
+  readonly settled: Deferred.Deferred<ProviderApprovalDecision>;
   readonly turnId?: TurnId;
   readonly providerItemId?: string;
+  readonly agentId?: string;
   settlementStarted: boolean;
 }
 
@@ -243,9 +244,10 @@ interface PendingUserInputResult {
 interface PendingUserInput {
   readonly questions: ReadonlyArray<UserInputQuestion>;
   readonly result: Deferred.Deferred<PendingUserInputResult>;
-  readonly settled: Deferred.Deferred<void>;
+  readonly settled: Deferred.Deferred<PendingUserInputResult>;
   readonly turnId?: TurnId;
   readonly providerItemId?: string;
+  readonly agentId?: string;
   settlementStarted: boolean;
 }
 
@@ -378,8 +380,8 @@ interface ClaudeSessionContext {
   // Stop requests that arrived before task_started mapped the tool_use_id to an
   // SDK task id; fired via query.stopTask the moment the mapping lands.
   readonly pendingSubagentStops: Set<string>;
-  // Last background-task ids from background_tasks_changed (REPLACE
-  // semantics); diffed so only newly backgrounded work gets announced.
+  // Live background-task ids. background_tasks_changed replaces the set while
+  // task_updated patches close the ordering window around individual tasks.
   readonly knownBackgroundTaskIds: Set<string>;
   // Final status per tool-use id whose task already settled (terminal
   // task_updated or task_notification). Late messages still tagged with them
@@ -2468,7 +2470,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
       requestId: ApprovalRequestId,
       pending: PendingApproval,
       decision: ProviderApprovalDecision,
-    ): Effect.Effect<void> =>
+    ): Effect.Effect<ProviderApprovalDecision> =>
       Effect.uninterruptible(
         Effect.gen(function* () {
           const ownsSettlement = yield* Effect.sync(() => {
@@ -2482,8 +2484,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             return true;
           });
           if (!ownsSettlement) {
-            yield* Deferred.await(pending.settled);
-            return;
+            return yield* Deferred.await(pending.settled);
           }
 
           const stamp = yield* makeEventStamp();
@@ -2510,7 +2511,8 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           });
           context.pendingApprovals.delete(requestId);
           yield* Deferred.succeed(pending.decision, decision);
-          yield* Deferred.succeed(pending.settled, undefined);
+          yield* Deferred.succeed(pending.settled, decision);
+          return decision;
         }),
       );
 
@@ -2519,7 +2521,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
       requestId: ApprovalRequestId,
       pending: PendingUserInput,
       result: PendingUserInputResult,
-    ): Effect.Effect<void> =>
+    ): Effect.Effect<PendingUserInputResult> =>
       Effect.uninterruptible(
         Effect.gen(function* () {
           const ownsSettlement = yield* Effect.sync(() => {
@@ -2533,8 +2535,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             return true;
           });
           if (!ownsSettlement) {
-            yield* Deferred.await(pending.settled);
-            return;
+            return yield* Deferred.await(pending.settled);
           }
 
           const answers = remapAnswersToClaudeQuestionText(pending.questions, result.answers);
@@ -2559,16 +2560,39 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           });
           context.pendingUserInputs.delete(requestId);
           yield* Deferred.succeed(pending.result, result);
-          yield* Deferred.succeed(pending.settled, undefined);
+          yield* Deferred.succeed(pending.settled, result);
+          return result;
         }),
       );
 
-    const settlePendingHumanInteractions = (context: ClaudeSessionContext): Effect.Effect<void> =>
+    type PendingInteractionSettlementScope =
+      | { readonly type: "session" }
+      | { readonly type: "foregroundTurn"; readonly turnId: TurnId };
+
+    const pendingBelongsToSettlementScope = (
+      context: ClaudeSessionContext,
+      pending: Pick<PendingApproval, "agentId" | "turnId">,
+      scope: PendingInteractionSettlementScope,
+    ): boolean =>
+      scope.type === "session" ||
+      (pending.turnId === scope.turnId &&
+        (pending.agentId === undefined || !context.knownBackgroundTaskIds.has(pending.agentId)));
+
+    const settlePendingHumanInteractions = (
+      context: ClaudeSessionContext,
+      scope: PendingInteractionSettlementScope,
+    ): Effect.Effect<void> =>
       Effect.gen(function* () {
         for (const [requestId, pending] of context.pendingApprovals) {
+          if (!pendingBelongsToSettlementScope(context, pending, scope)) {
+            continue;
+          }
           yield* settlePendingApproval(context, requestId, pending, "cancel");
         }
         for (const [requestId, pending] of context.pendingUserInputs) {
+          if (!pendingBelongsToSettlementScope(context, pending, scope)) {
+            continue;
+          }
           yield* settlePendingUserInput(context, requestId, pending, {
             answers: {},
             cancelled: true,
@@ -2583,10 +2607,15 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
       result?: SDKResultMessage,
     ): Effect.Effect<void> =>
       Effect.gen(function* () {
-        // A terminal turn cannot retain provider callbacks that the UI can no
-        // longer answer. Settle them before the terminal event so activity
-        // replay and durable pending state observe one ordered lifecycle.
-        yield* settlePendingHumanInteractions(context);
+        // A terminal foreground turn cannot retain its own provider callbacks
+        // once the UI can no longer answer them. Background-agent callbacks
+        // remain actionable until they settle or the whole session stops.
+        if (context.turnState) {
+          yield* settlePendingHumanInteractions(context, {
+            type: "foregroundTurn",
+            turnId: context.turnState.turnId,
+          });
+        }
 
         const liveContextUsage = yield* readClaudeContextUsage(context);
         const resultContextWindow = maxClaudeContextWindowFromModelUsage(result?.modelUsage);
@@ -3796,6 +3825,11 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           }
           const isTerminalStatus =
             status === "completed" || status === "failed" || status === "killed";
+          if (isTerminalStatus || isBackgrounded === false) {
+            context.knownBackgroundTaskIds.delete(message.task_id);
+          } else if (isBackgrounded === true) {
+            context.knownBackgroundTaskIds.add(message.task_id);
+          }
           const isSettledRuntimeStatus = isTerminalStatus || status === "paused";
           if (isSettledRuntimeStatus && context.liveWorkflowTaskIds.has(message.task_id)) {
             context.liveWorkflowTaskIds.delete(message.task_id);
@@ -4106,6 +4140,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           }
           case "task_notification": {
             yield* emitTaskUsageSnapshot(context, message);
+            context.knownBackgroundTaskIds.delete(message.task_id);
             const workflowTaskId = context.workflowTaskIdByMemberTaskId.get(message.task_id);
             // Settled workflows: the output file's workflowProgress carries the
             // final per-agent states/models the live stream never surfaced.
@@ -4450,7 +4485,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         yield* cancelAgentGatewayTurn(context.gatewaySessionLease, context.turnState?.turnId);
         context.gatewaySessionLease?.release();
 
-        yield* settlePendingHumanInteractions(context);
+        yield* settlePendingHumanInteractions(context, { type: "session" });
 
         for (const run of context.subagentRuns.values()) {
           if (run.context.turnState) {
@@ -4620,10 +4655,13 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         const handleAskUserQuestion = (
           context: ClaudeSessionContext,
           toolInput: Record<string, unknown>,
-          callbackOptions: { readonly signal: AbortSignal; readonly toolUseID?: string },
+          callbackOptions: Parameters<CanUseTool>[2],
         ) =>
           Effect.gen(function* () {
             const requestId = ApprovalRequestId.makeUnsafe(yield* Random.nextUUIDv4);
+            const interactionTurnId =
+              context.turnState?.turnId ??
+              (callbackOptions.agentID !== undefined ? context.lastTurnId : undefined);
 
             // Parse questions from the SDK's AskUserQuestion input.
             const rawQuestions = Array.isArray(toolInput.questions) ? toolInput.questions : [];
@@ -4643,13 +4681,16 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             );
 
             const resultDeferred = yield* Deferred.make<PendingUserInputResult>();
-            const settledDeferred = yield* Deferred.make<void>();
+            const settledDeferred = yield* Deferred.make<PendingUserInputResult>();
             const pendingInput: PendingUserInput = {
               questions,
               result: resultDeferred,
               settled: settledDeferred,
-              ...(context.turnState ? { turnId: context.turnState.turnId } : {}),
+              ...(interactionTurnId !== undefined ? { turnId: interactionTurnId } : {}),
               ...(callbackOptions.toolUseID ? { providerItemId: callbackOptions.toolUseID } : {}),
+              ...(callbackOptions.agentID !== undefined
+                ? { agentId: callbackOptions.agentID }
+                : {}),
               settlementStarted: false,
             };
 
@@ -4661,7 +4702,9 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               provider: PROVIDER,
               createdAt: requestedStamp.createdAt,
               threadId: context.session.threadId,
-              ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
+              ...(interactionTurnId !== undefined
+                ? { turnId: asCanonicalTurnId(interactionTurnId) }
+                : {}),
               requestId: asRuntimeRequestId(requestId),
               payload: { questions },
               providerRefs: nativeProviderRefs(context, {
@@ -4810,15 +4853,21 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               const requestId = ApprovalRequestId.makeUnsafe(yield* Random.nextUUIDv4);
               const requestType = classifyRequestType(toolName);
               const detail = summarizeToolRequest(toolName, toolInput);
+              const interactionTurnId =
+                context.turnState?.turnId ??
+                (callbackOptions.agentID !== undefined ? context.lastTurnId : undefined);
               const decisionDeferred = yield* Deferred.make<ProviderApprovalDecision>();
-              const settledDeferred = yield* Deferred.make<void>();
+              const settledDeferred = yield* Deferred.make<ProviderApprovalDecision>();
               const pendingApproval: PendingApproval = {
                 requestType,
                 detail,
                 decision: decisionDeferred,
                 settled: settledDeferred,
-                ...(context.turnState ? { turnId: context.turnState.turnId } : {}),
+                ...(interactionTurnId !== undefined ? { turnId: interactionTurnId } : {}),
                 ...(callbackOptions.toolUseID ? { providerItemId: callbackOptions.toolUseID } : {}),
+                ...(callbackOptions.agentID !== undefined
+                  ? { agentId: callbackOptions.agentID }
+                  : {}),
                 settlementStarted: false,
                 ...(callbackOptions.suggestions && callbackOptions.suggestions.length > 0
                   ? { suggestions: callbackOptions.suggestions }
@@ -4832,8 +4881,8 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
                 provider: PROVIDER,
                 createdAt: requestedStamp.createdAt,
                 threadId: context.session.threadId,
-                ...(context.turnState
-                  ? { turnId: asCanonicalTurnId(context.turnState.turnId) }
+                ...(interactionTurnId !== undefined
+                  ? { turnId: asCanonicalTurnId(interactionTurnId) }
                   : {}),
                 requestId: asRuntimeRequestId(requestId),
                 payload: {
@@ -5801,7 +5850,14 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           });
         }
 
-        yield* settlePendingApproval(context, requestId, pending, decision);
+        const settledDecision = yield* settlePendingApproval(context, requestId, pending, decision);
+        if (settledDecision !== decision) {
+          return yield* new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "item/requestApproval/decision",
+            detail: `Approval request ${requestId} was already resolved as ${settledDecision}.`,
+          });
+        }
       });
 
     const respondToUserInput: ClaudeAdapterShape["respondToUserInput"] = (
@@ -5820,10 +5876,23 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           });
         }
 
-        yield* settlePendingUserInput(context, requestId, pending, {
+        const submittedResult: PendingUserInputResult = {
           answers,
           cancelled: false,
-        });
+        };
+        const settledResult = yield* settlePendingUserInput(
+          context,
+          requestId,
+          pending,
+          submittedResult,
+        );
+        if (settledResult !== submittedResult) {
+          return yield* new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "item/tool/respondToUserInput",
+            detail: `User-input request ${requestId} was already resolved.`,
+          });
+        }
       });
 
     const stopSession: ClaudeAdapterShape["stopSession"] = (threadId) =>

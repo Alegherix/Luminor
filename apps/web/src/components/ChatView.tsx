@@ -2571,15 +2571,27 @@ export default function ChatView({
     () =>
       derivePendingApprovals(threadActivities, activeThread?.pendingInteractions, {
         authoritativeHasPending: activeThread?.hasPendingApprovals,
+        latestTurn: activeThread?.latestTurn,
       }),
-    [activeThread?.hasPendingApprovals, activeThread?.pendingInteractions, threadActivities],
+    [
+      activeThread?.hasPendingApprovals,
+      activeThread?.latestTurn,
+      activeThread?.pendingInteractions,
+      threadActivities,
+    ],
   );
   const pendingUserInputs = useMemo(
     () =>
       derivePendingUserInputs(threadActivities, activeThread?.pendingInteractions, {
         authoritativeHasPending: activeThread?.hasPendingUserInput,
+        latestTurn: activeThread?.latestTurn,
       }),
-    [activeThread?.hasPendingUserInput, activeThread?.pendingInteractions, threadActivities],
+    [
+      activeThread?.hasPendingUserInput,
+      activeThread?.latestTurn,
+      activeThread?.pendingInteractions,
+      threadActivities,
+    ],
   );
   const activePendingUserInput = pendingUserInputs[0] ?? null;
   const activePendingUserInputKey = activePendingUserInput

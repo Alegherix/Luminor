@@ -760,9 +760,10 @@ describe("buildTaskCompletionCopy", () => {
 
 describe("collectInputNeededThreadCandidates", () => {
   it("returns threads with newly opened approval requests", () => {
-    const previous = [makeThread({ activities: [] })];
+    const previous = [makeThread({ activities: [], hasPendingApprovals: false })];
     const next = [
       makeThread({
+        hasPendingApprovals: true,
         activities: [
           {
             id: EventId.makeUnsafe("activity-approval-1"),
@@ -794,9 +795,10 @@ describe("collectInputNeededThreadCandidates", () => {
   });
 
   it("returns threads with newly opened user-input requests", () => {
-    const previous = [makeThread({ activities: [] })];
+    const previous = [makeThread({ activities: [], hasPendingUserInput: false })];
     const next = [
       makeThread({
+        hasPendingUserInput: true,
         activities: [
           {
             id: EventId.makeUnsafe("activity-user-input-1"),
@@ -854,8 +856,37 @@ describe("collectInputNeededThreadCandidates", () => {
 
     expect(
       collectInputNeededThreadCandidates(
-        [makeThread({ activities })],
-        [makeThread({ activities })],
+        [makeThread({ activities, hasPendingApprovals: true })],
+        [makeThread({ activities, hasPendingApprovals: true })],
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not notify for a historical request when only the aggregate flag revives", () => {
+    const historicalActivity = {
+      id: EventId.makeUnsafe("activity-stale-user-input"),
+      tone: "info" as const,
+      kind: "user-input.requested",
+      summary: "User input requested",
+      payload: {
+        requestId: "stale-user-input-request",
+        questions: [
+          {
+            id: "question-stale",
+            header: "Question",
+            question: "Continue?",
+            options: [{ label: "Yes", description: "Continue" }],
+          },
+        ],
+      },
+      turnId: TurnId.makeUnsafe("turn-old"),
+      createdAt: "2026-04-05T09:00:00.000Z",
+    };
+
+    expect(
+      collectInputNeededThreadCandidates(
+        [makeThread({ activities: [historicalActivity], hasPendingUserInput: false })],
+        [makeThread({ activities: [historicalActivity], hasPendingUserInput: true })],
       ),
     ).toEqual([]);
   });
