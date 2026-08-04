@@ -29,6 +29,7 @@ export const GitHubProjectProvisioningErrorCode = Schema.Literals([
   "REPOSITORY_NOT_FOUND",
   "AUTH_REQUIRED",
   "NETWORK_ERROR",
+  "CLONE_TIMEOUT",
   "PERMISSION_DENIED",
   "DISK_FULL",
   "CLONE_FAILED",
@@ -150,6 +151,22 @@ function classifyCloneFailure(cause: unknown): GitHubProjectProvisioningError {
         ? cause.message
         : String(cause);
   const lower = detail.toLowerCase();
+
+  const exceededConfiguredCloneTimeout =
+    (cause instanceof GitCommandError &&
+      cause.operation === "clone public GitHub project" &&
+      lower.endsWith(" timed out.")) ||
+    (cause instanceof GitHubCliError &&
+      lower.includes("gh repo clone") &&
+      lower.includes(" timed out."));
+  if (exceededConfiguredCloneTimeout) {
+    return provisioningError(
+      "CLONE_TIMEOUT",
+      "The repository clone exceeded Synara's 30-minute limit. For very large repositories, clone it manually and add the local folder instead.",
+      false,
+      cause,
+    );
+  }
 
   if (
     lower.includes("repository not found") ||

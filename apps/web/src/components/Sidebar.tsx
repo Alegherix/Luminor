@@ -449,6 +449,8 @@ const EMPTY_THREAD_JUMP_LABELS = new Map<ThreadId, string>();
 const EMPTY_SHORTCUT_PARTS: readonly string[] = [];
 const ADD_PROJECT_SNAPSHOT_CATCH_UP_MAX_ATTEMPTS = 6;
 const ADD_PROJECT_SNAPSHOT_CATCH_UP_DELAY_MS = 50;
+const GITHUB_CANCEL_RECOVERY_MAX_ATTEMPTS = 40;
+const GITHUB_CANCEL_RECOVERY_DELAY_MS = 250;
 const SIDEBAR_VIEW_LABELS: Record<SidebarView, string> = {
   threads: "Projects",
   studio: "Studio",
@@ -2141,6 +2143,28 @@ export default function Sidebar() {
     [],
   );
 
+  // Cancellation can arrive while the server is committing project.create. Give
+  // that durable commit and its read-model projection enough time to become
+  // observable before reporting the clone as cancelled.
+  const waitForCancelledGitHubProjectInSnapshot = useCallback(
+    async (
+      api: NonNullable<ReturnType<typeof readNativeApi>>,
+      projectId: ProjectId,
+      workspaceRoot?: string,
+    ): Promise<{
+      project: OrchestrationShellSnapshot["projects"][number] | null;
+      snapshot: OrchestrationShellSnapshot | null;
+    }> =>
+      waitForRecoverableProjectInReadModel({
+        projectId,
+        ...(workspaceRoot ? { workspaceRoot } : {}),
+        loadSnapshot: () => api.orchestration.getShellSnapshot().catch(() => null),
+        maxAttempts: GITHUB_CANCEL_RECOVERY_MAX_ATTEMPTS,
+        delayMs: GITHUB_CANCEL_RECOVERY_DELAY_MS,
+      }),
+    [],
+  );
+
   const waitForProjectWorkspaceRootInSnapshot = useCallback(
     async (
       api: NonNullable<ReturnType<typeof readNativeApi>>,
@@ -3270,12 +3294,12 @@ export default function Sidebar() {
           const api = readNativeApi();
           if (!api) throw new Error("The app server is unavailable.");
           await runExclusiveProjectAddition(projectAdditionLockRef, async () => {
-            const openProvisionedProject = async (projectId: ProjectId, workspaceRoot?: string) => {
-              const { project, snapshot } = await waitForProjectInSnapshot(
-                api,
-                projectId,
-                workspaceRoot,
-              );
+            const openProvisionedProject = async (
+              projectId: ProjectId,
+              workspaceRoot: string | undefined,
+              waitForProject: typeof waitForProjectInSnapshot,
+            ) => {
+              const { project, snapshot } = await waitForProject(api, projectId, workspaceRoot);
               if (snapshot) {
                 syncServerShellSnapshot(snapshot);
               }
@@ -3314,10 +3338,20 @@ export default function Sidebar() {
               // commit won, recover the durable project and report success instead
               // of telling the user a registered project was cancelled.
               recoverCommittedProject: () =>
-                openProvisionedProject(requestedProjectId, requestedWorkspaceRoot),
+                openProvisionedProject(
+                  requestedProjectId,
+                  requestedWorkspaceRoot,
+                  waitForCancelledGitHubProjectInSnapshot,
+                ),
             });
             if (provision.status === "recovered") return;
-            if (!(await openProvisionedProject(provision.result.projectId))) {
+            if (
+              !(await openProvisionedProject(
+                provision.result.projectId,
+                undefined,
+                waitForProjectInSnapshot,
+              ))
+            ) {
               throw new Error(
                 "The GitHub project was added, but it has not synced into the sidebar yet. Try again in a moment.",
               );
@@ -3351,6 +3385,7 @@ export default function Sidebar() {
       openExistingProjectFromSnapshot,
       projects,
       syncServerShellSnapshot,
+      waitForCancelledGitHubProjectInSnapshot,
       waitForProjectInSnapshot,
     ],
   );

@@ -272,6 +272,41 @@ describe("GitHub project provisioning", () => {
     expect(failure.retryable).toBe(false);
   });
 
+  it("distinguishes the configured clone timeout from a network timeout", async () => {
+    const failure = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const parent = yield* fileSystem.makeTempDirectoryScoped({ prefix: "synara-provision-" });
+        const git = {
+          execute: (input: Parameters<GitCoreShape["execute"]>[0]) =>
+            Effect.fail(
+              new GitCommandError({
+                operation: input.operation,
+                command: "git clone",
+                cwd: input.cwd,
+                detail: "git clone timed out.",
+              }),
+            ),
+        } as unknown as GitCoreShape;
+        const provisioner = yield* makeGitHubProjectProvisioner({
+          homeDir: parent,
+          fileSystem,
+          path,
+          git,
+          github: unavailableGitHubCli(),
+        });
+        return yield* provisioner
+          .provisionCheckout(makeInput(parent), { publish: () => Effect.void })
+          .pipe(Effect.flip);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+
+    expect(failure.code).toBe("CLONE_TIMEOUT");
+    expect(failure.retryable).toBe(false);
+    expect(failure.message).toContain("30-minute limit");
+  });
+
   it("reports a destination conflict when the target appears during promotion", async () => {
     const failure = await Effect.runPromise(
       Effect.gen(function* () {
