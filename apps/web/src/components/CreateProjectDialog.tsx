@@ -102,6 +102,7 @@ export interface CreateProjectSubmitOptions {
 
 export function CreateProjectDialog(props: {
   open: boolean;
+  githubProvisioningAvailable: boolean;
   spaces: ReadonlyArray<Space>;
   activeSpaceId: SpaceId | null;
   defaultCloneParent: string;
@@ -173,6 +174,12 @@ export function CreateProjectDialog(props: {
     const frame = requestAnimationFrame(() => document.getElementById(pathInputId)?.focus());
     return () => cancelAnimationFrame(frame);
   }, [pathInputId, props.activeSpaceId, props.defaultCloneParent, props.open]);
+
+  useEffect(() => {
+    if (!props.githubProvisioningAvailable && source === "github") {
+      setSource("local");
+    }
+  }, [props.githubProvisioningAvailable, source]);
 
   const trimmedPath = path.trim();
   const parsedRepository = parseGitHubRepositoryInput(repositoryInput);
@@ -299,6 +306,10 @@ export function CreateProjectDialog(props: {
       setFormError("Enter a GitHub repository as owner/repository or a GitHub.com repository URL.");
       return;
     }
+    if (source === "github" && !props.githubProvisioningAvailable) {
+      setFormError("Update the Synara server before adding a project from GitHub.");
+      return;
+    }
     if (source === "github" && trimmedDestinationParent.length === 0) {
       setFormError("Choose the parent folder where the repository should be cloned.");
       return;
@@ -408,6 +419,7 @@ export function CreateProjectDialog(props: {
             className="mt-4"
             value={source}
             disabled={submitting}
+            githubAvailable={props.githubProvisioningAvailable}
             onValueChange={(nextSource) => {
               setSource(nextSource);
               setFormError(null);

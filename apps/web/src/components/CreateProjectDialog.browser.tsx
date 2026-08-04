@@ -24,12 +24,31 @@ describe("CreateProjectDialog GitHub source", () => {
     nativeApi.onProvisionProgress.mockClear();
   });
 
+  it("disables GitHub when the server does not advertise provisioning", async () => {
+    await render(
+      <CreateProjectDialog
+        open
+        githubProvisioningAvailable={false}
+        spaces={[]}
+        activeSpaceId={null}
+        defaultCloneParent="/Users/test/Developer"
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(
+      (page.getByRole("radio", { name: "GitHub" }).element() as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
   it("derives the clone folder from owner/repository and submits a parent directory", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const onOpenChange = vi.fn();
     await render(
       <CreateProjectDialog
         open
+        githubProvisioningAvailable
         spaces={[]}
         activeSpaceId={null}
         defaultCloneParent="/Users/test/Developer"
@@ -77,6 +96,7 @@ describe("CreateProjectDialog GitHub source", () => {
       return (
         <CreateProjectDialog
           open={open}
+          githubProvisioningAvailable
           spaces={[]}
           activeSpaceId={null}
           defaultCloneParent="/Users/test"

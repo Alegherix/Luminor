@@ -618,6 +618,11 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
               }),
             )
             .pipe(Effect.mapError(toGitCommandError(commandInput, "failed to spawn.")));
+          // Keep cancellation ownership explicit even though spawn is already
+          // Scope-bound: an RPC interruption closes this Scope and kills the child
+          // before execute settles. The spawner's own finalizer safely handles the
+          // second cleanup attempt.
+          yield* Effect.addFinalizer(() => child.kill().pipe(Effect.ignore));
 
           const [stdout, stderr, exitCode] = yield* Effect.all(
             [

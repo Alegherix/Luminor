@@ -1113,7 +1113,7 @@ const makeWsRpcHandlersLayer = () =>
                       workspaceRoot: checkout.workspaceRoot,
                       createWorkspaceRootIfMissing: false,
                       defaultModelSelection: input.defaultModelSelection,
-                      spaceId: input.spaceId,
+                      spaceId: input.newProjectSpaceId,
                       createdAt: input.createdAt,
                     },
                   });
@@ -1126,6 +1126,9 @@ const makeWsRpcHandlersLayer = () =>
                 const existingProjectId = yield* findRegisteredProjectId(
                   normalizedCommand.workspaceRoot,
                 );
+                // Re-adding an existing checkout opens the existing project as-is. In
+                // particular, it must not silently move that project between Spaces;
+                // newProjectSpaceId applies only when project.create runs below.
                 const registration = existingProjectId
                   ? { projectId: existingProjectId, created: false }
                   : yield* dispatchOrchestrationCommand(normalizedCommand).pipe(

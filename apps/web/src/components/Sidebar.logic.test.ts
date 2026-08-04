@@ -34,6 +34,7 @@ import {
   pruneProjectThreadListPagingForCollapsedProjects,
   recoverExistingAddProjectTarget,
   runExclusiveProjectAddition,
+  runProjectProvisionWithCancellationRecovery,
   resolvePullRequestReviewBadge,
   resolveSidebarThreadListPaging,
   resolveProjectEmptyState,
@@ -564,6 +565,38 @@ describe("add-project error helpers", () => {
     releaseFirst();
     await expect(first).resolves.toBe("first");
     await expect(runExclusiveProjectAddition(lock, async () => "third")).resolves.toBe("third");
+  });
+
+  it("recovers a project whose server commit won a cancellation race", async () => {
+    const controller = new AbortController();
+    const interruption = new Error("cancelled");
+    controller.abort(interruption);
+
+    await expect(
+      runProjectProvisionWithCancellationRecovery({
+        signal: controller.signal,
+        provision: async () => {
+          throw interruption;
+        },
+        recoverCommittedProject: async () => true,
+      }),
+    ).resolves.toEqual({ status: "recovered" });
+  });
+
+  it("preserves cancellation when no project commit can be recovered", async () => {
+    const controller = new AbortController();
+    const interruption = new Error("cancelled");
+    controller.abort(interruption);
+
+    await expect(
+      runProjectProvisionWithCancellationRecovery({
+        signal: controller.signal,
+        provision: async () => {
+          throw interruption;
+        },
+        recoverCommittedProject: async () => false,
+      }),
+    ).rejects.toBe(interruption);
   });
 
   it("detects duplicate project.create errors", () => {

@@ -42,6 +42,7 @@ import {
   WS_CHANNELS,
   WS_METHODS,
   type WsWelcomePayload,
+  type WsBootstrapNegotiateResult,
   type AutomationStreamEvent,
 } from "@synara/contracts";
 import { VOICE_TRANSCRIPTION_UPLOAD_ROUTE_PATH } from "@synara/shared/binaryTransfer";
@@ -56,6 +57,27 @@ import { resolveWsHttpUrl } from "./lib/wsHttpUrl";
 export type { WsThreadStreamFailure } from "./wsTransport";
 
 let instance: { api: NativeApi; transport: WsTransport } | null = null;
+
+export function readWsServerCapabilities(): ReadonlyArray<string> | null {
+  return instance?.transport.getCompatibility()?.capabilities ?? null;
+}
+
+export function onWsServerCapabilitiesChange(
+  listener: (capabilities: ReadonlyArray<string> | null) => void,
+  options?: { readonly replayCurrent?: boolean },
+): () => void {
+  if (!instance) createWsNativeApi();
+  const transport = instance?.transport;
+  if (!transport) {
+    if (options?.replayCurrent) listener(null);
+    return () => undefined;
+  }
+  return transport.onCompatibilityChange(
+    (compatibility: WsBootstrapNegotiateResult | null) =>
+      listener(compatibility?.capabilities ?? null),
+    options,
+  );
+}
 
 function createListenerRegistry<T>() {
   const listeners = new Set<(payload: T) => void>();

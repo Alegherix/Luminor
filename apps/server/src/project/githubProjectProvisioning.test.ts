@@ -1,6 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { CommandId, ProjectId, type GitHubProjectProvisionInput } from "@synara/contracts";
-import { Deferred, Effect, Fiber, FileSystem, Path } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Path, PlatformError } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { GitCommandError, GitHubCliError } from "../git/Errors";
@@ -20,7 +20,7 @@ function makeInput(destinationParent: string): GitHubProjectProvisionInput {
     directoryName: "codex",
     commandId: CommandId.makeUnsafe("command-1"),
     projectId: ProjectId.makeUnsafe("project-1"),
-    spaceId: null,
+    newProjectSpaceId: null,
     defaultModelSelection: { provider: "codex", model: "gpt-5" },
     createdAt: "2026-08-04T00:00:00.000Z",
   };
@@ -238,8 +238,90 @@ describe("GitHub project provisioning", () => {
     expect(result.entries).toEqual([]);
   });
 
+  it("classifies Git HTTPS 403 responses as an authentication problem", async () => {
+    const failure = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const parent = yield* fileSystem.makeTempDirectoryScoped({ prefix: "synara-provision-" });
+        const git = {
+          execute: (input: Parameters<GitCoreShape["execute"]>[0]) =>
+            Effect.fail(
+              new GitCommandError({
+                operation: input.operation,
+                command: "git clone",
+                cwd: input.cwd,
+                detail: "fatal: unable to access repository: The requested URL returned error: 403",
+              }),
+            ),
+        } as unknown as GitCoreShape;
+        const provisioner = yield* makeGitHubProjectProvisioner({
+          homeDir: parent,
+          fileSystem,
+          path,
+          git,
+          github: unavailableGitHubCli(),
+        });
+        return yield* provisioner
+          .provisionCheckout(makeInput(parent), { publish: () => Effect.void })
+          .pipe(Effect.flip);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+
+    expect(failure.code).toBe("AUTH_REQUIRED");
+    expect(failure.retryable).toBe(false);
+  });
+
+  it("reports a destination conflict when the target appears during promotion", async () => {
+    const failure = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const parent = yield* fileSystem.makeTempDirectoryScoped({ prefix: "synara-provision-" });
+        const git = {
+          execute: (input: Parameters<GitCoreShape["execute"]>[0]) =>
+            Effect.gen(function* () {
+              if (input.operation === "clone public GitHub project") {
+                yield* fileSystem.makeDirectory(input.args.at(-1) ?? "", { recursive: true });
+                return { code: 0, stdout: "", stderr: "" };
+              }
+              return {
+                code: 0,
+                stdout: "https://github.com/openai/codex.git\n",
+                stderr: "",
+              };
+            }),
+        } as unknown as GitCoreShape;
+        const fileSystemWithPromotionRace = {
+          ...fileSystem,
+          rename: () =>
+            Effect.fail(
+              PlatformError.systemError({
+                _tag: "AlreadyExists",
+                module: "FileSystem",
+                method: "rename",
+              }),
+            ),
+        } satisfies FileSystem.FileSystem;
+        const provisioner = yield* makeGitHubProjectProvisioner({
+          homeDir: parent,
+          fileSystem: fileSystemWithPromotionRace,
+          path,
+          git,
+          github: unavailableGitHubCli(),
+        });
+        return yield* provisioner
+          .provisionCheckout(makeInput(parent), { publish: () => Effect.void })
+          .pipe(Effect.flip);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+
+    expect(failure.code).toBe("DESTINATION_CONFLICT");
+    expect(failure.retryable).toBe(false);
+  });
+
   it("removes its staging directory when an in-flight clone is cancelled", async () => {
-    const entries = await Effect.runPromise(
+    const result = await Effect.runPromise(
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
@@ -273,6 +355,6 @@ describe("GitHub project provisioning", () => {
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
     );
 
-    expect(entries).toEqual([]);
+    expect(result).toEqual([]);
   });
 });

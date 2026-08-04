@@ -9,7 +9,7 @@ import {
   parseGitHubRepositoryInput,
   parseGitHubRepositoryNameWithOwnerFromRemoteUrl,
 } from "@synara/shared/githubRepository";
-import { Effect, FileSystem, Path, Schema, Semaphore } from "effect";
+import { Effect, FileSystem, Path, PlatformError, Schema, Semaphore } from "effect";
 
 import { GitCommandError, GitHubCliError } from "../git/Errors";
 import type { GitCoreShape } from "../git/Services/GitCore";
@@ -170,7 +170,11 @@ function classifyCloneFailure(cause: unknown): GitHubProjectProvisioningError {
     lower.includes("not authenticated") ||
     lower.includes("bad credentials") ||
     lower.includes("http 401") ||
-    lower.includes("http 403")
+    lower.includes("http 403") ||
+    lower.includes("returned error: 401") ||
+    lower.includes("returned error: 403") ||
+    lower.includes("401 unauthorized") ||
+    lower.includes("403 forbidden")
   ) {
     return provisioningError(
       "AUTH_REQUIRED",
@@ -213,6 +217,36 @@ function classifyCloneFailure(cause: unknown): GitHubProjectProvisioningError {
   return provisioningError(
     "CLONE_FAILED",
     "The GitHub repository could not be cloned. Check the repository and Git configuration, then retry.",
+    true,
+    cause,
+  );
+}
+
+function classifyPromotionFailure(cause: unknown): GitHubProjectProvisioningError {
+  const reason =
+    cause instanceof PlatformError.PlatformError &&
+    cause.reason instanceof PlatformError.SystemError
+      ? cause.reason._tag
+      : null;
+  if (reason === "AlreadyExists") {
+    return provisioningError(
+      "DESTINATION_CONFLICT",
+      "The destination appeared while the repository was cloning. Choose another folder name or retry after removing it.",
+      false,
+      cause,
+    );
+  }
+  if (reason === "PermissionDenied") {
+    return provisioningError(
+      "PERMISSION_DENIED",
+      "Synara does not have permission to move the cloned repository into the selected destination.",
+      false,
+      cause,
+    );
+  }
+  return provisioningError(
+    "CLONE_FAILED",
+    "The cloned repository could not be moved into the selected destination. Retry or choose another folder.",
     true,
     cause,
   );
@@ -341,6 +375,9 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
       return;
     }
 
+    // GitCore.execute owns the spawned process in an Effect Scope. Cancelling the
+    // WebSocket request interrupts this Effect, closes that Scope, and terminates
+    // the fallback `git clone` process just like runProcess does for the gh path.
     yield* git.execute({
       operation: "clone public GitHub project",
       cwd: parent,
@@ -466,16 +503,7 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
 
             yield* fileSystem
               .rename(stagingPath, workspaceRoot)
-              .pipe(
-                Effect.mapError((cause) =>
-                  provisioningError(
-                    "PERMISSION_DENIED",
-                    "The cloned repository could not be moved into the selected destination.",
-                    false,
-                    cause,
-                  ),
-                ),
-              );
+              .pipe(Effect.mapError(classifyPromotionFailure));
             promoted = true;
             return {
               operationId: input.operationId,

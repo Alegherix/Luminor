@@ -21,7 +21,8 @@ export const GitHubProjectProvisionInput = Schema.Struct({
   directoryName: BoundedDirectoryName,
   commandId: CommandId,
   projectId: ProjectId,
-  spaceId: Schema.NullOr(SpaceId),
+  /** Destination for a newly registered project; reusing an existing project preserves its Space. */
+  newProjectSpaceId: Schema.NullOr(SpaceId),
   defaultModelSelection: ModelSelection,
   createdAt: IsoDateTime,
 });

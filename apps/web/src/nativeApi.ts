@@ -1,6 +1,10 @@
 import type { NativeApi } from "@synara/contracts";
 
-import { createWsNativeApi } from "./wsNativeApi";
+import {
+  createWsNativeApi,
+  onWsServerCapabilitiesChange,
+  readWsServerCapabilities,
+} from "./wsNativeApi";
 
 let cachedDesktopApi: NativeApi | undefined;
 
@@ -22,4 +26,25 @@ export function ensureNativeApi(): NativeApi {
     throw new Error("Native API not found");
   }
   return api;
+}
+
+export function readNativeApiServerCapability(capability: string): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.nativeApi) return true;
+  return readWsServerCapabilities()?.includes(capability) === true;
+}
+
+export function onNativeApiServerCapabilitiesChange(
+  listener: () => void,
+  options?: { readonly replayCurrent?: boolean },
+): () => void {
+  if (typeof window === "undefined") {
+    if (options?.replayCurrent) listener();
+    return () => undefined;
+  }
+  if (window.nativeApi) {
+    if (options?.replayCurrent) listener();
+    return () => undefined;
+  }
+  return onWsServerCapabilitiesChange(listener, options);
 }
