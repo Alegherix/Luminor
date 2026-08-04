@@ -18,7 +18,7 @@ import {
   useParams,
   useRouterState,
 } from "@tanstack/react-router";
-import { useMemo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Throttler } from "@tanstack/react-pacer";
 
@@ -110,7 +110,7 @@ import { providerModelDiscoveryInvalidationFingerprint } from "../lib/providerDi
 import { providerDiscoveryQueryKeys } from "../lib/providerDiscoveryReactQuery";
 import { useAppSettings } from "../appSettings";
 import {
-  getVisibleProviderUpdateStatuses,
+  getNotifiableProviderUpdateStatuses,
   isProviderUpdateActive,
   providerUpdateNotificationKey,
   PROVIDER_UPDATE_INITIAL_REFRESH_DELAY_MS,
@@ -254,7 +254,6 @@ function RootRouteView() {
           <TaskCompletionNotifications />
           <AppSnapWelcomeDialog />
           <AppSnapCoordinator />
-          <ProviderUpdateNotifications />
           <DesktopProjectBootstrap />
           <Outlet />
         </AnchoredToastProvider>
@@ -316,19 +315,42 @@ function GitProgressToastPreviewDev() {
 function ProviderStatusRefreshCoordinator() {
   const { settings } = useAppSettings();
   const serverSettingsQuery = useQuery(serverSettingsQueryOptions());
+  const [transportOpen, setTransportOpen] = useState(false);
   const providerUpdateChecksEnabled =
     serverSettingsQuery.data !== undefined && settings.enableProviderUpdateChecks;
 
   useProviderAuthRefreshOnFocus();
+  useEffect(
+    () =>
+      addWsTransportStateListener((state) => setTransportOpen(state === "open"), {
+        replayCurrent: true,
+      }),
+    [],
+  );
+
+  // Unmounting across transport interruptions clears the live-check gate. When
+  // the socket reopens, a fresh coordinator schedules a new provider refresh
+  // before persisted server advisories are allowed to produce notifications.
+  return providerUpdateChecksEnabled && transportOpen ? (
+    <ProviderUpdateRefreshCoordinator />
+  ) : null;
+}
+
+function ProviderUpdateRefreshCoordinator() {
+  const [liveVersionCheckCompleted, setLiveVersionCheckCompleted] = useState(false);
+  const markLiveVersionCheckCompleted = useCallback(() => {
+    setLiveVersionCheckCompleted(true);
+  }, []);
+
   // Provider latest-version checks are slow/network-backed, so keep this cadence
   // coarse while still honoring the automatic update-check setting.
   useProviderStatusRefresh({
-    enabled: providerUpdateChecksEnabled,
     initialDelayMs: PROVIDER_UPDATE_INITIAL_REFRESH_DELAY_MS,
     intervalMs: PROVIDER_UPDATE_REFRESH_INTERVAL_MS,
+    onRefreshSuccess: markLiveVersionCheckCompleted,
   });
 
-  return null;
+  return <ProviderUpdateNotifications liveVersionCheckCompleted={liveVersionCheckCompleted} />;
 }
 
 // Extracted to module scope so its run-always cleanup can stay a try/finally: the
@@ -492,7 +514,11 @@ async function runProviderUpdateAll(params: {
   });
 }
 
-function ProviderUpdateNotifications() {
+function ProviderUpdateNotifications({
+  liveVersionCheckCompleted,
+}: {
+  readonly liveVersionCheckCompleted: boolean;
+}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { settings } = useAppSettings();
@@ -508,11 +534,11 @@ function ProviderUpdateNotifications() {
   const activeToastRef = useRef<ActiveProviderUpdateToast | null>(null);
   const isUpdatingAllRef = useRef(false);
   const progressToastDismissedRef = useRef(false);
-  const outdatedProviders = getVisibleProviderUpdateStatuses({
+  const outdatedProviders = getNotifiableProviderUpdateStatuses({
     providers: serverConfigQuery.data?.providers ?? [],
     hiddenProviders: settings.hiddenProviders,
     serverSettings: providerUpdateServerSettings,
-    oneClickOnly: true,
+    liveVersionCheckCompleted,
   });
   const oneClickProviders = outdatedProviders.filter(
     (provider) => !isProviderUpdateActive(provider),

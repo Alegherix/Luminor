@@ -247,6 +247,46 @@ function withTempCodexHome(configContent?: string) {
 
 it.layer(NodeServices.layer)("ProviderHealth", (it) => {
   describe("provider update commands", () => {
+    it("delegates native Claude release-channel truth to Claude", () => {
+      const definition = PACKAGE_MANAGED_PROVIDER_UPDATES.claudeAgent;
+      assert.ok(definition);
+
+      const capabilities = resolvePackageManagedProviderMaintenance(definition, {
+        binaryPath: "claude",
+        realCommandPath: "/Users/test/.local/share/claude/versions/2.1.100/claude",
+      });
+
+      assert.strictEqual(capabilities.latestVersionSource, null);
+      assert.deepStrictEqual(capabilities.update, {
+        command: "claude update",
+        executable: "claude",
+        args: ["update"],
+        lockKey: "claude-native",
+      });
+    });
+
+    it("keeps Claude's latest Homebrew cask source and command aligned", () => {
+      const definition = PACKAGE_MANAGED_PROVIDER_UPDATES.claudeAgent;
+      assert.ok(definition);
+
+      const capabilities = resolvePackageManagedProviderMaintenance(definition, {
+        binaryPath: "/opt/homebrew/bin/claude",
+        realCommandPath: "/opt/homebrew/Caskroom/claude-code@latest/2.1.100/claude",
+      });
+
+      assert.deepStrictEqual(capabilities.latestVersionSource, {
+        kind: "homebrew",
+        name: "claude-code@latest",
+        homebrewKind: "cask",
+      });
+      assert.deepStrictEqual(capabilities.update, {
+        command: "brew upgrade --cask claude-code@latest",
+        executable: "brew",
+        args: ["upgrade", "--cask", "claude-code@latest"],
+        lockKey: "homebrew",
+      });
+    });
+
     it("registers Antigravity's native updater", () => {
       const definition = PACKAGE_MANAGED_PROVIDER_UPDATES.antigravity;
       assert.ok(definition);
