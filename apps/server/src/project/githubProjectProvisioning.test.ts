@@ -9,7 +9,6 @@ import type { GitHubCliShape } from "../git/Services/GitHubCli";
 import {
   GitHubProjectProvisioningError,
   makeGitHubProjectProvisioner,
-  validateGitHubProjectDirectoryName,
 } from "./githubProjectProvisioning";
 
 function makeInput(destinationParent: string): GitHubProjectProvisionInput {
@@ -38,22 +37,6 @@ function unavailableGitHubCli(): GitHubCliShape {
       ),
   } as unknown as GitHubCliShape;
 }
-
-describe("validateGitHubProjectDirectoryName", () => {
-  it.each([
-    ["codex", "codex"],
-    ["my-project", "my-project"],
-    [".github", ".github"],
-    ["project.v2", "project.v2"],
-    [" name ", "name"],
-  ])("accepts %s", (name, expected) => {
-    expect(validateGitHubProjectDirectoryName(name)).toBe(expected);
-  });
-
-  it.each(["", ".", "..", "a/b", "a\\b", "CON", "name."])("rejects %s", (name) =>
-    expect(validateGitHubProjectDirectoryName(name)).toBeNull(),
-  );
-});
 
 describe("GitHub project provisioning", () => {
   it("uses authenticated GitHub CLI cloning without forcing SSH or HTTPS", async () => {

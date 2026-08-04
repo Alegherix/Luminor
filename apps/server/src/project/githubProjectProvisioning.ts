@@ -9,6 +9,7 @@ import {
   parseGitHubRepositoryInput,
   parseGitHubRepositoryNameWithOwnerFromRemoteUrl,
 } from "@synara/shared/githubRepository";
+import { normalizeProjectDirectoryName } from "@synara/shared/projectDirectoryName";
 import { Effect, FileSystem, Path, PlatformError, Schema, Semaphore } from "effect";
 
 import { GitCommandError, GitHubCliError } from "../git/Errors";
@@ -18,7 +19,6 @@ import type { GitHubCliShape } from "../git/Services/GitHubCli";
 const CLONE_TIMEOUT_MS = 30 * 60 * 1_000;
 const CLONE_OUTPUT_LIMIT_BYTES = 2 * 1_024 * 1_024;
 const MAX_CLONE_PROGRESS_MESSAGE_LENGTH = 240;
-const WINDOWS_RESERVED_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
 const CLONE_PROGRESS_LINE =
   /^(?:remote:\s*)?(?:Enumerating objects|Counting objects|Compressing objects|Receiving objects|Resolving deltas|Updating files|Checking out files|Filtering content):/i;
 
@@ -85,23 +85,6 @@ function provisioningError(
     retryable,
     ...(cause === undefined ? {} : { cause }),
   });
-}
-
-export function validateGitHubProjectDirectoryName(directoryName: string): string | null {
-  const normalized = directoryName.trim();
-  if (
-    normalized.length === 0 ||
-    normalized.length > 255 ||
-    normalized === "." ||
-    normalized === ".." ||
-    normalized.endsWith(".") ||
-    normalized.endsWith(" ") ||
-    /[<>:"/\\|?*\u0000-\u001f]/.test(normalized) ||
-    WINDOWS_RESERVED_NAME.test(normalized)
-  ) {
-    return null;
-  }
-  return normalized;
 }
 
 function safeCloneProgressMessage(rawLine: string): string | null {
@@ -428,7 +411,7 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
         );
       }
 
-      const directoryName = validateGitHubProjectDirectoryName(input.directoryName);
+      const directoryName = normalizeProjectDirectoryName(input.directoryName);
       if (!directoryName) {
         return yield* provisioningError(
           "INVALID_DESTINATION",

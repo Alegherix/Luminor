@@ -79,6 +79,29 @@ describe("CreateProjectDialog GitHub source", () => {
     expect(options.signal).toBeInstanceOf(AbortSignal);
   });
 
+  it("rejects invalid clone folder names before provisioning", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    await render(
+      <CreateProjectDialog
+        open
+        githubProvisioningAvailable
+        spaces={[]}
+        activeSpaceId={null}
+        defaultCloneParent="/Users/test/Developer"
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await page.getByRole("radio", { name: "GitHub" }).click();
+    await page.getByLabelText("Repository").fill("openai/codex");
+    await page.getByLabelText("Folder name").fill("CON");
+    await page.getByRole("button", { name: "Clone and add" }).click();
+
+    await expect.element(page.getByRole("alert")).toHaveTextContent("Choose a valid folder name");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it("aborts the active clone when the dialog is closed", async () => {
     const submittedSignals: AbortSignal[] = [];
     const onSubmit = vi.fn(

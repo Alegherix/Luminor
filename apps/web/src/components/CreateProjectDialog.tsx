@@ -6,6 +6,7 @@
 
 import { type GitHubProjectProvisionProgressEvent, type SpaceId } from "@synara/contracts";
 import { parseGitHubRepositoryInput } from "@synara/shared/githubRepository";
+import { normalizeProjectDirectoryName } from "@synara/shared/projectDirectoryName";
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
 import { isElectron } from "../env";
@@ -179,6 +180,7 @@ export function CreateProjectDialog(props: {
   const parsedRepository = parseGitHubRepositoryInput(repositoryInput);
   const trimmedDestinationParent = destinationParent.trim();
   const trimmedDirectoryName = directoryName.trim();
+  const normalizedDirectoryName = normalizeProjectDirectoryName(directoryName);
   const formErrorMeaning = formError ? describeAddProjectError(formError) : null;
   const spaces =
     createdSpace && !props.spaces.some((space) => space.id === createdSpace.id)
@@ -308,8 +310,10 @@ export function CreateProjectDialog(props: {
       setFormError("Choose the parent folder where the repository should be cloned.");
       return;
     }
-    if (source === "github" && trimmedDirectoryName.length === 0) {
-      setFormError("Choose a folder name for the cloned repository.");
+    if (source === "github" && !normalizedDirectoryName) {
+      setFormError(
+        "Choose a valid folder name without slashes, reserved device names, or a trailing dot.",
+      );
       return;
     }
     setSubmitting(true);
@@ -328,7 +332,7 @@ export function CreateProjectDialog(props: {
             operationId,
             repository: parsedRepository ?? repositoryInput.trim(),
             destinationParent: trimmedDestinationParent,
-            directoryName: trimmedDirectoryName,
+            directoryName: normalizedDirectoryName ?? trimmedDirectoryName,
             spaceId,
           },
           { signal: abortController.signal },
