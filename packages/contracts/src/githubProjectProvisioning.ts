@@ -1,12 +1,6 @@
 import { Schema } from "effect";
 
-import {
-  CommandId,
-  IsoDateTime,
-  ProjectId,
-  SpaceId,
-  TrimmedNonEmptyString,
-} from "./baseSchemas";
+import { CommandId, IsoDateTime, ProjectId, SpaceId, TrimmedNonEmptyString } from "./baseSchemas";
 import { ModelSelection } from "./orchestration";
 
 const BoundedRepositoryInput = TrimmedNonEmptyString.check(Schema.isMaxLength(512));
@@ -74,5 +68,4 @@ export const GitHubProjectProvisionProgressEvent = Schema.Union([
     result: GitHubProjectProvisionResult,
   }),
 ]);
-export type GitHubProjectProvisionProgressEvent =
-  typeof GitHubProjectProvisionProgressEvent.Type;
+export type GitHubProjectProvisionProgressEvent = typeof GitHubProjectProvisionProgressEvent.Type;

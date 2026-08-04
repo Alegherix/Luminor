@@ -417,15 +417,12 @@ export const WsSubscribeProjectDevServerEventsRpc = Rpc.make(
   },
 );
 
-export const WsProjectsProvisionFromGitHubRpc = Rpc.make(
-  WS_METHODS.projectsProvisionFromGitHub,
-  {
-    payload: GitHubProjectProvisionInput,
-    success: GitHubProjectProvisionProgressEvent,
-    error: WsRpcError,
-    stream: true,
-  },
-);
+export const WsProjectsProvisionFromGitHubRpc = Rpc.make(WS_METHODS.projectsProvisionFromGitHub, {
+  payload: GitHubProjectProvisionInput,
+  success: GitHubProjectProvisionProgressEvent,
+  error: WsRpcError,
+  stream: true,
+});
 
 export const WsStudioListThreadOutputsRpc = Rpc.make(WS_METHODS.studioListThreadOutputs, {
   payload: StudioListThreadOutputsInput,

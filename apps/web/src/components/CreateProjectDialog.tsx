@@ -106,10 +106,7 @@ export function CreateProjectDialog(props: {
   activeSpaceId: SpaceId | null;
   defaultCloneParent: string;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (
-    value: CreateProjectSubmitValue,
-    options: CreateProjectSubmitOptions,
-  ) => Promise<void>;
+  onSubmit: (value: CreateProjectSubmitValue, options: CreateProjectSubmitOptions) => Promise<void>;
 }) {
   const [source, setSource] = useState<"local" | "github">("local");
   const [path, setPath] = useState("");
@@ -299,9 +296,7 @@ export function CreateProjectDialog(props: {
       return;
     }
     if (source === "github" && !parsedRepository) {
-      setFormError(
-        "Enter a GitHub repository as owner/repository or a GitHub.com repository URL.",
-      );
+      setFormError("Enter a GitHub repository as owner/repository or a GitHub.com repository URL.");
       return;
     }
     if (source === "github" && trimmedDestinationParent.length === 0) {
@@ -472,11 +467,7 @@ export function CreateProjectDialog(props: {
                     )}
                     onClick={() => void handleBrowse()}
                   >
-                    <CentralIcon
-                      name="folder-add-left"
-                      className="size-4.5"
-                      aria-hidden="true"
-                    />
+                    <CentralIcon name="folder-add-left" className="size-4.5" aria-hidden="true" />
                     {isPickingFolder ? (
                       "Opening the folder picker…"
                     ) : pickedFolderName ? (
@@ -584,10 +575,7 @@ export function CreateProjectDialog(props: {
                 size="icon"
                 aria-label="New space"
                 disabled={submitting}
-                className={cn(
-                  PROJECT_DIALOG_FIELD_CONTROL_CLASS_NAME,
-                  "w-9 shrink-0 sm:h-9",
-                )}
+                className={cn(PROJECT_DIALOG_FIELD_CONTROL_CLASS_NAME, "w-9 shrink-0 sm:h-9")}
                 onClick={() => setSpaceEditorOpen(true)}
               >
                 <CentralIcon name="plus-medium" className="size-4" aria-hidden="true" />

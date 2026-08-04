@@ -770,17 +770,19 @@ const makeWsRpcHandlersLayer = () =>
           : toWsRpcError(cause, "Failed to clone and add the GitHub project");
 
       const findRegisteredProjectId = (workspaceRoot: string) =>
-        orchestrationEngine.getReadModel().pipe(
-          Effect.map(
-            (readModel) =>
-              readModel.projects.find(
-                (project) =>
-                  project.kind === "project" &&
-                  project.deletedAt === null &&
-                  workspaceRootsEqual(project.workspaceRoot, workspaceRoot),
-              )?.id ?? null,
-          ),
-        );
+        orchestrationEngine
+          .getReadModel()
+          .pipe(
+            Effect.map(
+              (readModel) =>
+                readModel.projects.find(
+                  (project) =>
+                    project.kind === "project" &&
+                    project.deletedAt === null &&
+                    workspaceRootsEqual(project.workspaceRoot, workspaceRoot),
+                )?.id ?? null,
+            ),
+          );
 
       const requireOwner = Effect.gen(function* () {
         if (!canManageExternalMcp(yield* CurrentWsSessionRole)) {
@@ -1115,6 +1117,11 @@ const makeWsRpcHandlersLayer = () =>
                       createdAt: input.createdAt,
                     },
                   });
+                if (normalizedCommand.type !== "project.create") {
+                  return yield* Effect.die(
+                    new Error("GitHub project provisioning normalized an unexpected command"),
+                  );
+                }
 
                 const existingProjectId = yield* findRegisteredProjectId(
                   normalizedCommand.workspaceRoot,

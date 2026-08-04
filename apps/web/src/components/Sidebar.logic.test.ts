@@ -33,6 +33,7 @@ import {
   isDuplicateProjectCreateError,
   pruneProjectThreadListPagingForCollapsedProjects,
   recoverExistingAddProjectTarget,
+  runExclusiveProjectAddition,
   resolvePullRequestReviewBadge,
   resolveSidebarThreadListPaging,
   resolveProjectEmptyState,
@@ -537,6 +538,32 @@ describe("add-project error helpers", () => {
     });
 
     expect(decision).toBe("recovered");
+  });
+
+  it("serializes project additions and releases the lock after completion", async () => {
+    const lock = { current: false };
+    let releaseFirst!: () => void;
+    const firstBlocked = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
+    const first = runExclusiveProjectAddition(lock, async () => {
+      markFirstStarted();
+      await firstBlocked;
+      return "first";
+    });
+
+    await firstStarted;
+    await expect(runExclusiveProjectAddition(lock, async () => "second")).rejects.toThrow(
+      "Another project is already being added.",
+    );
+
+    releaseFirst();
+    await expect(first).resolves.toBe("first");
+    await expect(runExclusiveProjectAddition(lock, async () => "third")).resolves.toBe("third");
   });
 
   it("detects duplicate project.create errors", () => {

@@ -33,8 +33,7 @@ export const GitHubProjectProvisioningErrorCode = Schema.Literals([
   "DISK_FULL",
   "CLONE_FAILED",
 ]);
-export type GitHubProjectProvisioningErrorCode =
-  typeof GitHubProjectProvisioningErrorCode.Type;
+export type GitHubProjectProvisioningErrorCode = typeof GitHubProjectProvisioningErrorCode.Type;
 
 export class GitHubProjectProvisioningError extends Schema.TaggedErrorClass<GitHubProjectProvisioningError>()(
   "GitHubProjectProvisioningError",
@@ -47,9 +46,7 @@ export class GitHubProjectProvisioningError extends Schema.TaggedErrorClass<GitH
 ) {}
 
 export interface GitHubProjectProvisioningProgressReporter {
-  readonly publish: (
-    event: GitHubProjectProvisionProgressEvent,
-  ) => Effect.Effect<void, never>;
+  readonly publish: (event: GitHubProjectProvisionProgressEvent) => Effect.Effect<void, never>;
 }
 
 export interface GitHubProjectCheckoutResult {
@@ -236,15 +233,9 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
   const { fileSystem, git, github, homeDir, path } = dependencies;
   const cloneSlots = yield* Semaphore.make(2);
   const lockIndex = yield* Semaphore.make(1);
-  const destinationLocks = new Map<
-    string,
-    { readonly lock: Semaphore.Semaphore; users: number }
-  >();
+  const destinationLocks = new Map<string, { readonly lock: Semaphore.Semaphore; users: number }>();
 
-  const withDestinationLock = <A, E, R>(
-    destination: string,
-    effect: Effect.Effect<A, E, R>,
-  ) =>
+  const withDestinationLock = <A, E, R>(destination: string, effect: Effect.Effect<A, E, R>) =>
     Effect.acquireUseRelease(
       lockIndex.withPermits(1)(
         Effect.gen(function* () {
@@ -289,7 +280,9 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
     workspaceRoot: string,
     repository: string,
   ) {
-    const stat = yield* fileSystem.stat(workspaceRoot).pipe(Effect.catch(() => Effect.succeed(null)));
+    const stat = yield* fileSystem
+      .stat(workspaceRoot)
+      .pipe(Effect.catch(() => Effect.succeed(null)));
     if (!stat) return null;
     if (stat.type !== "Directory") {
       return yield* provisioningError(
@@ -324,22 +317,15 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
     reporter: GitHubProjectProvisioningProgressReporter,
   ) {
     const publishChunk = createCloneProgressChunkHandler(input.operationId, reporter);
-    const githubCliReady = yield* github
-      .getViewerLogin({ cwd: parent })
-      .pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)));
+    const githubCliReady = yield* github.getViewerLogin({ cwd: parent }).pipe(
+      Effect.as(true),
+      Effect.catch(() => Effect.succeed(false)),
+    );
 
     if (githubCliReady) {
       yield* github.execute({
         cwd: parent,
-        args: [
-          "repo",
-          "clone",
-          "--no-upstream",
-          repository,
-          stagingPath,
-          "--",
-          "--progress",
-        ],
+        args: ["repo", "clone", "--no-upstream", repository, stagingPath, "--", "--progress"],
         timeoutMs: CLONE_TIMEOUT_MS,
         maxBufferBytes: CLONE_OUTPUT_LIMIT_BYTES,
         outputMode: "truncate",
@@ -358,13 +344,7 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
     yield* git.execute({
       operation: "clone public GitHub project",
       cwd: parent,
-      args: [
-        "clone",
-        "--progress",
-        "--",
-        `https://github.com/${repository}.git`,
-        stagingPath,
-      ],
+      args: ["clone", "--progress", "--", `https://github.com/${repository}.git`, stagingPath],
       env: {
         GCM_INTERACTIVE: "never",
         GIT_ASKPASS: "",
@@ -373,10 +353,8 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
       timeoutMs: CLONE_TIMEOUT_MS,
       maxOutputBytes: CLONE_OUTPUT_LIMIT_BYTES,
       progress: {
-        onStdoutLine: (line) =>
-          Effect.sync(() => publishChunk(`${line}\n`)),
-        onStderrLine: (line) =>
-          Effect.sync(() => publishChunk(`${line}\n`)),
+        onStdoutLine: (line) => Effect.sync(() => publishChunk(`${line}\n`)),
+        onStderrLine: (line) => Effect.sync(() => publishChunk(`${line}\n`)),
       },
     });
   });
@@ -428,16 +406,18 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
           false,
         );
       }
-      const parent = yield* fileSystem.realPath(resolvedParent).pipe(
-        Effect.mapError((cause) =>
-          provisioningError(
-            "INVALID_DESTINATION",
-            "The destination folder could not be resolved.",
-            false,
-            cause,
+      const parent = yield* fileSystem
+        .realPath(resolvedParent)
+        .pipe(
+          Effect.mapError((cause) =>
+            provisioningError(
+              "INVALID_DESTINATION",
+              "The destination folder could not be resolved.",
+              false,
+              cause,
+            ),
           ),
-        ),
-      );
+        );
       const workspaceRoot = path.join(parent, directoryName);
 
       return yield* withDestinationLock(
@@ -461,22 +441,12 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
           let promoted = false;
 
           const runClone = Effect.gen(function* () {
-            yield* publishPhase(
-              reporter,
-              input.operationId,
-              "cloning",
-              `Cloning ${repository}`,
-            );
+            yield* publishPhase(reporter, input.operationId, "cloning", `Cloning ${repository}`);
             yield* cloneSlots.withPermits(1)(
               cloneToStaging(input, repository, parent, stagingPath, reporter),
             );
 
-            yield* publishPhase(
-              reporter,
-              input.operationId,
-              "verifying",
-              "Verifying checkout",
-            );
+            yield* publishPhase(reporter, input.operationId, "verifying", "Verifying checkout");
             const valid = yield* verifyCheckout(stagingPath, repository);
             if (!valid) {
               return yield* provisioningError(
@@ -494,16 +464,18 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
               return { ...appearedDuringClone, operationId: input.operationId };
             }
 
-            yield* fileSystem.rename(stagingPath, workspaceRoot).pipe(
-              Effect.mapError((cause) =>
-                provisioningError(
-                  "PERMISSION_DENIED",
-                  "The cloned repository could not be moved into the selected destination.",
-                  false,
-                  cause,
+            yield* fileSystem
+              .rename(stagingPath, workspaceRoot)
+              .pipe(
+                Effect.mapError((cause) =>
+                  provisioningError(
+                    "PERMISSION_DENIED",
+                    "The cloned repository could not be moved into the selected destination.",
+                    false,
+                    cause,
+                  ),
                 ),
-              ),
-            );
+              );
             promoted = true;
             return {
               operationId: input.operationId,

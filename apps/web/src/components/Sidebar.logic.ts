@@ -677,6 +677,22 @@ export function findDeepestWorkspaceRootMatch<T>(
   return best;
 }
 
+export async function runExclusiveProjectAddition<T>(
+  lock: { current: boolean },
+  operation: () => Promise<T>,
+): Promise<T> {
+  if (lock.current) {
+    throw new Error("Another project is already being added.");
+  }
+
+  lock.current = true;
+  try {
+    return await operation();
+  } finally {
+    lock.current = false;
+  }
+}
+
 // Rechecks an existing local project against the server before the add flow decides to reuse it.
 export async function recoverExistingAddProjectTarget(input: {
   readonly existingProjectId: ProjectId | null | undefined;

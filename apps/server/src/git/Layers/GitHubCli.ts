@@ -783,12 +783,8 @@ const makeGitHubCli = Effect.sync(() => {
           ...(input.maxBufferBytes !== undefined ? { maxBufferBytes: input.maxBufferBytes } : {}),
           ...(input.outputMode !== undefined ? { outputMode: input.outputMode } : {}),
           ...(input.stdin !== undefined ? { stdin: input.stdin } : {}),
-          ...(input.onStdoutChunk !== undefined
-            ? { onStdoutChunk: input.onStdoutChunk }
-            : {}),
-          ...(input.onStderrChunk !== undefined
-            ? { onStderrChunk: input.onStderrChunk }
-            : {}),
+          ...(input.onStdoutChunk !== undefined ? { onStdoutChunk: input.onStdoutChunk } : {}),
+          ...(input.onStderrChunk !== undefined ? { onStderrChunk: input.onStderrChunk } : {}),
         }),
       catch: (error) => normalizeGitHubCliError("execute", error),
     });

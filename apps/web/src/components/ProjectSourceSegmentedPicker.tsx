@@ -38,9 +38,7 @@ export function ProjectSourceSegmentedPicker(props: {
   const cell = `(100% - 0.25rem) / ${PROJECT_SOURCES.length}`;
   const overhang = "5px";
   const chipLeft =
-    activeIndex === 0
-      ? `calc(-1px - ${overhang})`
-      : `calc(0.125rem + ${activeIndex} * (${cell}))`;
+    activeIndex === 0 ? `calc(-1px - ${overhang})` : `calc(0.125rem + ${activeIndex} * (${cell}))`;
   const chipWidth = `calc(${cell} + 0.125rem + 1px + ${overhang})`;
 
   return (

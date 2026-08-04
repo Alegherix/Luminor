@@ -44,9 +44,7 @@ describe("CreateProjectDialog GitHub source", () => {
     await page.getByLabelText("Repository").fill("openai/codex");
 
     expect((page.getByLabelText("Folder name").element() as HTMLInputElement).value).toBe("codex");
-    expect(document.body.textContent).toContain(
-      "Final location: /Users/test/Developer/codex",
-    );
+    expect(document.body.textContent).toContain("Final location: /Users/test/Developer/codex");
 
     await page.getByRole("button", { name: "Clone and add" }).click();
     await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
@@ -63,11 +61,11 @@ describe("CreateProjectDialog GitHub source", () => {
   });
 
   it("aborts the active clone when the dialog is closed", async () => {
-    let submittedSignal: AbortSignal | null = null;
+    const submittedSignals: AbortSignal[] = [];
     const onSubmit = vi.fn(
       (_value: unknown, options: { signal: AbortSignal }) =>
         new Promise<void>((_resolve, reject) => {
-          submittedSignal = options.signal;
+          submittedSignals.push(options.signal);
           options.signal.addEventListener("abort", () => reject(new Error("cancelled")), {
             once: true,
           });
@@ -90,9 +88,7 @@ describe("CreateProjectDialog GitHub source", () => {
         />
       );
     }
-    await render(
-      <Harness />,
-    );
+    await render(<Harness />);
 
     await page.getByRole("radio", { name: "GitHub" }).click();
     await page.getByLabelText("Repository").fill("openai/codex");
@@ -100,7 +96,7 @@ describe("CreateProjectDialog GitHub source", () => {
     await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
     await page.getByRole("button", { name: "Cancel clone" }).click();
 
-    expect(submittedSignal?.aborted).toBe(true);
+    expect(submittedSignals[0]?.aborted).toBe(true);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

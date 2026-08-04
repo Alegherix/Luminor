@@ -50,9 +50,8 @@ describe("validateGitHubProjectDirectoryName", () => {
     expect(validateGitHubProjectDirectoryName(name)).toBe(expected);
   });
 
-  it.each(["", ".", "..", "a/b", "a\\b", "CON", "name."])(
-    "rejects %s",
-    (name) => expect(validateGitHubProjectDirectoryName(name)).toBeNull(),
+  it.each(["", ".", "..", "a/b", "a\\b", "CON", "name."])("rejects %s", (name) =>
+    expect(validateGitHubProjectDirectoryName(name)).toBeNull(),
   );
 });
 
@@ -160,10 +159,7 @@ describe("GitHub project provisioning", () => {
     expect(result.provisioned.checkout).toBe("created");
     expect(result.provisioned.workspaceRoot).toMatch(/[/\\]codex$/);
     expect(result.entries).toEqual(["codex"]);
-    expect(result.calls).toEqual([
-      "clone public GitHub project",
-      "verify GitHub project clone",
-    ]);
+    expect(result.calls).toEqual(["clone public GitHub project", "verify GitHub project clone"]);
   });
 
   it("reuses an existing checkout with the same GitHub origin", async () => {

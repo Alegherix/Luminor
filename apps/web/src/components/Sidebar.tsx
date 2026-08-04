@@ -100,13 +100,7 @@ import {
 } from "../appSettings";
 import { isElectron } from "../env";
 import { formatRelativeTime } from "../lib/relativeTime";
-import {
-  isMacPlatform,
-  newCommandId,
-  newProjectId,
-  newThreadId,
-  randomUUID,
-} from "../lib/utils";
+import { isMacPlatform, newCommandId, newProjectId, newThreadId, randomUUID } from "../lib/utils";
 import { isOrdinarySpaceProject } from "../lib/spaces";
 import { reconcileDeletedThreadsFromClient } from "../lib/deletedThreadClientReconciliation";
 import { deleteProjectFromClient } from "../lib/projectDelete";
@@ -298,6 +292,7 @@ import {
   isProjectsSidebarSurface,
   pruneProjectThreadListPagingForCollapsedProjects,
   recoverExistingAddProjectTarget,
+  runExclusiveProjectAddition,
   resolvePullRequestReviewBadge,
   resolveSidebarThreadListPaging,
   DEBUG_FEATURE_FLAGS_MENU_STORAGE_KEY,
@@ -1526,7 +1521,7 @@ export default function Sidebar() {
   const [searchPaletteOpen, setSearchPaletteOpen] = useState(false);
   const openFeedbackDialog = useFeedbackDialogStore((state) => state.openDialog);
   const [searchPaletteMode, setSearchPaletteMode] = useState<SidebarSearchPaletteMode>("search");
-  const [isAddingProject, setIsAddingProject] = useState(false);
+  const projectAdditionLockRef = useRef(false);
   const [renameDialogThreadId, setRenameDialogThreadId] = useState<ThreadId | null>(null);
   const [renameProjectDialogId, setRenameProjectDialogId] = useState<ProjectId | null>(null);
   const [projectContextMenuState, setProjectContextMenuState] =
@@ -2423,20 +2418,12 @@ export default function Sidebar() {
       if (!cwd) {
         throw new Error("Project folder path is empty.");
       }
-      if (isAddingProject) {
-        throw new Error("Another project is already being added.");
-      }
       const api = readNativeApi();
       if (!api) {
         throw new Error("The app server is unavailable.");
       }
 
-      setIsAddingProject(true);
-      const finishAddingProject = () => {
-        setIsAddingProject(false);
-      };
-
-      // The flow lives in a nested function that the `try` below merely awaits: React
+      // The flow lives in a nested function that the exclusive lock helper merely awaits: React
       // Compiler's BuildHIR cannot lower a `throw` or a value block (`?.`, `??`, ternary,
       // conditional spread) that sits directly inside a try block, and a single one of them
       // makes the entire Sidebar bail out of compilation — silently, since `panicThreshold`
@@ -2452,7 +2439,6 @@ export default function Sidebar() {
             recoverExistingProjectByWorkspaceRootFromServer(api, workspaceRoot),
         });
         if (existingRecovery === "recovered") {
-          finishAddingProject();
           return;
         }
         if (existing) {
@@ -2485,7 +2471,6 @@ export default function Sidebar() {
                 creationResult.snapshot,
               );
           if (recovered) {
-            finishAddingProject();
             return;
           }
         }
@@ -2493,10 +2478,8 @@ export default function Sidebar() {
         if (!creationResult.created) {
           const recovered = await recoverExistingProjectFromServer(api, creationResult.projectId);
           if (recovered) {
-            finishAddingProject();
             return;
           }
-          setIsAddingProject(false);
           throw new Error(PROJECT_CREATE_EXISTING_SYNC_ERROR);
         }
 
@@ -2507,22 +2490,13 @@ export default function Sidebar() {
         void handleNewThread(creationResult.projectId, {
           envMode: appSettings.defaultThreadEnvMode,
         }).catch(() => undefined);
-        finishAddingProject();
       };
 
-      try {
-        await runAddProject();
-      } catch (error) {
-        const description =
-          error instanceof Error ? error.message : "An error occurred while adding the project.";
-        setIsAddingProject(false);
-        throw error instanceof Error ? error : new Error(description);
-      }
+      await runExclusiveProjectAddition(projectAdditionLockRef, runAddProject);
     },
     [
       appSettings.defaultThreadEnvMode,
       handleNewThread,
-      isAddingProject,
       projects,
       recoverExistingProjectFromServer,
       recoverExistingProjectByWorkspaceRootFromServer,
@@ -3277,27 +3251,36 @@ export default function Sidebar() {
         if (value.source === "github") {
           const api = readNativeApi();
           if (!api) throw new Error("The app server is unavailable.");
-          const result = await api.projects.provisionFromGitHub(
-            {
-              operationId: value.operationId,
-              repository: value.repository,
-              destinationParent: value.destinationParent,
-              directoryName: value.directoryName,
-              commandId: newCommandId(),
-              projectId: newProjectId(),
-              spaceId: value.spaceId,
-              defaultModelSelection: {
-                provider: "codex",
-                model: getDefaultModel("codex"),
+          await runExclusiveProjectAddition(projectAdditionLockRef, async () => {
+            const result = await api.projects.provisionFromGitHub(
+              {
+                operationId: value.operationId,
+                repository: value.repository,
+                destinationParent: value.destinationParent,
+                directoryName: value.directoryName,
+                commandId: newCommandId(),
+                projectId: newProjectId(),
+                spaceId: value.spaceId,
+                defaultModelSelection: {
+                  provider: "codex",
+                  model: getDefaultModel("codex"),
+                },
+                createdAt: new Date().toISOString(),
               },
-              createdAt: new Date().toISOString(),
-            },
-            { signal: options.signal },
-          );
-          handleSelectSpaceForIncomingProject(value.spaceId);
-          await addProjectFromPath(result.workspaceRoot, {
-            createIfMissing: false,
-            spaceId: value.spaceId,
+              { signal: options.signal },
+            );
+            const { project, snapshot } = await waitForProjectInSnapshot(api, result.projectId);
+            if (snapshot) {
+              syncServerShellSnapshot(snapshot);
+            }
+            if (!project || !snapshot) {
+              throw new Error(
+                "The GitHub project was added, but it has not synced into the sidebar yet. Try again in a moment.",
+              );
+            }
+
+            handleSelectSpaceForIncomingProject(project.spaceId ?? null);
+            await openExistingProjectFromSnapshot(project.id, snapshot);
           });
         } else {
           handleSelectSpaceForIncomingProject(destinationSpaceId);
@@ -3313,7 +3296,15 @@ export default function Sidebar() {
         throw error;
       }
     },
-    [activeSpaceId, addProjectFromPath, handleSelectSpaceForIncomingProject, projects],
+    [
+      activeSpaceId,
+      addProjectFromPath,
+      handleSelectSpaceForIncomingProject,
+      openExistingProjectFromSnapshot,
+      projects,
+      syncServerShellSnapshot,
+      waitForProjectInSnapshot,
+    ],
   );
 
   // Tab index 0 is Void, then spaces in strip order — the same mapping the
