@@ -183,6 +183,73 @@ describe("GitHub project provisioning", () => {
     expect(result.calls).toEqual(["verify GitHub project clone"]);
   });
 
+  it("reports a conflict for an existing directory that is not a Git checkout", async () => {
+    const failure = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const parent = yield* fileSystem.makeTempDirectoryScoped({ prefix: "synara-provision-" });
+        yield* fileSystem.makeDirectory(path.join(parent, "codex"));
+        const git = {
+          execute: () =>
+            Effect.succeed({
+              code: 128,
+              stdout: "",
+              stderr: "fatal: not a git repository",
+            }),
+        } as unknown as GitCoreShape;
+        const provisioner = yield* makeGitHubProjectProvisioner({
+          homeDir: parent,
+          fileSystem,
+          path,
+          git,
+          github: unavailableGitHubCli(),
+        });
+        return yield* provisioner
+          .provisionCheckout(makeInput(parent), { publish: () => Effect.void })
+          .pipe(Effect.flip);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+
+    expect(failure.code).toBe("DESTINATION_CONFLICT");
+    expect(failure.retryable).toBe(false);
+  });
+
+  it("preserves transient Git failures while inspecting an existing checkout", async () => {
+    const failure = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const parent = yield* fileSystem.makeTempDirectoryScoped({ prefix: "synara-provision-" });
+        yield* fileSystem.makeDirectory(path.join(parent, "codex"));
+        const git = {
+          execute: () =>
+            Effect.fail(
+              new GitCommandError({
+                operation: "verify GitHub project clone",
+                command: "git remote get-url origin",
+                cwd: path.join(parent, "codex"),
+                detail: "connection reset",
+              }),
+            ),
+        } as unknown as GitCoreShape;
+        const provisioner = yield* makeGitHubProjectProvisioner({
+          homeDir: parent,
+          fileSystem,
+          path,
+          git,
+          github: unavailableGitHubCli(),
+        });
+        return yield* provisioner
+          .provisionCheckout(makeInput(parent), { publish: () => Effect.void })
+          .pipe(Effect.flip);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+
+    expect(failure.code).toBe("NETWORK_ERROR");
+    expect(failure.retryable).toBe(true);
+  });
+
   it("removes only its owned staging directory after a failed clone", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {

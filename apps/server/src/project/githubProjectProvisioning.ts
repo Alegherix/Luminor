@@ -304,9 +304,23 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
       operation: "verify GitHub project clone",
       cwd: workspaceRoot,
       args: ["remote", "get-url", "origin"],
+      allowNonZeroExit: true,
       timeoutMs: 15_000,
       maxOutputBytes: 64 * 1_024,
     });
+    if (result.code !== 0) {
+      const detail = `${result.stdout}\n${result.stderr}`.trim();
+      const lower = detail.toLowerCase();
+      if (lower.includes("not a git repository") || lower.includes("no such remote 'origin'")) {
+        return false;
+      }
+      return yield* new GitCommandError({
+        operation: "verify GitHub project clone",
+        command: "git remote get-url origin",
+        cwd: workspaceRoot,
+        detail: detail || `git exited with code ${result.code}.`,
+      });
+    }
     const actualRepository = parseGitHubRepositoryNameWithOwnerFromRemoteUrl(result.stdout.trim());
     return actualRepository?.toLowerCase() === expectedRepository.toLowerCase();
   });
@@ -326,9 +340,7 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
         false,
       );
     }
-    const matches = yield* verifyCheckout(workspaceRoot, repository).pipe(
-      Effect.catch(() => Effect.succeed(false)),
-    );
+    const matches = yield* verifyCheckout(workspaceRoot, repository);
     if (!matches) {
       return yield* provisioningError(
         "DESTINATION_CONFLICT",
