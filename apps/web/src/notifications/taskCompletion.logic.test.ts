@@ -123,15 +123,15 @@ function buildCollectedTaskCompletionCopy(assistantText: string) {
 
 describe("shouldAttemptSystemTaskNotification", () => {
   it("only attempts enabled notifications while the window is in the background", () => {
-    expect(
-      shouldAttemptSystemTaskNotification({ enabled: true, isWindowForeground: false }),
-    ).toBe(true);
-    expect(
-      shouldAttemptSystemTaskNotification({ enabled: true, isWindowForeground: true }),
-    ).toBe(false);
-    expect(
-      shouldAttemptSystemTaskNotification({ enabled: false, isWindowForeground: false }),
-    ).toBe(false);
+    expect(shouldAttemptSystemTaskNotification({ enabled: true, isWindowForeground: false })).toBe(
+      true,
+    );
+    expect(shouldAttemptSystemTaskNotification({ enabled: true, isWindowForeground: true })).toBe(
+      false,
+    );
+    expect(shouldAttemptSystemTaskNotification({ enabled: false, isWindowForeground: false })).toBe(
+      false,
+    );
   });
 });
 
