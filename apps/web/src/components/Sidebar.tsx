@@ -100,7 +100,13 @@ import {
 } from "../appSettings";
 import { isElectron } from "../env";
 import { formatRelativeTime } from "../lib/relativeTime";
-import { isMacPlatform, newCommandId, newThreadId, randomUUID } from "../lib/utils";
+import {
+  isMacPlatform,
+  newCommandId,
+  newProjectId,
+  newThreadId,
+  randomUUID,
+} from "../lib/utils";
 import { isOrdinarySpaceProject } from "../lib/spaces";
 import { reconcileDeletedThreadsFromClient } from "../lib/deletedThreadClientReconciliation";
 import { deleteProjectFromClient } from "../lib/projectDelete";
@@ -379,7 +385,11 @@ import {
   PROJECT_CREATE_EXISTING_SYNC_ERROR,
 } from "../lib/projectCreation";
 import { useSpacesUiStore } from "../spacesUiStore";
-import { CreateProjectDialog, type CreateProjectSubmitValue } from "./CreateProjectDialog";
+import {
+  CreateProjectDialog,
+  type CreateProjectSubmitOptions,
+  type CreateProjectSubmitValue,
+} from "./CreateProjectDialog";
 import { SpaceEditorDialog } from "./SpaceEditorDialog";
 import { useSpacesController } from "./useSpacesController";
 import { SpaceEmptyState } from "./SpaceEmptyState";
@@ -3250,13 +3260,12 @@ export default function Sidebar() {
     onCloseProjectContextMenu: handleCloseProjectContextMenu,
   });
   const handleCreateProjectSubmit = useCallback(
-    async (value: CreateProjectSubmitValue) => {
+    async (value: CreateProjectSubmitValue, options: CreateProjectSubmitOptions) => {
       const previousSpaceId = activeSpaceId;
-      const existingProject = findWorkspaceRootMatch(
-        projects,
-        value.workspaceRoot,
-        (project) => project.cwd,
-      );
+      const existingProject =
+        value.source === "local"
+          ? findWorkspaceRootMatch(projects, value.workspaceRoot, (project) => project.cwd)
+          : null;
       // Reopening an existing project must follow the Space where that project
       // actually lives. New projects use the destination selected in the dialog.
       const destinationSpaceId = existingProject
@@ -3264,12 +3273,39 @@ export default function Sidebar() {
         : value.spaceId;
       // Land on the destination space before creating so the sidebar follows the
       // new project's thread instead of bouncing back to the previous space.
-      handleSelectSpaceForIncomingProject(destinationSpaceId);
       try {
-        await addProjectFromPath(value.workspaceRoot, {
-          createIfMissing: value.createIfMissing,
-          spaceId: value.spaceId,
-        });
+        if (value.source === "github") {
+          const api = readNativeApi();
+          if (!api) throw new Error("The app server is unavailable.");
+          const result = await api.projects.provisionFromGitHub(
+            {
+              operationId: value.operationId,
+              repository: value.repository,
+              destinationParent: value.destinationParent,
+              directoryName: value.directoryName,
+              commandId: newCommandId(),
+              projectId: newProjectId(),
+              spaceId: value.spaceId,
+              defaultModelSelection: {
+                provider: "codex",
+                model: getDefaultModel("codex"),
+              },
+              createdAt: new Date().toISOString(),
+            },
+            { signal: options.signal },
+          );
+          handleSelectSpaceForIncomingProject(value.spaceId);
+          await addProjectFromPath(result.workspaceRoot, {
+            createIfMissing: false,
+            spaceId: value.spaceId,
+          });
+        } else {
+          handleSelectSpaceForIncomingProject(destinationSpaceId);
+          await addProjectFromPath(value.workspaceRoot, {
+            createIfMissing: value.createIfMissing,
+            spaceId: value.spaceId,
+          });
+        }
       } catch (error) {
         // Project creation is one UI transaction: a failed command must not
         // strand the sidebar in a Space unrelated to the current route.
@@ -6222,6 +6258,7 @@ export default function Sidebar() {
         open={createProjectDialogOpen}
         spaces={spaces}
         activeSpaceId={activeSpaceId}
+        defaultCloneParent={homeDir ?? "~"}
         onOpenChange={setCreateProjectDialogOpen}
         onSubmit={handleCreateProjectSubmit}
       />

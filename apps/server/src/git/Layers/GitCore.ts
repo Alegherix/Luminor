@@ -510,14 +510,16 @@ const collectOutput = Effect.fn(function* <E>(
 
   const emitCompleteLines = (flush: boolean) =>
     Effect.gen(function* () {
-      let newlineIndex = lineBuffer.indexOf("\n");
-      while (newlineIndex >= 0) {
-        const line = lineBuffer.slice(0, newlineIndex).replace(/\r$/, "");
-        lineBuffer = lineBuffer.slice(newlineIndex + 1);
+      let separatorIndex = lineBuffer.search(/[\r\n]/);
+      while (separatorIndex >= 0) {
+        const line = lineBuffer.slice(0, separatorIndex);
+        const separatorWidth =
+          lineBuffer[separatorIndex] === "\r" && lineBuffer[separatorIndex + 1] === "\n" ? 2 : 1;
+        lineBuffer = lineBuffer.slice(separatorIndex + separatorWidth);
         if (line.length > 0 && onLine) {
           yield* onLine(line);
         }
-        newlineIndex = lineBuffer.indexOf("\n");
+        separatorIndex = lineBuffer.search(/[\r\n]/);
       }
 
       if (flush) {

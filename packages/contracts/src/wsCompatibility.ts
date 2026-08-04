@@ -44,6 +44,9 @@ export const WS_CLIENT_REQUIRED_CAPABILITIES = [
 
 export const WS_SERVER_CAPABILITIES = [
   ...WS_CLIENT_REQUIRED_CAPABILITIES,
+  // Optional feature capability: older servers may omit it without making the
+  // rest of a newer client unusable during a staggered rollout.
+  "projects.github-provisioning",
   // Single-handshake connect: negotiation is available over plain HTTP at
   // WS_NEGOTIATE_HTTP_PATH, so a connect costs exactly one WebSocket upgrade.
   "transport.http-negotiate",

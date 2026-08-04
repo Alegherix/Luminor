@@ -25,6 +25,8 @@ import {
   type AutomationStreamEvent,
   type GitActionProgressEvent,
   type GitRunStackedActionResult,
+  type GitHubProjectProvisionProgressEvent,
+  type GitHubProjectProvisionResult,
   type OrchestrationEvent,
   type OrchestrationShellStreamItem,
   type OrchestrationThreadStreamItem,
@@ -611,6 +613,9 @@ export class WsTransport {
 
       if (method === WS_METHODS.gitRunStackedAction) {
         return (await this.runGitActionStream(client, params, abortScope.signal)) as T;
+      }
+      if (method === WS_METHODS.projectsProvisionFromGitHub) {
+        return (await this.runProjectProvisionStream(client, params, abortScope.signal)) as T;
       }
 
       if (method === ORCHESTRATION_WS_METHODS.subscribeShell) {
@@ -1520,6 +1525,28 @@ export class WsTransport {
       signal ? { signal } : undefined,
     );
     if (!result) throw new Error("Git action stream completed without a final result.");
+    return result;
+  }
+
+  private async runProjectProvisionStream(
+    client: RpcClientInstance,
+    params: unknown,
+    signal?: AbortSignal,
+  ): Promise<GitHubProjectProvisionResult> {
+    let result: GitHubProjectProvisionResult | null = null;
+    await this.getClientRuntime(client).runPromise(
+      Stream.runForEach(client[WS_METHODS.projectsProvisionFromGitHub](params as never), (event) =>
+        Effect.sync(() => {
+          const progressEvent = event as GitHubProjectProvisionProgressEvent;
+          this.emit(WS_CHANNELS.projectProvisionProgress, progressEvent);
+          if (progressEvent.kind === "completed") {
+            result = progressEvent.result;
+          }
+        }),
+      ),
+      signal ? { signal } : undefined,
+    );
+    if (!result) throw new Error("Project provisioning completed without a final result.");
     return result;
   }
 }
