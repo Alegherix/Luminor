@@ -17,6 +17,7 @@ import { VOID_SPACE_KEY, spaceKey, toSpaceIconName } from "../lib/spaceGrouping"
 import { createSpace } from "../lib/spaces";
 import { readNativeApi } from "../nativeApi";
 import { randomUUID } from "../lib/utils";
+import { joinProjectPath } from "../lib/projectPaths";
 import type { Space } from "../types";
 import { useVoidSpace } from "../voidSpaceStore";
 import { cn } from "~/lib/utils";
@@ -47,13 +48,6 @@ import { CentralIcon } from "~/lib/central-icons";
 
 // Inputs share one fixed height + radius so every control in the dialog reads
 // as the same size (mirrors EditProfileDialog's field styling).
-function joinDisplayPath(parent: string, child: string): string {
-  const trimmedParent = parent.trim().replace(/[/\\]+$/, "");
-  if (!trimmedParent || !child.trim()) return trimmedParent;
-  const separator = trimmedParent.includes("\\") && !trimmedParent.includes("/") ? "\\" : "/";
-  return `${trimmedParent}${separator}${child.trim()}`;
-}
-
 function isFileDrag(event: globalThis.DragEvent): boolean {
   return Array.from(event.dataTransfer?.types ?? []).includes("Files");
 }
@@ -406,7 +400,7 @@ export function CreateProjectDialog(props: {
     pickedPath !== null && trimmedPath === pickedPath
       ? (pickedPath.split(/[/\\]/).filter(Boolean).at(-1) ?? pickedPath)
       : null;
-  const finalClonePath = joinDisplayPath(trimmedDestinationParent, trimmedDirectoryName);
+  const finalClonePath = joinProjectPath(trimmedDestinationParent, trimmedDirectoryName);
 
   return (
     <Dialog open={props.open} onOpenChange={handleOpenChange}>

@@ -1,4 +1,4 @@
-import type { NativeApi } from "@synara/contracts";
+import { WS_GITHUB_PROJECT_PROVISIONING_CAPABILITY, type NativeApi } from "@synara/contracts";
 
 import {
   createWsNativeApi,
@@ -30,7 +30,12 @@ export function ensureNativeApi(): NativeApi {
 
 export function readNativeApiServerCapability(capability: string): boolean {
   if (typeof window === "undefined") return false;
-  if (window.nativeApi) return true;
+  if (window.nativeApi) {
+    return (
+      capability === WS_GITHUB_PROJECT_PROVISIONING_CAPABILITY &&
+      typeof window.nativeApi.projects?.provisionFromGitHub === "function"
+    );
+  }
   return readWsServerCapabilities()?.includes(capability) === true;
 }
 

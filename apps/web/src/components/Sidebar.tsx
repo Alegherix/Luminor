@@ -104,6 +104,7 @@ import { isElectron } from "../env";
 import { formatRelativeTime } from "../lib/relativeTime";
 import { isMacPlatform, newCommandId, newProjectId, newThreadId, randomUUID } from "../lib/utils";
 import { isOrdinarySpaceProject } from "../lib/spaces";
+import { joinProjectPath } from "../lib/projectPaths";
 import { reconcileDeletedThreadsFromClient } from "../lib/deletedThreadClientReconciliation";
 import { deleteProjectFromClient } from "../lib/projectDelete";
 import { persistAppStateNow, useStore } from "../store";
@@ -2125,12 +2126,14 @@ export default function Sidebar() {
     async (
       api: NonNullable<ReturnType<typeof readNativeApi>>,
       projectId: ProjectId,
+      workspaceRoot?: string,
     ): Promise<{
       project: OrchestrationShellSnapshot["projects"][number] | null;
       snapshot: OrchestrationShellSnapshot | null;
     }> =>
       waitForRecoverableProjectInReadModel({
         projectId,
+        ...(workspaceRoot ? { workspaceRoot } : {}),
         loadSnapshot: () => api.orchestration.getShellSnapshot().catch(() => null),
         maxAttempts: ADD_PROJECT_SNAPSHOT_CATCH_UP_MAX_ATTEMPTS,
         delayMs: ADD_PROJECT_SNAPSHOT_CATCH_UP_DELAY_MS,
@@ -3269,8 +3272,12 @@ export default function Sidebar() {
           const api = readNativeApi();
           if (!api) throw new Error("The app server is unavailable.");
           await runExclusiveProjectAddition(projectAdditionLockRef, async () => {
-            const openProvisionedProject = async (projectId: ProjectId) => {
-              const { project, snapshot } = await waitForProjectInSnapshot(api, projectId);
+            const openProvisionedProject = async (projectId: ProjectId, workspaceRoot?: string) => {
+              const { project, snapshot } = await waitForProjectInSnapshot(
+                api,
+                projectId,
+                workspaceRoot,
+              );
               if (snapshot) {
                 syncServerShellSnapshot(snapshot);
               }
@@ -3281,6 +3288,10 @@ export default function Sidebar() {
               return true;
             };
             const requestedProjectId = newProjectId();
+            const requestedWorkspaceRoot = joinProjectPath(
+              value.destinationParent,
+              value.directoryName,
+            );
             const provision = await runProjectProvisionWithCancellationRecovery({
               signal: options.signal,
               provision: () =>
@@ -3304,7 +3315,8 @@ export default function Sidebar() {
               // Cancellation can race the server's project.create commit. If that
               // commit won, recover the durable project and report success instead
               // of telling the user a registered project was cancelled.
-              recoverCommittedProject: () => openProvisionedProject(requestedProjectId),
+              recoverCommittedProject: () =>
+                openProvisionedProject(requestedProjectId, requestedWorkspaceRoot),
             });
             if (provision.status === "recovered") return;
             if (!(await openProvisionedProject(provision.result.projectId))) {
