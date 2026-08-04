@@ -1096,6 +1096,7 @@ const makeWsRpcHandlersLayer = () =>
                 const checkout = yield* githubProjectProvisioner.provisionCheckout(input, {
                   publish: (event) => Queue.offer(queue, event).pipe(Effect.asVoid),
                 });
+                let registrationCommitted = false;
                 const registerCheckout = Effect.gen(function* () {
                   yield* Queue.offer(queue, {
                     operationId: input.operationId,
@@ -1145,6 +1146,9 @@ const makeWsRpcHandlersLayer = () =>
                           ),
                         ),
                       );
+                  // This assignment is synchronous, so a pending interruption cannot run
+                  // recovery between a successful dispatch and recording that fact.
+                  registrationCommitted = true;
                   if (registration.created && prepareWorkspaceRoot) {
                     yield* prepareWorkspaceRoot;
                   }
@@ -1160,11 +1164,15 @@ const makeWsRpcHandlersLayer = () =>
                   Effect.onError(() =>
                     recoverUnregisteredGitHubCheckout({
                       checkout,
-                      findRegisteredProjectId,
+                      registrationCommitted,
                       moveWorkspaceRoot: (workspaceRoot, recoveryPath) =>
                         fileSystem.rename(workspaceRoot, recoveryPath),
                     }),
                   ),
+                  // Promotion and registration form one critical section. If the client cancels
+                  // after cloning, finish registration first so its workspace is never moved out
+                  // from under a committed project. Recovery must share the same guarantee.
+                  Effect.uninterruptible,
                 );
 
                 const result = yield* registerCheckout;

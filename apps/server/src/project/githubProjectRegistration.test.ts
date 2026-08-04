@@ -21,7 +21,7 @@ describe("recoverUnregisteredGitHubCheckout", () => {
     await Effect.runPromise(
       recoverUnregisteredGitHubCheckout({
         checkout: checkout("created"),
-        findRegisteredProjectId: () => Effect.succeed(null),
+        registrationCommitted: false,
         moveWorkspaceRoot: (workspaceRoot, recoveryPath) =>
           Effect.sync(() => moves.push([workspaceRoot, recoveryPath])),
       }),
@@ -31,15 +31,15 @@ describe("recoverUnregisteredGitHubCheckout", () => {
   });
 
   it.each([
-    ["a reused checkout", checkout("reused"), null],
-    ["a registered checkout", checkout("created"), "project-1"],
-  ])("preserves %s", async (_label, provisionedCheckout, registeredProjectId) => {
+    ["a reused checkout", checkout("reused"), false],
+    ["a registered checkout", checkout("created"), true],
+  ])("preserves %s", async (_label, provisionedCheckout, registrationCommitted) => {
     let moved = false;
 
     await Effect.runPromise(
       recoverUnregisteredGitHubCheckout({
         checkout: provisionedCheckout,
-        findRegisteredProjectId: () => Effect.succeed(registeredProjectId),
+        registrationCommitted,
         moveWorkspaceRoot: () => Effect.sync(() => (moved = true)),
       }),
     );
