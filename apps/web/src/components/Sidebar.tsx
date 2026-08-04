@@ -3265,9 +3265,7 @@ export default function Sidebar() {
       const destinationSpaceId = existingProject
         ? (existingProject.spaceId ?? null)
         : value.spaceId;
-      // Land on the destination space before creating so the sidebar follows the
-      // new project's thread instead of bouncing back to the previous space.
-      try {
+      const runCreateProject = async () => {
         if (value.source === "github") {
           const api = readNativeApi();
           if (!api) throw new Error("The app server is unavailable.");
@@ -3332,6 +3330,13 @@ export default function Sidebar() {
             spaceId: value.spaceId,
           });
         }
+      };
+
+      // Keep the compiler-sensitive try block free of value/throw statements.
+      // Land on the destination space before creating so the sidebar follows the
+      // new project's thread instead of bouncing back to the previous space.
+      try {
+        await runCreateProject();
       } catch (error) {
         // Project creation is one UI transaction: a failed command must not
         // strand the sidebar in a Space unrelated to the current route.
