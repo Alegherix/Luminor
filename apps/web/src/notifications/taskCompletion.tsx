@@ -100,7 +100,13 @@ async function showSystemThreadNotification(
     if (!supported) {
       return false;
     }
-    return window.desktopBridge.notifications.show({ title, body, silent: false, threadId });
+    return window.desktopBridge.notifications.show({
+      title,
+      body,
+      silent: false,
+      suppressWhenForeground: true,
+      threadId,
+    });
   }
 
   if (readBrowserNotificationPermissionState() !== "granted") {
