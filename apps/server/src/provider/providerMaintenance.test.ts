@@ -301,8 +301,7 @@ describe("providerMaintenance", () => {
 
     it("resolves explicit Homebrew symlinks before selecting a cask variant", async () => {
       const layer = FileSystem.layerNoop({
-        realPath: () =>
-          Effect.succeed("/opt/homebrew/Caskroom/claude-code@latest/2.1.100/claude"),
+        realPath: () => Effect.succeed("/opt/homebrew/Caskroom/claude-code@latest/2.1.100/claude"),
       });
 
       const capabilities = await Effect.runPromise(

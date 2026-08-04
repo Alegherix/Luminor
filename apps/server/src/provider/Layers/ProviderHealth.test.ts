@@ -642,6 +642,48 @@ it.layer(NodeServices.layer)("ProviderHealth", (it) => {
       ]);
     });
 
+    it("drops a cached update advisory when a transient timeout prevents verification", () => {
+      const previousWithUpdate = {
+        ...previousReadyOpenCode,
+        versionAdvisory: {
+          status: "behind_latest",
+          currentVersion: "1.15.13",
+          latestVersion: "1.16.0",
+          updateCommand: "npm install -g opencode-ai@latest",
+          canUpdate: true,
+          checkedAt: "2026-06-04T17:00:00.000Z",
+          message: "Update available.",
+        },
+      } satisfies ServerProviderStatus;
+
+      const [result] = stabilizeProviderStatusesAgainstTransientTimeouts(
+        [previousWithUpdate],
+        [
+          {
+            provider: "opencode",
+            status: "error",
+            available: false,
+            authStatus: "unknown",
+            checkedAt: "2026-06-04T17:01:00.000Z",
+            message:
+              "OpenCode CLI is installed but failed to run. Timed out while running command.",
+          },
+        ],
+      );
+
+      assert.strictEqual(result?.status, "ready");
+      assert.strictEqual(result?.available, true);
+      assert.deepStrictEqual(result?.versionAdvisory, {
+        status: "unknown",
+        currentVersion: "1.15.13",
+        latestVersion: null,
+        updateCommand: null,
+        canUpdate: false,
+        checkedAt: "2026-06-04T17:01:00.000Z",
+        message: null,
+      });
+    });
+
     it("does not hide non-timeout provider failures", () => {
       const unavailableStatus = {
         provider: "opencode",

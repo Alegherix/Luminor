@@ -319,8 +319,13 @@ function ProviderStatusRefreshCoordinator() {
   const { settings } = useAppSettings();
   const serverSettingsQuery = useQuery(serverSettingsQueryOptions());
   const [transportOpen, setTransportOpen] = useState(false);
+  const [liveVersionCheckCompleted, setLiveVersionCheckCompleted] = useState(false);
   const providerUpdateChecksEnabled =
     serverSettingsQuery.data !== undefined && settings.enableProviderUpdateChecks;
+  const providerUpdateRefreshEnabled = providerUpdateChecksEnabled && transportOpen;
+  const markLiveVersionCheckCompleted = useCallback(() => {
+    setLiveVersionCheckCompleted(true);
+  }, []);
 
   // The update coordinator includes the same focus/visibility refresh. Keep the
   // auth-only loop for the setting-off case so enabling update checks never
@@ -328,29 +333,29 @@ function ProviderStatusRefreshCoordinator() {
   useProviderAuthRefreshOnFocus({ enabled: !providerUpdateChecksEnabled });
   useEffect(
     () =>
-      addWsTransportStateListener((state) => setTransportOpen(state === "open"), {
-        replayCurrent: true,
-      }),
+      addWsTransportStateListener(
+        (state) => {
+          const open = state === "open";
+          setTransportOpen(open);
+          if (!open) {
+            setLiveVersionCheckCompleted(false);
+          }
+        },
+        { replayCurrent: true },
+      ),
     [],
   );
 
-  // Unmounting across transport interruptions clears the live-check gate. When
-  // the socket reopens, a fresh coordinator schedules a new provider refresh
-  // before persisted server advisories are allowed to produce notifications.
-  return providerUpdateChecksEnabled && transportOpen ? (
-    <ProviderUpdateRefreshCoordinator />
-  ) : null;
-}
-
-function ProviderUpdateRefreshCoordinator() {
-  const [liveVersionCheckCompleted, setLiveVersionCheckCompleted] = useState(false);
-  const markLiveVersionCheckCompleted = useCallback(() => {
-    setLiveVersionCheckCompleted(true);
-  }, []);
+  useEffect(() => {
+    if (!providerUpdateChecksEnabled) {
+      setLiveVersionCheckCompleted(false);
+    }
+  }, [providerUpdateChecksEnabled]);
 
   // Provider latest-version checks are slow/network-backed, so keep this cadence
   // coarse while still honoring the automatic update-check setting.
   useProviderStatusRefresh({
+    enabled: providerUpdateRefreshEnabled,
     initialDelayMs: PROVIDER_UPDATE_INITIAL_REFRESH_DELAY_MS,
     intervalMs: PROVIDER_UPDATE_REFRESH_INTERVAL_MS,
     minIntervalMs: PROVIDER_AUTH_REFRESH_MIN_INTERVAL_MS,
@@ -358,7 +363,13 @@ function ProviderUpdateRefreshCoordinator() {
     onRefreshSuccess: markLiveVersionCheckCompleted,
   });
 
-  return <ProviderUpdateNotifications liveVersionCheckCompleted={liveVersionCheckCompleted} />;
+  // Keep the notifier mounted while the transport is interrupted. Dropping the
+  // gate makes it close any active prompt before a reconnect can reuse cached data.
+  return (
+    <ProviderUpdateNotifications
+      liveVersionCheckCompleted={providerUpdateRefreshEnabled && liveVersionCheckCompleted}
+    />
+  );
 }
 
 // Extracted to module scope so its run-always cleanup can stay a try/finally: the

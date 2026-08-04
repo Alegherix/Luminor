@@ -452,14 +452,8 @@ function makeProviderMaintenanceForInstallSource(input: {
   /** Path that matched install-source detection, used to pin the install tree. */
   readonly commandPath?: string | null;
 }): ProviderMaintenanceCapabilities {
-  const {
-    definition,
-    installSource,
-    homebrewPackage,
-    executable,
-    pathPrepend,
-    commandPath,
-  } = input;
+  const { definition, installSource, homebrewPackage, executable, pathPrepend, commandPath } =
+    input;
   if (
     definition.nativeUpdate?.strategy === "always" &&
     !definition.nativeUpdate.excludedInstallSources?.includes(installSource)
@@ -621,9 +615,7 @@ export const resolveProviderMaintenanceCapabilitiesEffect = Effect.fn(
   if (hasPathSeparator(binaryPath)) {
     const realCommandPath =
       nonEmptyString(options?.realCommandPath) ??
-      (yield* fileSystem.realPath(binaryPath).pipe(
-        Effect.catch(() => Effect.succeed(binaryPath)),
-      ));
+      (yield* fileSystem.realPath(binaryPath).pipe(Effect.catch(() => Effect.succeed(binaryPath))));
     return resolvePackageManagedProviderMaintenance(definition, {
       ...options,
       binaryPath,

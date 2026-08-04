@@ -1997,11 +1997,16 @@ export function stabilizeProviderStatusesAgainstTransientTimeouts(
     }
 
     // A single slow CLI probe should not make an already usable provider look broken.
-    return {
+    // The previous update advisory is network-backed evidence, though, so it must
+    // not survive a probe that could not confirm the installed version.
+    const stabilizedStatus = {
       ...previous,
       checkedAt: status.checkedAt,
       ...(status.updateState !== undefined ? { updateState: status.updateState } : {}),
     };
+    return previous.versionAdvisory
+      ? suppressProviderVersionAdvisory(stabilizedStatus)
+      : stabilizedStatus;
   });
 }
 

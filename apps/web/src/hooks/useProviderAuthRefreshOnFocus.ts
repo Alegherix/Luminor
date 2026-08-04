@@ -13,7 +13,7 @@ export const PROVIDER_AUTH_REFRESH_MIN_INTERVAL_MS = 15_000;
 
 export function useProviderAuthRefreshOnFocus(options?: { readonly enabled?: boolean }): void {
   useProviderStatusRefresh({
-    enabled: options?.enabled,
+    ...(options?.enabled !== undefined ? { enabled: options.enabled } : {}),
     minIntervalMs: PROVIDER_AUTH_REFRESH_MIN_INTERVAL_MS,
     refreshOnFocus: true,
   });
