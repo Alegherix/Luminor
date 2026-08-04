@@ -615,7 +615,7 @@ export function CreateProjectDialog(props: {
           <Button
             id={submitButtonId}
             variant="prominent"
-            className="px-4 text-[length:var(--app-font-size-ui-lg,13px)] sm:text-[length:var(--app-font-size-ui-lg,13px)]"
+            className="px-4 text-[length:var(--app-font-size-ui-lg,13px)] transition-opacity hover:scale-100 sm:text-[length:var(--app-font-size-ui-lg,13px)]"
             onClick={() => void submit()}
             disabled={submitting}
           >

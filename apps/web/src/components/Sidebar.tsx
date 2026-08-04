@@ -104,7 +104,7 @@ import { isElectron } from "../env";
 import { formatRelativeTime } from "../lib/relativeTime";
 import { isMacPlatform, newCommandId, newProjectId, newThreadId, randomUUID } from "../lib/utils";
 import { isOrdinarySpaceProject } from "../lib/spaces";
-import { joinProjectPath } from "../lib/projectPaths";
+import { expandProjectHomePath, joinProjectPath } from "../lib/projectPaths";
 import { reconcileDeletedThreadsFromClient } from "../lib/deletedThreadClientReconciliation";
 import { deleteProjectFromClient } from "../lib/projectDelete";
 import { persistAppStateNow, useStore } from "../store";
@@ -3311,7 +3311,7 @@ export default function Sidebar() {
             };
             const requestedProjectId = newProjectId();
             const requestedWorkspaceRoot = joinProjectPath(
-              value.destinationParent,
+              expandProjectHomePath(value.destinationParent, homeDir),
               value.directoryName,
             );
             const provision = await runProjectProvisionWithCancellationRecovery({
@@ -3382,6 +3382,7 @@ export default function Sidebar() {
       activeSpaceId,
       addProjectFromPath,
       handleSelectSpaceForIncomingProject,
+      homeDir,
       openExistingProjectFromSnapshot,
       projects,
       syncServerShellSnapshot,

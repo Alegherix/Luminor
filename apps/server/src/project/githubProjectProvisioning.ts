@@ -55,6 +55,7 @@ export interface GitHubProjectCheckoutResult {
   readonly repository: string;
   readonly workspaceRoot: string;
   readonly checkout: "created" | "reused";
+  readonly recoveryPath: string | null;
 }
 
 interface GitHubProjectProvisionerDependencies {
@@ -357,6 +358,7 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
       repository,
       workspaceRoot,
       checkout: "reused" as const,
+      recoveryPath: null,
     };
   });
 
@@ -406,6 +408,7 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
       },
       timeoutMs: CLONE_TIMEOUT_MS,
       maxOutputBytes: CLONE_OUTPUT_LIMIT_BYTES,
+      outputMode: "truncate",
       progress: {
         onStdoutLine: (line) => Effect.sync(() => publishChunk(`${line}\n`)),
         onStderrLine: (line) => Effect.sync(() => publishChunk(`${line}\n`)),
@@ -527,6 +530,7 @@ export const makeGitHubProjectProvisioner = Effect.fn(function* (
               repository,
               workspaceRoot,
               checkout: "created" as const,
+              recoveryPath: stagingPath,
             };
           });
 

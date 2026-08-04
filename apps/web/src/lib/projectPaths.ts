@@ -58,6 +58,16 @@ export function joinProjectPath(parent: string, child: string): string {
   return `${trimmedParent}${preferredPathSeparator(trimmedParent)}${trimmedChild}`;
 }
 
+export function expandProjectHomePath(value: string, homeDir: string | null): string {
+  const trimmed = value.trim();
+  if (!homeDir) return trimmed;
+  if (trimmed === "~") return homeDir;
+  if (trimmed.startsWith("~/") || trimmed.startsWith("~\\")) {
+    return joinProjectPath(homeDir, trimmed.slice(2));
+  }
+  return trimmed;
+}
+
 export function hasTrailingPathSeparator(value: string): boolean {
   return (getAbsolutePathKind(value) === "unix" ? /\/$/ : /[\\/]$/).test(value);
 }

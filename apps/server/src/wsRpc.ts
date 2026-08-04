@@ -85,6 +85,7 @@ import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnap
 import { shouldPublishThreadShellForEvent } from "./orchestration/threadShellEvents";
 import { ProviderDiscoveryService } from "./provider/Services/ProviderDiscoveryService";
 import { discoverSkillsCatalog, synaraSkillsDir } from "./provider/skillsCatalog";
+import { recoverUnregisteredGitHubCheckout } from "./project/githubProjectRegistration";
 import { ProviderAdapterRegistry } from "./provider/Services/ProviderAdapterRegistry";
 import { ProviderHealth } from "./provider/Services/ProviderHealth";
 import { ProviderService } from "./provider/Services/ProviderService";
@@ -1095,65 +1096,78 @@ const makeWsRpcHandlersLayer = () =>
                 const checkout = yield* githubProjectProvisioner.provisionCheckout(input, {
                   publish: (event) => Queue.offer(queue, event).pipe(Effect.asVoid),
                 });
-                yield* Queue.offer(queue, {
-                  operationId: input.operationId,
-                  kind: "phase",
-                  phase: "registering",
-                  message: "Adding project to Synara",
-                });
-
-                const { command: normalizedCommand, prepareWorkspaceRoot } =
-                  yield* normalizeDispatchCommand({
-                    command: {
-                      type: "project.create",
-                      commandId: input.commandId,
-                      projectId: input.projectId,
-                      kind: "project",
-                      title: path.basename(checkout.workspaceRoot),
-                      workspaceRoot: checkout.workspaceRoot,
-                      createWorkspaceRootIfMissing: false,
-                      defaultModelSelection: input.defaultModelSelection,
-                      spaceId: input.newProjectSpaceId,
-                      createdAt: input.createdAt,
-                    },
+                const registerCheckout = Effect.gen(function* () {
+                  yield* Queue.offer(queue, {
+                    operationId: input.operationId,
+                    kind: "phase",
+                    phase: "registering",
+                    message: "Adding project to Synara",
                   });
-                if (normalizedCommand.type !== "project.create") {
-                  return yield* Effect.die(
-                    new Error("GitHub project provisioning normalized an unexpected command"),
-                  );
-                }
 
-                const existingProjectId = yield* findRegisteredProjectId(
-                  normalizedCommand.workspaceRoot,
-                );
-                // Re-adding an existing checkout opens the existing project as-is. In
-                // particular, it must not silently move that project between Spaces;
-                // newProjectSpaceId applies only when project.create runs below.
-                const registration = existingProjectId
-                  ? { projectId: existingProjectId, created: false }
-                  : yield* dispatchOrchestrationCommand(normalizedCommand).pipe(
-                      Effect.map(() => ({ projectId: input.projectId, created: true })),
-                      Effect.catch((cause) =>
-                        findRegisteredProjectId(normalizedCommand.workspaceRoot).pipe(
-                          Effect.flatMap((racedProjectId) =>
-                            racedProjectId
-                              ? Effect.succeed({ projectId: racedProjectId, created: false })
-                              : Effect.fail(cause),
+                  const { command: normalizedCommand, prepareWorkspaceRoot } =
+                    yield* normalizeDispatchCommand({
+                      command: {
+                        type: "project.create",
+                        commandId: input.commandId,
+                        projectId: input.projectId,
+                        kind: "project",
+                        title: path.basename(checkout.workspaceRoot),
+                        workspaceRoot: checkout.workspaceRoot,
+                        createWorkspaceRootIfMissing: false,
+                        defaultModelSelection: input.defaultModelSelection,
+                        spaceId: input.newProjectSpaceId,
+                        createdAt: input.createdAt,
+                      },
+                    });
+                  if (normalizedCommand.type !== "project.create") {
+                    return yield* Effect.die(
+                      new Error("GitHub project provisioning normalized an unexpected command"),
+                    );
+                  }
+
+                  const existingProjectId = yield* findRegisteredProjectId(
+                    normalizedCommand.workspaceRoot,
+                  );
+                  // Re-adding an existing checkout opens the existing project as-is. In
+                  // particular, it must not silently move that project between Spaces;
+                  // newProjectSpaceId applies only when project.create runs below.
+                  const registration = existingProjectId
+                    ? { projectId: existingProjectId, created: false }
+                    : yield* dispatchOrchestrationCommand(normalizedCommand).pipe(
+                        Effect.map(() => ({ projectId: input.projectId, created: true })),
+                        Effect.catch((cause) =>
+                          findRegisteredProjectId(normalizedCommand.workspaceRoot).pipe(
+                            Effect.flatMap((racedProjectId) =>
+                              racedProjectId
+                                ? Effect.succeed({ projectId: racedProjectId, created: false })
+                                : Effect.fail(cause),
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                if (registration.created && prepareWorkspaceRoot) {
-                  yield* prepareWorkspaceRoot;
-                }
+                      );
+                  if (registration.created && prepareWorkspaceRoot) {
+                    yield* prepareWorkspaceRoot;
+                  }
 
-                const result = {
-                  operationId: input.operationId,
-                  repository: checkout.repository,
-                  workspaceRoot: normalizedCommand.workspaceRoot,
-                  projectId: registration.projectId,
-                  checkout: checkout.checkout,
-                } as const;
+                  return {
+                    operationId: input.operationId,
+                    repository: checkout.repository,
+                    workspaceRoot: normalizedCommand.workspaceRoot,
+                    projectId: registration.projectId,
+                    checkout: checkout.checkout,
+                  } as const;
+                }).pipe(
+                  Effect.onError(() =>
+                    recoverUnregisteredGitHubCheckout({
+                      checkout,
+                      findRegisteredProjectId,
+                      moveWorkspaceRoot: (workspaceRoot, recoveryPath) =>
+                        fileSystem.rename(workspaceRoot, recoveryPath),
+                    }),
+                  ),
+                );
+
+                const result = yield* registerCheckout;
                 yield* Queue.offer(queue, {
                   operationId: input.operationId,
                   kind: "completed",
