@@ -103,7 +103,10 @@ import { useNativeFontSmoothing } from "../hooks/useNativeFontSmoothing";
 import { invalidateGitQueries, invalidateGitQueriesForCwds } from "../lib/gitReactQuery";
 import { hasLiveThreadsWithMissingProjects } from "../lib/desktopProjectRecovery";
 import { useDiffRouteSearch } from "../hooks/useDiffRouteSearch";
-import { useProviderAuthRefreshOnFocus } from "../hooks/useProviderAuthRefreshOnFocus";
+import {
+  PROVIDER_AUTH_REFRESH_MIN_INTERVAL_MS,
+  useProviderAuthRefreshOnFocus,
+} from "../hooks/useProviderAuthRefreshOnFocus";
 import { useProviderStatusRefresh } from "../hooks/useProviderStatusRefresh";
 import { resolveSplitViewThreadIds, selectSplitView, useSplitViewStore } from "../splitViewStore";
 import { providerModelDiscoveryInvalidationFingerprint } from "../lib/providerDiscoveryInvalidation";
@@ -319,7 +322,10 @@ function ProviderStatusRefreshCoordinator() {
   const providerUpdateChecksEnabled =
     serverSettingsQuery.data !== undefined && settings.enableProviderUpdateChecks;
 
-  useProviderAuthRefreshOnFocus();
+  // The update coordinator includes the same focus/visibility refresh. Keep the
+  // auth-only loop for the setting-off case so enabling update checks never
+  // launches duplicate provider probes on focus.
+  useProviderAuthRefreshOnFocus({ enabled: !providerUpdateChecksEnabled });
   useEffect(
     () =>
       addWsTransportStateListener((state) => setTransportOpen(state === "open"), {
@@ -347,6 +353,8 @@ function ProviderUpdateRefreshCoordinator() {
   useProviderStatusRefresh({
     initialDelayMs: PROVIDER_UPDATE_INITIAL_REFRESH_DELAY_MS,
     intervalMs: PROVIDER_UPDATE_REFRESH_INTERVAL_MS,
+    minIntervalMs: PROVIDER_AUTH_REFRESH_MIN_INTERVAL_MS,
+    refreshOnFocus: true,
     onRefreshSuccess: markLiveVersionCheckCompleted,
   });
 
