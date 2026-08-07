@@ -5795,13 +5795,25 @@ export default function ChatView({
   // turn. Once the turn RPC has resolved the server owns the turn, so a stream
   // that never echoes (dead subscription, lost event) must not lock the
   // composer forever: this fallback force-clears the marker after a bound. The
-  // startedAt match keeps a stale timer from clearing a newer dispatch.
+  // startedAt match keeps a stale timer from clearing a newer dispatch, and an
+  // already-acknowledged dispatch is left alone — the send spinner has
+  // released, and the awaiting-turn bridge legitimately keeps `localDispatch`
+  // alive until takeover or its own fail-open bound.
   const localDispatchStartedAtRef = useRef<string | null>(null);
   useEffect(() => {
     localDispatchStartedAtRef.current = localDispatch?.startedAt ?? null;
   }, [localDispatch]);
+  const serverAcknowledgedLocalDispatchRef = useRef(serverAcknowledgedLocalDispatch);
+  useEffect(() => {
+    serverAcknowledgedLocalDispatchRef.current = serverAcknowledgedLocalDispatch;
+  }, [serverAcknowledgedLocalDispatch]);
   const localDispatchAckFallbackTimeoutRef = useRef<number | null>(null);
-  const armLocalDispatchAckFallback = useCallback(() => {
+  const armLocalDispatchAckFallback = useCallback((threadIdForSend: ThreadId) => {
+    // The turn RPC has resolved, so the server provably owns a turn. Re-arm
+    // the cross-component watchdog marker here: pre-dispatch work (worktree
+    // creation, attachment uploads) can outlive the marker's age cap, and this
+    // is the moment its clock should restart.
+    markPendingTurnDispatch(threadIdForSend);
     const armedStartedAt = localDispatchStartedAtRef.current;
     if (armedStartedAt === null) {
       return;
@@ -5811,6 +5823,9 @@ export default function ChatView({
     }
     localDispatchAckFallbackTimeoutRef.current = window.setTimeout(() => {
       localDispatchAckFallbackTimeoutRef.current = null;
+      if (serverAcknowledgedLocalDispatchRef.current) {
+        return;
+      }
       setLocalDispatch((current) =>
         current &&
         current.startedAt === armedStartedAt &&
@@ -5834,13 +5849,20 @@ export default function ChatView({
   // busy, and a lost running transition leaves that belief stale. This signal
   // makes the watchdog re-check a thread the composer just wrote to even while
   // the store still reports it idle.
+  //
+  // Mark-only on purpose. The composer clears `localDispatch` on its own
+  // acknowledgement signals (message echo, ack fallback, takeover reset),
+  // all of which can fire off a stream that then stalls before the running
+  // transition — exactly the loss the marker exists to repair. So the marker
+  // must outlive `localDispatch`: the watchdog retires it once the projection
+  // confirms the thread busy, dispatch failures clear it at the dispatch
+  // site, and the age cap bounds any stray.
   const pendingDispatchStartedAt = localDispatch?.startedAt ?? null;
   useEffect(() => {
     if (activeThreadId === null || pendingDispatchStartedAt === null) {
       return;
     }
     markPendingTurnDispatch(activeThreadId);
-    return () => clearPendingTurnDispatch(activeThreadId);
   }, [activeThreadId, pendingDispatchStartedAt]);
 
   // Fallback cleanup for a failed worktree setup: clears the dispatch after the
@@ -8163,7 +8185,7 @@ export default function ChatView({
         }),
       );
       turnStartSucceeded = true;
-      armLocalDispatchAckFallback();
+      armLocalDispatchAckFallback(threadIdForSend);
       // Steers on providers without native mid-turn steering interrupt the live
       // turn before re-dispatching; hold queued auto-dispatch through that gap
       // so it can't race the steer. The live session provider decides the
@@ -8198,6 +8220,11 @@ export default function ChatView({
       // Surface the failure on whichever setup step was active (no-op for
       // sends without a worktree setup in flight).
       failLocalDispatchWorktreeSetup();
+      if (!turnStartSucceeded) {
+        // The turn RPC never resolved, so no server turn exists for the
+        // watchdog to recover — drop the marker armed when the dispatch began.
+        clearPendingTurnDispatch(threadIdForSend);
+      }
       if (createdServerThreadForLocalDraft && !turnStartSucceeded) {
         // This rollback cleans up a retryable draft promotion; do not tombstone the draft id.
         await api.orchestration
@@ -8690,7 +8717,7 @@ export default function ChatView({
 
     try {
       await dispatchPlanFollowUpTurn();
-      armLocalDispatchAckFallback();
+      armLocalDispatchAckFallback(threadIdForSend);
       sendInFlightRef.current = false;
       return true;
     } catch (err) {
@@ -8702,6 +8729,9 @@ export default function ChatView({
         err instanceof Error ? err.message : "Failed to send plan follow-up.",
       );
       sendInFlightRef.current = false;
+      // The turn RPC failed, so no server turn exists for the watchdog to
+      // recover — drop the marker armed when the dispatch began.
+      clearPendingTurnDispatch(threadIdForSend);
       resetLocalDispatch();
       return false;
     }
@@ -9074,7 +9104,14 @@ export default function ChatView({
           createdAt,
         });
       })
-      .then(() => api.orchestration.getShellSnapshot())
+      .then(() => {
+        // The turn RPC resolved for a thread this view never made active, so
+        // the dispatch-mirror effect cannot arm the watchdog marker for it —
+        // arm it here so a lost running transition on the new thread still
+        // forces catch-up after navigation subscribes it.
+        markPendingTurnDispatch(nextThreadId);
+        return api.orchestration.getShellSnapshot();
+      })
       .then((snapshot) => {
         syncServerShellSnapshot(snapshot);
         // Signal that the plan sidebar should open on the new thread.

@@ -92,7 +92,7 @@ import {
   getThreadDetailResumeCursor,
   setThreadDetailResumeCursor,
 } from "../threadDetailResumeCursors";
-import { hasPendingTurnDispatch } from "../pendingTurnDispatch";
+import { clearPendingTurnDispatch, hasPendingTurnDispatch } from "../pendingTurnDispatch";
 import { canApplyThreadSnapshot, selectOrphanedThreadDetailIds } from "./-threadDetailOwnership";
 import { getThreadFromState, getThreadsFromState } from "../threadDerivation";
 import { useAppDensity } from "../hooks/useAppDensity";
@@ -956,27 +956,39 @@ function isThreadDetailEventForThread(event: OrchestrationEvent, threadId: Threa
 // exact failure being repaired is a lost `thread.session-set(running)` event
 // that leaves that belief stale. A turn dispatched with no observed echo must
 // force re-sync regardless of what the store says.
+//
+// The watchdog also owns retiring that signal. The composer clears its own
+// dispatch state on UI-level acknowledgement (a user-message echo can arrive
+// on a stream that then stalls before the running transition), which is too
+// early — the marker must hold until the projection itself confirms the
+// thread busy, and these predicates are where that confirmation is observed.
+// Once the store reports busy the store-derived checks take over seamlessly.
+// A turn that settles before any busy state is ever observed leaves the
+// marker to the age cap, which bounds the redundant catch-up polls.
 function shouldPollThreadDetailCatchup(threadId: ThreadId): boolean {
-  if (hasPendingTurnDispatch(threadId)) {
+  const thread = getThreadFromState(useStore.getState(), threadId);
+  if (
+    thread?.session?.orchestrationStatus === "running" ||
+    thread?.latestTurn?.state === "running"
+  ) {
+    clearPendingTurnDispatch(threadId);
     return true;
   }
-  const thread = getThreadFromState(useStore.getState(), threadId);
-  return (
-    thread?.session?.orchestrationStatus === "running" || thread?.latestTurn?.state === "running"
-  );
+  return hasPendingTurnDispatch(threadId);
 }
 
 function shouldReconcileThreadProjection(threadId: ThreadId): boolean {
-  if (hasPendingTurnDispatch(threadId)) {
-    return true;
-  }
   const thread = getThreadFromState(useStore.getState(), threadId);
-  return (
+  if (
     thread?.session?.orchestrationStatus === "starting" ||
     thread?.session?.orchestrationStatus === "running" ||
     thread?.latestTurn?.state === "running" ||
     thread?.messages.some((message) => message.role === "assistant" && message.streaming) === true
-  );
+  ) {
+    clearPendingTurnDispatch(threadId);
+    return true;
+  }
+  return hasPendingTurnDispatch(threadId);
 }
 
 function isTerminalThreadSessionStatus(status: string): boolean {

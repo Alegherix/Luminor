@@ -66,7 +66,7 @@ describe("WsStreamAdmission", () => {
     }).pipe(Effect.runPromise);
   });
 
-  it("holds a stream lease through interruption and releases it after finalization", async () => {
+  it("tears down the evicted stream on a same-key takeover and counts a single release", async () => {
     await Effect.gen(function* () {
       const admission = yield* makeWsStreamAdmission();
       const started = yield* Deferred.make<void>();
@@ -85,11 +85,14 @@ describe("WsStreamAdmission", () => {
 
       yield* Deferred.await(started);
       expect(yield* admission.snapshot).toMatchObject({ active: 1, releasedTotal: 0 });
-      // A same-key resubscribe takes the lease over; the takeover's own
-      // release is the only one counted because the evicted lease is already
-      // gone from the ledger when the interrupted stream finalizes.
+      // A same-key resubscribe takes the lease over and tears the evicted
+      // stream down through its eviction latch — the fiber draining it
+      // completes without manual interruption. The takeover's own release is
+      // the only one counted because the evicted lease is already gone from
+      // the ledger when the evicted stream finalizes.
       yield* Stream.runDrain(admission.guard(1, { key: "server.settings" }, Stream.empty));
       expect(yield* Ref.get(subscriptions)).toBe(1);
+      yield* Fiber.join(fiber);
       expect(yield* admission.snapshot).toMatchObject({
         clients: 0,
         active: 0,
@@ -97,10 +100,51 @@ describe("WsStreamAdmission", () => {
         replacedDuplicateTotal: 1,
         releasedTotal: 1,
       });
-      yield* Fiber.interrupt(fiber);
+    }).pipe(Effect.runPromise);
+  });
+
+  it("bounds live taps under repeated same-key resubscribes", async () => {
+    await Effect.gen(function* () {
+      const admission = yield* makeWsStreamAdmission();
+      // Forks a guarded never-ending stream and waits until it is admitted, so
+      // successive resubscribes evict in a deterministic order.
+      const forkGuardedNever = () =>
+        Effect.gen(function* () {
+          const admitted = yield* Deferred.make<void>();
+          const source = Stream.concat(
+            Stream.fromEffect(Deferred.succeed(admitted, undefined)),
+            Stream.never,
+          );
+          const fiber = yield* Effect.forkChild(
+            Stream.runDrain(
+              admission.guard(1, { key: "orchestration.thread:t", threadId: "t" }, source),
+            ),
+          );
+          yield* Deferred.await(admitted);
+          return fiber;
+        });
+      const first = yield* forkGuardedNever();
+      const second = yield* forkGuardedNever();
+      // Each takeover must terminate its predecessor: joining the evicted
+      // fibers completes without manual interruption, and capacity accounting
+      // never sees more than the single live lease.
+      yield* Fiber.join(first);
+      const third = yield* forkGuardedNever();
+      yield* Fiber.join(second);
+      expect(yield* admission.snapshot).toMatchObject({
+        active: 1,
+        admittedTotal: 3,
+        replacedDuplicateTotal: 2,
+      });
+      yield* Stream.runDrain(
+        admission.guard(1, { key: "orchestration.thread:t", threadId: "t" }, Stream.empty),
+      );
+      yield* Fiber.join(third);
       expect(yield* admission.snapshot).toMatchObject({
         clients: 0,
         active: 0,
+        admittedTotal: 4,
+        replacedDuplicateTotal: 3,
         releasedTotal: 1,
       });
     }).pipe(Effect.runPromise);

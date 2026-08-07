@@ -10,13 +10,23 @@ import type { ThreadId } from "@synara/contracts";
 // The catch-up watchdog otherwise re-syncs only threads the store already
 // believes are busy. A lost `thread.session-set(running)` event corrupts
 // exactly that belief, so the watchdog needs a signal that does not come from
-// the store: "the composer dispatched a turn here and has seen no echo yet".
+// the store: "the composer dispatched a turn here that the projection has not
+// yet confirmed".
+//
+// Lifecycle — deliberately independent of the composer's own dispatch state,
+// which clears on UI-level acknowledgement (message echo, ack fallback) that
+// can fire off a stream that then stalls before the running transition:
+// - armed when the composer begins a dispatch, and re-armed when the turn RPC
+//   resolves (pre-dispatch work like worktree setup can outlive the age cap);
+// - cleared by the watchdog once the store reports the thread busy (the
+//   projection has confirmed the turn, store-derived signals take over), or
+//   at the dispatch site when the turn RPC fails (no server turn exists);
+// - otherwise expired by the age cap below.
 const pendingDispatchArmedAtByThreadId = new Map<ThreadId, number>();
 
-// Upper bound on how long a pending dispatch keeps forcing catch-up work. The
-// composer's own ack fallback clears its marker well before this; the age cap
-// only guards against a marker leaking (e.g. the owning view unmounted without
-// cleanup) turning into a permanent poll.
+// Upper bound on how long a pending dispatch keeps forcing catch-up work.
+// Covers both leaked markers and a dispatched turn that settles before the
+// watchdog ever observes a busy state (nothing else clears that marker).
 export const PENDING_TURN_DISPATCH_MAX_AGE_MS = 30_000;
 
 export function markPendingTurnDispatch(threadId: ThreadId): void {
