@@ -299,6 +299,7 @@ const PROVIDER_COMMAND_SAFE_RETRY_DELAY = Duration.millis(50);
 const PROVIDER_COMMAND_INTERRUPT_TIMEOUT = Duration.seconds(10);
 const PROVIDER_COMMAND_STOP_TIMEOUT = Duration.seconds(15);
 const PROVIDER_COMMAND_EVENT_TIMEOUT = Duration.seconds(120);
+const GATEWAY_OPERATION_COMPLETION_WAIT_TIMEOUT = Duration.seconds(120);
 const PROVIDER_INPUT_SAFETY_MARGIN_CHARS = 1_000;
 const THREAD_MENTION_CONTEXT_SUFFIX_PREFIX_CHARS = 2;
 const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
@@ -468,6 +469,41 @@ const make = Effect.gen(function* () {
   const gatewayOperations = yield* AgentGatewayOperationRepository;
   const textGeneration = yield* TextGeneration;
   const serverSettings = yield* ServerSettingsService;
+
+  const waitForGatewayOperationCompletion = Effect.fnUntraced(function* (operationId: string) {
+    const completed = yield* Effect.gen(function* () {
+      while (true) {
+        const operation = yield* gatewayOperations
+          .getById(operationId)
+          .pipe(
+            Effect.catch((error) =>
+              Effect.logWarning(
+                "provider command reactor could not read creating gateway operation; skipping worktree branch rename",
+                { operationId, error: error instanceof Error ? error.message : String(error) },
+              ).pipe(Effect.as(null)),
+            ),
+          );
+        if (operation === null) {
+          return false;
+        }
+        if (operation.status === "completed") {
+          return true;
+        }
+        if (operation.status === "failed" || operation.status === "compensating") {
+          return false;
+        }
+        yield* Effect.sleep(Duration.millis(100));
+      }
+    }).pipe(Effect.timeoutOption(GATEWAY_OPERATION_COMPLETION_WAIT_TIMEOUT));
+    if (Option.isNone(completed)) {
+      yield* Effect.logWarning(
+        "provider command reactor timed out waiting for creating gateway operation; skipping worktree branch rename",
+        { operationId },
+      );
+      return false;
+    }
+    return completed.value;
+  });
   const managedAttachments = yield* ManagedAttachmentRepository;
   const serverConfig = yield* ServerConfig;
   const handledTurnStartKeys = yield* Cache.make<string, true>({
@@ -1842,26 +1878,12 @@ const make = Effect.gen(function* () {
     // proof records the temporary branch name. Renaming before the operation
     // reaches a terminal state would make live compensation and startup
     // recovery reject the worktree as tampered ("worktree branch changed"),
-    // stranding it. Check right before mutating so the window between the LLM
-    // name generation and the rename stays covered; skipping is safe — the
-    // thread simply keeps its temporary name.
+    // stranding it. Wait for durable completion rather than dropping the
+    // first-turn rename; failed, compensating, missing, or unreadable
+    // operations never authorize the mutation.
     if (input.gatewayOperationId !== null) {
-      const operation = yield* gatewayOperations.getById(input.gatewayOperationId).pipe(
-        // An unreadable record proves nothing; skip the rename rather than
-        // risk invalidating a proof that may still be needed.
-        Effect.catch(() => Effect.succeed(null)),
-      );
-      if (operation !== null && operation.status !== "completed") {
-        yield* Effect.logInfo(
-          "provider command reactor skipped worktree branch rename: creating gateway operation is not complete",
-          {
-            threadId: input.threadId,
-            cwd: input.cwd,
-            oldBranch: input.oldBranch,
-            gatewayOperationId: input.gatewayOperationId,
-            operationStatus: operation.status,
-          },
-        );
+      const completed = yield* waitForGatewayOperationCompletion(input.gatewayOperationId);
+      if (!completed) {
         return;
       }
     }
