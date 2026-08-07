@@ -5,7 +5,13 @@
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 import { isSupportedLocalImagePath } from "@synara/shared/localPreviewFiles";
 import { type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronDownIcon, CopyIcon, EllipsisIcon, MessageCircleIcon } from "~/lib/icons";
+import {
+  ChevronDownIcon,
+  CopyIcon,
+  EllipsisIcon,
+  MessageCircleIcon,
+  PencilIcon,
+} from "~/lib/icons";
 
 import { buildFileDiffRenderKey, resolveFileDiffPath } from "~/lib/diffRendering";
 import { FileDiffCard, FileDiffSurface, type DiffLineClickProps } from "./chat/FileDiffView";
@@ -21,6 +27,7 @@ type DiffRenderMode = "stacked" | "split";
 export interface DiffFileChatActions {
   onReferenceInChat: (filePath: string) => void;
   onAskWhyChanged: (filePath: string) => void;
+  onEditFile?: ((filePath: string) => void) | undefined;
 }
 
 const DIFF_FILE_ACTIONS_MENU_ICON_CLASS_NAME = "size-3.5 shrink-0 text-muted-foreground";
@@ -45,6 +52,16 @@ function DiffFileHeaderActionsMenu(props: { filePath: string; chatActions: DiffF
         }
       />
       <ComposerPickerMenuPopup align="end" side="bottom" sideOffset={6} className="w-60 min-w-60">
+        {props.chatActions.onEditFile ? (
+          <MenuItem
+            onClick={() => {
+              props.chatActions.onEditFile?.(props.filePath);
+            }}
+          >
+            <PencilIcon className={DIFF_FILE_ACTIONS_MENU_ICON_CLASS_NAME} />
+            <span>Edit file</span>
+          </MenuItem>
+        ) : null}
         <MenuItem
           onClick={() => {
             props.chatActions.onReferenceInChat(props.filePath);

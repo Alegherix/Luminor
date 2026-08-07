@@ -4,6 +4,7 @@ import * as NodeFs from "node:fs/promises";
 import * as NodePath from "node:path";
 
 import { isLocalAbsolutePath } from "@synara/shared/path";
+import { WORKSPACE_FILE_WRITE_CONFLICT_MESSAGE } from "@synara/shared/workspaceFileWrite";
 import { Effect, Layer, Path } from "effect";
 
 import { resolveLocalPreviewGrantRealPath } from "../../localImageFiles";
@@ -22,7 +23,6 @@ import {
 } from "../realPathContainment";
 
 const DEFAULT_READ_FILE_MAX_BYTES = 1_000_000;
-export const WORKSPACE_WRITE_CONFLICT_DETAIL = "File changed on disk since it was loaded.";
 
 function isBinaryLike(bytes: Uint8Array): boolean {
   return bytes.includes(0);
@@ -30,6 +30,25 @@ function isBinaryLike(bytes: Uint8Array): boolean {
 
 function isFileNotFoundError(cause: unknown): boolean {
   return (cause as NodeJS.ErrnoException | null)?.code === "ENOENT";
+}
+
+async function assertFileMatchesExpectedHash(
+  filePath: string,
+  expectedContentsSha256: string,
+): Promise<void> {
+  const currentContents = await NodeFs.readFile(filePath, "utf8").catch((cause: unknown) => {
+    if (isFileNotFoundError(cause)) return null;
+    throw cause;
+  });
+  if (currentContents === null) {
+    throw new Error(WORKSPACE_FILE_WRITE_CONFLICT_MESSAGE);
+  }
+  const currentSha256 = createHash("sha256")
+    .update(Buffer.from(currentContents, "utf8"))
+    .digest("hex");
+  if (currentSha256 !== expectedContentsSha256) {
+    throw new Error(WORKSPACE_FILE_WRITE_CONFLICT_MESSAGE);
+  }
 }
 
 async function writeFileStringAtomically(
@@ -355,19 +374,7 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
         }
 
         if (input.expectedContentsSha256 !== undefined) {
-          const currentContents = await NodeFs.readFile(finalRealTarget, "utf8").catch(
-            (cause: unknown) => {
-              if (isFileNotFoundError(cause)) return null;
-              throw cause;
-            },
-          );
-          const currentSha =
-            currentContents === null
-              ? null
-              : createHash("sha256").update(currentContents, "utf8").digest("hex");
-          if (currentSha !== input.expectedContentsSha256) {
-            return "conflict" as const;
-          }
+          await assertFileMatchesExpectedHash(finalRealTarget, input.expectedContentsSha256);
         }
 
         await writeFileStringAtomically(input.cwd, finalRealTarget, input.contents);
@@ -382,28 +389,15 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
           cause,
         }),
     }).pipe(
-      Effect.flatMap(
-        (result): Effect.Effect<void, WorkspaceFileSystemError | WorkspacePathOutsideRootError> => {
-          if (result === "outside") {
-            return Effect.fail(
+      Effect.flatMap((result) =>
+        result === "outside"
+          ? Effect.fail(
               new WorkspacePathOutsideRootError({
                 workspaceRoot: input.cwd,
                 relativePath: input.relativePath,
               }),
-            );
-          }
-          if (result === "conflict") {
-            return Effect.fail(
-              new WorkspaceFileSystemError({
-                cwd: input.cwd,
-                relativePath: input.relativePath,
-                operation: "workspaceFileSystem.writeFile",
-                detail: WORKSPACE_WRITE_CONFLICT_DETAIL,
-              }),
-            );
-          }
-          return Effect.void;
-        },
+            )
+          : Effect.void,
       ),
     );
     yield* workspaceEntries.invalidate(input.cwd);

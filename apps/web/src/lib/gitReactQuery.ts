@@ -50,6 +50,12 @@ export const gitQueryKeys = {
     line: number | null,
     rev: string | null,
   ) => ["git", "blame-line", cwd, filePath, line, rev] as const,
+  fileAtRev: (
+    cwd: string | null,
+    filePath: string | null,
+    rev: string | null,
+    mergeBaseWith: string | null,
+  ) => ["git", "file-at-rev", cwd, filePath, rev, mergeBaseWith] as const,
   diffSummary: (
     cacheScope: string | null,
     model: string | null,
@@ -277,6 +283,33 @@ export function gitWorkingTreeDiffStatsQueryOptions(input: {
     ...(refetchInterval !== undefined ? { refetchInterval } : {}),
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
+  });
+}
+
+export function gitReadFileAtRevQueryOptions(input: {
+  cwd: string | null;
+  filePath: string | null;
+  rev?: string | undefined;
+  mergeBaseWith?: string | undefined;
+  enabled?: boolean;
+}) {
+  const { cwd, filePath, mergeBaseWith, rev } = input;
+  return queryOptions({
+    queryKey: gitQueryKeys.fileAtRev(cwd, filePath, rev ?? null, mergeBaseWith ?? null),
+    queryFn: async () => {
+      const api = ensureNativeApi();
+      if (!cwd || !filePath) {
+        throw new Error("File revision read is unavailable.");
+      }
+      return api.git.readFileAtRev({
+        cwd,
+        filePath,
+        ...(rev !== undefined ? { rev } : {}),
+        ...(mergeBaseWith !== undefined ? { mergeBaseWith } : {}),
+      });
+    },
+    enabled: (input.enabled ?? true) && cwd !== null && filePath !== null,
+    staleTime: GIT_WORKING_TREE_DIFF_STALE_TIME_MS,
   });
 }
 

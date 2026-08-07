@@ -40,6 +40,7 @@ import {
   buildDiffSelectionReference,
   buildWhyChangedPrompt,
 } from "../lib/chatReferences";
+import { resolveDiffEditBaseRev, type DiffFileEditRequest } from "../lib/diffEditBaseRev";
 import { resolveDiffEnvironmentState } from "../lib/threadEnvironment";
 import { disclosureWidthClassName } from "../lib/disclosureMotion";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
@@ -415,6 +416,7 @@ interface DiffPanelProps {
   onRenderableFilesChange?: (files: ReadonlyArray<FileDiffMetadata>, isLoading: boolean) => void;
   onEditorDiffOptionsChange?: (control: ReactNode | null) => void;
   onVisibleFileChange?: (filePath: string | null) => void;
+  onEditFile?: (request: DiffFileEditRequest) => void;
 }
 
 export { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
@@ -431,6 +433,7 @@ export default function DiffPanel({
   onRenderableFilesChange,
   onEditorDiffOptionsChange,
   onVisibleFileChange,
+  onEditFile,
 }: DiffPanelProps) {
   const mode = modeProp ?? "inline";
   const liveRefreshEnabled = liveRefreshEnabledProp ?? true;
@@ -995,6 +998,21 @@ export default function DiffPanel({
     });
   }, []);
 
+  const upstreamBranch = gitStatusQuery.data?.upstreamBranch ?? null;
+  const openFileInEditor = useMemo(
+    () =>
+      onEditFile
+        ? (filePath: string) => {
+            onEditFile({
+              filePath,
+              mode: diffViewKind === "turn" ? "file" : "diff",
+              baseRev: resolveDiffEditBaseRev(repoDiffScope, null, upstreamBranch),
+            });
+          }
+        : undefined,
+    [diffViewKind, onEditFile, repoDiffScope, upstreamBranch],
+  );
+
   // Per-file header actions that talk to the active thread's composer draft.
   const diffFileChatActions = useMemo(
     () =>
@@ -1006,9 +1024,10 @@ export default function DiffPanel({
             onAskWhyChanged: (filePath: string) => {
               appendComposerPromptText(activeThreadId, buildWhyChangedPrompt(filePath));
             },
+            ...(openFileInEditor ? { onEditFile: openFileInEditor } : {}),
           }
         : undefined,
-    [activeThreadId],
+    [activeThreadId, openFileInEditor],
   );
 
   const [blameTarget, setBlameTarget] = useState<DiffLineBlameTarget | null>(null);

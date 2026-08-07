@@ -25,6 +25,8 @@ import type {
   GitListRecentCommitsInput,
   GitListRecentCommitsResult,
   GitPullResult,
+  GitReadFileAtRevInput,
+  GitReadFileAtRevResult,
   GitRemoveIndexLockInput,
   GitRemoveWorktreeInput,
   GitStashAndCheckoutInput,
