@@ -625,6 +625,124 @@ describe("OpenCode host policy delivery", () => {
     });
   });
 
+  it("retries host policy delivery after the first prompt is rejected", async () => {
+    let promptAttempt = 0;
+    const runtime = createMockOpenCodeRuntime({
+      promptAsync: async () => {
+        promptAttempt += 1;
+        if (promptAttempt === 1) {
+          throw new Error("prompt rejected");
+        }
+        return { data: null };
+      },
+    });
+    const threadId = asThreadId("thread-host-policy-rejected-prompt");
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const adapter = yield* OpenCodeAdapter;
+        yield* adapter.startSession({
+          provider: "opencode",
+          threadId,
+          runtimeMode: "full-access",
+        });
+        const firstExit = yield* Effect.exit(
+          adapter.sendTurn({
+            threadId,
+            input: "rejected turn",
+            attachments: [],
+            modelSelection,
+          }),
+        );
+        const [failedSession] = yield* adapter.listSessions();
+        yield* adapter.startSession({
+          provider: "opencode",
+          threadId,
+          runtimeMode: "full-access",
+          resumeCursor: failedSession?.resumeCursor,
+        });
+        const retry = yield* adapter.sendTurn({
+          threadId,
+          input: "retry turn",
+          attachments: [],
+          modelSelection,
+        });
+        return {
+          firstFailed: Exit.isFailure(firstExit),
+          failedCursor: failedSession?.resumeCursor,
+          retryCursor: retry.resumeCursor,
+        };
+      }).pipe(Effect.provide(makeOpenCodeAdapterTestLayer(runtime.runtime))),
+    );
+
+    expect(result.firstFailed).toBe(true);
+    expect(result.failedCursor).not.toHaveProperty("harnessPolicyDelivery");
+    expect(runtime.promptCalls.map(promptContainsHarnessPolicy)).toEqual([true, true]);
+    expect(result.retryCursor).toMatchObject({
+      harnessPolicyDelivery: {
+        sessionId: "opencode-session-1",
+        policyVersion: SYNARA_HARNESS_POLICY_VERSION,
+      },
+    });
+  });
+
+  it("re-injects the host policy when an in-memory restart has a stale policy version", async () => {
+    const runtime = createMockOpenCodeRuntime();
+    const threadId = asThreadId("thread-host-policy-stale-version-restart");
+
+    const secondCursor = await Effect.runPromise(
+      Effect.gen(function* () {
+        const adapter = yield* OpenCodeAdapter;
+        yield* adapter.startSession({
+          provider: "opencode",
+          threadId,
+          runtimeMode: "full-access",
+        });
+        const first = yield* adapter.sendTurn({
+          threadId,
+          input: "first turn",
+          attachments: [],
+          modelSelection,
+        });
+        const firstCursor = first.resumeCursor as {
+          readonly openCodeSessionId: string;
+          readonly cwd: string;
+          readonly harnessPolicyDelivery: {
+            readonly sessionId: string;
+            readonly gatewayControlAvailable: boolean;
+          };
+        };
+        yield* adapter.startSession({
+          provider: "opencode",
+          threadId,
+          runtimeMode: "full-access",
+          resumeCursor: {
+            ...firstCursor,
+            harnessPolicyDelivery: {
+              ...firstCursor.harnessPolicyDelivery,
+              policyVersion: "stale-policy-version",
+            },
+          },
+        });
+        const second = yield* adapter.sendTurn({
+          threadId,
+          input: "after policy update",
+          attachments: [],
+          modelSelection,
+        });
+        return second.resumeCursor;
+      }).pipe(Effect.provide(makeOpenCodeAdapterTestLayer(runtime.runtime))),
+    );
+
+    expect(runtime.promptCalls.map(promptContainsHarnessPolicy)).toEqual([true, true]);
+    expect(secondCursor).toMatchObject({
+      harnessPolicyDelivery: {
+        sessionId: "opencode-session-1",
+        policyVersion: SYNARA_HARNESS_POLICY_VERSION,
+      },
+    });
+  });
+
   it("injects the host policy when the native session id changes", async () => {
     const runtime = createMockOpenCodeRuntime();
     const threadId = asThreadId("thread-host-policy-changed-session");

@@ -166,6 +166,7 @@ interface OpenCodeResumeCursor {
 
 interface OpenCodeSessionContext {
   harnessPolicyDelivered?: boolean;
+  pendingHarnessPolicyTurnId: TurnId | undefined;
   readonly gatewayControlAvailable: boolean;
   gatewaySessionLease?: AgentGatewaySessionLease;
   session: ProviderSession;
@@ -749,6 +750,9 @@ const clearActiveTurnState = Effect.fn("clearOpenCodeActiveTurnState")(function*
   if (options?.cancelGatewayTurn !== false) {
     yield* cancelAgentGatewayTurn(context.gatewaySessionLease, context.activeTurnId);
   }
+  if (context.pendingHarnessPolicyTurnId === context.activeTurnId) {
+    context.pendingHarnessPolicyTurnId = undefined;
+  }
   context.activeTurnId = undefined;
   context.activeTurnEventSerial = 0;
   context.activeTurnProviderActivitySerial = 0;
@@ -1002,6 +1006,22 @@ function buildOpenCodeResumeCursor(input: {
         }
       : {}),
   };
+}
+
+function markOpenCodeHarnessPolicyDelivered(context: OpenCodeSessionContext, turnId: TurnId): void {
+  if (context.pendingHarnessPolicyTurnId !== turnId) {
+    return;
+  }
+  context.pendingHarnessPolicyTurnId = undefined;
+  context.harnessPolicyDelivered = true;
+  updateProviderSession(context, {
+    resumeCursor: buildOpenCodeResumeCursor({
+      openCodeSessionId: context.openCodeSessionId,
+      cwd: context.directory,
+      harnessPolicyDelivered: true,
+      gatewayControlAvailable: context.gatewayControlAvailable,
+    }),
+  });
 }
 
 function openCodeRecord(value: unknown): Record<string, unknown> | undefined {
@@ -2081,6 +2101,9 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
           context.client.session.prompt(input.promptInput),
         ).pipe(
           Effect.mapError(toAdapterRequestError),
+          Effect.tap(() =>
+            Effect.sync(() => markOpenCodeHarnessPolicyDelivered(context, input.turnId)),
+          ),
           Effect.flatMap((response) =>
             Effect.gen(function* () {
               if (yield* Ref.get(context.stopped)) {
@@ -2164,6 +2187,9 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
           context.client.session.promptAsync(input.promptInput),
         ).pipe(
           Effect.mapError(toAdapterRequestError),
+          Effect.tap(() =>
+            Effect.sync(() => markOpenCodeHarnessPolicyDelivered(context, input.turnId)),
+          ),
           Effect.as(null),
           Effect.catch((requestError) =>
             Effect.gen(function* () {
@@ -2344,6 +2370,7 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
           // User-message echoes should not disable prompt recovery; track provider-side
           // activity separately for the "accepted but nothing started" watchdog.
           if (isOpenCodeTurnProviderActivityEvent(context, event)) {
+            markOpenCodeHarnessPolicyDelivered(context, turnId);
             markOpenCodeTurnProviderActivity(context, turnId);
           }
         }
@@ -3756,13 +3783,10 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
                 // capability require a fresh, truthful host-policy delivery.
                 const harnessPolicyDelivered =
                   resumedSessionId === started.openCodeSessionId &&
-                  (isMatchingHarnessPolicyDelivery(persistedHarnessPolicyDelivery, {
+                  isMatchingHarnessPolicyDelivery(persistedHarnessPolicyDelivery, {
                     sessionId: started.openCodeSessionId,
                     gatewayControlAvailable: started.gatewayControlAvailable,
-                  }) ||
-                    (existing?.openCodeSessionId === started.openCodeSessionId &&
-                      existing.harnessPolicyDelivered === true &&
-                      existing.gatewayControlAvailable === started.gatewayControlAvailable));
+                  });
                 if (options?.beforeSessionInstall) {
                   yield* options.beforeSessionInstall;
                 }
@@ -3800,6 +3824,7 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
 
                 const context: OpenCodeSessionContext = {
                   ...(harnessPolicyDelivered ? { harnessPolicyDelivered: true } : {}),
+                  pendingHarnessPolicyTurnId: undefined,
                   session,
                   gatewayControlAvailable: started.gatewayControlAvailable,
                   ...(started.gatewayControlAvailable && agentGatewaySessionLease
@@ -3937,10 +3962,13 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
             issue: `${adapterConfig.displayName} turns require text input or at least one attachment.`,
           });
         }
-        const harnessPolicy = takeSynaraHarnessPolicyForProviderSession(context, {
-          provider,
-          scopedGatewayConnectionAvailable: context.gatewayControlAvailable,
-        });
+        const harnessPolicy = takeSynaraHarnessPolicyForProviderSession(
+          { harnessPolicyDelivered: context.harnessPolicyDelivered },
+          {
+            provider,
+            scopedGatewayConnectionAvailable: context.gatewayControlAvailable,
+          },
+        );
         const providerText = [harnessPolicy, text].filter(Boolean).join("\n\n");
 
         const requestedAgent =
@@ -3956,6 +3984,7 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
         yield* applyPermissionInteractionMode(context, interactionMode);
 
         context.activeTurnId = turnId;
+        context.pendingHarnessPolicyTurnId = harnessPolicy === null ? undefined : turnId;
         context.activeTurnEventSerial = 0;
         context.activeTurnProviderActivitySerial = 0;
         context.activeTurnCompletionActivitySerial = 0;
