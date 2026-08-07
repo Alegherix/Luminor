@@ -9,7 +9,7 @@ import {
   Undo2Icon,
   XIcon,
 } from "~/lib/icons";
-import type { MonacoEditHistoryState } from "~/components/monaco/editHistory";
+import type { CodeEditHistoryState } from "~/components/codeEditor/pierreEdit";
 import { cn } from "~/lib/utils";
 import {
   AlertDialog,
@@ -43,7 +43,7 @@ export function workspaceFileEditorBreadcrumbSegments(
 }
 
 interface WorkspaceFileEditorHistoryActionsProps {
-  history: MonacoEditHistoryState;
+  history: CodeEditHistoryState;
   canRevert: boolean;
   onUndo: () => void;
   onRedo: () => void;

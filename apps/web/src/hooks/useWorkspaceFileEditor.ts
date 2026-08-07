@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
 import { invalidateGitQueriesForCwds } from "~/lib/gitReactQuery";
-import { monacoLanguageForPath } from "~/lib/monaco/language";
 import {
   invalidateProjectFileQueriesForCwds,
   projectReadFileQueryOptions,
@@ -26,7 +25,6 @@ export interface UseWorkspaceFileEditorInput {
 
 export interface WorkspaceFileEditorController {
   state: WorkspaceFileEditorState;
-  language: string;
   dirty: boolean;
   loading: boolean;
   loadError: string | null;
@@ -172,7 +170,6 @@ export function useWorkspaceFileEditor(
 
   return {
     state,
-    language: monacoLanguageForPath(filePath ?? ""),
     dirty: isWorkspaceFileEditorDirty(state),
     loading: fileQuery.isLoading,
     loadError:

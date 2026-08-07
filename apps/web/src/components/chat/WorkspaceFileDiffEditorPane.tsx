@@ -5,12 +5,11 @@ import { useWorkspaceFileEditorSession } from "~/hooks/useWorkspaceFileEditorSes
 import type { DiffEditBaseRev } from "~/lib/diffEditBaseRev";
 import { gitReadFileAtRevQueryOptions } from "~/lib/gitReactQuery";
 import { Columns2Icon, Rows3Icon } from "~/lib/icons";
-import type { MonacoThemeVariant } from "~/lib/monaco/theme";
-import { CodeDiffEditorPane } from "../monaco/CodeDiffEditorPane";
+import { CodeDiffEditorPane } from "../codeEditor/CodeDiffEditorPane";
 import {
-  INITIAL_MONACO_EDIT_HISTORY_STATE,
-  type MonacoEditHistoryControls,
-} from "../monaco/editHistory";
+  INITIAL_CODE_EDIT_HISTORY_STATE,
+  type CodeEditHistoryControls,
+} from "../codeEditor/pierreEdit";
 import { ChatHeaderIconButton } from "./chatHeaderControls";
 import { PanelStateMessage } from "./PanelStateMessage";
 import {
@@ -24,15 +23,15 @@ export interface WorkspaceFileDiffEditorPaneProps {
   workspaceRoot: string | null;
   filePath: string;
   baseRev: DiffEditBaseRev;
-  resolvedTheme: MonacoThemeVariant;
+  resolvedTheme: "light" | "dark";
   onClose: () => void;
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
 }
 
 export function WorkspaceFileDiffEditorPane(props: WorkspaceFileDiffEditorPaneProps) {
   const [renderSideBySide, setRenderSideBySide] = useState(true);
-  const historyControlsRef = useRef<MonacoEditHistoryControls | null>(null);
-  const [history, setHistory] = useState(INITIAL_MONACO_EDIT_HISTORY_STATE);
+  const historyControlsRef = useRef<CodeEditHistoryControls | null>(null);
+  const [history, setHistory] = useState(INITIAL_CODE_EDIT_HISTORY_STATE);
   const session = useWorkspaceFileEditorSession({
     cwd: props.workspaceRoot,
     filePath: props.filePath,
@@ -140,7 +139,7 @@ export function WorkspaceFileDiffEditorPane(props: WorkspaceFileDiffEditorPanePr
           originalVersion={originalVersionRef.current.version}
           modified={session.state.value}
           modifiedVersion={session.state.version}
-          language={session.language}
+          fileName={props.filePath}
           resolvedTheme={props.resolvedTheme}
           renderSideBySide={renderSideBySide}
           readOnly={!editable}

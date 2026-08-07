@@ -1,12 +1,11 @@
 import { useRef, useState } from "react";
 
 import { useWorkspaceFileEditorSession } from "~/hooks/useWorkspaceFileEditorSession";
-import type { MonacoThemeVariant } from "~/lib/monaco/theme";
-import { CodeEditorPane } from "../monaco/CodeEditorPane";
+import { CodeEditorPane } from "../codeEditor/CodeEditorPane";
 import {
-  INITIAL_MONACO_EDIT_HISTORY_STATE,
-  type MonacoEditHistoryControls,
-} from "../monaco/editHistory";
+  INITIAL_CODE_EDIT_HISTORY_STATE,
+  type CodeEditHistoryControls,
+} from "../codeEditor/pierreEdit";
 import { PanelStateMessage } from "./PanelStateMessage";
 import {
   WorkspaceFileEditorConflictBar,
@@ -18,7 +17,7 @@ import {
 export interface WorkspaceFileEditorPaneProps {
   workspaceRoot: string | null;
   filePath: string;
-  resolvedTheme: MonacoThemeVariant;
+  resolvedTheme: "light" | "dark";
   onClose: () => void;
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
 }
@@ -31,8 +30,8 @@ export function WorkspaceFileEditorPane(props: WorkspaceFileEditorPaneProps) {
     onClose: props.onClose,
     onDirtyChange: props.onDirtyChange,
   });
-  const historyControlsRef = useRef<MonacoEditHistoryControls | null>(null);
-  const [history, setHistory] = useState(INITIAL_MONACO_EDIT_HISTORY_STATE);
+  const historyControlsRef = useRef<CodeEditHistoryControls | null>(null);
+  const [history, setHistory] = useState(INITIAL_CODE_EDIT_HISTORY_STATE);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-[var(--color-background-surface)]">
@@ -80,7 +79,7 @@ export function WorkspaceFileEditorPane(props: WorkspaceFileEditorPaneProps) {
         <CodeEditorPane
           value={session.state.value}
           valueVersion={session.state.version}
-          language={session.language}
+          fileName={props.filePath}
           resolvedTheme={props.resolvedTheme}
           onChange={session.handleChange}
           onSave={session.save}
