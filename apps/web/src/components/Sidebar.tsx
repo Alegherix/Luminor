@@ -87,7 +87,6 @@ import {
   ThreadId,
   type GitStatusResult,
   type ResolvedKeybindingsConfig,
-  type ServerProviderStatus,
   WS_GITHUB_PROJECT_PROVISIONING_CAPABILITY,
 } from "@synara/contracts";
 import { isGenericChatThreadTitle } from "@synara/shared/chatThreads";
@@ -217,6 +216,7 @@ import {
 import { useHandleNewChat } from "../hooks/useHandleNewChat";
 import { useHandleNewStudioChat } from "../hooks/useHandleNewStudioChat";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useProviderStatusesForLocalConfig } from "../hooks/useProviderStatusesForLocalConfig";
 import { useThreadHandoff } from "../hooks/useThreadHandoff";
 import { useFeedbackDialogStore } from "../feedbackDialogStore";
 import { openExternalLink } from "~/lib/linkChips";
@@ -423,7 +423,6 @@ const CollapseAllIcon = createCentralIconComponent("minimize-45");
 const SortFilterIcon = createCentralIconComponent("filter-2");
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
-const EMPTY_PROVIDER_STATUSES: readonly ServerProviderStatus[] = [];
 const subscribeGitHubProvisioningCapability = (listener: () => void) =>
   onNativeApiServerCapabilitiesChange(listener);
 const readGitHubProvisioningCapability = () =>
@@ -1558,11 +1557,7 @@ export default function Sidebar() {
     select: (config) => config.cwd ?? null,
   });
   const serverCwd = serverCwdQuery.data ?? null;
-  const providerStatusesQuery = useQuery({
-    ...serverConfigQueryOptions(),
-    select: (config) => config.providers,
-  });
-  const providerStatuses = providerStatusesQuery.data ?? EMPTY_PROVIDER_STATUSES;
+  const providerStatuses = useProviderStatusesForLocalConfig();
   const serverSettingsQuery = useQuery(serverSettingsQueryOptions());
   // Declared next to `keybindings` (rather than further down) because the project-row render
   // helpers above read these labels. A const declared after the closure that captures it
