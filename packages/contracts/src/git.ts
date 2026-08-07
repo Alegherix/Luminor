@@ -67,6 +67,14 @@ export const GitBranch = Schema.Struct({
 });
 export type GitBranch = typeof GitBranch.Type;
 
+export const GitRecentCommit = Schema.Struct({
+  sha: TrimmedNonEmptyStringSchema,
+  shortSha: TrimmedNonEmptyStringSchema,
+  subject: Schema.String,
+  committedAt: Schema.String,
+});
+export type GitRecentCommit = typeof GitRecentCommit.Type;
+
 const GitWorktree = Schema.Struct({
   path: TrimmedNonEmptyStringSchema,
   branch: TrimmedNonEmptyStringSchema,
@@ -136,9 +144,10 @@ export type GitHubRepositoryInput = typeof GitHubRepositoryInput.Type;
 
 export const GitReadWorkingTreeDiffInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
-  scope: Schema.optional(Schema.Literals(["workingTree", "unstaged", "staged", "branch"])).pipe(
-    Schema.withConstructorDefault(() => Option.some("workingTree" as const)),
-  ),
+  scope: Schema.optional(
+    Schema.Literals(["workingTree", "unstaged", "staged", "branch", "ref"]),
+  ).pipe(Schema.withConstructorDefault(() => Option.some("workingTree" as const))),
+  compareRef: Schema.optional(TrimmedNonEmptyStringSchema),
 });
 export type GitReadWorkingTreeDiffInput = typeof GitReadWorkingTreeDiffInput.Type;
 
@@ -184,6 +193,16 @@ export const GitListBranchesInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
 });
 export type GitListBranchesInput = typeof GitListBranchesInput.Type;
+
+export const DEFAULT_GIT_RECENT_COMMIT_LIMIT = 20;
+
+export const GitListRecentCommitsInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  limit: Schema.optional(PositiveInt).pipe(
+    Schema.withConstructorDefault(() => Option.some(DEFAULT_GIT_RECENT_COMMIT_LIMIT)),
+  ),
+});
+export type GitListRecentCommitsInput = typeof GitListRecentCommitsInput.Type;
 
 export const GitCreateWorktreeInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
@@ -414,6 +433,11 @@ export const GitListBranchesResult = Schema.Struct({
   hasOriginRemote: Schema.Boolean,
 });
 export type GitListBranchesResult = typeof GitListBranchesResult.Type;
+
+export const GitListRecentCommitsResult = Schema.Struct({
+  commits: Schema.Array(GitRecentCommit),
+});
+export type GitListRecentCommitsResult = typeof GitListRecentCommitsResult.Type;
 
 export const GitCreateWorktreeResult = Schema.Struct({
   worktree: GitWorktree,

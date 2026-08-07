@@ -26,6 +26,7 @@ import { createReadStream } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as nodePath from "node:path";
+import { DEFAULT_GIT_RECENT_COMMIT_LIMIT, type GitRecentCommit } from "@synara/contracts";
 import { parseGitHubRepositoryNameWithOwnerFromRemoteUrl } from "@synara/shared/githubRepository";
 import { decodeJsonResult } from "@synara/shared/schemaJson";
 
@@ -53,6 +54,7 @@ const STATUS_UPSTREAM_REFRESH_TIMEOUT = Duration.seconds(5);
 const STATUS_UPSTREAM_REFRESH_CACHE_CAPACITY = 2_048;
 const DEFAULT_BASE_BRANCH_CANDIDATES = ["main", "master"] as const;
 const EMPTY_TREE_OBJECT_ID = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+const RECENT_COMMIT_FIELD_SEPARATOR = "\u001f";
 const WORKING_TREE_DIFF_TIMEOUT_MS = 15_000;
 const MAX_UNTRACKED_DIFF_CONCURRENCY = 4;
 const MAX_QUEUED_REPOSITORY_MUTATIONS = 64;
@@ -139,6 +141,19 @@ function parseBranchLine(line: string): { name: string; current: boolean } | nul
     name,
     current: trimmed.startsWith("* "),
   };
+}
+
+function parseRecentCommitLines(stdout: string): ReadonlyArray<GitRecentCommit> {
+  const commits: GitRecentCommit[] = [];
+  for (const line of stdout.split("\n")) {
+    if (line.length === 0) continue;
+    const [sha = "", shortSha = "", subject = "", committedAt = ""] = line.split(
+      RECENT_COMMIT_FIELD_SEPARATOR,
+    );
+    if (sha.length === 0 || shortSha.length === 0) continue;
+    commits.push({ sha, shortSha, subject, committedAt });
+  }
+  return commits;
 }
 
 function parseRemoteNames(stdout: string): ReadonlyArray<string> {
@@ -1630,6 +1645,40 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
         };
       });
 
+    const readRefPatch: GitCoreShape["readRefPatch"] = (cwd, ref) =>
+      Effect.gen(function* () {
+        const verified = yield* executeGit(
+          "GitCore.readRefPatch.verifyRef",
+          cwd,
+          ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+          { allowNonZeroExit: true },
+        );
+        const resolvedRef = verified.stdout.trim();
+        if (verified.code !== 0 || resolvedRef.length === 0) {
+          return yield* createGitCommandError(
+            "GitCore.readRefPatch.verifyRef",
+            cwd,
+            ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+            `Cannot resolve "${ref}" to a commit in this repository.`,
+          );
+        }
+
+        const trackedPatch = yield* executeGit(
+          "GitCore.readRefPatch.trackedPatch",
+          cwd,
+          ["diff", "--patch", "--no-color", "--no-ext-diff", resolvedRef],
+          {
+            timeoutMs: WORKING_TREE_DIFF_TIMEOUT_MS,
+            maxOutputBytes: 10_000_000,
+          },
+        ).pipe(Effect.map((result) => result.stdout));
+        const untrackedPatches = yield* readUntrackedPatches(cwd, "GitCore.readRefPatch");
+
+        return {
+          patch: joinPatchSegments([trackedPatch, ...untrackedPatches]),
+        };
+      });
+
     const prepareCommitContext: GitCoreShape["prepareCommitContext"] = (cwd, filePaths) =>
       Effect.gen(function* () {
         if (filePaths && filePaths.length > 0) {
@@ -2092,6 +2141,30 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
         const branches = [...localBranches, ...remoteBranches];
 
         return { branches, isRepo: true, hasOriginRemote: remoteNames.includes("origin") };
+      });
+
+    const listRecentCommits: GitCoreShape["listRecentCommits"] = (input) =>
+      Effect.gen(function* () {
+        const limit = input.limit ?? DEFAULT_GIT_RECENT_COMMIT_LIMIT;
+        const result = yield* executeGit(
+          "GitCore.listRecentCommits",
+          input.cwd,
+          ["log", "--format=%H%x1f%h%x1f%s%x1f%cI", "-n", String(limit)],
+          {
+            timeoutMs: 10_000,
+            allowNonZeroExit: true,
+          },
+        ).pipe(
+          Effect.catchIf(isMissingGitCwdError, () =>
+            Effect.succeed({ code: 128, stdout: "", stderr: "fatal: not a git repository" }),
+          ),
+        );
+
+        if (result.code !== 0) {
+          return { commits: [] };
+        }
+
+        return { commits: parseRecentCommitLines(result.stdout) };
       });
 
     const createWorktree: GitCoreShape["createWorktree"] = (input) =>
@@ -3141,6 +3214,7 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
       readUnstagedPatch,
       readStagedPatch,
       readBranchPatch,
+      readRefPatch,
       prepareCommitContext,
       commit,
       pushCurrentBranch,
@@ -3148,6 +3222,7 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
       readRangeContext,
       readConfigValue,
       listBranches,
+      listRecentCommits,
       createWorktree,
       recordWorktreeOwnership,
       verifyWorktreeOwnership,

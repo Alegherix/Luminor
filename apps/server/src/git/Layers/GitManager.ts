@@ -1392,6 +1392,16 @@ export const makeGitManager = Effect.gen(function* () {
   const readWorkingTreeDiff: GitManagerShape["readWorkingTreeDiff"] = Effect.fnUntraced(
     function* (input) {
       switch (input.scope) {
+        case "ref": {
+          const compareRef = input.compareRef?.trim() ?? "";
+          if (compareRef.length === 0) {
+            return yield* gitManagerError(
+              "readWorkingTreeDiff",
+              "A branch or commit is required to compare the working tree against.",
+            );
+          }
+          return yield* gitCore.readRefPatch(input.cwd, compareRef);
+        }
         case "branch":
           return yield* gitCore.readBranchPatch(input.cwd);
         case "staged":

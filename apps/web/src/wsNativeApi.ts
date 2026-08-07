@@ -572,6 +572,7 @@ export function createWsNativeApi(): NativeApi {
           timeoutMs: null,
         }),
       listBranches: (input) => transport.request(WS_METHODS.gitListBranches, input),
+      listRecentCommits: (input) => transport.request(WS_METHODS.gitListRecentCommits, input),
       createWorktree: (input) => transport.request(WS_METHODS.gitCreateWorktree, input),
       createDetachedWorktree: (input) =>
         transport.request(WS_METHODS.gitCreateDetachedWorktree, input),

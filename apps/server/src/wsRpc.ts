@@ -1328,6 +1328,8 @@ const makeWsRpcHandlersLayer = () =>
           rpcEffect(pullRequests.setPinned(input), "Failed to update pull request pin"),
         [WS_METHODS.gitListBranches]: (input) =>
           rpcEffect(git.listBranches(input), "Failed to list branches"),
+        [WS_METHODS.gitListRecentCommits]: (input) =>
+          rpcEffect(git.listRecentCommits(input), "Failed to list recent commits"),
         [WS_METHODS.gitCreateWorktree]: (input) =>
           rpcEffect(
             refreshGitStatusAfter(

@@ -1,3 +1,4 @@
+import { DEFAULT_GIT_RECENT_COMMIT_LIMIT } from "@synara/contracts";
 import type {
   GitHandoffThreadInput,
   GitReadWorkingTreeDiffInput,
@@ -27,17 +28,21 @@ export const gitQueryKeys = {
   githubRepository: (cwd: string | null) => ["git", "github-repository", cwd] as const,
   status: (cwd: string | null) => ["git", "status", cwd] as const,
   branches: (cwd: string | null) => ["git", "branches", cwd] as const,
+  recentCommits: (cwd: string | null, limit: number) =>
+    ["git", "recent-commits", cwd, limit] as const,
   pullRequest: (cwd: string | null) => ["git", "pull-request", cwd] as const,
   workingTreeDiff: (
     cwd: string | null,
     scope: GitReadWorkingTreeDiffInput["scope"] = "workingTree",
-  ) => ["git", "working-tree-diff", cwd, scope] as const,
+    compareRef: string | null = null,
+  ) => ["git", "working-tree-diff", cwd, scope, compareRef] as const,
   // Deliberately nested under the patch key so every existing
   // `["git", "working-tree-diff", ...]` invalidation refreshes the counts too.
   workingTreeDiffStats: (
     cwd: string | null,
     scope: GitReadWorkingTreeDiffInput["scope"] = "workingTree",
-  ) => ["git", "working-tree-diff", cwd, scope, "stats"] as const,
+    compareRef: string | null = null,
+  ) => ["git", "working-tree-diff", cwd, scope, compareRef, "stats"] as const,
   diffSummary: (
     cacheScope: string | null,
     model: string | null,
@@ -75,6 +80,7 @@ export function invalidateGitQueries(queryClient: QueryClient) {
     queryClient.invalidateQueries({ queryKey: ["git", "github-repository"] as const }),
     queryClient.invalidateQueries({ queryKey: gitQueryKeys.statuses }),
     queryClient.invalidateQueries({ queryKey: ["git", "branches"] as const }),
+    queryClient.invalidateQueries({ queryKey: ["git", "recent-commits"] as const }),
     queryClient.invalidateQueries({ queryKey: ["git", "working-tree-diff"] as const }),
     queryClient.invalidateQueries({ queryKey: gitQueryKeys.pullRequests }),
   ]);
@@ -88,6 +94,7 @@ export function invalidateGitQueriesForCwds(queryClient: QueryClient, cwds: Iter
       queryClient.invalidateQueries({ queryKey: gitQueryKeys.githubRepository(cwd) }),
       queryClient.invalidateQueries({ queryKey: gitQueryKeys.status(cwd) }),
       queryClient.invalidateQueries({ queryKey: gitQueryKeys.branches(cwd) }),
+      queryClient.invalidateQueries({ queryKey: ["git", "recent-commits", cwd] as const }),
       queryClient.invalidateQueries({ queryKey: ["git", "working-tree-diff", cwd] as const }),
       queryClient.invalidateQueries({ queryKey: gitQueryKeys.pullRequest(cwd) }),
     ]),
@@ -121,6 +128,37 @@ export function gitGithubRepositoryQueryOptions(cwd: string | null, enabled = tr
     enabled: enabled && cwd !== null,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+  });
+}
+
+function resolveGitCompareRef(
+  scope: GitReadWorkingTreeDiffInput["scope"],
+  compareRef: string | null | undefined,
+): string | null {
+  if (scope !== "ref") {
+    return null;
+  }
+  const trimmed = compareRef?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function gitRecentCommitsQueryOptions(input: {
+  cwd: string | null;
+  limit?: number;
+  enabled?: boolean;
+}) {
+  const limit = input.limit ?? DEFAULT_GIT_RECENT_COMMIT_LIMIT;
+  return queryOptions({
+    queryKey: gitQueryKeys.recentCommits(input.cwd, limit),
+    queryFn: async () => {
+      const api = ensureNativeApi();
+      if (!input.cwd) throw new Error("Git commits are unavailable.");
+      return api.git.listRecentCommits({ cwd: input.cwd, limit });
+    },
+    enabled: (input.enabled ?? true) && input.cwd !== null,
+    staleTime: GIT_BRANCHES_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   });
 }
@@ -207,21 +245,27 @@ export function gitPullRequestSnapshotQueryOptions(input: {
 export function gitWorkingTreeDiffStatsQueryOptions(input: {
   cwd: string | null;
   scope?: GitReadWorkingTreeDiffInput["scope"];
+  compareRef?: string | null;
   enabled?: boolean;
   refetchInterval?: number | false;
 }) {
   const scope = input.scope ?? "workingTree";
+  const compareRef = resolveGitCompareRef(scope, input.compareRef);
   const refetchInterval = input.refetchInterval;
   return queryOptions({
-    queryKey: gitQueryKeys.workingTreeDiffStats(input.cwd, scope),
+    queryKey: gitQueryKeys.workingTreeDiffStats(input.cwd, scope, compareRef),
     queryFn: async () => {
       const api = ensureNativeApi();
       if (!input.cwd) {
         throw new Error("Working tree diff stats are unavailable.");
       }
-      return api.git.workingTreeDiffStats({ cwd: input.cwd, scope });
+      return api.git.workingTreeDiffStats({
+        cwd: input.cwd,
+        scope,
+        ...(compareRef ? { compareRef } : {}),
+      });
     },
-    enabled: (input.enabled ?? true) && input.cwd !== null,
+    enabled: (input.enabled ?? true) && input.cwd !== null && (scope !== "ref" || !!compareRef),
     staleTime: GIT_WORKING_TREE_DIFF_STALE_TIME_MS,
     ...(refetchInterval !== undefined ? { refetchInterval } : {}),
     refetchOnWindowFocus: true,
@@ -232,21 +276,27 @@ export function gitWorkingTreeDiffStatsQueryOptions(input: {
 export function gitWorkingTreeDiffQueryOptions(input: {
   cwd: string | null;
   scope?: GitReadWorkingTreeDiffInput["scope"];
+  compareRef?: string | null;
   enabled?: boolean;
   refetchInterval?: number | false;
 }) {
   const scope = input.scope ?? "workingTree";
+  const compareRef = resolveGitCompareRef(scope, input.compareRef);
   const refetchInterval = input.refetchInterval;
   return queryOptions({
-    queryKey: gitQueryKeys.workingTreeDiff(input.cwd, scope),
+    queryKey: gitQueryKeys.workingTreeDiff(input.cwd, scope, compareRef),
     queryFn: async () => {
       const api = ensureNativeApi();
       if (!input.cwd) {
         throw new Error("Working tree diff is unavailable.");
       }
-      return api.git.readWorkingTreeDiff({ cwd: input.cwd, scope });
+      return api.git.readWorkingTreeDiff({
+        cwd: input.cwd,
+        scope,
+        ...(compareRef ? { compareRef } : {}),
+      });
     },
-    enabled: (input.enabled ?? true) && input.cwd !== null,
+    enabled: (input.enabled ?? true) && input.cwd !== null && (scope !== "ref" || !!compareRef),
     staleTime: GIT_WORKING_TREE_DIFF_STALE_TIME_MS,
     ...(refetchInterval !== undefined ? { refetchInterval } : {}),
     refetchOnWindowFocus: true,
