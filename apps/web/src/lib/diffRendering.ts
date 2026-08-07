@@ -390,6 +390,21 @@ function diffStatPathsReferToSameFile(left: string, right: string): boolean {
   );
 }
 
+export function resolveDiffEntryByPath<T>(
+  entriesByPath: ReadonlyMap<string, T>,
+  changedFilePath: string,
+): T | undefined {
+  const direct = entriesByPath.get(changedFilePath);
+  if (direct) {
+    return direct;
+  }
+
+  const matches = Array.from(entriesByPath.entries())
+    .filter(([path]) => diffStatPathsReferToSameFile(path, changedFilePath))
+    .map(([, entry]) => entry);
+  return matches.length === 1 ? matches.at(0) : undefined;
+}
+
 // Resolve a parsed patch stat for a visible changed-file row. Parsed patch paths are
 // usually repo-relative, while work-log changedFiles can be absolute or basename-only.
 export function resolveFileDiffStatByChangedPath(
@@ -401,17 +416,9 @@ export function resolveFileDiffStatByChangedPath(
     return undefined;
   }
 
-  const direct = statsByPath.get(changedFilePath);
-  if (direct) {
-    return direct;
-  }
-
-  const matchingStats = Array.from(statsByPath.entries())
-    .filter(([path]) => diffStatPathsReferToSameFile(path, changedFilePath))
-    .map(([, stat]) => stat);
-  const uniqueMatch = matchingStats.length === 1 ? matchingStats.at(0) : undefined;
-  if (uniqueMatch) {
-    return uniqueMatch;
+  const match = resolveDiffEntryByPath(statsByPath, changedFilePath);
+  if (match) {
+    return match;
   }
 
   if (statsByPath.size === 1 && changedFileCount === 1) {
