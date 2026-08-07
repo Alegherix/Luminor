@@ -1006,11 +1006,11 @@ export default function DiffPanel({
             onEditFile({
               filePath,
               mode: diffViewKind === "turn" ? "file" : "diff",
-              baseRev: resolveDiffEditBaseRev(repoDiffScope, null, upstreamBranch),
+              baseRev: resolveDiffEditBaseRev(repoDiffScope, repoDiffCompareRef, upstreamBranch),
             });
           }
         : undefined,
-    [diffViewKind, onEditFile, repoDiffScope, upstreamBranch],
+    [diffViewKind, onEditFile, repoDiffCompareRef, repoDiffScope, upstreamBranch],
   );
 
   // Per-file header actions that talk to the active thread's composer draft.
