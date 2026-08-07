@@ -25,7 +25,7 @@ interface AdmissionLedger {
   readonly clients: ReadonlyMap<number, ClientLedger>;
   readonly admittedTotal: number;
   readonly releasedTotal: number;
-  readonly rejectedDuplicateTotal: number;
+  readonly replacedDuplicateTotal: number;
   readonly rejectedCapacityTotal: number;
 }
 
@@ -34,16 +34,16 @@ export interface WsStreamAdmissionSnapshot {
   readonly active: number;
   readonly admittedTotal: number;
   readonly releasedTotal: number;
-  readonly rejectedDuplicateTotal: number;
+  readonly replacedDuplicateTotal: number;
   readonly rejectedCapacityTotal: number;
 }
 
 type AdmissionOutcome =
-  | { readonly _tag: "Admitted"; readonly lease: WsStreamLease }
+  | { readonly _tag: "Admitted"; readonly lease: WsStreamLease; readonly replacedCount: number }
   | {
       readonly _tag: "Rejected";
       readonly error: WsRpcError;
-      readonly reason: "duplicate" | "stream-capacity" | "thread-capacity";
+      readonly reason: "stream-capacity" | "thread-capacity";
       readonly active: number;
       readonly activeThreads: number;
     };
@@ -52,7 +52,7 @@ const initialLedger = (): AdmissionLedger => ({
   clients: new Map(),
   admittedTotal: 0,
   releasedTotal: 0,
-  rejectedDuplicateTotal: 0,
+  replacedDuplicateTotal: 0,
   rejectedCapacityTotal: 0,
 });
 
@@ -68,7 +68,7 @@ export const makeWsStreamAdmission = (
   options: {
     readonly recordRejection?: (input: {
       readonly threadId?: string;
-      readonly reason: "duplicate" | "stream-capacity" | "thread-capacity";
+      readonly reason: "stream-capacity" | "thread-capacity";
       readonly errorCode: string;
       readonly active: number;
       readonly activeThreads: number;
@@ -81,28 +81,18 @@ export const makeWsStreamAdmission = (
     const acquire = (clientId: number, subscription: WsStreamSubscription) =>
       Ref.modify(ledgerRef, (ledger): readonly [AdmissionOutcome, AdmissionLedger] => {
         const client = ledger.clients.get(clientId) ?? { leases: new Map() };
-        const leases = client.leases;
-        const active = leases.size;
-        const activeThreads = activeThreadCount(leases);
-        const duplicate = Array.from(leases.values()).some(
-          (lease) => lease.key === subscription.key,
+        // Last subscription wins: a resubscribe for the same key evicts the
+        // prior lease instead of being rejected. Release timing of the old
+        // stream depends on async scope finalization (unsubscribeThread is a
+        // no-op), so rejecting duplicates made every fast resubscribe race the
+        // old stream's teardown. The evicted stream's own eventual release is a
+        // safe no-op because its leaseId is no longer in the ledger.
+        const retainedLeases = new Map(
+          Array.from(client.leases).filter(([, lease]) => lease.key !== subscription.key),
         );
-        if (duplicate) {
-          return [
-            {
-              _tag: "Rejected",
-              reason: "duplicate",
-              active,
-              activeThreads,
-              error: new WsRpcError({
-                message: "Duplicate streaming RPC subscription.",
-                code: "STREAM_DUPLICATE_SUBSCRIPTION",
-                retryable: false,
-              }),
-            },
-            { ...ledger, rejectedDuplicateTotal: ledger.rejectedDuplicateTotal + 1 },
-          ];
-        }
+        const replacedCount = client.leases.size - retainedLeases.size;
+        const active = retainedLeases.size;
+        const activeThreads = activeThreadCount(retainedLeases);
         if (active >= MAX_STREAMS_PER_RPC_CLIENT) {
           return [
             {
@@ -146,18 +136,34 @@ export const makeWsStreamAdmission = (
           clientId,
           leaseId: Crypto.randomUUID(),
         };
-        const nextLeases = new Map(leases);
+        const nextLeases = new Map(retainedLeases);
         nextLeases.set(lease.leaseId, lease);
         const nextClients = new Map(ledger.clients);
         nextClients.set(clientId, { leases: nextLeases });
         return [
-          { _tag: "Admitted", lease },
-          { ...ledger, clients: nextClients, admittedTotal: ledger.admittedTotal + 1 },
+          { _tag: "Admitted", lease, replacedCount },
+          {
+            ...ledger,
+            clients: nextClients,
+            admittedTotal: ledger.admittedTotal + 1,
+            replacedDuplicateTotal: ledger.replacedDuplicateTotal + replacedCount,
+          },
         ];
       }).pipe(
         Effect.flatMap((outcome) =>
           outcome._tag === "Admitted"
-            ? Effect.succeed(outcome.lease)
+            ? Effect.gen(function* () {
+                if (outcome.replacedCount > 0) {
+                  yield* Effect.logWarning("Streaming RPC subscription replaced prior lease.").pipe(
+                    Effect.annotateLogs({
+                      key: subscription.key,
+                      replacedCount: outcome.replacedCount,
+                      requestedThreadId: subscription.threadId ?? null,
+                    }),
+                  );
+                }
+                return outcome.lease;
+              })
             : Effect.gen(function* () {
                 yield* Effect.logWarning("Rejected streaming RPC admission.").pipe(
                   Effect.annotateLogs({
@@ -223,7 +229,7 @@ export const makeWsStreamAdmission = (
           ),
           admittedTotal: ledger.admittedTotal,
           releasedTotal: ledger.releasedTotal,
-          rejectedDuplicateTotal: ledger.rejectedDuplicateTotal,
+          replacedDuplicateTotal: ledger.replacedDuplicateTotal,
           rejectedCapacityTotal: ledger.rejectedCapacityTotal,
         }),
       ),

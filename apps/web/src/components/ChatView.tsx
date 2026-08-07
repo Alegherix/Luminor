@@ -552,6 +552,7 @@ import {
   failWorktreeSetupSnapshot,
   filterSidechatTranscriptMessages,
   hasServerAcknowledgedLocalDispatch,
+  LOCAL_DISPATCH_ACK_TIMEOUT_MS,
   resolveNextLocalDispatchSnapshot,
   resolveThreadArtifactWorkspaceRoot,
   WORKTREE_SETUP_ERROR_HOLD_MS,
@@ -568,6 +569,7 @@ import {
   revokeBlobPreviewUrl,
   revokeUserMessagePreviewUrls,
 } from "./ChatView.logic";
+import { clearPendingTurnDispatch, markPendingTurnDispatch } from "../pendingTurnDispatch";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { useComposerSlashCommands } from "../hooks/useComposerSlashCommands";
 import { useFeatureFlags } from "../featureFlags";
@@ -5761,6 +5763,58 @@ export default function ChatView({
     setLocalDispatch(null);
   }, []);
 
+  // The dispatch marker normally clears when the thread stream echoes the sent
+  // turn. Once the turn RPC has resolved the server owns the turn, so a stream
+  // that never echoes (dead subscription, lost event) must not lock the
+  // composer forever: this fallback force-clears the marker after a bound. The
+  // startedAt match keeps a stale timer from clearing a newer dispatch.
+  const localDispatchStartedAtRef = useRef<string | null>(null);
+  useEffect(() => {
+    localDispatchStartedAtRef.current = localDispatch?.startedAt ?? null;
+  }, [localDispatch]);
+  const localDispatchAckFallbackTimeoutRef = useRef<number | null>(null);
+  const armLocalDispatchAckFallback = useCallback(() => {
+    const armedStartedAt = localDispatchStartedAtRef.current;
+    if (armedStartedAt === null) {
+      return;
+    }
+    if (localDispatchAckFallbackTimeoutRef.current !== null) {
+      window.clearTimeout(localDispatchAckFallbackTimeoutRef.current);
+    }
+    localDispatchAckFallbackTimeoutRef.current = window.setTimeout(() => {
+      localDispatchAckFallbackTimeoutRef.current = null;
+      setLocalDispatch((current) =>
+        current &&
+        current.startedAt === armedStartedAt &&
+        !worktreeSetupHasError(current.worktreeSetup)
+          ? null
+          : current,
+      );
+    }, LOCAL_DISPATCH_ACK_TIMEOUT_MS);
+  }, []);
+  useEffect(
+    () => () => {
+      if (localDispatchAckFallbackTimeoutRef.current !== null) {
+        window.clearTimeout(localDispatchAckFallbackTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  // Mirror the outstanding dispatch into the cross-component pending-turn
+  // signal: the EventRouter catch-up watchdog re-syncs threads it believes are
+  // busy, and a lost running transition leaves that belief stale. This signal
+  // makes the watchdog re-check a thread the composer just wrote to even while
+  // the store still reports it idle.
+  const pendingDispatchStartedAt = localDispatch?.startedAt ?? null;
+  useEffect(() => {
+    if (activeThreadId === null || pendingDispatchStartedAt === null) {
+      return;
+    }
+    markPendingTurnDispatch(activeThreadId);
+    return () => clearPendingTurnDispatch(activeThreadId);
+  }, [activeThreadId, pendingDispatchStartedAt]);
+
   // Fallback cleanup for a failed worktree setup: clears the dispatch after the
   // error hold unless a newer dispatch already replaced it.
   const scheduleFailedWorktreeSetupDispatchReset = useCallback(() => {
@@ -8018,11 +8072,14 @@ export default function ChatView({
         });
       }
 
-      beginLocalDispatch(
-        baseBranchForWorktree
+      // Carry the expected message id so a snapshot rebuilt after an interim
+      // reset (thread switch, ack effect) keeps the message-echo ack signal.
+      beginLocalDispatch({
+        expectedUserMessageId: messageIdForSend,
+        ...(baseBranchForWorktree
           ? { worktreeSetupStepId: "start-session", setupScriptName: worktreeSetupScriptName }
-          : undefined,
-      );
+          : {}),
+      });
       const stagedTurnAttachments = await turnAttachmentsPromise;
       rememberCustomBinaryPathForDispatch({
         threadId: threadIdForSend,
@@ -8057,6 +8114,7 @@ export default function ChatView({
         }),
       );
       turnStartSucceeded = true;
+      armLocalDispatchAckFallback();
       // Steers on providers without native mid-turn steering interrupt the live
       // turn before re-dispatching; hold queued auto-dispatch through that gap
       // so it can't race the steer. The live session provider decides the
@@ -8583,6 +8641,7 @@ export default function ChatView({
 
     try {
       await dispatchPlanFollowUpTurn();
+      armLocalDispatchAckFallback();
       sendInFlightRef.current = false;
       return true;
     } catch (err) {
