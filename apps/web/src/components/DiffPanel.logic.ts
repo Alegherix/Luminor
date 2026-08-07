@@ -263,6 +263,76 @@ export function filterRenderableFilesForSearch(
   });
 }
 
+export type DiffChangeNavigationDirection = "previous" | "next";
+
+export type DiffChangeMarkerKind = "added" | "removed" | "modified";
+
+export interface DiffChangeMarkerSource {
+  path: string;
+  offsetTop: number;
+  changeType: FileDiffMetadata["type"];
+}
+
+export interface DiffChangeMarker {
+  path: string;
+  kind: DiffChangeMarkerKind;
+  topRatio: number;
+  top: number;
+}
+
+export const DIFF_CHANGE_MARKER_HEIGHT_PX = 3;
+
+export function resolveAdjacentDiffFilePath(
+  filePaths: ReadonlyArray<string>,
+  activeFilePath: string | null,
+  direction: DiffChangeNavigationDirection,
+): string | null {
+  if (filePaths.length === 0) {
+    return null;
+  }
+  const activeIndex = activeFilePath === null ? -1 : filePaths.indexOf(activeFilePath);
+  if (activeIndex === -1) {
+    return direction === "next" ? (filePaths[0] ?? null) : null;
+  }
+  const targetIndex = direction === "next" ? activeIndex + 1 : activeIndex - 1;
+  if (targetIndex < 0 || targetIndex >= filePaths.length) {
+    return null;
+  }
+  return filePaths[targetIndex] ?? null;
+}
+
+export function resolveDiffChangeMarkerKind(
+  changeType: FileDiffMetadata["type"],
+): DiffChangeMarkerKind {
+  if (changeType === "new") {
+    return "added";
+  }
+  if (changeType === "deleted") {
+    return "removed";
+  }
+  return "modified";
+}
+
+export function resolveDiffChangeMarkers(input: {
+  files: ReadonlyArray<DiffChangeMarkerSource>;
+  scrollHeight: number;
+  stripHeight: number;
+}): DiffChangeMarker[] {
+  if (input.files.length === 0 || input.scrollHeight <= 0) {
+    return [];
+  }
+  const maxTop = Math.max(0, input.stripHeight - DIFF_CHANGE_MARKER_HEIGHT_PX);
+  return input.files.map((file) => {
+    const topRatio = Math.min(1, Math.max(0, file.offsetTop / input.scrollHeight));
+    return {
+      path: file.path,
+      kind: resolveDiffChangeMarkerKind(file.changeType),
+      topRatio,
+      top: Math.min(maxTop, topRatio * input.stripHeight),
+    };
+  });
+}
+
 export function areAllRenderableFilesCollapsed(
   files: ReadonlyArray<FileDiffMetadata>,
   collapsedFiles: ReadonlySet<string>,
@@ -312,23 +382,3 @@ export function resolveDiffSelectAllWithinViewport(
   return eventWithinDiffViewport || (lastPointerInDiffViewport && !isTextEditingTarget);
 }
 
-export interface DiffFileAnchorPosition {
-  readonly filePath: string;
-  readonly top: number;
-}
-
-export function resolveActiveDiffFilePath(
-  anchors: ReadonlyArray<DiffFileAnchorPosition>,
-  viewportTop: number,
-): string | null {
-  let active: string | null = null;
-  for (const anchor of anchors) {
-    if (anchor.top > viewportTop + 1) {
-      break;
-    }
-    if (anchor.filePath.length > 0) {
-      active = anchor.filePath;
-    }
-  }
-  return active ?? anchors.find((anchor) => anchor.filePath.length > 0)?.filePath ?? null;
-}

@@ -1,60 +1,75 @@
-// FILE: useVisibleDiffFilePath.ts
-// Purpose: Track which diff file the viewport is scrolled to.
-// Layer: Diff panel hooks
-
-import type { FileDiffMetadata } from "@pierre/diffs/react";
 import { useEffect, useState, type RefObject } from "react";
 
-import { resolveActiveDiffFilePath } from "../components/DiffPanel.logic";
+import {
+  readDiffFileAnchors,
+  readDiffFileOffsetTops,
+  resolveDiffRenderSurface,
+} from "../lib/diffScrollSurface";
 
-export function useVisibleDiffFilePath(input: {
-  viewportRef: RefObject<HTMLElement | null>;
-  files: ReadonlyArray<FileDiffMetadata>;
-}): string | null {
-  const { viewportRef, files } = input;
+const VISIBLE_DIFF_FILE_TOLERANCE_PX = 8;
+
+export function resolveVisibleDiffFilePath(surface: HTMLElement): string | null {
+  const anchors = readDiffFileAnchors(surface);
+  if (anchors.length === 0) {
+    return null;
+  }
+  const offsetTops = readDiffFileOffsetTops(surface, anchors);
+  const threshold = surface.scrollTop + VISIBLE_DIFF_FILE_TOLERANCE_PX;
+  let visiblePath = anchors[0]?.path ?? null;
+  for (const anchor of anchors) {
+    if ((offsetTops.get(anchor.path) ?? 0) > threshold) {
+      break;
+    }
+    visiblePath = anchor.path;
+  }
+  return visiblePath;
+}
+
+export function useVisibleDiffFilePath(
+  viewportRef: RefObject<HTMLElement | null>,
+  contentKey: unknown,
+): string | null {
   const [visibleFilePath, setVisibleFilePath] = useState<string | null>(null);
 
   useEffect(() => {
-    const surface = viewportRef.current?.querySelector<HTMLElement>(".diff-render-surface") ?? null;
-    if (files.length === 0 || !surface) {
+    const surface = resolveDiffRenderSurface(viewportRef.current);
+    if (!surface) {
       setVisibleFilePath(null);
       return;
     }
 
     let frame = 0;
-    const update = () => {
+    const measure = () => {
+      frame = 0;
       if (surface.clientHeight === 0) {
         return;
       }
-      const surfaceTop = surface.getBoundingClientRect().top;
-      const anchors = Array.from(
-        surface.querySelectorAll<HTMLElement>("[data-diff-file-path]"),
-        (anchor) => ({
-          filePath: anchor.dataset.diffFilePath ?? "",
-          top: anchor.getBoundingClientRect().top,
-        }),
-      );
-      setVisibleFilePath(resolveActiveDiffFilePath(anchors, surfaceTop));
+      const nextPath = resolveVisibleDiffFilePath(surface);
+      setVisibleFilePath((previous) => (previous === nextPath ? previous : nextPath));
     };
-    const handleScroll = () => {
+    const schedule = () => {
       if (frame !== 0) {
         return;
       }
-      frame = requestAnimationFrame(() => {
-        frame = 0;
-        update();
-      });
+      frame = window.requestAnimationFrame(measure);
     };
 
-    surface.addEventListener("scroll", handleScroll, { passive: true });
-    update();
+    schedule();
+    surface.addEventListener("scroll", schedule, { passive: true });
+    const resizeObserver = new ResizeObserver(schedule);
+    resizeObserver.observe(surface);
+    for (const anchor of readDiffFileAnchors(surface)) {
+      resizeObserver.observe(anchor.element);
+    }
+
     return () => {
-      surface.removeEventListener("scroll", handleScroll);
       if (frame !== 0) {
-        cancelAnimationFrame(frame);
+        window.cancelAnimationFrame(frame);
       }
+      surface.removeEventListener("scroll", schedule);
+      resizeObserver.disconnect();
     };
-  }, [files, viewportRef]);
+  }, [contentKey, viewportRef]);
 
   return visibleFilePath;
 }

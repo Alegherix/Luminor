@@ -4,7 +4,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { ThreadId, type TurnId } from "@synara/contracts";
+import { ThreadId, type ResolvedKeybindingsConfig, type TurnId } from "@synara/contracts";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 import { Columns2Icon, CopyIcon, EllipsisIcon, FolderIcon, Rows3Icon, XIcon } from "~/lib/icons";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -21,14 +21,19 @@ import {
 import { stripDiffSearchParams } from "../diffRouteSearch";
 import { useTheme } from "../hooks/useTheme";
 import { useDiffRouteSearch } from "../hooks/useDiffRouteSearch";
+import { useDiffChangeNavigationShortcuts } from "../hooks/useDiffChangeNavigationShortcuts";
 import { useVisibleDiffFilePath } from "../hooks/useVisibleDiffFilePath";
+import { serverConfigQueryOptions } from "../lib/serverReactQuery";
+import { shortcutLabelForCommand } from "../keybindings";
 import {
   buildFileDiffRenderKey,
   getRenderablePatch,
   resolveDiffCopyText,
+  resolveFileDiffPath,
   sortFileDiffsByPath,
   summarizeRenderablePatchStats,
 } from "../lib/diffRendering";
+import { scrollDiffFileIntoView } from "../lib/diffScrollSurface";
 import {
   appendChatFileReference,
   appendComposerPromptText,
@@ -58,13 +63,20 @@ import {
   resolveDiffPanelScopePickerValue,
   resolveDiffPanelThread,
   resolveDiffPanelViewSource,
+  resolveAdjacentDiffFilePath,
   resolveDiffSelectAllArmed,
   resolveDiffSelectAllWithinViewport,
   resolveInitialDiffViewKind,
   resolveSelectedTurnSummary,
+  type DiffChangeNavigationDirection,
   type DiffPanelTurnScopeIntent,
   type DiffViewKind,
 } from "./DiffPanel.logic";
+import { DiffPanelChangeMarkers } from "./DiffPanelChangeMarkers";
+import {
+  DiffPanelChangeNavigationButtons,
+  type DiffPanelChangeNavigation,
+} from "./DiffPanelChangeNavigation";
 import { DiffPanelPatchViewport } from "./DiffPanelPatchViewport";
 import { DiffPanelToolbar } from "./DiffPanelToolbar";
 import { ReviewFileTreePanel } from "./ReviewFileTreePanel";
@@ -97,6 +109,7 @@ import { formatShortTimestamp } from "../timestampFormat";
 import type { TurnDiffSummary } from "../types";
 
 const EDITOR_DIFF_OPTIONS_MENU_ICON_CLASS_NAME = "size-3.5 shrink-0 text-muted-foreground";
+const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 
 function EditorDiffOptionsCountBadge(props: { count: number | undefined }) {
   if (typeof props.count !== "number" || props.count <= 0) {
@@ -122,6 +135,7 @@ function EditorDiffOptionsMenu(props: {
   diffCopyText: string | null;
   isDiffCopied: boolean;
   allFilesCollapsed: boolean;
+  changeMarkersEnabled: boolean;
   diffRenderMode: DiffRenderMode;
   onSelectRepoScope: (scope: RepoDiffScope) => void;
   onSelectAllTurns: () => void;
@@ -130,6 +144,7 @@ function EditorDiffOptionsMenu(props: {
   onDiffRenderModeChange: (mode: DiffRenderMode) => void;
   onDiffWordWrapChange: (enabled: boolean) => void;
   onDiffIgnoreWhitespaceChange: (enabled: boolean) => void;
+  onChangeMarkersEnabledChange: (enabled: boolean) => void;
   onCopyDiff: () => void;
   onToggleCollapseAll: () => void;
 }) {
@@ -267,6 +282,15 @@ function EditorDiffOptionsMenu(props: {
           >
             Wrap long lines
           </MenuCheckboxItem>
+          <MenuCheckboxItem
+            checked={props.changeMarkersEnabled}
+            variant="switch"
+            onCheckedChange={(checked) => {
+              props.onChangeMarkersEnabledChange(checked === true);
+            }}
+          >
+            Change markers
+          </MenuCheckboxItem>
           {props.diffCopyText ? (
             <MenuItem
               onClick={() => {
@@ -307,6 +331,8 @@ function EditorDiffControls(props: {
   diffCopyText: string | null;
   isDiffCopied: boolean;
   allFilesCollapsed: boolean;
+  changeMarkersEnabled: boolean;
+  changeNavigation: DiffPanelChangeNavigation;
   onSelectRepoScope: (scope: RepoDiffScope) => void;
   onSelectAllTurns: () => void;
   onSelectLastTurn: () => void;
@@ -314,11 +340,16 @@ function EditorDiffControls(props: {
   onDiffRenderModeChange: (mode: DiffRenderMode) => void;
   onDiffWordWrapChange: (enabled: boolean) => void;
   onDiffIgnoreWhitespaceChange: (enabled: boolean) => void;
+  onChangeMarkersEnabledChange: (enabled: boolean) => void;
   onCopyDiff: () => void;
   onToggleCollapseAll: () => void;
 }) {
   return (
     <div className="flex items-center gap-1">
+      <DiffPanelChangeNavigationButtons
+        navigation={props.changeNavigation}
+        className="text-muted-foreground hover:text-foreground"
+      />
       <EditorDiffOptionsMenu
         scopePickerValue={props.scopePickerValue}
         scopeFileCounts={props.scopeFileCounts}
@@ -332,6 +363,7 @@ function EditorDiffControls(props: {
         diffCopyText={props.diffCopyText}
         isDiffCopied={props.isDiffCopied}
         allFilesCollapsed={props.allFilesCollapsed}
+        changeMarkersEnabled={props.changeMarkersEnabled}
         diffRenderMode={props.diffRenderMode}
         onSelectRepoScope={props.onSelectRepoScope}
         onSelectAllTurns={props.onSelectAllTurns}
@@ -340,6 +372,7 @@ function EditorDiffControls(props: {
         onDiffRenderModeChange={props.onDiffRenderModeChange}
         onDiffWordWrapChange={props.onDiffWordWrapChange}
         onDiffIgnoreWhitespaceChange={props.onDiffIgnoreWhitespaceChange}
+        onChangeMarkersEnabledChange={props.onChangeMarkersEnabledChange}
         onCopyDiff={props.onCopyDiff}
         onToggleCollapseAll={props.onToggleCollapseAll}
       />
@@ -389,6 +422,7 @@ export default function DiffPanel({
   const [diffRenderMode, setDiffRenderMode] = useState<DiffRenderMode>("split");
   const [diffWordWrap, setDiffWordWrap] = useState(settings.diffWordWrap);
   const [diffIgnoreWhitespace, setDiffIgnoreWhitespace] = useState(true);
+  const [changeMarkersEnabled, setChangeMarkersEnabled] = useState(true);
   const [scopePickerOpen, setScopePickerOpen] = useState(false);
   const handleScopePickerOpenChange = useCallback((open: boolean) => {
     setScopePickerOpen((previous) => (previous === open ? previous : open));
@@ -731,15 +765,6 @@ export default function DiffPanel({
     onRenderableFilesChange?.(renderableFiles, activeReviewIsLoading);
   }, [activeReviewIsLoading, onRenderableFilesChange, renderableFiles]);
 
-  const visibleFilePath = useVisibleDiffFilePath({
-    viewportRef: patchViewportRef,
-    files: renderableFiles,
-  });
-  const activeFilePath = visibleFilePath ?? selectedFilePath;
-  useEffect(() => {
-    onVisibleFileChange?.(visibleFilePath);
-  }, [onVisibleFileChange, visibleFilePath]);
-
   // Virtualized shadow-DOM diffs only mount ~150 rows. Arm on Cmd/Ctrl+A inside
   // the viewport, then hijack the document `copy` event to write the full raw patch.
   useEffect(() => {
@@ -873,14 +898,59 @@ export default function DiffPanel({
   }, [selectedTurnId]);
 
   useEffect(() => {
-    if (!selectedFilePath || !patchViewportRef.current) {
+    if (!selectedFilePath) {
       return;
     }
-    const target = Array.from(
-      patchViewportRef.current.querySelectorAll<HTMLElement>("[data-diff-file-path]"),
-    ).find((element) => element.dataset.diffFilePath === selectedFilePath);
-    target?.scrollIntoView({ block: "nearest" });
+    scrollDiffFileIntoView(patchViewportRef.current, selectedFilePath, "nearest");
   }, [selectedFilePath, renderableFiles]);
+
+  const diffFilePaths = useMemo(
+    () => renderableFiles.map((fileDiff) => resolveFileDiffPath(fileDiff)),
+    [renderableFiles],
+  );
+  const visibleFilePath = useVisibleDiffFilePath(patchViewportRef, renderableFiles);
+  const activeFilePath = visibleFilePath ?? selectedFilePath;
+  useEffect(() => {
+    onVisibleFileChange?.(visibleFilePath);
+  }, [onVisibleFileChange, visibleFilePath]);
+  const scrollToDiffFilePath = useCallback((filePath: string) => {
+    scrollDiffFileIntoView(patchViewportRef.current, filePath, "start");
+  }, []);
+  const goToAdjacentChange = useCallback(
+    (direction: DiffChangeNavigationDirection) => {
+      const targetPath = resolveAdjacentDiffFilePath(diffFilePaths, activeFilePath, direction);
+      if (!targetPath) {
+        return;
+      }
+      scrollToDiffFilePath(targetPath);
+    },
+    [activeFilePath, diffFilePaths, scrollToDiffFilePath],
+  );
+  const goToPreviousChange = useCallback(() => {
+    goToAdjacentChange("previous");
+  }, [goToAdjacentChange]);
+  const goToNextChange = useCallback(() => {
+    goToAdjacentChange("next");
+  }, [goToAdjacentChange]);
+  const serverConfigQuery = useQuery(serverConfigQueryOptions());
+  const keybindings = serverConfigQuery.data?.keybindings ?? EMPTY_KEYBINDINGS;
+  useDiffChangeNavigationShortcuts({
+    keybindings,
+    enabled: diffQueriesEnabled && diffFilePaths.length > 0,
+    onNavigate: goToAdjacentChange,
+  });
+  const changeNavigation = useMemo(
+    (): DiffPanelChangeNavigation => ({
+      canGoToPrevious:
+        resolveAdjacentDiffFilePath(diffFilePaths, activeFilePath, "previous") !== null,
+      canGoToNext: resolveAdjacentDiffFilePath(diffFilePaths, activeFilePath, "next") !== null,
+      previousShortcutLabel: shortcutLabelForCommand(keybindings, "diff.change.previous"),
+      nextShortcutLabel: shortcutLabelForCommand(keybindings, "diff.change.next"),
+      onGoToPrevious: goToPreviousChange,
+      onGoToNext: goToNextChange,
+    }),
+    [activeFilePath, diffFilePaths, goToNextChange, goToPreviousChange, keybindings],
+  );
 
   const toggleFileCollapsed = useCallback((fileKey: string) => {
     setCollapsedFiles((prev) => {
@@ -1072,6 +1142,8 @@ export default function DiffPanel({
           diffCopyText={diffCopyText}
           isDiffCopied={isDiffCopied}
           allFilesCollapsed={allFilesCollapsed}
+          changeMarkersEnabled={changeMarkersEnabled}
+          changeNavigation={changeNavigation}
           onSelectRepoScope={selectRepoScope}
           onSelectAllTurns={selectAllTurns}
           onSelectLastTurn={selectLastTurn}
@@ -1079,12 +1151,15 @@ export default function DiffPanel({
           onDiffRenderModeChange={setDiffRenderMode}
           onDiffWordWrapChange={setDiffWordWrap}
           onDiffIgnoreWhitespaceChange={setDiffIgnoreWhitespace}
+          onChangeMarkersEnabledChange={setChangeMarkersEnabled}
           onCopyDiff={copyDiff}
           onToggleCollapseAll={toggleCollapseAll}
         />
       ) : null,
     [
       allFilesCollapsed,
+      changeMarkersEnabled,
+      changeNavigation,
       copyDiff,
       diffCopyText,
       diffIgnoreWhitespace,
@@ -1150,6 +1225,8 @@ export default function DiffPanel({
           diffCopyText={diffCopyText}
           isDiffCopied={isDiffCopied}
           allFilesCollapsed={allFilesCollapsed}
+          changeMarkersEnabled={changeMarkersEnabled}
+          changeNavigation={changeNavigation}
           onSelectRepoScope={selectRepoScope}
           onSelectAllTurns={selectAllTurns}
           onSelectLastTurn={selectLastTurn}
@@ -1159,6 +1236,7 @@ export default function DiffPanel({
           onDiffRenderModeChange={setDiffRenderMode}
           onDiffWordWrapChange={setDiffWordWrap}
           onDiffIgnoreWhitespaceChange={setDiffIgnoreWhitespace}
+          onChangeMarkersEnabledChange={setChangeMarkersEnabled}
           onCopyDiff={copyDiff}
           onToggleCollapseAll={toggleCollapseAll}
           scopePickerOpen={scopePickerOpen}
@@ -1186,6 +1264,8 @@ export default function DiffPanel({
       activePatchStat,
       activeThreadId,
       allFilesCollapsed,
+      changeMarkersEnabled,
+      changeNavigation,
       copyDiff,
       diffCopyText,
       diffIgnoreWhitespace,
@@ -1243,7 +1323,7 @@ export default function DiffPanel({
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
           <div
             ref={patchViewportRef}
-            className="diff-panel-viewport flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+            className="diff-panel-viewport relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
             onMouseUp={diffSelectionAction.onContainerMouseUp}
           >
             <DiffPanelPatchViewport
@@ -1274,6 +1354,13 @@ export default function DiffPanel({
               }
               unavailableLabel="No repo diff is available right now."
             />
+            {changeMarkersEnabled ? (
+              <DiffPanelChangeMarkers
+                viewportRef={patchViewportRef}
+                renderableFiles={renderableFiles}
+                onSelectFilePath={scrollToDiffFilePath}
+              />
+            ) : null}
             {diffSelectionAction.pendingAction ? (
               <TranscriptSelectionAction
                 left={diffSelectionAction.pendingAction.left}

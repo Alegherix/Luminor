@@ -5,6 +5,10 @@ import type { DraftThreadState } from "../composerDraftStore";
 import type { Thread } from "../types";
 import {
   filterRenderableFilesForSearch,
+  resolveAdjacentDiffFilePath,
+  resolveDiffChangeMarkers,
+  resolveDiffChangeMarkerKind,
+  DIFF_CHANGE_MARKER_HEIGHT_PX,
   isDiffPanelPickerOptionSelected,
   isStaleDiffTurnSelection,
   resolveConversationCacheScope,
@@ -17,7 +21,6 @@ import {
   resolveDiffPanelScopePickerValue,
   resolveDiffPanelThread,
   resolveDiffPanelViewSource,
-  resolveActiveDiffFilePath,
   resolveDiffSelectAllArmed,
   resolveDiffSelectAllWithinViewport,
   resolveInitialDiffViewKind,
@@ -429,57 +432,94 @@ describe("resolveDiffSelectAllWithinViewport", () => {
   });
 });
 
-describe("resolveActiveDiffFilePath", () => {
-  it("activates the last file whose top has scrolled past the viewport top", () => {
-    expect(
-      resolveActiveDiffFilePath(
-        [
-          { filePath: "a.ts", top: -300 },
-          { filePath: "b.ts", top: -20 },
-          { filePath: "c.ts", top: 400 },
-        ],
-        0,
-      ),
-    ).toBe("b.ts");
+describe("resolveAdjacentDiffFilePath", () => {
+  const FILE_PATHS = ["a.ts", "b.ts", "c.ts"];
+
+  it("returns null when there are no files", () => {
+    expect(resolveAdjacentDiffFilePath([], null, "next")).toBeNull();
+    expect(resolveAdjacentDiffFilePath([], "a.ts", "previous")).toBeNull();
   });
 
-  it("activates a file scrolled exactly to the viewport top", () => {
-    expect(
-      resolveActiveDiffFilePath(
-        [
-          { filePath: "a.ts", top: -500 },
-          { filePath: "b.ts", top: 100 },
-        ],
-        100,
-      ),
-    ).toBe("b.ts");
+  it("moves to the neighbouring file in both directions", () => {
+    expect(resolveAdjacentDiffFilePath(FILE_PATHS, "a.ts", "next")).toBe("b.ts");
+    expect(resolveAdjacentDiffFilePath(FILE_PATHS, "b.ts", "next")).toBe("c.ts");
+    expect(resolveAdjacentDiffFilePath(FILE_PATHS, "c.ts", "previous")).toBe("b.ts");
   });
 
-  it("falls back to the first file before any anchor crosses the top", () => {
-    expect(
-      resolveActiveDiffFilePath(
-        [
-          { filePath: "a.ts", top: 80 },
-          { filePath: "b.ts", top: 500 },
-        ],
-        0,
-      ),
-    ).toBe("a.ts");
+  it("clamps at both ends instead of wrapping around", () => {
+    expect(resolveAdjacentDiffFilePath(FILE_PATHS, "c.ts", "next")).toBeNull();
+    expect(resolveAdjacentDiffFilePath(FILE_PATHS, "a.ts", "previous")).toBeNull();
   });
 
-  it("skips anchors without a file path", () => {
-    expect(
-      resolveActiveDiffFilePath(
-        [
-          { filePath: "", top: -50 },
-          { filePath: "b.ts", top: -10 },
-        ],
-        0,
-      ),
-    ).toBe("b.ts");
+  it("starts at the first file when the active file is unknown", () => {
+    expect(resolveAdjacentDiffFilePath(FILE_PATHS, null, "next")).toBe("a.ts");
+    expect(resolveAdjacentDiffFilePath(FILE_PATHS, "gone.ts", "next")).toBe("a.ts");
+    expect(resolveAdjacentDiffFilePath(FILE_PATHS, null, "previous")).toBeNull();
+  });
+});
+
+describe("resolveDiffChangeMarkerKind", () => {
+  it("maps git change types onto marker colors", () => {
+    expect(resolveDiffChangeMarkerKind("new")).toBe("added");
+    expect(resolveDiffChangeMarkerKind("deleted")).toBe("removed");
+    expect(resolveDiffChangeMarkerKind("change")).toBe("modified");
+    expect(resolveDiffChangeMarkerKind("rename-pure")).toBe("modified");
+    expect(resolveDiffChangeMarkerKind("rename-changed")).toBe("modified");
+  });
+});
+
+describe("resolveDiffChangeMarkers", () => {
+  it("returns nothing for an empty file list", () => {
+    expect(resolveDiffChangeMarkers({ files: [], scrollHeight: 1000, stripHeight: 200 })).toEqual(
+      [],
+    );
   });
 
-  it("returns null without anchors", () => {
-    expect(resolveActiveDiffFilePath([], 0)).toBe(null);
+  it("returns nothing when the scroll surface has no measurable height", () => {
+    expect(
+      resolveDiffChangeMarkers({
+        files: [{ path: "a.ts", offsetTop: 0, changeType: "change" }],
+        scrollHeight: 0,
+        stripHeight: 200,
+      }),
+    ).toEqual([]);
+  });
+
+  it("positions markers proportionally within the strip", () => {
+    const markers = resolveDiffChangeMarkers({
+      files: [
+        { path: "a.ts", offsetTop: 0, changeType: "new" },
+        { path: "b.ts", offsetTop: 500, changeType: "change" },
+      ],
+      scrollHeight: 1000,
+      stripHeight: 200,
+    });
+
+    expect(markers).toEqual([
+      { path: "a.ts", kind: "added", topRatio: 0, top: 0 },
+      { path: "b.ts", kind: "modified", topRatio: 0.5, top: 100 },
+    ]);
+  });
+
+  it("clamps the last marker inside the strip", () => {
+    const markers = resolveDiffChangeMarkers({
+      files: [{ path: "z.ts", offsetTop: 4000, changeType: "deleted" }],
+      scrollHeight: 1000,
+      stripHeight: 200,
+    });
+
+    expect(markers).toEqual([
+      { path: "z.ts", kind: "removed", topRatio: 1, top: 200 - DIFF_CHANGE_MARKER_HEIGHT_PX },
+    ]);
+  });
+
+  it("keeps markers at the strip origin when the strip has no height", () => {
+    const markers = resolveDiffChangeMarkers({
+      files: [{ path: "a.ts", offsetTop: 250, changeType: "change" }],
+      scrollHeight: 1000,
+      stripHeight: 0,
+    });
+
+    expect(markers).toEqual([{ path: "a.ts", kind: "modified", topRatio: 0.25, top: 0 }]);
   });
 });
