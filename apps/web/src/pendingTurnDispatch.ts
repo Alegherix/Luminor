@@ -18,9 +18,8 @@ import type { ThreadId } from "@synara/contracts";
 // can fire off a stream that then stalls before the running transition:
 // - armed when the composer begins a dispatch, and re-armed when the turn RPC
 //   resolves (pre-dispatch work like worktree setup can outlive the age cap);
-// - cleared by the watchdog once the store reports the thread busy (the
-//   projection has confirmed the turn, store-derived signals take over), or
-//   at the dispatch site when the turn RPC fails (no server turn exists);
+// - cleared at the dispatch site when the turn RPC fails or rollback confirms
+//   that no server turn remains;
 // - otherwise expired by the age cap below.
 const pendingDispatchArmedAtByThreadId = new Map<ThreadId, number>();
 

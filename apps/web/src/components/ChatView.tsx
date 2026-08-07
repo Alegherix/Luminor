@@ -5844,27 +5844,6 @@ export default function ChatView({
     [],
   );
 
-  // Mirror the outstanding dispatch into the cross-component pending-turn
-  // signal: the EventRouter catch-up watchdog re-syncs threads it believes are
-  // busy, and a lost running transition leaves that belief stale. This signal
-  // makes the watchdog re-check a thread the composer just wrote to even while
-  // the store still reports it idle.
-  //
-  // Mark-only on purpose. The composer clears `localDispatch` on its own
-  // acknowledgement signals (message echo, ack fallback, takeover reset),
-  // all of which can fire off a stream that then stalls before the running
-  // transition — exactly the loss the marker exists to repair. So the marker
-  // must outlive `localDispatch`: the watchdog retires it once the projection
-  // confirms the thread busy, dispatch failures clear it at the dispatch
-  // site, and the age cap bounds any stray.
-  const pendingDispatchStartedAt = localDispatch?.startedAt ?? null;
-  useEffect(() => {
-    if (activeThreadId === null || pendingDispatchStartedAt === null) {
-      return;
-    }
-    markPendingTurnDispatch(activeThreadId);
-  }, [activeThreadId, pendingDispatchStartedAt]);
-
   // Fallback cleanup for a failed worktree setup: clears the dispatch after the
   // error hold unless a newer dispatch already replaced it.
   const scheduleFailedWorktreeSetupDispatchReset = useCallback(() => {
@@ -9106,9 +9085,7 @@ export default function ChatView({
       })
       .then(() => {
         // The turn RPC resolved for a thread this view never made active, so
-        // the dispatch-mirror effect cannot arm the watchdog marker for it —
-        // arm it here so a lost running transition on the new thread still
-        // forces catch-up after navigation subscribes it.
+        // arm the watchdog marker with that exact thread id before navigation.
         markPendingTurnDispatch(nextThreadId);
         return api.orchestration.getShellSnapshot();
       })
@@ -9131,6 +9108,7 @@ export default function ChatView({
           .then(() => true)
           .catch(() => false);
         if (deletedOnServer) {
+          clearPendingTurnDispatch(nextThreadId);
           void reconcileDeletedThreadFromClient({
             threadId: nextThreadId,
             removeDeletedThreadFromClientState:
