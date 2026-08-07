@@ -26,6 +26,7 @@ import { createReadStream } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as nodePath from "node:path";
+import { isTemporaryWorktreeBranch } from "@synara/shared/git";
 import { parseGitHubRepositoryNameWithOwnerFromRemoteUrl } from "@synara/shared/githubRepository";
 import { decodeJsonResult } from "@synara/shared/schemaJson";
 
@@ -2585,13 +2586,16 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
             ),
           ));
 
-        yield* executeGit("GitCore.createDetachedWorktree", input.cwd, [
-          "worktree",
-          "add",
-          "--detach",
-          worktreePath,
-          resolvedRef,
-        ]);
+        // Branch-backed managed worktrees still pin to the resolved commit, so
+        // ownership proofs and pruning behave exactly like the detached form.
+        const newBranch = input.newBranch ?? null;
+        yield* executeGit(
+          "GitCore.createDetachedWorktree",
+          input.cwd,
+          newBranch
+            ? ["worktree", "add", "-b", newBranch, worktreePath, resolvedRef]
+            : ["worktree", "add", "--detach", worktreePath, resolvedRef],
+        );
 
         if (input.copyChangesFrom) {
           yield* copyCheckoutChanges(input.copyChangesFrom, worktreePath).pipe(
@@ -2601,7 +2605,19 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
                 input.cwd,
                 ["worktree", "remove", "--force", worktreePath],
                 { allowNonZeroExit: true },
-              ).pipe(Effect.ignore),
+              ).pipe(
+                Effect.andThen(
+                  newBranch
+                    ? executeGit(
+                        "GitCore.createDetachedWorktree.rollbackBranch",
+                        input.cwd,
+                        ["branch", "-D", newBranch],
+                        { allowNonZeroExit: true },
+                      )
+                    : Effect.void,
+                ),
+                Effect.ignore,
+              ),
             ),
           );
         }
@@ -2610,7 +2626,7 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
           worktree: {
             path: worktreePath,
             ref: resolvedRef,
-            branch: null,
+            branch: newBranch,
           },
         };
       });
@@ -2701,6 +2717,25 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
 
     const removeWorktree: GitCoreShape["removeWorktree"] = (input) =>
       Effect.gen(function* () {
+        // Resolve the branch before removal: afterwards the worktree checkout
+        // is gone and can no longer answer. Only temporary synara/* branches
+        // qualify for reclamation; detached HEADs and user-named branches
+        // resolve to null.
+        const temporaryBranch = input.reclaimTemporaryBranch
+          ? yield* executeGit(
+              "GitCore.removeWorktree.readBranch",
+              input.path,
+              ["symbolic-ref", "--quiet", "--short", "HEAD"],
+              { allowNonZeroExit: true, timeoutMs: 5_000 },
+            ).pipe(
+              Effect.map((result) => {
+                if (result.code !== 0) return null;
+                const branch = result.stdout.trim();
+                return branch.length > 0 && isTemporaryWorktreeBranch(branch) ? branch : null;
+              }),
+              Effect.catch(() => Effect.succeed(null)),
+            )
+          : null;
         const args = ["worktree", "remove"];
         if (input.force) {
           args.push("--force");
@@ -2720,6 +2755,27 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
             ),
           ),
         );
+        if (temporaryBranch !== null) {
+          // Temporary branches hold unmerged thread commits by design, so this
+          // is a forced delete. The removal itself already succeeded; a branch
+          // cleanup failure must not surface as a failed removal.
+          yield* executeGit(
+            "GitCore.removeWorktree.reclaimBranch",
+            input.cwd,
+            ["branch", "-D", "--", temporaryBranch],
+            { allowNonZeroExit: true, timeoutMs: 10_000 },
+          ).pipe(
+            Effect.catch((error) =>
+              Effect.logWarning("worktree removal could not reclaim its temporary branch", {
+                cwd: input.cwd,
+                path: input.path,
+                branch: temporaryBranch,
+                error: error instanceof Error ? error.message : String(error),
+              }),
+            ),
+            Effect.asVoid,
+          );
+        }
       });
 
     const deleteBranch: GitCoreShape["deleteBranch"] = (input) =>

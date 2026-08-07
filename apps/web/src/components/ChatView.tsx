@@ -77,6 +77,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Debouncer, useDebouncedValue } from "@tanstack/react-pacer";
 import { useNavigate } from "@tanstack/react-router";
 import { type LegendListRef } from "@legendapp/list/react";
+import { buildTemporaryWorktreeBranchName } from "@synara/shared/git";
 import {
   GIT_WORKING_TREE_DIFF_LIVE_REFETCH_INTERVAL_MS,
   gitCreateDetachedWorktreeMutationOptions,
@@ -7870,6 +7871,7 @@ export default function ChatView({
         const result = await createWorktreeMutation.mutateAsync({
           cwd: targetProjectCwdForSend,
           ref: baseBranchForWorktree,
+          newBranch: buildTemporaryWorktreeBranchName(),
           ...(baseBranchForWorktree === activeRootBranch
             ? { copyChangesFrom: targetProjectCwdForSend }
             : {}),
@@ -7883,7 +7885,7 @@ export default function ChatView({
         createdWorktreeForSendPath = result.worktree.path;
         const nextAssociatedWorktree = {
           associatedWorktreePath: result.worktree.path,
-          associatedWorktreeBranch: null,
+          associatedWorktreeBranch: result.worktree.branch,
           associatedWorktreeRef: result.worktree.ref,
         };
         nextAssociatedWorktreePath = nextAssociatedWorktree.associatedWorktreePath;
@@ -8107,6 +8109,7 @@ export default function ChatView({
             cwd: targetProjectCwdForSend,
             path: createdWorktreeForSendPath,
             force: true,
+            reclaimTemporaryBranch: true,
           })
           .then(
             () => true,
