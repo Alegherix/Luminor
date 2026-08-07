@@ -41,6 +41,8 @@ import {
   GitActionProgressEvent,
   GitBlameLineInput,
   GitBlameLineResult,
+  GitReadFileAtRevInput,
+  GitReadFileAtRevResult,
   GitCreateBranchInput,
   GitCreateDetachedWorktreeInput,
   GitCreateDetachedWorktreeResult,
@@ -478,6 +480,12 @@ export const WsGitReadWorkingTreeDiffRpc = Rpc.make(WS_METHODS.gitReadWorkingTre
 export const WsGitBlameLineRpc = Rpc.make(WS_METHODS.gitBlameLine, {
   payload: GitBlameLineInput,
   success: GitBlameLineResult,
+  error: WsRpcError,
+});
+
+export const WsGitReadFileAtRevRpc = Rpc.make(WS_METHODS.gitReadFileAtRev, {
+  payload: GitReadFileAtRevInput,
+  success: GitReadFileAtRevResult,
   error: WsRpcError,
 });
 
@@ -1062,6 +1070,7 @@ export const WsFeatureRpcGroup = RpcGroup.make(
   WsGitStatusRpc,
   WsGitReadWorkingTreeDiffRpc,
   WsGitBlameLineRpc,
+  WsGitReadFileAtRevRpc,
   WsGitWorkingTreeDiffStatsRpc,
   WsGitSummarizeDiffRpc,
   WsGitPullRpc,

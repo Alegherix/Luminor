@@ -37,6 +37,7 @@ import {
 import {
   GitActionProgressEvent,
   GitBlameLineInput,
+  GitReadFileAtRevInput,
   GitCheckoutInput,
   GitCreateBranchInput,
   GitCreateDetachedWorktreeInput,
@@ -167,6 +168,7 @@ export const WS_METHODS = {
   gitStatus: "git.status",
   gitReadWorkingTreeDiff: "git.readWorkingTreeDiff",
   gitBlameLine: "git.blameLine",
+  gitReadFileAtRev: "git.readFileAtRev",
   gitWorkingTreeDiffStats: "git.workingTreeDiffStats",
   gitSummarizeDiff: "git.summarizeDiff",
   gitRunStackedAction: "git.runStackedAction",
@@ -350,6 +352,7 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(WS_METHODS.gitStatus, GitStatusInput),
   tagRequestBody(WS_METHODS.gitReadWorkingTreeDiff, GitReadWorkingTreeDiffInput),
   tagRequestBody(WS_METHODS.gitBlameLine, GitBlameLineInput),
+  tagRequestBody(WS_METHODS.gitReadFileAtRev, GitReadFileAtRevInput),
   tagRequestBody(WS_METHODS.gitWorkingTreeDiffStats, GitReadWorkingTreeDiffInput),
   tagRequestBody(WS_METHODS.gitSummarizeDiff, GitSummarizeDiffInput),
   tagRequestBody(WS_METHODS.gitRunStackedAction, GitRunStackedActionInput),

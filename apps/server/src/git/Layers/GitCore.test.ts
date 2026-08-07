@@ -2049,6 +2049,86 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
+    it.effect("reads file contents at a revision", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const core = yield* GitCore;
+
+        yield* writeTextFile(path.join(tmp, "notes.txt"), "first version\n");
+        yield* git(tmp, ["add", "notes.txt"]);
+        yield* git(tmp, ["commit", "-m", "add notes"]);
+        const firstSha = yield* git(tmp, ["rev-parse", "HEAD"]);
+
+        yield* writeTextFile(path.join(tmp, "notes.txt"), "second version\n");
+        yield* git(tmp, ["add", "notes.txt"]);
+        yield* git(tmp, ["commit", "-m", "update notes"]);
+
+        const atHead = yield* core.readFileAtRev({ cwd: tmp, filePath: "notes.txt" });
+        expect(atHead.contents).toBe("second version\n");
+        expect(atHead.missing).toBe(false);
+        expect(atHead.truncated).toBe(false);
+
+        const atFirst = yield* core.readFileAtRev({
+          cwd: tmp,
+          filePath: "notes.txt",
+          rev: firstSha,
+        });
+        expect(atFirst.contents).toBe("first version\n");
+        expect(atFirst.resolvedRev).toBe(firstSha);
+
+        const missing = yield* core.readFileAtRev({ cwd: tmp, filePath: "nope.txt" });
+        expect(missing.missing).toBe(true);
+        expect(missing.contents).toBe("");
+      }),
+    );
+
+    it.effect("reads file contents at the merge base of another branch", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(tmp);
+        const core = yield* GitCore;
+
+        yield* writeTextFile(path.join(tmp, "shared.txt"), "base version\n");
+        yield* git(tmp, ["add", "shared.txt"]);
+        yield* git(tmp, ["commit", "-m", "base"]);
+        const baseSha = yield* git(tmp, ["rev-parse", "HEAD"]);
+
+        yield* core.createBranch({ cwd: tmp, branch: "feature/at-rev" });
+        yield* core.checkoutBranch({ cwd: tmp, branch: "feature/at-rev" });
+        yield* writeTextFile(path.join(tmp, "shared.txt"), "feature version\n");
+        yield* git(tmp, ["add", "shared.txt"]);
+        yield* git(tmp, ["commit", "-m", "feature"]);
+
+        const atMergeBase = yield* core.readFileAtRev({
+          cwd: tmp,
+          filePath: "shared.txt",
+          mergeBaseWith: initialBranch,
+        });
+        expect(atMergeBase.contents).toBe("base version\n");
+        expect(atMergeBase.resolvedRev).toBe(baseSha);
+      }),
+    );
+
+    it.effect("fails when the file revision does not resolve", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const core = yield* GitCore;
+
+        const exit = yield* core
+          .readFileAtRev({ cwd: tmp, filePath: "README.md", rev: "no/such/ref" })
+          .pipe(Effect.exit);
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          const rendered = String(exit.cause);
+          expect(rendered).toContain("GitCore.readFileAtRev.resolveRev");
+          expect(rendered).toContain("Cannot resolve");
+        }
+      }),
+    );
+
     it.effect("lists recent commits newest first and tolerates an empty repository", () =>
       Effect.gen(function* () {
         const empty = yield* makeTmpDir();

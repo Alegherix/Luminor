@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { constants as NodeFsConstants } from "node:fs";
 import * as NodeFs from "node:fs/promises";
 import * as NodePath from "node:path";
@@ -22,6 +22,7 @@ import {
 } from "../realPathContainment";
 
 const DEFAULT_READ_FILE_MAX_BYTES = 1_000_000;
+export const WORKSPACE_WRITE_CONFLICT_DETAIL = "File changed on disk since it was loaded.";
 
 function isBinaryLike(bytes: Uint8Array): boolean {
   return bytes.includes(0);
@@ -353,6 +354,22 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
           return "outside" as const;
         }
 
+        if (input.expectedContentsSha256 !== undefined) {
+          const currentContents = await NodeFs.readFile(finalRealTarget, "utf8").catch(
+            (cause: unknown) => {
+              if (isFileNotFoundError(cause)) return null;
+              throw cause;
+            },
+          );
+          const currentSha =
+            currentContents === null
+              ? null
+              : createHash("sha256").update(currentContents, "utf8").digest("hex");
+          if (currentSha !== input.expectedContentsSha256) {
+            return "conflict" as const;
+          }
+        }
+
         await writeFileStringAtomically(input.cwd, finalRealTarget, input.contents);
         return "written" as const;
       },
@@ -365,15 +382,28 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
           cause,
         }),
     }).pipe(
-      Effect.flatMap((result) =>
-        result === "outside"
-          ? Effect.fail(
+      Effect.flatMap(
+        (result): Effect.Effect<void, WorkspaceFileSystemError | WorkspacePathOutsideRootError> => {
+          if (result === "outside") {
+            return Effect.fail(
               new WorkspacePathOutsideRootError({
                 workspaceRoot: input.cwd,
                 relativePath: input.relativePath,
               }),
-            )
-          : Effect.void,
+            );
+          }
+          if (result === "conflict") {
+            return Effect.fail(
+              new WorkspaceFileSystemError({
+                cwd: input.cwd,
+                relativePath: input.relativePath,
+                operation: "workspaceFileSystem.writeFile",
+                detail: WORKSPACE_WRITE_CONFLICT_DETAIL,
+              }),
+            );
+          }
+          return Effect.void;
+        },
       ),
     );
     yield* workspaceEntries.invalidate(input.cwd);

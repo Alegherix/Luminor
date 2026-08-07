@@ -422,6 +422,22 @@ export const GitBlameLineResult = Schema.Struct({
 });
 export type GitBlameLineResult = typeof GitBlameLineResult.Type;
 
+export const GitReadFileAtRevInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  filePath: TrimmedNonEmptyStringSchema,
+  rev: Schema.optional(TrimmedNonEmptyStringSchema),
+  mergeBaseWith: Schema.optional(TrimmedNonEmptyStringSchema),
+});
+export type GitReadFileAtRevInput = typeof GitReadFileAtRevInput.Type;
+
+export const GitReadFileAtRevResult = Schema.Struct({
+  contents: Schema.String,
+  resolvedRev: Schema.String,
+  missing: Schema.Boolean,
+  truncated: Schema.Boolean,
+});
+export type GitReadFileAtRevResult = typeof GitReadFileAtRevResult.Type;
+
 /**
  * Line counts for a scope's patch, without the patch itself.
  *

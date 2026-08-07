@@ -9,6 +9,8 @@
 import {
   GitActionProgressEvent,
   GitBlameLineInput,
+  GitReadFileAtRevInput,
+  GitReadFileAtRevResult,
   GitBlameLineResult,
   GitHandoffThreadInput,
   GitHandoffThreadResult,
@@ -62,6 +64,10 @@ export interface GitManagerShape {
   readonly blameLine: (
     input: GitBlameLineInput,
   ) => Effect.Effect<GitBlameLineResult, GitManagerServiceError>;
+
+  readonly readFileAtRev: (
+    input: GitReadFileAtRevInput,
+  ) => Effect.Effect<GitReadFileAtRevResult, GitManagerServiceError>;
 
   /**
    * Count the lines a scope's patch changes without returning the patch text.

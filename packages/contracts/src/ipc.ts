@@ -65,6 +65,8 @@ import type {
   GitPullResult,
   GitBlameLineInput,
   GitBlameLineResult,
+  GitReadFileAtRevInput,
+  GitReadFileAtRevResult,
   GitReadWorkingTreeDiffInput,
   GitReadWorkingTreeDiffResult,
   GitWorkingTreeDiffStatsResult,
@@ -656,6 +658,7 @@ export interface NativeApi {
       input: GitReadWorkingTreeDiffInput,
     ) => Promise<GitWorkingTreeDiffStatsResult>;
     blameLine: (input: GitBlameLineInput) => Promise<GitBlameLineResult>;
+    readFileAtRev: (input: GitReadFileAtRevInput) => Promise<GitReadFileAtRevResult>;
     summarizeDiff: (input: GitSummarizeDiffInput) => Promise<GitSummarizeDiffResult>;
     runStackedAction: (input: GitRunStackedActionInput) => Promise<GitRunStackedActionResult>;
     onActionProgress: (callback: (event: GitActionProgressEvent) => void) => () => void;

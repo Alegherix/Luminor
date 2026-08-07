@@ -10,6 +10,8 @@ import { ServiceMap } from "effect";
 import type { Effect, Scope } from "effect";
 import type {
   GitBlameLineInput,
+  GitReadFileAtRevInput,
+  GitReadFileAtRevResult,
   GitBlameLineResult,
   GitCheckoutInput,
   GitCreateBranchInput,
@@ -233,6 +235,10 @@ export interface GitCoreShape {
   readonly blameLine: (
     input: GitBlameLineInput,
   ) => Effect.Effect<GitBlameLineResult, GitCommandError>;
+
+  readonly readFileAtRev: (
+    input: GitReadFileAtRevInput,
+  ) => Effect.Effect<GitReadFileAtRevResult, GitCommandError>;
 
   readonly readRefPatch: (
     cwd: string,

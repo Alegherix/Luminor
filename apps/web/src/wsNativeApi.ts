@@ -564,6 +564,7 @@ export function createWsNativeApi(): NativeApi {
       readWorkingTreeDiff: (input) => transport.request(WS_METHODS.gitReadWorkingTreeDiff, input),
       workingTreeDiffStats: (input) => transport.request(WS_METHODS.gitWorkingTreeDiffStats, input),
       blameLine: (input) => transport.request(WS_METHODS.gitBlameLine, input),
+      readFileAtRev: (input) => transport.request(WS_METHODS.gitReadFileAtRev, input),
       summarizeDiff: (input) =>
         transport.request(WS_METHODS.gitSummarizeDiff, input, {
           timeoutMs: null,

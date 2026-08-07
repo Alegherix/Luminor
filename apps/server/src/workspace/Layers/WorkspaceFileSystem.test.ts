@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as NodeFs from "node:fs/promises";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -286,6 +287,42 @@ it.layer(TestLayer)("WorkspaceFileSystemLive", (it) => {
           expect.arrayContaining([expect.objectContaining({ path: "plans/effect-rpc.md" })]),
         );
         expect(afterWrite.truncated).toBe(false);
+      }),
+    );
+
+    it.effect("guards conditional writes against files changed on disk", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        yield* writeTextFile(cwd, "notes.md", "loaded contents\n");
+        const loadedSha = createHash("sha256").update("loaded contents\n", "utf8").digest("hex");
+
+        yield* workspaceFileSystem.writeFile({
+          cwd,
+          relativePath: "notes.md",
+          contents: "edited contents\n",
+          expectedContentsSha256: loadedSha,
+        });
+        const saved = yield* fileSystem
+          .readFileString(path.join(cwd, "notes.md"))
+          .pipe(Effect.orDie);
+        expect(saved).toBe("edited contents\n");
+
+        const conflict = yield* workspaceFileSystem
+          .writeFile({
+            cwd,
+            relativePath: "notes.md",
+            contents: "stale edit\n",
+            expectedContentsSha256: loadedSha,
+          })
+          .pipe(Effect.flip);
+        expect(conflict.message).toContain("File changed on disk since it was loaded.");
+        const untouched = yield* fileSystem
+          .readFileString(path.join(cwd, "notes.md"))
+          .pipe(Effect.orDie);
+        expect(untouched).toBe("edited contents\n");
       }),
     );
 
