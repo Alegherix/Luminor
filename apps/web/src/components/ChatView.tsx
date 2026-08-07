@@ -551,8 +551,10 @@ import {
   deriveComposerSendState,
   failWorktreeSetupSnapshot,
   filterSidechatTranscriptMessages,
+  hasLiveTurnTakenOver,
   hasServerAcknowledgedLocalDispatch,
   LOCAL_DISPATCH_ACK_TIMEOUT_MS,
+  LOCAL_DISPATCH_TURN_TAKEOVER_TIMEOUT_MS,
   resolveNextLocalDispatchSnapshot,
   resolveThreadArtifactWorkspaceRoot,
   WORKTREE_SETUP_ERROR_HOLD_MS,
@@ -2856,7 +2858,30 @@ export default function ChatView({
       phase,
     ],
   );
+  const turnTakenOver = useMemo(
+    () =>
+      hasLiveTurnTakenOver({
+        localDispatch,
+        phase,
+        latestTurn: activeLatestTurn,
+        session: activeThread?.session ?? null,
+        hasPendingApproval: activePendingApproval !== null,
+        hasPendingUserInput: activePendingUserInput !== null,
+        threadError: activeThread?.error,
+        now: Date.now(),
+      }),
+    [
+      activeLatestTurn,
+      activePendingApproval,
+      activePendingUserInput,
+      activeThread?.error,
+      activeThread?.session,
+      localDispatch,
+      phase,
+    ],
+  );
   const isSendBusy = localDispatch !== null && !serverAcknowledgedLocalDispatch;
+  const isAwaitingTurnStart = localDispatch !== null && !turnTakenOver;
   const activeWorktreeSetup = localDispatch?.worktreeSetup ?? null;
   const isPreparingWorktree = activeWorktreeSetup !== null;
   const hasLiveTurn = phase === "running";
@@ -2926,7 +2951,10 @@ export default function ChatView({
     promptRef,
     setComposerDraftPrompt,
   });
-  const isWorking = hasLiveTurn || isSendBusy || isConnecting || isRevertingCheckpoint;
+  // Keep Thinking through the post-ack gap where the server has the message /
+  // turn request but the provider session is not live yet (common on first send).
+  const isWorking =
+    hasLiveTurn || isSendBusy || isConnecting || isRevertingCheckpoint || isAwaitingTurnStart;
   const hasStreamingAssistantText =
     activeThread?.messages.some((message) => message.role === "assistant" && message.streaming) ??
     false;
@@ -5837,11 +5865,11 @@ export default function ChatView({
 
   const localDispatchWorktreeSetupFailed = worktreeSetupHasError(activeWorktreeSetup);
   useEffect(() => {
-    if (!serverAcknowledgedLocalDispatch) {
+    if (!turnTakenOver) {
       return;
     }
     // A failed worktree setup would otherwise reset in the same commit that
-    // painted the error (thread errors count as acknowledgement), so hold the
+    // painted the error (thread errors count as takeover), so hold the
     // row briefly before letting it animate out.
     if (localDispatchWorktreeSetupFailed) {
       const failedDispatchStartedAt = localDispatch?.startedAt;
@@ -5868,8 +5896,29 @@ export default function ChatView({
     localDispatch?.startedAt,
     localDispatchWorktreeSetupFailed,
     resetLocalDispatch,
-    serverAcknowledgedLocalDispatch,
+    turnTakenOver,
   ]);
+
+  // Fail-open: if takeover never arrives, clear the awaiting-turn bridge so
+  // Thinking cannot stick forever. Skipped while worktree setup is active.
+  useEffect(() => {
+    if (!localDispatch || turnTakenOver || localDispatch.worktreeSetup) {
+      return;
+    }
+    const startedAtMs = Date.parse(localDispatch.startedAt);
+    if (!Number.isFinite(startedAtMs)) {
+      return;
+    }
+    const remainingMs = LOCAL_DISPATCH_TURN_TAKEOVER_TIMEOUT_MS - (Date.now() - startedAtMs);
+    if (remainingMs <= 0) {
+      resetLocalDispatch();
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      resetLocalDispatch();
+    }, remainingMs);
+    return () => window.clearTimeout(timer);
+  }, [localDispatch, resetLocalDispatch, turnTakenOver]);
 
   useEffect(() => {
     if (!activeThreadId) return;
@@ -11624,7 +11673,8 @@ export default function ChatView({
                     activeTurnId={activeTurnIdForTranscript}
                     agentActivityDetail={openAgentActivityDetail}
                     hasMessages={timelineEntries.length > 0}
-                    isWorking={hasLiveTurn}
+                    isWorking={isWorking}
+                    workingLabel={isAwaitingTurnStart ? "Loading" : "Thinking"}
                     worktreeSetup={activeWorktreeSetup}
                     activeTurnInProgress={activeTurnInProgress}
                     activeTurnStartedAt={activeWorkStartedAt}

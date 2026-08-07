@@ -198,6 +198,7 @@ export function EnvironmentPullRequestSection({
   activeThreadId,
   projectId,
   configuredRepositories,
+  showDiffColors: showDiffColorsProp,
   onOpenUrl,
   onClose,
 }: {
@@ -207,10 +208,12 @@ export function EnvironmentPullRequestSection({
   activeThreadId: ThreadId | null;
   projectId: ProjectId | null;
   configuredRepositories: ReadonlyArray<{ readonly nameWithOwner: string }>;
+  showDiffColors?: boolean;
   /** Open non-PR URLs in the in-app browser panel. */
   onOpenUrl: (url: string) => void;
   onClose: () => void;
 }) {
+  const showDiffColors = showDiffColorsProp ?? true;
   const openPane = useRightDockStore((store) => store.openPane);
   // Shares the cached git status the git block already fetches — no extra RPC.
   const { data: gitStatus } = useQuery(gitStatusQueryOptions(gitCwd));
@@ -322,9 +325,11 @@ export function EnvironmentPullRequestSection({
           icon={<DiffIcon className={ENVIRONMENT_ROW_ICON_CLASS_NAME} aria-hidden />}
           label={
             <span className="flex min-w-0 items-center gap-1.5">
-              {/* Muted like every other pull request diff stat, not the green/red used by
-                  working-tree diffs — PR change counts read as ambient metadata. */}
-              <PullRequestDiffStat additions={diffStat.additions} deletions={diffStat.deletions} />
+              <PullRequestDiffStat
+                additions={diffStat.additions}
+                deletions={diffStat.deletions}
+                tone={showDiffColors ? "diff" : "muted"}
+              />
               {diffStat.filesLabel ? (
                 <span className="truncate text-muted-foreground">{diffStat.filesLabel}</span>
               ) : null}
