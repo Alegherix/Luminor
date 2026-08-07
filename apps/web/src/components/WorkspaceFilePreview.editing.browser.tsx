@@ -131,6 +131,59 @@ it("keeps the buffer dirty and shows guarded write failures", async () => {
   }
 });
 
+it("keeps markdown task previews and guarded versions in sync after an editor save", async () => {
+  const markdownPath = "README.md";
+  const taskVersion = `sha256:${"3".repeat(64)}`;
+  let completeTaskWrite: ((result: { relativePath: string; version: string }) => void) | null = null;
+  const pendingTaskWrite = new Promise<{ relativePath: string; version: string }>((resolve) => {
+    completeTaskWrite = resolve;
+  });
+  const readFile = vi.fn().mockResolvedValue(
+    loadedFile({
+      relativePath: markdownPath,
+      contents: "- [ ] task\n",
+    }),
+  );
+  const writeFile = vi
+    .fn()
+    .mockResolvedValueOnce({ relativePath: markdownPath, version: SAVED_VERSION })
+    .mockReturnValueOnce(pendingTaskWrite);
+  const restoreNativeApi = installNativeApi({
+    projects: { readFile, writeFile },
+  } as unknown as NativeApi);
+
+  try {
+    await render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <WorkspaceFilePreview workspaceRoot={WORKSPACE_ROOT} filePath={markdownPath} editable />
+      </QueryClientProvider>,
+    );
+
+    const editor = page.getByRole("textbox", { name: `Edit ${markdownPath}` });
+    await editor.fill("- [ ] updated task\n");
+    pressKeyboardSave(editor.element());
+    await vi.waitFor(() => expect(writeFile).toHaveBeenCalledTimes(1));
+    await page.getByRole("radio", { name: "Preview" }).click();
+
+    const checkbox = page.getByRole("checkbox");
+    await checkbox.click();
+    await expect.element(checkbox).toBeChecked();
+    await vi.waitFor(() =>
+      expect(writeFile).toHaveBeenNthCalledWith(2, {
+        cwd: WORKSPACE_ROOT,
+        relativePath: markdownPath,
+        contents: "- [x] updated task\n",
+        expectedVersion: SAVED_VERSION,
+        encoding: "utf8",
+        lineEnding: "lf",
+      }),
+    );
+    completeTaskWrite?.({ relativePath: markdownPath, version: taskVersion });
+  } finally {
+    restoreNativeApi();
+  }
+});
+
 it("keeps oversized and mixed-line-ending files read-only", async () => {
   const readFile = vi
     .fn()

@@ -343,7 +343,9 @@ function resolveFileEditBuffer(
     return makeFileEditBuffer(document);
   }
   const dirty = current.contents !== current.savedContents;
-  return !dirty && current.version !== document.version ? makeFileEditBuffer(document) : current;
+  const sourceChanged =
+    current.version !== document.version || current.savedContents !== document.contents;
+  return !dirty && sourceChanged ? makeFileEditBuffer(document) : current;
 }
 
 function readFileSaveError(error: unknown): string {
@@ -572,6 +574,11 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
         encoding: activeEditBuffer.encoding,
         lineEnding: activeEditBuffer.lineEnding,
       });
+      const options = projectReadFileQueryOptions({ cwd: workspaceRoot, relativePath: filePath });
+      queryClient.setQueryData<ProjectReadFileResult>(options.queryKey, (current) =>
+        current ? { ...current, contents: contentsToSave, version: result.version } : current,
+      );
+      taskFileDiskVersionRef.current.set(`${workspaceRoot}\0${filePath}`, result.version);
       setEditBuffer((current) =>
         current?.key === documentKey
           ? {
@@ -581,12 +588,6 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
               saving: false,
               error: null,
             }
-          : current,
-      );
-      const options = projectReadFileQueryOptions({ cwd: workspaceRoot, relativePath: filePath });
-      queryClient.setQueryData<ProjectReadFileResult>(options.queryKey, (current) =>
-        current
-          ? { ...current, contents: contentsToSave, version: result.version }
           : current,
       );
     } catch (error) {
