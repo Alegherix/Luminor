@@ -183,6 +183,99 @@ it.layer(TestLayer)("git integration", (it) => {
     );
   });
 
+  describe("readFileAtRev", () => {
+    it.effect("reads the committed blob, not the working tree copy", () =>
+      Effect.gen(function* () {
+        const core = yield* GitCore;
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* writeTextFile(path.join(tmp, "src.ts"), "committed\n");
+        yield* git(tmp, ["add", "."]);
+        yield* git(tmp, ["commit", "-m", "add src"]);
+        yield* writeTextFile(path.join(tmp, "src.ts"), "working tree\n");
+
+        const result = yield* core.readFileAtRev({ cwd: tmp, filePath: "src.ts" });
+
+        expect(result.contents).toBe("committed\n");
+        expect(result.missing).toBe(false);
+        expect(result.truncated).toBe(false);
+        expect(result.resolvedRev).toMatch(/^[0-9a-f]{40}$/);
+      }),
+    );
+
+    it.effect("reports a path that does not exist at the revision as missing", () =>
+      Effect.gen(function* () {
+        const core = yield* GitCore;
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* writeTextFile(path.join(tmp, "added.ts"), "brand new\n");
+
+        const result = yield* core.readFileAtRev({ cwd: tmp, filePath: "added.ts" });
+
+        expect(result).toMatchObject({ contents: "", missing: true, truncated: false });
+      }),
+    );
+
+    it.effect("resolves the merge base when comparing against another branch", () =>
+      Effect.gen(function* () {
+        const core = yield* GitCore;
+        const tmp = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(tmp);
+        yield* writeTextFile(path.join(tmp, "src.ts"), "base\n");
+        yield* git(tmp, ["add", "."]);
+        yield* git(tmp, ["commit", "-m", "base"]);
+        const mergeBase = yield* git(tmp, ["rev-parse", "HEAD"]);
+        yield* git(tmp, ["checkout", "-b", "feature"]);
+        yield* writeTextFile(path.join(tmp, "src.ts"), "feature\n");
+        yield* git(tmp, ["add", "."]);
+        yield* git(tmp, ["commit", "-m", "feature"]);
+
+        const result = yield* core.readFileAtRev({
+          cwd: tmp,
+          filePath: "src.ts",
+          mergeBaseWith: initialBranch,
+        });
+
+        expect(result.resolvedRev).toBe(mergeBase);
+        expect(result.contents).toBe("base\n");
+      }),
+    );
+
+    it.effect("marks a blob larger than the byte budget as truncated", () =>
+      Effect.gen(function* () {
+        const core = yield* GitCore;
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* writeTextFile(path.join(tmp, "big.txt"), "x".repeat(500));
+        yield* git(tmp, ["add", "."]);
+        yield* git(tmp, ["commit", "-m", "big"]);
+
+        const result = yield* core.readFileAtRev({
+          cwd: tmp,
+          filePath: "big.txt",
+          maxBytes: 100,
+        });
+
+        expect(result.truncated).toBe(true);
+        expect(result.contents.length).toBeLessThanOrEqual(100);
+      }),
+    );
+
+    it.effect("rejects paths that escape the workspace", () =>
+      Effect.gen(function* () {
+        const core = yield* GitCore;
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+
+        const error = yield* core
+          .readFileAtRev({ cwd: tmp, filePath: "../outside.ts" })
+          .pipe(Effect.flip);
+
+        expect(error.message).toContain("workspace-relative");
+      }),
+    );
+  });
+
   // ── initGitRepo ──
 
   describe("initGitRepo", () => {

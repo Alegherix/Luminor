@@ -268,6 +268,11 @@ export const DEFAULT_SHORTCUT_FALLBACKS: ResolvedKeybindingsConfig = [
     shortcut: commandShortcut("2"),
     whenAst: whenIdentifier("terminalWorkspaceOpen"),
   },
+  {
+    command: "editor.file.save",
+    shortcut: commandShortcut("s"),
+    whenAst: whenNotTerminalFocus,
+  },
 ];
 
 const TERMINAL_WORD_BACKWARD = "\u001bb";
@@ -717,6 +722,14 @@ export function isOpenFavoriteEditorShortcut(
   options?: ShortcutMatchOptions,
 ): boolean {
   return matchesCommandShortcut(event, keybindings, "editor.openFavorite", options);
+}
+
+export function isEditorFileSaveShortcut(
+  event: ShortcutEventLike,
+  keybindings: ResolvedKeybindingsConfig,
+  options?: ShortcutMatchOptions,
+): boolean {
+  return matchesCommandShortcut(event, keybindings, "editor.file.save", options);
 }
 
 export function isTerminalClearShortcut(event: ShortcutEventLike): boolean {

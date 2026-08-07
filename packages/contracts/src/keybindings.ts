@@ -67,6 +67,7 @@ const STATIC_KEYBINDING_COMMANDS = [
   "chat.visible.next",
   "chat.visible.previous",
   "editor.openFavorite",
+  "editor.file.save",
   "git.commitAndPush",
 ] as const;
 

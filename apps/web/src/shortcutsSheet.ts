@@ -197,6 +197,11 @@ const AVAILABLE_NOW_DEFINITIONS: readonly ShortcutDefinition[] = [
     description: "Send the current thread or workspace target to your preferred editor.",
   },
   {
+    command: "editor.file.save",
+    label: "Save file",
+    description: "Write the focused editor's unsaved changes back to disk.",
+  },
+  {
     command: "git.commitAndPush",
     label: "Commit and push",
     description: "Commit pending changes and push the active thread's repo.",

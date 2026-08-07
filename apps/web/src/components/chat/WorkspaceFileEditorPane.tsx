@@ -1,0 +1,91 @@
+import { useWorkspaceFileEditorSession } from "~/hooks/useWorkspaceFileEditorSession";
+import type { MonacoThemeVariant } from "~/lib/monaco/theme";
+import { CodeEditorPane } from "../monaco/CodeEditorPane";
+import { PanelStateMessage } from "./PanelStateMessage";
+import {
+  WorkspaceFileEditorConflictBar,
+  WorkspaceFileEditorDiscardDialog,
+  WorkspaceFileEditorHeader,
+} from "./WorkspaceFileEditorChrome";
+
+export interface WorkspaceFileEditorPaneProps {
+  workspaceRoot: string | null;
+  filePath: string;
+  resolvedTheme: MonacoThemeVariant;
+  onClose: () => void;
+  onDirtyChange?: ((dirty: boolean) => void) | undefined;
+}
+
+export function WorkspaceFileEditorPane(props: WorkspaceFileEditorPaneProps) {
+  const session = useWorkspaceFileEditorSession({
+    cwd: props.workspaceRoot,
+    filePath: props.filePath,
+    enabled: true,
+    onClose: props.onClose,
+    onDirtyChange: props.onDirtyChange,
+  });
+
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-[var(--color-background-surface)]">
+      <WorkspaceFileEditorHeader
+        workspaceRoot={props.workspaceRoot}
+        filePath={props.filePath}
+        title="Editing"
+        dirty={session.dirty}
+        saving={session.state.saving}
+        canSave={session.dirty && session.canEdit}
+        onSave={session.save}
+        onClose={session.requestClose}
+      />
+      {session.state.saveError ? (
+        <WorkspaceFileEditorConflictBar
+          message={session.state.saveError}
+          conflict={session.state.conflict}
+          onReload={session.requestReload}
+          onOverwrite={session.overwrite}
+          onDismiss={session.dismissConflict}
+        />
+      ) : null}
+      {session.loadError ? (
+        <PanelStateMessage density="compact" fill="flex" className="items-start justify-start p-3">
+          <p className="text-left text-[11px] text-destructive/85">{session.loadError}</p>
+        </PanelStateMessage>
+      ) : session.truncated ? (
+        <PanelStateMessage density="compact" fill="flex">
+          <p>This file is too large to open in the editor without truncating it.</p>
+        </PanelStateMessage>
+      ) : session.loading || !session.canEdit ? (
+        <PanelStateMessage density="compact" fill="flex">
+          <p>Loading file...</p>
+        </PanelStateMessage>
+      ) : (
+        <CodeEditorPane
+          value={session.state.value}
+          valueVersion={session.state.version}
+          language={session.language}
+          resolvedTheme={props.resolvedTheme}
+          onChange={session.handleChange}
+          onSave={session.save}
+        />
+      )}
+      <WorkspaceFileEditorDiscardDialog
+        open={session.pendingDiscard !== null}
+        title="Discard unsaved changes?"
+        description={
+          session.pendingDiscard === "reload"
+            ? "Reloading replaces the editor contents with what is currently on disk."
+            : "Closing the editor drops the changes you have not saved yet."
+        }
+        confirmLabel={
+          session.pendingDiscard === "reload" ? "Reload and discard" : "Discard changes"
+        }
+        onOpenChange={(open) => {
+          if (!open) {
+            session.cancelPendingDiscard();
+          }
+        }}
+        onConfirm={session.confirmPendingDiscard}
+      />
+    </div>
+  );
+}

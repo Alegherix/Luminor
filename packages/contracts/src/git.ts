@@ -147,6 +147,33 @@ export const GitPullInput = Schema.Struct({
 });
 export type GitPullInput = typeof GitPullInput.Type;
 
+export const GIT_READ_FILE_AT_REV_MAX_BYTES = 1_000_000;
+const GIT_READ_FILE_AT_REV_PATH_MAX_LENGTH = 2048;
+const GIT_REV_MAX_LENGTH = 256;
+
+export const GitReadFileAtRevInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  filePath: TrimmedNonEmptyStringSchema.check(
+    Schema.isMaxLength(GIT_READ_FILE_AT_REV_PATH_MAX_LENGTH),
+  ),
+  rev: Schema.optional(TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(GIT_REV_MAX_LENGTH))),
+  mergeBaseWith: Schema.optional(
+    TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(GIT_REV_MAX_LENGTH)),
+  ),
+  maxBytes: Schema.optional(
+    PositiveInt.check(Schema.isLessThanOrEqualTo(GIT_READ_FILE_AT_REV_MAX_BYTES)),
+  ),
+});
+export type GitReadFileAtRevInput = typeof GitReadFileAtRevInput.Type;
+
+export const GitReadFileAtRevResult = Schema.Struct({
+  contents: Schema.String,
+  resolvedRev: Schema.String,
+  missing: Schema.Boolean,
+  truncated: Schema.Boolean,
+});
+export type GitReadFileAtRevResult = typeof GitReadFileAtRevResult.Type;
+
 // Read-only diff summary requests reuse the shared git text-generation model settings.
 export const GitSummarizeDiffInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,

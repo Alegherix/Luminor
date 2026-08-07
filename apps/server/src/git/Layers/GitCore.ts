@@ -26,7 +26,9 @@ import { createReadStream } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as nodePath from "node:path";
+import { GIT_READ_FILE_AT_REV_MAX_BYTES } from "@synara/contracts";
 import { parseGitHubRepositoryNameWithOwnerFromRemoteUrl } from "@synara/shared/githubRepository";
+import { isWorkspaceRelativePathSafe } from "@synara/shared/path";
 import { decodeJsonResult } from "@synara/shared/schemaJson";
 
 import { GitCheckoutDirtyWorktreeError, GitCommandError } from "../Errors.ts";
@@ -1576,6 +1578,69 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
         return {
           patch: joinPatchSegments([trackedPatch, ...untrackedPatches]),
         };
+      });
+
+    const readFileAtRev: GitCoreShape["readFileAtRev"] = (input) =>
+      Effect.gen(function* () {
+        const filePath = input.filePath.trim();
+        if (!isWorkspaceRelativePathSafe(filePath)) {
+          return yield* createGitCommandError(
+            "GitCore.readFileAtRev",
+            input.cwd,
+            ["cat-file", "blob", filePath],
+            "File path must be a workspace-relative path.",
+          );
+        }
+
+        const maxBytes = input.maxBytes ?? GIT_READ_FILE_AT_REV_MAX_BYTES;
+        const requestedRev = input.rev?.trim() || "HEAD";
+        const baseRev = input.mergeBaseWith
+          ? (yield* executeGit(
+              "GitCore.readFileAtRev.mergeBase",
+              input.cwd,
+              ["merge-base", input.mergeBaseWith, "HEAD"],
+              { allowNonZeroExit: true },
+            ).pipe(Effect.map((result) => result.stdout.trim()))) || "HEAD"
+          : requestedRev;
+
+        const resolvedRev =
+          (yield* executeGit(
+            "GitCore.readFileAtRev.revParse",
+            input.cwd,
+            ["rev-parse", "--verify", "--quiet", `${baseRev}^{commit}`],
+            { allowNonZeroExit: true },
+          ).pipe(Effect.map((result) => result.stdout.trim()))) || baseRev;
+
+        const blobRef = `${resolvedRev}:${filePath}`;
+        const sizeResult = yield* executeGit(
+          "GitCore.readFileAtRev.size",
+          input.cwd,
+          ["cat-file", "-s", blobRef],
+          { allowNonZeroExit: true },
+        );
+        if (sizeResult.code !== 0) {
+          return { contents: "", resolvedRev, missing: true, truncated: false };
+        }
+        const blobSize = Number.parseInt(sizeResult.stdout.trim(), 10);
+        const truncated = Number.isFinite(blobSize) && blobSize > maxBytes;
+
+        const contents = yield* executeGit(
+          "GitCore.readFileAtRev.blob",
+          input.cwd,
+          ["cat-file", "blob", blobRef],
+          { maxOutputBytes: maxBytes, outputMode: "truncate" },
+        ).pipe(Effect.map((result) => result.stdout));
+
+        if (contents.includes("\u0000")) {
+          return yield* createGitCommandError(
+            "GitCore.readFileAtRev",
+            input.cwd,
+            ["cat-file", "blob", blobRef],
+            "File at this revision appears to be binary.",
+          );
+        }
+
+        return { contents, resolvedRev, missing: false, truncated };
       });
 
     const readBranchPatch: GitCoreShape["readBranchPatch"] = (cwd) =>
@@ -3168,6 +3233,7 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
       stashAndCheckout,
       stashDrop,
       stashInfo,
+      readFileAtRev,
       removeIndexLock,
       initRepo,
       listLocalBranchNames,

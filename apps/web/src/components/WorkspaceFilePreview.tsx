@@ -300,6 +300,7 @@ export interface WorkspaceFilePreviewProps {
   onReferenceInChat?: ((reference: ChatFileReference) => void) | undefined;
   onAskWhyInChat?: ((reference: ChatFileReference) => void) | undefined;
   onCommentInChat?: ((comment: FileCommentSelection) => void) | undefined;
+  onEditFile?: ((filePath: string) => void) | undefined;
 }
 
 export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
@@ -552,6 +553,11 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
     fileIsWorkspaceRelative &&
     fileQuery.data !== undefined &&
     !fileQuery.data.truncated;
+  const { onEditFile } = props;
+  const editFile =
+    onEditFile && canToggleTasks && !fileIsImage && !fileIsPdf && filePath !== null
+      ? () => onEditFile(filePath)
+      : undefined;
 
   if (!props.workspaceRoot && !fileIsLocalAbsolute && !fileIsScratchBinaryPreview) {
     return (
@@ -623,6 +629,7 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
         onReferenceInChat={onReferenceInChat}
         onAskWhyInChat={onAskWhyInChat}
         truncated={fileQuery.data?.truncated ?? false}
+        onEditFile={editFile}
       />
       {locatingOutOfRootFile ? (
         <FilePreviewLoadingState />

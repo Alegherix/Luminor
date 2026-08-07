@@ -1262,6 +1262,8 @@ const makeWsRpcHandlersLayer = () =>
           rpcEffect(gitStatusBroadcaster.getStatus(input), "Failed to read git status"),
         [WS_METHODS.gitReadWorkingTreeDiff]: (input) =>
           rpcEffect(gitManager.readWorkingTreeDiff(input), "Failed to read working tree diff"),
+        [WS_METHODS.gitReadFileAtRev]: (input) =>
+          rpcEffect(git.readFileAtRev(input), "Failed to read file at revision"),
         [WS_METHODS.gitWorkingTreeDiffStats]: (input) =>
           rpcEffect(
             gitManager.readWorkingTreeDiffStats(input),

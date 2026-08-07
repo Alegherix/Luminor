@@ -19,6 +19,8 @@ import type {
   GitListBranchesInput,
   GitListBranchesResult,
   GitPullResult,
+  GitReadFileAtRevInput,
+  GitReadFileAtRevResult,
   GitRemoveIndexLockInput,
   GitRemoveWorktreeInput,
   GitStashAndCheckoutInput,
@@ -225,6 +227,10 @@ export interface GitCoreShape {
    * Read aggregate branch changes from the upstream/base merge-base through the working tree.
    */
   readonly readBranchPatch: (cwd: string) => Effect.Effect<GitWorkingTreePatch, GitCommandError>;
+
+  readonly readFileAtRev: (
+    input: GitReadFileAtRevInput,
+  ) => Effect.Effect<GitReadFileAtRevResult, GitCommandError>;
 
   /**
    * Build staged change context for commit generation.
