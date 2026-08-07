@@ -311,3 +311,24 @@ export function resolveDiffSelectAllWithinViewport(
 ): boolean {
   return eventWithinDiffViewport || (lastPointerInDiffViewport && !isTextEditingTarget);
 }
+
+export interface DiffFileAnchorPosition {
+  readonly filePath: string;
+  readonly top: number;
+}
+
+export function resolveActiveDiffFilePath(
+  anchors: ReadonlyArray<DiffFileAnchorPosition>,
+  viewportTop: number,
+): string | null {
+  let active: string | null = null;
+  for (const anchor of anchors) {
+    if (anchor.top > viewportTop + 1) {
+      break;
+    }
+    if (anchor.filePath.length > 0) {
+      active = anchor.filePath;
+    }
+  }
+  return active ?? anchors.find((anchor) => anchor.filePath.length > 0)?.filePath ?? null;
+}

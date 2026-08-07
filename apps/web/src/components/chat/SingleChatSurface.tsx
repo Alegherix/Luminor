@@ -279,6 +279,7 @@ export function SingleChatSurface(props: {
   const [editorDiffFiles, setEditorDiffFiles] = useState<ReadonlyArray<FileDiffMetadata>>([]);
   const [editorDiffFilesLoading, setEditorDiffFilesLoading] = useState(false);
   const [editorDiffOptionsControl, setEditorDiffOptionsControl] = useState<ReactNode | null>(null);
+  const [editorDiffVisibleFilePath, setEditorDiffVisibleFilePath] = useState<string | null>(null);
 
   const activePane = resolveActivePane(dockState);
   const {
@@ -403,6 +404,9 @@ export function SingleChatSurface(props: {
   ) => {
     setEditorDiffFiles(files);
     setEditorDiffFilesLoading(isLoading);
+  };
+  const handleEditorDiffVisibleFileChange = (filePath: string | null) => {
+    setEditorDiffVisibleFilePath(filePath);
   };
   const handleSelectEditorDiffFile = (filePath: string) => {
     setEditorCenterMode("diff");
@@ -941,7 +945,9 @@ export function SingleChatSurface(props: {
               centerMode={editorCenterMode}
               diffFiles={editorDiffFiles}
               diffFilesLoading={editorDiffFilesLoading}
-              selectedDiffFilePath={editorDiffPanelState.diffFilePath ?? null}
+              selectedDiffFilePath={
+                editorDiffVisibleFilePath ?? editorDiffPanelState.diffFilePath ?? null
+              }
               diffOptionsControl={editorDiffOptionsControl}
               onSelectDiffFile={handleSelectEditorDiffFile}
               onSelectFile={handleSelectEditorFile}
@@ -965,6 +971,7 @@ export function SingleChatSurface(props: {
                   hideHeader
                   onRenderableFilesChange={handleEditorDiffFilesChange}
                   onEditorDiffOptionsChange={handleEditorDiffOptionsChange}
+                  onVisibleFileChange={handleEditorDiffVisibleFileChange}
                 />
               }
               chatPanel={

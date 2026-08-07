@@ -45,6 +45,7 @@ export function LazyDiffPanel(props: {
   hideHeader?: boolean;
   onRenderableFilesChange?: (files: ReadonlyArray<FileDiffMetadata>, isLoading: boolean) => void;
   onEditorDiffOptionsChange?: (control: ReactNode | null) => void;
+  onVisibleFileChange?: (filePath: string | null) => void;
 }) {
   return (
     <DiffWorkerPoolProvider>
@@ -73,6 +74,7 @@ export function LazyDiffPanel(props: {
           {...(props.onEditorDiffOptionsChange
             ? { onEditorDiffOptionsChange: props.onEditorDiffOptionsChange }
             : {})}
+          {...(props.onVisibleFileChange ? { onVisibleFileChange: props.onVisibleFileChange } : {})}
         />
       </Suspense>
     </DiffWorkerPoolProvider>

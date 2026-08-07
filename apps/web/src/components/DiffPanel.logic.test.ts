@@ -17,6 +17,7 @@ import {
   resolveDiffPanelScopePickerValue,
   resolveDiffPanelThread,
   resolveDiffPanelViewSource,
+  resolveActiveDiffFilePath,
   resolveDiffSelectAllArmed,
   resolveDiffSelectAllWithinViewport,
   resolveInitialDiffViewKind,
@@ -425,5 +426,60 @@ describe("resolveDiffSelectAllWithinViewport", () => {
 
   it("keeps direct events inside the diff authoritative", () => {
     expect(resolveDiffSelectAllWithinViewport(true, false, true)).toBe(true);
+  });
+});
+
+describe("resolveActiveDiffFilePath", () => {
+  it("activates the last file whose top has scrolled past the viewport top", () => {
+    expect(
+      resolveActiveDiffFilePath(
+        [
+          { filePath: "a.ts", top: -300 },
+          { filePath: "b.ts", top: -20 },
+          { filePath: "c.ts", top: 400 },
+        ],
+        0,
+      ),
+    ).toBe("b.ts");
+  });
+
+  it("activates a file scrolled exactly to the viewport top", () => {
+    expect(
+      resolveActiveDiffFilePath(
+        [
+          { filePath: "a.ts", top: -500 },
+          { filePath: "b.ts", top: 100 },
+        ],
+        100,
+      ),
+    ).toBe("b.ts");
+  });
+
+  it("falls back to the first file before any anchor crosses the top", () => {
+    expect(
+      resolveActiveDiffFilePath(
+        [
+          { filePath: "a.ts", top: 80 },
+          { filePath: "b.ts", top: 500 },
+        ],
+        0,
+      ),
+    ).toBe("a.ts");
+  });
+
+  it("skips anchors without a file path", () => {
+    expect(
+      resolveActiveDiffFilePath(
+        [
+          { filePath: "", top: -50 },
+          { filePath: "b.ts", top: -10 },
+        ],
+        0,
+      ),
+    ).toBe("b.ts");
+  });
+
+  it("returns null without anchors", () => {
+    expect(resolveActiveDiffFilePath([], 0)).toBe(null);
   });
 });

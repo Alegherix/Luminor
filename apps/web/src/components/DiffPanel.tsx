@@ -21,6 +21,7 @@ import {
 import { stripDiffSearchParams } from "../diffRouteSearch";
 import { useTheme } from "../hooks/useTheme";
 import { useDiffRouteSearch } from "../hooks/useDiffRouteSearch";
+import { useVisibleDiffFilePath } from "../hooks/useVisibleDiffFilePath";
 import {
   buildFileDiffRenderKey,
   getRenderablePatch,
@@ -360,6 +361,7 @@ interface DiffPanelProps {
   hideHeader?: boolean;
   onRenderableFilesChange?: (files: ReadonlyArray<FileDiffMetadata>, isLoading: boolean) => void;
   onEditorDiffOptionsChange?: (control: ReactNode | null) => void;
+  onVisibleFileChange?: (filePath: string | null) => void;
 }
 
 export { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
@@ -375,6 +377,7 @@ export default function DiffPanel({
   hideHeader: hideHeaderProp,
   onRenderableFilesChange,
   onEditorDiffOptionsChange,
+  onVisibleFileChange,
 }: DiffPanelProps) {
   const mode = modeProp ?? "inline";
   const liveRefreshEnabled = liveRefreshEnabledProp ?? true;
@@ -727,6 +730,15 @@ export default function DiffPanel({
   useEffect(() => {
     onRenderableFilesChange?.(renderableFiles, activeReviewIsLoading);
   }, [activeReviewIsLoading, onRenderableFilesChange, renderableFiles]);
+
+  const visibleFilePath = useVisibleDiffFilePath({
+    viewportRef: patchViewportRef,
+    files: renderableFiles,
+  });
+  const activeFilePath = visibleFilePath ?? selectedFilePath;
+  useEffect(() => {
+    onVisibleFileChange?.(visibleFilePath);
+  }, [onVisibleFileChange, visibleFilePath]);
 
   // Virtualized shadow-DOM diffs only mount ~150 rows. Arm on Cmd/Ctrl+A inside
   // the viewport, then hijack the document `copy` event to write the full raw patch.
@@ -1129,7 +1141,7 @@ export default function DiffPanel({
           selectedTurnId={selectedTurnId}
           timestampFormat={settings.timestampFormat}
           renderableFiles={renderableFiles}
-          selectedFilePath={selectedFilePath}
+          selectedFilePath={activeFilePath}
           fileTreeOpen={fileTreeOpen}
           resolvedTheme={resolvedTheme}
           diffRenderMode={diffRenderMode}
@@ -1195,7 +1207,7 @@ export default function DiffPanel({
       selectLastTurn,
       selectRepoScope,
       selectTurn,
-      selectedFilePath,
+      activeFilePath,
       selectedTurnId,
       settings.timestampFormat,
       showDiffToolbar,
@@ -1283,7 +1295,7 @@ export default function DiffPanel({
               {fileTreeMounted ? (
                 <ReviewFileTreePanel
                   files={renderableFiles}
-                  selectedFilePath={selectedFilePath}
+                  selectedFilePath={activeFilePath}
                   resolvedTheme={resolvedTheme}
                   isLoading={activeReviewIsLoading}
                   onSelectFile={selectFile}
