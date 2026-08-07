@@ -4,15 +4,18 @@ import { describe, expect, it } from "vitest";
 import type { DraftThreadState } from "../composerDraftStore";
 import type { Thread } from "../types";
 import {
+  buildDiffPanelCompareRefValue,
   filterRenderableFilesForSearch,
   resolveAdjacentDiffFilePath,
   resolveDiffChangeMarkers,
   resolveDiffChangeMarkerKind,
   DIFF_CHANGE_MARKER_HEIGHT_PX,
   isDiffPanelPickerOptionSelected,
+  isDiffPanelRepoScopeOption,
   isStaleDiffTurnSelection,
   resolveConversationCacheScope,
   resolveDiffPanelGitStatusQueriesEnabled,
+  resolveDiffPanelPickerLabel,
   resolveDiffPanelQueriesEnabled,
   resolveDiffPanelRepoLiveRefresh,
   resolveDiffPanelRepoLiveRefetchIntervalMs,
@@ -23,6 +26,7 @@ import {
   resolveDiffPanelViewSource,
   resolveDiffSelectAllArmed,
   resolveDiffSelectAllWithinViewport,
+  parseDiffPanelCompareRefValue,
   resolveInitialDiffViewKind,
   resolveSelectedTurnSummary,
   DIFF_PANEL_PICKER_SCOPE_OPTIONS,
@@ -305,6 +309,59 @@ describe("diff panel view source helpers", () => {
 
   it("keeps the persisted default working-tree scope available in the picker", () => {
     expect(DIFF_PANEL_PICKER_SCOPE_OPTIONS).toContain("workingTree");
+  });
+
+  it("keeps the ref scope out of the plain scope option list", () => {
+    expect(DIFF_PANEL_PICKER_SCOPE_OPTIONS).not.toContain("ref");
+    expect(isDiffPanelRepoScopeOption("ref")).toBe(false);
+    expect(isDiffPanelRepoScopeOption("branch")).toBe(true);
+  });
+
+  it("round-trips compare ref picker values", () => {
+    expect(buildDiffPanelCompareRefValue("feature/x")).toBe("ref:feature/x");
+    expect(parseDiffPanelCompareRefValue("ref:feature/x")).toBe("feature/x");
+    expect(parseDiffPanelCompareRefValue("ref:  ")).toBeNull();
+    expect(parseDiffPanelCompareRefValue("branch")).toBeNull();
+  });
+
+  it("resolves the compare-ref picker value and label from the active ref", () => {
+    const latestTurnId = TurnId.makeUnsafe("turn-latest");
+
+    expect(
+      resolveDiffPanelScopePickerValue({
+        viewSource: { kind: "repo", scope: "ref" },
+        latestTurnId,
+        compareRef: "release/1.2",
+      }),
+    ).toBe("ref:release/1.2");
+    expect(
+      resolveDiffPanelScopePickerValue({
+        viewSource: { kind: "repo", scope: "ref" },
+        latestTurnId,
+        compareRef: null,
+      }),
+    ).toBeNull();
+    expect(
+      resolveDiffPanelPickerLabel({ kind: "repo", scope: "ref" }, undefined, "release/1.2"),
+    ).toBe("vs release/1.2");
+    expect(
+      resolveDiffPanelPickerLabel(
+        { kind: "repo", scope: "ref" },
+        undefined,
+        "0123456789abcdef0123456789abcdef01234567",
+      ),
+    ).toBe("vs 0123456");
+  });
+
+  it("surfaces a ref scope file count in the picker badges", () => {
+    expect(
+      resolveDiffPanelScopeFileCounts({
+        viewSource: { kind: "repo", scope: "ref" },
+        activeScopeFileCount: 4,
+        scopePickerOpen: false,
+        pickerScopeCounts: {},
+      }),
+    ).toEqual({ ref: 4 });
   });
 
   it("marks picker options selected only when they match the active scope", () => {

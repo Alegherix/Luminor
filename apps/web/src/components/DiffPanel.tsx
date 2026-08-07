@@ -53,6 +53,7 @@ import { DOCK_HEADER_ICON_BUTTON_CLASS, type DiffRenderMode } from "./chat/chatH
 import {
   areAllRenderableFilesCollapsed,
   DIFF_PANEL_PICKER_SCOPE_OPTIONS,
+  isDiffPanelRepoScopeOption,
   isStaleDiffTurnSelection,
   resolveConversationCacheScope,
   resolveDiffPanelGitStatusQueriesEnabled,
@@ -69,6 +70,7 @@ import {
   resolveInitialDiffViewKind,
   resolveSelectedTurnSummary,
   type DiffChangeNavigationDirection,
+  type DiffPanelRepoScopeOption,
   type DiffPanelTurnScopeIntent,
   type DiffViewKind,
 } from "./DiffPanel.logic";
@@ -78,6 +80,7 @@ import {
   type DiffPanelChangeNavigation,
 } from "./DiffPanelChangeNavigation";
 import { DiffLineBlamePopover, type DiffLineBlameTarget } from "./DiffLineBlamePopover";
+import { DiffPanelCompareRefMenuSection } from "./DiffPanelCompareRefMenuSection";
 import { DiffPanelPatchViewport } from "./DiffPanelPatchViewport";
 import { DiffPanelToolbar } from "./DiffPanelToolbar";
 import { ReviewFileTreePanel } from "./ReviewFileTreePanel";
@@ -103,7 +106,7 @@ import {
   MenuRadioItem,
   MenuTrigger,
 } from "./ui/menu";
-import { REPO_DIFF_SCOPE_LABELS } from "../repoDiffScopeStore";
+import { REPO_DIFF_SCOPE_LABELS, resolveRepoDiffScopeLabel } from "../repoDiffScopeStore";
 import { PanelStateMessage } from "./chat/PanelStateMessage";
 import { type SplitViewPanePanelState } from "../splitViewStore";
 import { formatShortTimestamp } from "../timestampFormat";
@@ -126,6 +129,9 @@ function EditorDiffOptionsCountBadge(props: { count: number | undefined }) {
 function EditorDiffOptionsMenu(props: {
   scopePickerValue: string | null;
   scopeFileCounts: Partial<Record<RepoDiffScope, number>>;
+  activeCwd: string | null;
+  compareRef: string | null;
+  scopeIsRef: boolean;
   selectedTurnId: TurnId | null;
   orderedTurnDiffSummaries: ReadonlyArray<TurnDiffSummary>;
   inferredCheckpointTurnCountByTurnId: Record<string, number>;
@@ -138,7 +144,8 @@ function EditorDiffOptionsMenu(props: {
   allFilesCollapsed: boolean;
   changeMarkersEnabled: boolean;
   diffRenderMode: DiffRenderMode;
-  onSelectRepoScope: (scope: RepoDiffScope) => void;
+  onSelectRepoScope: (scope: DiffPanelRepoScopeOption) => void;
+  onSelectCompareRef: (ref: string) => void;
   onSelectAllTurns: () => void;
   onSelectLastTurn: () => void;
   onSelectTurn: (turnId: TurnId | null) => void;
@@ -191,12 +198,7 @@ function EditorDiffOptionsMenu(props: {
                 props.onSelectLastTurn();
                 return;
               }
-              if (
-                value === "workingTree" ||
-                value === "unstaged" ||
-                value === "staged" ||
-                value === "branch"
-              ) {
+              if (isDiffPanelRepoScopeOption(value)) {
                 props.onSelectRepoScope(value);
               }
             }}
@@ -215,6 +217,15 @@ function EditorDiffOptionsMenu(props: {
             </MenuRadioItem>
           </MenuRadioGroup>
         </MenuGroup>
+
+        <DiffPanelCompareRefMenuSection
+          cwd={props.activeCwd}
+          open={optionsOpen}
+          compareRef={props.compareRef}
+          scopeIsRef={props.scopeIsRef}
+          iconClassName={EDITOR_DIFF_OPTIONS_MENU_ICON_CLASS_NAME}
+          onSelectCompareRef={props.onSelectCompareRef}
+        />
 
         {props.orderedTurnDiffSummaries.length > 0 ? (
           <MenuGroup>
@@ -321,6 +332,9 @@ function EditorDiffOptionsMenu(props: {
 function EditorDiffControls(props: {
   scopePickerValue: string | null;
   scopeFileCounts: Partial<Record<RepoDiffScope, number>>;
+  activeCwd: string | null;
+  compareRef: string | null;
+  scopeIsRef: boolean;
   selectedTurnId: TurnId | null;
   orderedTurnDiffSummaries: ReadonlyArray<TurnDiffSummary>;
   inferredCheckpointTurnCountByTurnId: Record<string, number>;
@@ -334,7 +348,8 @@ function EditorDiffControls(props: {
   allFilesCollapsed: boolean;
   changeMarkersEnabled: boolean;
   changeNavigation: DiffPanelChangeNavigation;
-  onSelectRepoScope: (scope: RepoDiffScope) => void;
+  onSelectRepoScope: (scope: DiffPanelRepoScopeOption) => void;
+  onSelectCompareRef: (ref: string) => void;
   onSelectAllTurns: () => void;
   onSelectLastTurn: () => void;
   onSelectTurn: (turnId: TurnId | null) => void;
@@ -354,6 +369,9 @@ function EditorDiffControls(props: {
       <EditorDiffOptionsMenu
         scopePickerValue={props.scopePickerValue}
         scopeFileCounts={props.scopeFileCounts}
+        activeCwd={props.activeCwd}
+        compareRef={props.compareRef}
+        scopeIsRef={props.scopeIsRef}
         selectedTurnId={props.selectedTurnId}
         orderedTurnDiffSummaries={props.orderedTurnDiffSummaries}
         inferredCheckpointTurnCountByTurnId={props.inferredCheckpointTurnCountByTurnId}
@@ -367,6 +385,7 @@ function EditorDiffControls(props: {
         changeMarkersEnabled={props.changeMarkersEnabled}
         diffRenderMode={props.diffRenderMode}
         onSelectRepoScope={props.onSelectRepoScope}
+        onSelectCompareRef={props.onSelectCompareRef}
         onSelectAllTurns={props.onSelectAllTurns}
         onSelectLastTurn={props.onSelectLastTurn}
         onSelectTurn={props.onSelectTurn}
@@ -430,6 +449,8 @@ export default function DiffPanel({
   }, []);
   const repoDiffScope = useRepoDiffScopeStore((store) => store.scope);
   const setRepoDiffScope = useRepoDiffScopeStore((store) => store.setScope);
+  const repoDiffCompareRef = useRepoDiffScopeStore((store) => store.compareRef);
+  const setRepoDiffCompareRef = useRepoDiffScopeStore((store) => store.setCompareRef);
   const [collapsedFiles, setCollapsedFiles] = useState<Set<string>>(() => new Set());
   const [fileTreeOpen, setFileTreeOpen] = useState(false);
   // Lazy-mount the review file tree on first open so a closed diff panel never
@@ -695,10 +716,19 @@ export default function DiffPanel({
       enabled: scopeCountQueriesEnabled && !diffEnvironmentPending,
     }),
   );
+  const refDiffStatsQuery = useQuery(
+    gitWorkingTreeDiffStatsQueryOptions({
+      cwd: activeCwd ?? null,
+      scope: "ref",
+      compareRef: repoDiffCompareRef,
+      enabled: scopeCountQueriesEnabled && !diffEnvironmentPending,
+    }),
+  );
   const repoDiffQuery = useQuery(
     gitWorkingTreeDiffQueryOptions({
       cwd: activeCwd ?? null,
       scope: repoDiffScope,
+      compareRef: repoDiffCompareRef,
       enabled: diffQueriesEnabled && !diffEnvironmentPending && diffViewKind === "repo",
       refetchInterval: repoDiffLiveRefreshIntervalMs,
     }),
@@ -847,13 +877,16 @@ export default function DiffPanel({
     const unstagedCount = unstagedDiffStatsQuery.data?.fileCount;
     const stagedCount = stagedDiffStatsQuery.data?.fileCount;
     const branchCount = branchDiffStatsQuery.data?.fileCount;
+    const refCount = refDiffStatsQuery.data?.fileCount;
     if (typeof workingTreeCount === "number") counts.workingTree = workingTreeCount;
     if (typeof unstagedCount === "number") counts.unstaged = unstagedCount;
     if (typeof stagedCount === "number") counts.staged = stagedCount;
     if (typeof branchCount === "number") counts.branch = branchCount;
+    if (typeof refCount === "number") counts.ref = refCount;
     return counts;
   }, [
     branchDiffStatsQuery.data?.fileCount,
+    refDiffStatsQuery.data?.fileCount,
     stagedDiffStatsQuery.data?.fileCount,
     unstagedDiffStatsQuery.data?.fileCount,
     workingTreeDiffStatsQuery.data?.fileCount,
@@ -1091,7 +1124,7 @@ export default function DiffPanel({
     [updateDiffSelection],
   );
   const selectRepoScope = useCallback(
-    (scope: typeof repoDiffScope) => {
+    (scope: DiffPanelRepoScopeOption) => {
       setDiffViewKind("repo");
       setRepoDiffScope(scope);
       if (selectedTurnId !== null) {
@@ -1099,6 +1132,21 @@ export default function DiffPanel({
       }
     },
     [selectedTurnId, setRepoDiffScope, updateDiffSelection],
+  );
+  const selectCompareRef = useCallback(
+    (ref: string) => {
+      const trimmed = ref.trim();
+      if (trimmed.length === 0) {
+        return;
+      }
+      setDiffViewKind("repo");
+      setRepoDiffCompareRef(trimmed);
+      setRepoDiffScope("ref");
+      if (selectedTurnId !== null) {
+        updateDiffSelection({ turnId: null, filePath: null });
+      }
+    },
+    [selectedTurnId, setRepoDiffCompareRef, setRepoDiffScope, updateDiffSelection],
   );
   const selectAllTurns = useCallback(() => {
     setTurnScopeIntent("all");
@@ -1143,8 +1191,9 @@ export default function DiffPanel({
         viewSource,
         latestTurnId,
         turnScopeIntent,
+        compareRef: repoDiffCompareRef,
       }),
-    [latestTurnId, turnScopeIntent, viewSource],
+    [latestTurnId, repoDiffCompareRef, turnScopeIntent, viewSource],
   );
   const editorDiffOptionsControl = useMemo(
     () =>
@@ -1152,6 +1201,9 @@ export default function DiffPanel({
         <EditorDiffControls
           scopePickerValue={scopePickerValue}
           scopeFileCounts={scopeFileCounts}
+          activeCwd={activeCwd}
+          compareRef={repoDiffCompareRef}
+          scopeIsRef={viewSource.kind === "repo" && viewSource.scope === "ref"}
           selectedTurnId={selectedTurnId}
           orderedTurnDiffSummaries={orderedTurnDiffSummaries}
           inferredCheckpointTurnCountByTurnId={inferredCheckpointTurnCountByTurnId}
@@ -1166,6 +1218,7 @@ export default function DiffPanel({
           changeMarkersEnabled={changeMarkersEnabled}
           changeNavigation={changeNavigation}
           onSelectRepoScope={selectRepoScope}
+          onSelectCompareRef={selectCompareRef}
           onSelectAllTurns={selectAllTurns}
           onSelectLastTurn={selectLastTurn}
           onSelectTurn={selectTurn}
@@ -1178,6 +1231,7 @@ export default function DiffPanel({
         />
       ) : null,
     [
+      activeCwd,
       allFilesCollapsed,
       changeMarkersEnabled,
       changeNavigation,
@@ -1191,15 +1245,18 @@ export default function DiffPanel({
       isDiffCopied,
       orderedTurnDiffSummaries,
       renderableFiles,
+      repoDiffCompareRef,
       scopeFileCounts,
       scopePickerValue,
       selectAllTurns,
+      selectCompareRef,
       selectLastTurn,
       selectRepoScope,
       selectTurn,
       selectedTurnId,
       settings.timestampFormat,
       toggleCollapseAll,
+      viewSource,
     ],
   );
   useEffect(() => {
@@ -1224,6 +1281,7 @@ export default function DiffPanel({
           viewSource={viewSource}
           turnScopeIntent={turnScopeIntent}
           scopeFileCounts={scopeFileCounts}
+          compareRef={repoDiffCompareRef}
           activeStats={
             activePatchStat
               ? {
@@ -1249,6 +1307,7 @@ export default function DiffPanel({
           changeMarkersEnabled={changeMarkersEnabled}
           changeNavigation={changeNavigation}
           onSelectRepoScope={selectRepoScope}
+          onSelectCompareRef={selectCompareRef}
           onSelectAllTurns={selectAllTurns}
           onSelectLastTurn={selectLastTurn}
           onSelectTurn={selectTurn}
@@ -1299,11 +1358,13 @@ export default function DiffPanel({
       handleScopePickerOpenChange,
       onClosePanel,
       orderedTurnDiffSummaries,
+      repoDiffCompareRef,
       scopePickerOpen,
       renderableFiles,
       resolvedTheme,
       scopeFileCounts,
       selectAllTurns,
+      selectCompareRef,
       selectFile,
       selectLastTurn,
       selectRepoScope,
@@ -1363,9 +1424,11 @@ export default function DiffPanel({
               error={activeReviewError}
               viewKind={diffViewKind}
               loadingLabel={
-                diffViewKind === "repo"
-                  ? `Loading ${REPO_DIFF_SCOPE_LABELS[repoDiffScope].toLowerCase()} diff...`
-                  : "Loading checkpoint diff..."
+                diffViewKind !== "repo"
+                  ? "Loading checkpoint diff..."
+                  : repoDiffScope === "ref"
+                    ? `Loading diff ${resolveRepoDiffScopeLabel(repoDiffScope, repoDiffCompareRef)}...`
+                    : `Loading ${REPO_DIFF_SCOPE_LABELS[repoDiffScope].toLowerCase()} diff...`
               }
               emptyLabel={
                 diffViewKind === "repo"
