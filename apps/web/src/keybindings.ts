@@ -172,6 +172,16 @@ export const DEFAULT_SHORTCUT_FALLBACKS: ResolvedKeybindingsConfig = [
     shortcut: commandShortcut("e", { shiftKey: true }),
     whenAst: whenNotTerminalFocus,
   },
+  {
+    command: "diff.change.next",
+    shortcut: commandShortcut("arrowdown", { altKey: true, modKey: false }),
+    whenAst: whenNotTerminalFocus,
+  },
+  {
+    command: "diff.change.previous",
+    shortcut: commandShortcut("arrowup", { altKey: true, modKey: false }),
+    whenAst: whenNotTerminalFocus,
+  },
   // Cmd-only instead of mod so Ctrl+L remains available to shells on non-macOS.
   {
     command: "composer.focus.toggle",

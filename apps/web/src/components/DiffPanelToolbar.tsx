@@ -41,6 +41,10 @@ import {
   type DiffPanelTurnScopeIntent,
   type DiffPanelViewSource,
 } from "./DiffPanel.logic";
+import {
+  DiffPanelChangeNavigationButtons,
+  type DiffPanelChangeNavigation,
+} from "./DiffPanelChangeNavigation";
 import { DiffPanelFileJumpMenu } from "./DiffPanelFileJumpMenu";
 import { ComposerPickerMenuPopup } from "./chat/ComposerPickerMenuPopup";
 import { EnvironmentRowBody, EnvironmentRowChevron } from "./chat/environment/EnvironmentRow";
@@ -99,6 +103,9 @@ interface DiffPanelToolbarProps {
   diffCopyText: string | null;
   isDiffCopied: boolean;
   allFilesCollapsed: boolean;
+  changeMarkersEnabled: boolean;
+  changeNavigation: DiffPanelChangeNavigation;
+  onChangeMarkersEnabledChange: (enabled: boolean) => void;
   onSelectRepoScope: (scope: RepoDiffScope) => void;
   onSelectAllTurns: () => void;
   onSelectLastTurn: () => void;
@@ -348,6 +355,15 @@ export const DiffPanelToolbar = function DiffPanelToolbar(props: DiffPanelToolba
                 >
                   Wrap long lines
                 </MenuCheckboxItem>
+                <MenuCheckboxItem
+                  checked={props.changeMarkersEnabled}
+                  variant="switch"
+                  onCheckedChange={(checked) => {
+                    props.onChangeMarkersEnabledChange(checked === true);
+                  }}
+                >
+                  Change markers
+                </MenuCheckboxItem>
                 {props.diffCopyText ? (
                   <MenuItem
                     onClick={() => {
@@ -373,6 +389,11 @@ export const DiffPanelToolbar = function DiffPanelToolbar(props: DiffPanelToolba
               </MenuGroup>
             </ComposerPickerMenuPopup>
           </Menu>
+
+          <DiffPanelChangeNavigationButtons
+            navigation={props.changeNavigation}
+            className={DIFF_PANEL_TOOLBAR_ICON_BUTTON_CLASS_NAME}
+          />
 
           <DiffPanelFileJumpMenu
             renderableFiles={props.renderableFiles}
