@@ -30,6 +30,7 @@ import { parseGitHubRepositoryNameWithOwnerFromRemoteUrl } from "@synara/shared/
 import { decodeJsonResult } from "@synara/shared/schemaJson";
 
 import { GitCheckoutDirtyWorktreeError, GitCommandError } from "../Errors.ts";
+import { parseGitBlamePorcelain } from "../gitBlameParsing.ts";
 import {
   countTextFileLines,
   normalizeConfiguredMergeBranch,
@@ -54,6 +55,7 @@ const STATUS_UPSTREAM_REFRESH_CACHE_CAPACITY = 2_048;
 const DEFAULT_BASE_BRANCH_CANDIDATES = ["main", "master"] as const;
 const EMPTY_TREE_OBJECT_ID = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const WORKING_TREE_DIFF_TIMEOUT_MS = 15_000;
+const BLAME_LINE_TIMEOUT_MS = 10_000;
 const MAX_UNTRACKED_DIFF_CONCURRENCY = 4;
 const MAX_QUEUED_REPOSITORY_MUTATIONS = 64;
 const MOVE_AWARE_WORKING_TREE_STATUS_TIMEOUT_MS = 15_000;
@@ -1630,6 +1632,34 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
         };
       });
 
+    const blameLine: GitCoreShape["blameLine"] = (input) =>
+      Effect.gen(function* () {
+        const args = [
+          "blame",
+          "--porcelain",
+          "-L",
+          `${input.line},${input.line}`,
+          ...(input.rev ? [input.rev] : []),
+          "--",
+          input.filePath,
+        ];
+        const stdout = yield* executeGit("GitCore.blameLine", input.cwd, args, {
+          timeoutMs: BLAME_LINE_TIMEOUT_MS,
+          fallbackErrorMessage: "git blame failed",
+        }).pipe(Effect.map((result) => result.stdout));
+
+        const parsed = parseGitBlamePorcelain(stdout);
+        if (!parsed) {
+          return yield* createGitCommandError(
+            "GitCore.blameLine",
+            input.cwd,
+            args,
+            "git blame returned no attribution for this line.",
+          );
+        }
+        return parsed;
+      });
+
     const prepareCommitContext: GitCoreShape["prepareCommitContext"] = (cwd, filePaths) =>
       Effect.gen(function* () {
         if (filePaths && filePaths.length > 0) {
@@ -3141,6 +3171,7 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
       readUnstagedPatch,
       readStagedPatch,
       readBranchPatch,
+      blameLine,
       prepareCommitContext,
       commit,
       pushCurrentBranch,

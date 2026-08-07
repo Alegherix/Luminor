@@ -142,6 +142,14 @@ export const GitReadWorkingTreeDiffInput = Schema.Struct({
 });
 export type GitReadWorkingTreeDiffInput = typeof GitReadWorkingTreeDiffInput.Type;
 
+export const GitBlameLineInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  filePath: TrimmedNonEmptyStringSchema,
+  line: PositiveInt,
+  rev: Schema.optional(TrimmedNonEmptyStringSchema),
+});
+export type GitBlameLineInput = typeof GitBlameLineInput.Type;
+
 export const GitPullInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
 });
@@ -383,6 +391,17 @@ export const GitReadWorkingTreeDiffResult = Schema.Struct({
   patch: Schema.String,
 });
 export type GitReadWorkingTreeDiffResult = typeof GitReadWorkingTreeDiffResult.Type;
+
+export const GitBlameLineResult = Schema.Struct({
+  sha: Schema.String,
+  shortSha: Schema.String,
+  author: Schema.String,
+  authorEmail: Schema.String,
+  authorTime: Schema.String,
+  summary: Schema.String,
+  uncommitted: Schema.Boolean,
+});
+export type GitBlameLineResult = typeof GitBlameLineResult.Type;
 
 /**
  * Line counts for a scope's patch, without the patch itself.

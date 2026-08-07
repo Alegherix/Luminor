@@ -381,4 +381,3 @@ export function resolveDiffSelectAllWithinViewport(
 ): boolean {
   return eventWithinDiffViewport || (lastPointerInDiffViewport && !isTextEditingTarget);
 }
-
