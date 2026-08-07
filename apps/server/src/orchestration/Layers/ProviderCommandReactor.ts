@@ -65,6 +65,7 @@ import {
   resolveThreadWorkspaceCwd,
 } from "../../checkpointing/Utils.ts";
 import { CheckpointStore } from "../../checkpointing/Services/CheckpointStore.ts";
+import { AgentGatewayOperationRepository } from "../../agentGateway/Services/AgentGatewayOperationRepository.ts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import {
   ProviderAdapterRequestError,
@@ -107,6 +108,7 @@ import {
   listImportedForkMessages,
   listPriorTranscriptMessages,
 } from "../handoff.ts";
+import type { OrchestrationDispatchError } from "../Errors.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
 import {
@@ -463,6 +465,7 @@ const make = Effect.gen(function* () {
   const checkpointStore = yield* CheckpointStore;
   const studioOutputReactor = yield* StudioOutputReactor;
   const git = yield* GitCore;
+  const gatewayOperations = yield* AgentGatewayOperationRepository;
   const textGeneration = yield* TextGeneration;
   const serverSettings = yield* ServerSettingsService;
   const managedAttachments = yield* ManagedAttachmentRepository;
@@ -1829,9 +1832,38 @@ const make = Effect.gen(function* () {
     readonly cwd: string;
     readonly oldBranch: string;
     readonly targetBranch: string;
+    readonly gatewayOperationId: string | null;
   }) {
     if (input.targetBranch === input.oldBranch) {
       return;
+    }
+
+    // Gateway-created threads: the creating operation's durable ownership
+    // proof records the temporary branch name. Renaming before the operation
+    // reaches a terminal state would make live compensation and startup
+    // recovery reject the worktree as tampered ("worktree branch changed"),
+    // stranding it. Check right before mutating so the window between the LLM
+    // name generation and the rename stays covered; skipping is safe — the
+    // thread simply keeps its temporary name.
+    if (input.gatewayOperationId !== null) {
+      const operation = yield* gatewayOperations.getById(input.gatewayOperationId).pipe(
+        // An unreadable record proves nothing; skip the rename rather than
+        // risk invalidating a proof that may still be needed.
+        Effect.catch(() => Effect.succeed(null)),
+      );
+      if (operation !== null && operation.status !== "completed") {
+        yield* Effect.logInfo(
+          "provider command reactor skipped worktree branch rename: creating gateway operation is not complete",
+          {
+            threadId: input.threadId,
+            cwd: input.cwd,
+            oldBranch: input.oldBranch,
+            gatewayOperationId: input.gatewayOperationId,
+            operationStatus: operation.status,
+          },
+        );
+        return;
+      }
     }
 
     const renamed = yield* git.withMutation(
@@ -1916,6 +1948,7 @@ const make = Effect.gen(function* () {
         cwd,
         oldBranch,
         targetBranch,
+        gatewayOperationId: thread.gatewayOperationId ?? null,
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.logWarning(
@@ -1957,6 +1990,7 @@ const make = Effect.gen(function* () {
           cwd,
           oldBranch,
           targetBranch,
+          gatewayOperationId: thread.gatewayOperationId ?? null,
         });
       }),
       Effect.catchCause((cause) =>
@@ -2679,7 +2713,7 @@ const make = Effect.gen(function* () {
       readonly detail: string;
       readonly settlementStatus: "retryable" | "uncertain";
     },
-  ) =>
+  ): Effect.Effect<void, OrchestrationDispatchError> =>
     event.commandId === null
       ? Effect.void
       : appendProviderFailureActivity({

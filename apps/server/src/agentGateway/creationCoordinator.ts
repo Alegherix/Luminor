@@ -458,7 +458,7 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
       if (deprecatedBranchName) {
         return yield* Effect.fail(
           new ToolInputError(
-            '"branchName" is no longer supported for managed worktrees. Synara creates a detached HEAD; create a branch inside the new thread when the work is ready.',
+            '"branchName" is no longer supported for managed worktrees. Synara creates a managed temporary branch and renames it after the first prompt; create additional branches inside the new thread if needed.',
           ),
         );
       }
@@ -724,10 +724,15 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
                           Effect.flatMap(() =>
                             worktree.branch === null
                               ? Effect.void
-                              : git.deleteBranch({
+                              : // The branch is this operation's own deterministic
+                                // synara/* name and its worktree was just force-removed.
+                                // A non-forced delete would fail whenever the pinned
+                                // ref is not merged into the root HEAD (e.g. PR heads),
+                                // stranding the name and blocking exact-plan retries.
+                                git.deleteBranch({
                                   cwd: worktree.cwd,
                                   branch: worktree.branch,
-                                  force: false,
+                                  force: true,
                                 }),
                           ),
                         )

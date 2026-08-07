@@ -42,6 +42,7 @@ import {
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { AgentGatewayOperationRepositoryLive } from "../../agentGateway/Layers/AgentGatewayOperationRepository.ts";
 import { deriveServerPaths, ServerConfig } from "../../config.ts";
 import { TextGenerationError } from "../../git/Errors.ts";
 import {
@@ -520,6 +521,7 @@ describe("ProviderCommandReactor", () => {
       Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
       Layer.provideMerge(NodeServices.layer),
       Layer.provideMerge(OrchestrationEventDeliveryRepositoryLive),
+      Layer.provideMerge(AgentGatewayOperationRepositoryLive),
       Layer.provideMerge(SqlitePersistenceMemory),
     );
     const runtime = ManagedRuntime.make(layer);

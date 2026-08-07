@@ -2717,10 +2717,10 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
 
     const removeWorktree: GitCoreShape["removeWorktree"] = (input) =>
       Effect.gen(function* () {
-        // Resolve the branch before removal: afterwards the worktree checkout
-        // is gone and can no longer answer. Only temporary synara/* branches
-        // qualify for reclamation; detached HEADs and user-named branches
-        // resolve to null.
+        // Resolve the branch and its HEAD before removal: afterwards the
+        // worktree checkout is gone and can no longer answer. Only temporary
+        // synara/* branches qualify for reclamation; detached HEADs and
+        // user-named branches resolve to null.
         const temporaryBranch = input.reclaimTemporaryBranch
           ? yield* executeGit(
               "GitCore.removeWorktree.readBranch",
@@ -2728,10 +2728,18 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
               ["symbolic-ref", "--quiet", "--short", "HEAD"],
               { allowNonZeroExit: true, timeoutMs: 5_000 },
             ).pipe(
-              Effect.map((result) => {
-                if (result.code !== 0) return null;
+              Effect.flatMap((result) => {
+                if (result.code !== 0) return Effect.succeed(null);
                 const branch = result.stdout.trim();
-                return branch.length > 0 && isTemporaryWorktreeBranch(branch) ? branch : null;
+                if (branch.length === 0 || !isTemporaryWorktreeBranch(branch)) {
+                  return Effect.succeed(null);
+                }
+                return executeGit(
+                  "GitCore.removeWorktree.readBranchHead",
+                  input.path,
+                  ["rev-parse", "--verify", `refs/heads/${branch}`],
+                  { timeoutMs: 5_000 },
+                ).pipe(Effect.map((head) => ({ branch, head: head.stdout.trim() })));
               }),
               Effect.catch(() => Effect.succeed(null)),
             )
@@ -2756,20 +2764,23 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
           ),
         );
         if (temporaryBranch !== null) {
-          // Temporary branches hold unmerged thread commits by design, so this
-          // is a forced delete. The removal itself already succeeded; a branch
-          // cleanup failure must not surface as a failed removal.
+          // Compare-and-delete against the HEAD observed above: if a concurrent
+          // Git process repointed the ref since then, its commits survive. The
+          // removal itself already succeeded; a branch cleanup failure must not
+          // surface as a failed removal, but it must be logged — a stranded
+          // deterministic branch blocks later reuse of its name.
           yield* executeGit(
             "GitCore.removeWorktree.reclaimBranch",
             input.cwd,
-            ["branch", "-D", "--", temporaryBranch],
-            { allowNonZeroExit: true, timeoutMs: 10_000 },
+            ["update-ref", "-d", `refs/heads/${temporaryBranch.branch}`, temporaryBranch.head],
+            { timeoutMs: 10_000 },
           ).pipe(
             Effect.catch((error) =>
               Effect.logWarning("worktree removal could not reclaim its temporary branch", {
                 cwd: input.cwd,
                 path: input.path,
-                branch: temporaryBranch,
+                branch: temporaryBranch.branch,
+                expectedHead: temporaryBranch.head,
                 error: error instanceof Error ? error.message : String(error),
               }),
             ),
