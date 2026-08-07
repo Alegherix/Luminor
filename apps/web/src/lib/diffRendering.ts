@@ -227,6 +227,26 @@ export type RenderablePatch =
       reason: string;
     };
 
+const PATCH_FILE_BOUNDARY_PATTERN = /^diff --git /gm;
+
+export function splitPatchIntoFileSegments(patch: string): string[] {
+  const boundaries: number[] = [];
+  for (const match of patch.matchAll(PATCH_FILE_BOUNDARY_PATTERN)) {
+    boundaries.push(match.index);
+  }
+  if (boundaries.length <= 1) {
+    return [patch];
+  }
+  const segments: string[] = [];
+  let start = 0;
+  for (const boundary of boundaries.slice(1)) {
+    segments.push(patch.slice(start, boundary));
+    start = boundary;
+  }
+  segments.push(patch.slice(start));
+  return segments;
+}
+
 export function getRenderablePatch(
   patch: string | undefined,
   cacheScope = "diff-panel",
@@ -236,11 +256,11 @@ export function getRenderablePatch(
   if (normalizedPatch.length === 0) return null;
 
   try {
-    const parsedPatches = parsePatchFiles(
-      normalizedPatch,
-      buildPatchCacheKey(normalizedPatch, cacheScope),
+    const files = splitPatchIntoFileSegments(normalizedPatch).flatMap((segment) =>
+      parsePatchFiles(segment, buildPatchCacheKey(segment, cacheScope)).flatMap(
+        (parsedPatch) => parsedPatch.files,
+      ),
     );
-    const files = parsedPatches.flatMap((parsedPatch) => parsedPatch.files);
     if (files.length > 0) {
       return { kind: "files", files };
     }

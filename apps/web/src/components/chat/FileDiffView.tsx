@@ -50,7 +50,7 @@ export function FileDiffCard(props: {
       fileDiff={props.fileDiff}
       options={{
         diffStyle: props.diffStyle ?? "unified",
-        lineDiffType: "none",
+        lineDiffType: "word",
         overflow: props.overflow ?? "scroll",
         theme: resolveDiffThemeName(props.theme),
         themeType: props.theme,
