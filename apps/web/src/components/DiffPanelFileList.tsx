@@ -8,7 +8,8 @@ import { type MouseEvent as ReactMouseEvent } from "react";
 import { ChevronDownIcon, CopyIcon, EllipsisIcon, MessageCircleIcon } from "~/lib/icons";
 
 import { buildFileDiffRenderKey, resolveFileDiffPath } from "~/lib/diffRendering";
-import { FileDiffCard, FileDiffSurface } from "./chat/FileDiffView";
+import { FileDiffCard, FileDiffSurface, type DiffLineClickProps } from "./chat/FileDiffView";
+import { resolveDiffLineBlameTarget, type DiffLineBlameTarget } from "./DiffLineBlamePopover";
 import { LocalImagePreview } from "./LocalImagePreview";
 import { PanelStateMessage } from "./chat/PanelStateMessage";
 import { ComposerPickerMenuPopup } from "./chat/ComposerPickerMenuPopup";
@@ -105,6 +106,7 @@ const DiffPanelFileRow = function DiffPanelFileRow(props: {
   isCollapsed: boolean;
   onToggleFileCollapsed: (fileKey: string) => void;
   chatActions?: DiffFileChatActions | undefined;
+  onBlameLine?: ((target: DiffLineBlameTarget) => void) | undefined;
 }) {
   const filePath = resolveFileDiffPath(props.fileDiff);
   const fileKey = buildFileDiffRenderKey(props.fileDiff);
@@ -121,6 +123,13 @@ const DiffPanelFileRow = function DiffPanelFileRow(props: {
       <DiffFileCollapseChevron collapsed={isCollapsed} />
     </>
   );
+  const { onBlameLine } = props;
+  const handleLineClick = onBlameLine
+    ? (line: DiffLineClickProps) => {
+        const target = resolveDiffLineBlameTarget(filePath, line);
+        if (target) onBlameLine(target);
+      }
+    : undefined;
   const handleClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
     const nativeEvent = event.nativeEvent;
     const composedPath = nativeEvent.composedPath?.() ?? [];
@@ -155,6 +164,7 @@ const DiffPanelFileRow = function DiffPanelFileRow(props: {
         overflow={props.diffWordWrap ? "wrap" : "scroll"}
         collapsed={props.isCollapsed}
         renderHeaderTrailing={renderHeaderTrailing}
+        onLineClick={handleLineClick}
       />
       {shouldPreviewImage ? (
         <LocalImagePreview
@@ -178,6 +188,7 @@ export const DiffPanelFileList = function DiffPanelFileList(props: {
   collapsedFiles: ReadonlySet<string>;
   onToggleFileCollapsed: (fileKey: string) => void;
   chatActions?: DiffFileChatActions | undefined;
+  onBlameLine?: ((target: DiffLineBlameTarget) => void) | undefined;
 }) {
   if (props.renderableFiles.length === 0) {
     return (
@@ -207,6 +218,7 @@ export const DiffPanelFileList = function DiffPanelFileList(props: {
             isCollapsed={props.collapsedFiles.has(fileKey)}
             onToggleFileCollapsed={props.onToggleFileCollapsed}
             chatActions={props.chatActions}
+            onBlameLine={props.onBlameLine}
           />
         );
       })}

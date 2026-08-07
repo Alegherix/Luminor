@@ -18,6 +18,7 @@ const GIT_STATUS_REFETCH_INTERVAL_MS = 300_000;
 const GIT_BRANCHES_STALE_TIME_MS = 15_000;
 const GIT_BRANCHES_REFETCH_INTERVAL_MS = 300_000;
 const GIT_WORKING_TREE_DIFF_STALE_TIME_MS = 5_000;
+const GIT_BLAME_LINE_STALE_TIME_MS = 30_000;
 export const GIT_WORKING_TREE_DIFF_LIVE_REFETCH_INTERVAL_MS = 4_000;
 
 export const gitQueryKeys = {
@@ -38,6 +39,12 @@ export const gitQueryKeys = {
     cwd: string | null,
     scope: GitReadWorkingTreeDiffInput["scope"] = "workingTree",
   ) => ["git", "working-tree-diff", cwd, scope, "stats"] as const,
+  blameLine: (
+    cwd: string | null,
+    filePath: string | null,
+    line: number | null,
+    rev: string | null,
+  ) => ["git", "blame-line", cwd, filePath, line, rev] as const,
   diffSummary: (
     cacheScope: string | null,
     model: string | null,
@@ -251,6 +258,38 @@ export function gitWorkingTreeDiffQueryOptions(input: {
     ...(refetchInterval !== undefined ? { refetchInterval } : {}),
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
+  });
+}
+
+export function gitBlameLineQueryOptions(input: {
+  cwd: string | null;
+  filePath: string | null;
+  line: number | null;
+  rev?: string | undefined;
+  enabled?: boolean;
+}) {
+  const rev = input.rev ?? null;
+  return queryOptions({
+    queryKey: gitQueryKeys.blameLine(input.cwd, input.filePath, input.line, rev),
+    queryFn: async () => {
+      const api = ensureNativeApi();
+      if (!input.cwd || !input.filePath || input.line === null) {
+        throw new Error("Git blame is unavailable.");
+      }
+      return api.git.blameLine({
+        cwd: input.cwd,
+        filePath: input.filePath,
+        line: input.line,
+        ...(rev !== null ? { rev } : {}),
+      });
+    },
+    enabled:
+      (input.enabled ?? true) &&
+      input.cwd !== null &&
+      input.filePath !== null &&
+      input.line !== null,
+    staleTime: GIT_BLAME_LINE_STALE_TIME_MS,
+    retry: false,
   });
 }
 

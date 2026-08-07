@@ -64,6 +64,7 @@ import {
   type DiffPanelTurnScopeIntent,
   type DiffViewKind,
 } from "./DiffPanel.logic";
+import { DiffLineBlamePopover, type DiffLineBlameTarget } from "./DiffLineBlamePopover";
 import { DiffPanelPatchViewport } from "./DiffPanelPatchViewport";
 import { DiffPanelToolbar } from "./DiffPanelToolbar";
 import { ReviewFileTreePanel } from "./ReviewFileTreePanel";
@@ -895,6 +896,26 @@ export default function DiffPanel({
     [activeThreadId],
   );
 
+  const [blameTarget, setBlameTarget] = useState<DiffLineBlameTarget | null>(null);
+  const showLineBlame = useCallback((target: DiffLineBlameTarget) => {
+    setBlameTarget(target);
+  }, []);
+  const closeLineBlame = useCallback(() => {
+    setBlameTarget(null);
+  }, []);
+  const referenceBlameLineInChat = useMemo(
+    () =>
+      activeThreadId
+        ? (target: DiffLineBlameTarget) => {
+            appendChatFileReference(activeThreadId, {
+              path: target.filePath,
+              startLine: target.line,
+            });
+          }
+        : undefined,
+    [activeThreadId],
+  );
+
   // Highlight diff code -> floating "Add to chat" -> mention + quoted snippet.
   // The diff body renders inside the @pierre/diffs shadow root, so selection
   // ancestors are resolved through shadow boundaries.
@@ -1244,6 +1265,7 @@ export default function DiffPanel({
               collapsedFiles={collapsedFiles}
               onToggleFileCollapsed={toggleFileCollapsed}
               chatActions={diffFileChatActions}
+              onBlameLine={showLineBlame}
               isLoading={activeReviewIsLoading}
               hasNoChanges={activeReviewHasNoChanges}
               error={activeReviewError}
@@ -1262,6 +1284,15 @@ export default function DiffPanel({
               }
               unavailableLabel="No repo diff is available right now."
             />
+            {blameTarget ? (
+              <DiffLineBlamePopover
+                target={blameTarget}
+                cwd={activeCwd ?? null}
+                timestampFormat={settings.timestampFormat}
+                onReferenceInChat={referenceBlameLineInChat}
+                onClose={closeLineBlame}
+              />
+            ) : null}
             {diffSelectionAction.pendingAction ? (
               <TranscriptSelectionAction
                 left={diffSelectionAction.pendingAction.left}

@@ -39,6 +39,8 @@ import { StudioListThreadOutputsInput, StudioListThreadOutputsResult } from "./s
 import {
   GitCheckoutInput,
   GitActionProgressEvent,
+  GitBlameLineInput,
+  GitBlameLineResult,
   GitCreateBranchInput,
   GitCreateDetachedWorktreeInput,
   GitCreateDetachedWorktreeResult,
@@ -468,6 +470,12 @@ export const WsGitGithubRepositoryRpc = Rpc.make(WS_METHODS.gitGithubRepository,
 export const WsGitReadWorkingTreeDiffRpc = Rpc.make(WS_METHODS.gitReadWorkingTreeDiff, {
   payload: GitReadWorkingTreeDiffInput,
   success: GitReadWorkingTreeDiffResult,
+  error: WsRpcError,
+});
+
+export const WsGitBlameLineRpc = Rpc.make(WS_METHODS.gitBlameLine, {
+  payload: GitBlameLineInput,
+  success: GitBlameLineResult,
   error: WsRpcError,
 });
 
@@ -1045,6 +1053,7 @@ export const WsFeatureRpcGroup = RpcGroup.make(
   WsGitGithubRepositoryRpc,
   WsGitStatusRpc,
   WsGitReadWorkingTreeDiffRpc,
+  WsGitBlameLineRpc,
   WsGitWorkingTreeDiffStatsRpc,
   WsGitSummarizeDiffRpc,
   WsGitPullRpc,

@@ -9,6 +9,8 @@
 import { ServiceMap } from "effect";
 import type { Effect, Scope } from "effect";
 import type {
+  GitBlameLineInput,
+  GitBlameLineResult,
   GitCheckoutInput,
   GitCreateBranchInput,
   GitCreateDetachedWorktreeInput,
@@ -225,6 +227,10 @@ export interface GitCoreShape {
    * Read aggregate branch changes from the upstream/base merge-base through the working tree.
    */
   readonly readBranchPatch: (cwd: string) => Effect.Effect<GitWorkingTreePatch, GitCommandError>;
+
+  readonly blameLine: (
+    input: GitBlameLineInput,
+  ) => Effect.Effect<GitBlameLineResult, GitCommandError>;
 
   /**
    * Build staged change context for commit generation.

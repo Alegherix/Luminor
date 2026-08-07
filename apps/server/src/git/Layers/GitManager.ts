@@ -1405,6 +1405,10 @@ export const makeGitManager = Effect.gen(function* () {
     },
   );
 
+  const blameLine: GitManagerShape["blameLine"] = Effect.fnUntraced(function* (input) {
+    return yield* gitCore.blameLine(input);
+  });
+
   // Same reason as summarizeDiff below: the badge surfaces need three integers, not the patch.
   // Deriving them from the very patch readWorkingTreeDiff would have returned keeps the numbers
   // identical to the ones a client-side parse produced, so no surface changes what it displays.
@@ -2750,6 +2754,7 @@ The local stash entry was kept for recovery.`,
     status,
     readWorkingTreeDiff,
     readWorkingTreeDiffStats,
+    blameLine,
     summarizeDiff,
     resolvePullRequest,
     pullRequestSnapshot,
