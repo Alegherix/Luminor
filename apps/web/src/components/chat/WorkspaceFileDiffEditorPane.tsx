@@ -7,12 +7,17 @@ import { gitReadFileAtRevQueryOptions } from "~/lib/gitReactQuery";
 import { Columns2Icon, Rows3Icon } from "~/lib/icons";
 import type { MonacoThemeVariant } from "~/lib/monaco/theme";
 import { CodeDiffEditorPane } from "../monaco/CodeDiffEditorPane";
+import {
+  INITIAL_MONACO_EDIT_HISTORY_STATE,
+  type MonacoEditHistoryControls,
+} from "../monaco/editHistory";
 import { ChatHeaderIconButton } from "./chatHeaderControls";
 import { PanelStateMessage } from "./PanelStateMessage";
 import {
   WorkspaceFileEditorConflictBar,
   WorkspaceFileEditorDiscardDialog,
   WorkspaceFileEditorHeader,
+  WorkspaceFileEditorHistoryActions,
 } from "./WorkspaceFileEditorChrome";
 
 export interface WorkspaceFileDiffEditorPaneProps {
@@ -26,6 +31,8 @@ export interface WorkspaceFileDiffEditorPaneProps {
 
 export function WorkspaceFileDiffEditorPane(props: WorkspaceFileDiffEditorPaneProps) {
   const [renderSideBySide, setRenderSideBySide] = useState(true);
+  const historyControlsRef = useRef<MonacoEditHistoryControls | null>(null);
+  const [history, setHistory] = useState(INITIAL_MONACO_EDIT_HISTORY_STATE);
   const session = useWorkspaceFileEditorSession({
     cwd: props.workspaceRoot,
     filePath: props.filePath,
@@ -76,19 +83,28 @@ export function WorkspaceFileDiffEditorPane(props: WorkspaceFileDiffEditorPanePr
         onSave={session.save}
         onClose={session.requestClose}
         actions={
-          <ChatHeaderIconButton
-            type="button"
-            tone="plain"
-            label={renderSideBySide ? "Switch to inline diff" : "Switch to side-by-side diff"}
-            title={renderSideBySide ? "Switch to inline diff" : "Switch to side-by-side diff"}
-            onClick={() => setRenderSideBySide((previous) => !previous)}
-          >
-            {renderSideBySide ? (
-              <Rows3Icon aria-hidden="true" className="size-3.5" />
-            ) : (
-              <Columns2Icon aria-hidden="true" className="size-3.5" />
-            )}
-          </ChatHeaderIconButton>
+          <>
+            <WorkspaceFileEditorHistoryActions
+              history={history}
+              canRevert={session.dirty && editable}
+              onUndo={() => historyControlsRef.current?.undo()}
+              onRedo={() => historyControlsRef.current?.redo()}
+              onRevert={() => historyControlsRef.current?.revertTo(session.state.baseline)}
+            />
+            <ChatHeaderIconButton
+              type="button"
+              tone="plain"
+              label={renderSideBySide ? "Switch to inline diff" : "Switch to side-by-side diff"}
+              title={renderSideBySide ? "Switch to inline diff" : "Switch to side-by-side diff"}
+              onClick={() => setRenderSideBySide((previous) => !previous)}
+            >
+              {renderSideBySide ? (
+                <Rows3Icon aria-hidden="true" className="size-3.5" />
+              ) : (
+                <Columns2Icon aria-hidden="true" className="size-3.5" />
+              )}
+            </ChatHeaderIconButton>
+          </>
         }
       />
       {session.state.saveError ? (
@@ -130,6 +146,8 @@ export function WorkspaceFileDiffEditorPane(props: WorkspaceFileDiffEditorPanePr
           readOnly={!editable}
           onChange={session.handleChange}
           onSave={session.save}
+          historyControlsRef={historyControlsRef}
+          onHistoryChange={setHistory}
         />
       )}
       <WorkspaceFileEditorDiscardDialog

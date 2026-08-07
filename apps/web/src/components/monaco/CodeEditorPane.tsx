@@ -1,10 +1,16 @@
 import type * as MonacoTypes from "monaco-editor/editor/editor.api";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 import { buildMonacoEditorOptions } from "~/lib/monaco/editorOptions";
 import { loadMonaco } from "~/lib/monaco/loader";
 import { defineSynaraMonacoTheme, type MonacoThemeVariant } from "~/lib/monaco/theme";
 import { cn } from "~/lib/utils";
+import {
+  createMonacoEditHistoryControls,
+  readMonacoEditHistoryState,
+  type MonacoEditHistoryControls,
+  type MonacoEditHistoryState,
+} from "./editHistory";
 
 export interface CodeEditorPaneProps {
   value: string;
@@ -15,6 +21,8 @@ export interface CodeEditorPaneProps {
   className?: string;
   onChange: (value: string) => void;
   onSave: () => void;
+  historyControlsRef?: RefObject<MonacoEditHistoryControls | null> | undefined;
+  onHistoryChange?: ((history: MonacoEditHistoryState) => void) | undefined;
 }
 
 export function CodeEditorPane(props: CodeEditorPaneProps) {
@@ -25,6 +33,9 @@ export function CodeEditorPane(props: CodeEditorPaneProps) {
   const onSaveRef = useRef(props.onSave);
   onChangeRef.current = props.onChange;
   onSaveRef.current = props.onSave;
+  const onHistoryChangeRef = useRef(props.onHistoryChange);
+  onHistoryChangeRef.current = props.onHistoryChange;
+  const historyControlsRef = props.historyControlsRef;
   const valueRef = useRef(props.value);
   valueRef.current = props.value;
   const languageRef = useRef(props.language);
@@ -56,8 +67,15 @@ export function CodeEditorPane(props: CodeEditorPaneProps) {
       });
       appliedVersionRef.current = versionRef.current;
       editorRef.current = editor;
+      if (historyControlsRef) {
+        historyControlsRef.current = createMonacoEditHistoryControls(editor, model);
+      }
+      onHistoryChangeRef.current?.(readMonacoEditHistoryState(model));
       model.onDidChangeContent(() => {
         onChangeRef.current(model?.getValue() ?? "");
+        if (model) {
+          onHistoryChangeRef.current?.(readMonacoEditHistoryState(model));
+        }
       });
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
         onSaveRef.current();
@@ -68,10 +86,13 @@ export function CodeEditorPane(props: CodeEditorPaneProps) {
       disposed = true;
       editorRef.current = null;
       appliedVersionRef.current = null;
+      if (historyControlsRef) {
+        historyControlsRef.current = null;
+      }
       editor?.dispose();
       model?.dispose();
     };
-  }, []);
+  }, [historyControlsRef]);
 
   useEffect(() => {
     const editor = editorRef.current;

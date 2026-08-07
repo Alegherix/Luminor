@@ -1,11 +1,18 @@
+import { useRef, useState } from "react";
+
 import { useWorkspaceFileEditorSession } from "~/hooks/useWorkspaceFileEditorSession";
 import type { MonacoThemeVariant } from "~/lib/monaco/theme";
 import { CodeEditorPane } from "../monaco/CodeEditorPane";
+import {
+  INITIAL_MONACO_EDIT_HISTORY_STATE,
+  type MonacoEditHistoryControls,
+} from "../monaco/editHistory";
 import { PanelStateMessage } from "./PanelStateMessage";
 import {
   WorkspaceFileEditorConflictBar,
   WorkspaceFileEditorDiscardDialog,
   WorkspaceFileEditorHeader,
+  WorkspaceFileEditorHistoryActions,
 } from "./WorkspaceFileEditorChrome";
 
 export interface WorkspaceFileEditorPaneProps {
@@ -24,6 +31,8 @@ export function WorkspaceFileEditorPane(props: WorkspaceFileEditorPaneProps) {
     onClose: props.onClose,
     onDirtyChange: props.onDirtyChange,
   });
+  const historyControlsRef = useRef<MonacoEditHistoryControls | null>(null);
+  const [history, setHistory] = useState(INITIAL_MONACO_EDIT_HISTORY_STATE);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-[var(--color-background-surface)]">
@@ -36,6 +45,15 @@ export function WorkspaceFileEditorPane(props: WorkspaceFileEditorPaneProps) {
         canSave={session.dirty && session.canEdit}
         onSave={session.save}
         onClose={session.requestClose}
+        actions={
+          <WorkspaceFileEditorHistoryActions
+            history={history}
+            canRevert={session.dirty && session.canEdit}
+            onUndo={() => historyControlsRef.current?.undo()}
+            onRedo={() => historyControlsRef.current?.redo()}
+            onRevert={() => historyControlsRef.current?.revertTo(session.state.baseline)}
+          />
+        }
       />
       {session.state.saveError ? (
         <WorkspaceFileEditorConflictBar
@@ -66,6 +84,8 @@ export function WorkspaceFileEditorPane(props: WorkspaceFileEditorPaneProps) {
           resolvedTheme={props.resolvedTheme}
           onChange={session.handleChange}
           onSave={session.save}
+          historyControlsRef={historyControlsRef}
+          onHistoryChange={setHistory}
         />
       )}
       <WorkspaceFileEditorDiscardDialog

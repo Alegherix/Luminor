@@ -1,7 +1,15 @@
 import { Fragment, type ReactNode } from "react";
 
 import { basenameOfPath } from "~/file-icons";
-import { ChevronRightIcon, TriangleAlertIcon, XIcon } from "~/lib/icons";
+import {
+  ChevronRightIcon,
+  Redo2Icon,
+  RotateCcwIcon,
+  TriangleAlertIcon,
+  Undo2Icon,
+  XIcon,
+} from "~/lib/icons";
+import type { MonacoEditHistoryState } from "~/components/monaco/editHistory";
 import { cn } from "~/lib/utils";
 import {
   AlertDialog,
@@ -32,6 +40,51 @@ export function workspaceFileEditorBreadcrumbSegments(
     })),
     fileSegment: segments.at(-1) ?? filePath,
   };
+}
+
+interface WorkspaceFileEditorHistoryActionsProps {
+  history: MonacoEditHistoryState;
+  canRevert: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
+  onRevert: () => void;
+}
+
+export function WorkspaceFileEditorHistoryActions(props: WorkspaceFileEditorHistoryActionsProps) {
+  return (
+    <>
+      <ChatHeaderIconButton
+        type="button"
+        tone="plain"
+        label="Undo"
+        title="Undo"
+        disabled={!props.history.canUndo}
+        onClick={props.onUndo}
+      >
+        <Undo2Icon aria-hidden="true" className="size-3.5" />
+      </ChatHeaderIconButton>
+      <ChatHeaderIconButton
+        type="button"
+        tone="plain"
+        label="Redo"
+        title="Redo"
+        disabled={!props.history.canRedo}
+        onClick={props.onRedo}
+      >
+        <Redo2Icon aria-hidden="true" className="size-3.5" />
+      </ChatHeaderIconButton>
+      <ChatHeaderIconButton
+        type="button"
+        tone="plain"
+        label="Revert all changes"
+        title="Revert all changes"
+        disabled={!props.canRevert}
+        onClick={props.onRevert}
+      >
+        <RotateCcwIcon aria-hidden="true" className="size-3.5" />
+      </ChatHeaderIconButton>
+    </>
+  );
 }
 
 interface WorkspaceFileEditorHeaderProps {

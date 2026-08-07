@@ -1,10 +1,16 @@
 import type * as MonacoTypes from "monaco-editor/editor/editor.api";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 import { buildMonacoEditorOptions } from "~/lib/monaco/editorOptions";
 import { loadMonaco } from "~/lib/monaco/loader";
 import { defineSynaraMonacoTheme, type MonacoThemeVariant } from "~/lib/monaco/theme";
 import { cn } from "~/lib/utils";
+import {
+  createMonacoEditHistoryControls,
+  readMonacoEditHistoryState,
+  type MonacoEditHistoryControls,
+  type MonacoEditHistoryState,
+} from "./editHistory";
 
 export interface CodeDiffEditorPaneProps {
   original: string;
@@ -18,6 +24,8 @@ export interface CodeDiffEditorPaneProps {
   className?: string;
   onChange: (value: string) => void;
   onSave: () => void;
+  historyControlsRef?: RefObject<MonacoEditHistoryControls | null> | undefined;
+  onHistoryChange?: ((history: MonacoEditHistoryState) => void) | undefined;
 }
 
 export function CodeDiffEditorPane(props: CodeDiffEditorPaneProps) {
@@ -31,6 +39,9 @@ export function CodeDiffEditorPane(props: CodeDiffEditorPaneProps) {
   const onSaveRef = useRef(props.onSave);
   onChangeRef.current = props.onChange;
   onSaveRef.current = props.onSave;
+  const onHistoryChangeRef = useRef(props.onHistoryChange);
+  onHistoryChangeRef.current = props.onHistoryChange;
+  const historyControlsRef = props.historyControlsRef;
   const originalRef = useRef(props.original);
   originalRef.current = props.original;
   const modifiedRef = useRef(props.modified);
@@ -77,8 +88,18 @@ export function CodeDiffEditorPane(props: CodeDiffEditorPaneProps) {
       diffEditorRef.current = diffEditor;
       originalModelRef.current = originalModel;
       modifiedModelRef.current = modifiedModel;
+      if (historyControlsRef) {
+        historyControlsRef.current = createMonacoEditHistoryControls(
+          diffEditor.getModifiedEditor(),
+          modifiedModel,
+        );
+      }
+      onHistoryChangeRef.current?.(readMonacoEditHistoryState(modifiedModel));
       modifiedModel.onDidChangeContent(() => {
         onChangeRef.current(modifiedModel?.getValue() ?? "");
+        if (modifiedModel) {
+          onHistoryChangeRef.current?.(readMonacoEditHistoryState(modifiedModel));
+        }
       });
       diffEditor.getModifiedEditor().addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
         onSaveRef.current();
@@ -92,11 +113,14 @@ export function CodeDiffEditorPane(props: CodeDiffEditorPaneProps) {
       modifiedModelRef.current = null;
       appliedOriginalVersionRef.current = null;
       appliedModifiedVersionRef.current = null;
+      if (historyControlsRef) {
+        historyControlsRef.current = null;
+      }
       diffEditor?.dispose();
       originalModel?.dispose();
       modifiedModel?.dispose();
     };
-  }, []);
+  }, [historyControlsRef]);
 
   useEffect(() => {
     const model = originalModelRef.current;
