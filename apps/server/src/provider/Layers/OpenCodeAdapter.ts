@@ -36,7 +36,10 @@ import {
   ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
 } from "../Errors.ts";
-import { takeSynaraHarnessPolicyForProviderSession } from "../../agentGateway/harnessPolicy.ts";
+import {
+  SYNARA_HARNESS_POLICY_VERSION,
+  takeSynaraHarnessPolicyForProviderSession,
+} from "../../agentGateway/harnessPolicy.ts";
 import { buildOpenCodeMcpServer, SYNARA_MCP_SERVER_NAME } from "../../agentGateway/mcpInjection.ts";
 import { AgentGatewayCredentials } from "../../agentGateway/Services/AgentGatewayCredentials.ts";
 import {
@@ -147,6 +150,18 @@ type OpenCodeSubscribedEvent =
 interface OpenCodeTurnSnapshot {
   readonly id: TurnId;
   readonly items: Array<unknown>;
+}
+
+interface OpenCodeHarnessPolicyDelivery {
+  readonly sessionId: string;
+  readonly policyVersion: string;
+  readonly gatewayControlAvailable: boolean;
+}
+
+interface OpenCodeResumeCursor {
+  readonly openCodeSessionId: string;
+  readonly cwd: string;
+  readonly harnessPolicyDelivery?: OpenCodeHarnessPolicyDelivery;
 }
 
 interface OpenCodeSessionContext {
@@ -921,6 +936,72 @@ function extractResumeCwd(resumeCursor: unknown): string | undefined {
     return resumeCursor.cwd.trim();
   }
   return undefined;
+}
+
+function extractHarnessPolicyDelivery(
+  resumeCursor: unknown,
+): OpenCodeHarnessPolicyDelivery | undefined {
+  if (
+    resumeCursor &&
+    typeof resumeCursor === "object" &&
+    "harnessPolicyDelivery" in resumeCursor &&
+    resumeCursor.harnessPolicyDelivery &&
+    typeof resumeCursor.harnessPolicyDelivery === "object"
+  ) {
+    const delivery = resumeCursor.harnessPolicyDelivery;
+    if (
+      "sessionId" in delivery &&
+      typeof delivery.sessionId === "string" &&
+      delivery.sessionId.trim().length > 0 &&
+      "policyVersion" in delivery &&
+      typeof delivery.policyVersion === "string" &&
+      delivery.policyVersion.trim().length > 0 &&
+      "gatewayControlAvailable" in delivery &&
+      typeof delivery.gatewayControlAvailable === "boolean"
+    ) {
+      return {
+        sessionId: delivery.sessionId.trim(),
+        policyVersion: delivery.policyVersion.trim(),
+        gatewayControlAvailable: delivery.gatewayControlAvailable,
+      };
+    }
+  }
+  return undefined;
+}
+
+function isMatchingHarnessPolicyDelivery(
+  delivery: OpenCodeHarnessPolicyDelivery | undefined,
+  input: {
+    readonly sessionId: string;
+    readonly gatewayControlAvailable: boolean;
+  },
+): boolean {
+  return (
+    delivery?.sessionId === input.sessionId &&
+    delivery.policyVersion === SYNARA_HARNESS_POLICY_VERSION &&
+    delivery.gatewayControlAvailable === input.gatewayControlAvailable
+  );
+}
+
+function buildOpenCodeResumeCursor(input: {
+  readonly openCodeSessionId: string;
+  readonly cwd: string;
+  readonly harnessPolicyDelivered?: boolean;
+  readonly gatewayControlAvailable: boolean;
+}): OpenCodeResumeCursor {
+  return {
+    openCodeSessionId: input.openCodeSessionId,
+    cwd: input.cwd,
+    ...(input.harnessPolicyDelivered
+      ? {
+          harnessPolicyDelivery: {
+            sessionId: input.openCodeSessionId,
+            policyVersion: SYNARA_HARNESS_POLICY_VERSION,
+            gatewayControlAvailable: input.gatewayControlAvailable,
+          },
+        }
+      : {}),
+  };
 }
 
 function openCodeRecord(value: unknown): Record<string, unknown> | undefined {
@@ -3528,13 +3609,14 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
             input.modelSelection?.provider === adapterConfig.provider
               ? input.modelSelection.options?.variant
               : undefined;
+          const resumedSessionId = extractResumeSessionId(input.resumeCursor);
+          const persistedHarnessPolicyDelivery = extractHarnessPolicyDelivery(input.resumeCursor);
           const existing = sessions.get(input.threadId);
           if (existing) {
             yield* stopOpenCodeContext(existing);
             sessions.delete(input.threadId);
           }
 
-          const resumedSessionId = extractResumeSessionId(input.resumeCursor);
           // OpenCode's MCP registry is process/directory scoped, not session
           // scoped. Issue a gateway token only for a managed server isolated to
           // this exact Synara thread.
@@ -3670,6 +3752,17 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
                 }
 
                 const started = startedExit.value;
+                // A session id alone is not enough: policy revisions or a changed gateway
+                // capability require a fresh, truthful host-policy delivery.
+                const harnessPolicyDelivered =
+                  resumedSessionId === started.openCodeSessionId &&
+                  (isMatchingHarnessPolicyDelivery(persistedHarnessPolicyDelivery, {
+                    sessionId: started.openCodeSessionId,
+                    gatewayControlAvailable: started.gatewayControlAvailable,
+                  }) ||
+                    (existing?.openCodeSessionId === started.openCodeSessionId &&
+                      existing.harnessPolicyDelivered === true &&
+                      existing.gatewayControlAvailable === started.gatewayControlAvailable));
                 if (options?.beforeSessionInstall) {
                   yield* options.beforeSessionInstall;
                 }
@@ -3695,12 +3788,18 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
                   cwd: directory,
                   ...(input.modelSelection ? { model: input.modelSelection.model } : {}),
                   threadId: input.threadId,
-                  resumeCursor: { openCodeSessionId: started.openCodeSessionId, cwd: directory },
+                  resumeCursor: buildOpenCodeResumeCursor({
+                    openCodeSessionId: started.openCodeSessionId,
+                    cwd: directory,
+                    harnessPolicyDelivered,
+                    gatewayControlAvailable: started.gatewayControlAvailable,
+                  }),
                   createdAt,
                   updatedAt: createdAt,
                 };
 
                 const context: OpenCodeSessionContext = {
+                  ...(harnessPolicyDelivered ? { harnessPolicyDelivered: true } : {}),
                   session,
                   gatewayControlAvailable: started.gatewayControlAvailable,
                   ...(started.gatewayControlAvailable && agentGatewaySessionLease
@@ -3881,6 +3980,12 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
             status: "running",
             activeTurnId: turnId,
             model: modelSelection?.model ?? context.session.model,
+            resumeCursor: buildOpenCodeResumeCursor({
+              openCodeSessionId: context.openCodeSessionId,
+              cwd: context.directory,
+              harnessPolicyDelivered: context.harnessPolicyDelivered,
+              gatewayControlAvailable: context.gatewayControlAvailable,
+            }),
           },
           { clearLastError: true },
         );
@@ -3953,7 +4058,12 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
         return {
           threadId: input.threadId,
           turnId,
-          resumeCursor: { openCodeSessionId: context.openCodeSessionId, cwd: context.directory },
+          resumeCursor: buildOpenCodeResumeCursor({
+            openCodeSessionId: context.openCodeSessionId,
+            cwd: context.directory,
+            harnessPolicyDelivered: context.harnessPolicyDelivered,
+            gatewayControlAvailable: context.gatewayControlAvailable,
+          }),
         };
       });
 
