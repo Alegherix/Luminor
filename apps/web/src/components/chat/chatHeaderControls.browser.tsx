@@ -29,7 +29,44 @@ describe("SurfaceTabChip selection", () => {
     expect(document.querySelectorAll("button")).toHaveLength(1);
     expect(page.getByRole("button", { name: "Close PR #42" })).toBeVisible();
     expect(document.body.textContent).toContain("PR #42");
+    expect(document.body.textContent).toContain("PR");
     expect(document.querySelector("[aria-pressed]")).toBeNull();
+  });
+
+  it("keeps the panel icon and puts close to the right of the label", async () => {
+    const onClose = vi.fn();
+    await render(
+      <SurfaceTabChip
+        active
+        icon={<span data-testid="pane-icon">Browser</span>}
+        label="Browser"
+        closeLabel="Close Browser"
+        onSelect={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+
+    const icon = document.querySelector("[data-testid='pane-icon']");
+    const closeButton = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Close Browser"]',
+    );
+    const selectButton = document.querySelector<HTMLButtonElement>('button[aria-pressed="true"]');
+    expect(icon).not.toBeNull();
+    expect(closeButton).not.toBeNull();
+    expect(selectButton).not.toBeNull();
+    expect(
+      Boolean(
+        icon &&
+          closeButton &&
+          selectButton &&
+          (icon.compareDocumentPosition(selectButton) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 &&
+          (selectButton.compareDocumentPosition(closeButton) & Node.DOCUMENT_POSITION_FOLLOWING) !==
+            0,
+      ),
+    ).toBe(true);
+
+    closeButton?.click();
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("keeps the selectable button for multi-pane hosts", async () => {
