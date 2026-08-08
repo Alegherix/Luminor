@@ -14,6 +14,7 @@ import {
   isDiffToggleShortcut,
   isKeyboardShortcutsHelpShortcut,
   isOpenFavoriteEditorShortcut,
+  isRightDockToggleShortcut,
   isSidebarToggleShortcut,
   isTerminalClearShortcut,
   isTerminalCloseShortcut,
@@ -271,6 +272,11 @@ const DEFAULT_BINDINGS = compile([
   {
     shortcut: modShortcut("d"),
     command: "diff.toggle",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: modShortcut("e"),
+    command: "rightDock.toggle",
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
   {
@@ -989,6 +995,10 @@ describe("shortcutLabelForCommand", () => {
     );
     assert.strictEqual(shortcutLabelForCommand(DEFAULT_BINDINGS, "diff.toggle", "Linux"), "Ctrl+D");
     assert.strictEqual(
+      shortcutLabelForCommand(DEFAULT_BINDINGS, "rightDock.toggle", "Linux"),
+      "Ctrl+E",
+    );
+    assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "sidebar.toggle", "MacIntel"),
       "⌘B",
     );
@@ -1381,6 +1391,27 @@ describe("chat/editor shortcuts", () => {
     assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "sidebar.search", "Win32"),
       "Ctrl+K",
+    );
+  });
+
+  it("matches rightDock.toggle shortcut outside terminal focus", () => {
+    assert.isTrue(
+      isRightDockToggleShortcut(event({ key: "e", metaKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: false },
+      }),
+    );
+    assert.isTrue(
+      isRightDockToggleShortcut(event({ key: "e", ctrlKey: true }), DEFAULT_BINDINGS, {
+        platform: "Linux",
+        context: { terminalFocus: false },
+      }),
+    );
+    assert.isFalse(
+      isRightDockToggleShortcut(event({ key: "e", metaKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: true },
+      }),
     );
   });
 

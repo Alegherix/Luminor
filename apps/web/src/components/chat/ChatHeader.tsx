@@ -91,6 +91,7 @@ interface ChatHeaderProps {
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   diffToggleShortcutLabel: string | null;
+  rightDockToggleShortcutLabel?: string | null;
   handoffBadgeLabel: string | null;
   handoffActionLabel: string;
   handoffDisabled: boolean;
@@ -509,6 +510,7 @@ export function ChatHeader({
   keybindings,
   availableEditors,
   diffToggleShortcutLabel,
+  rightDockToggleShortcutLabel: rightDockToggleShortcutLabelProp,
   handoffBadgeLabel,
   handoffActionLabel,
   handoffDisabled,
@@ -603,6 +605,7 @@ export function ChatHeader({
   // without a multi-pane dock (split/editor surfaces) keep the legacy diff-only
   // behavior until they gain their own launcher surface.
   const togglesRightDock = onToggleRightDock !== undefined;
+  const rightDockToggleShortcutLabel = rightDockToggleShortcutLabelProp ?? null;
   const rightPanelToggleControl = showDiffToggle ? (
     <Tooltip>
       <TooltipTrigger
@@ -640,8 +643,12 @@ export function ChatHeader({
       <TooltipPopup side="bottom">
         {togglesRightDock
           ? rightDockOpen
-            ? "Close right sidebar"
-            : "Open right sidebar"
+            ? rightDockToggleShortcutLabel
+              ? `Close right sidebar (${rightDockToggleShortcutLabel})`
+              : "Close right sidebar"
+            : rightDockToggleShortcutLabel
+              ? `Open right sidebar (${rightDockToggleShortcutLabel})`
+              : "Open right sidebar"
           : !isGitRepo
             ? "Diff panel is unavailable because this project is not a git repository."
             : diffDisabledReason && !diffOpen

@@ -4022,6 +4022,10 @@ export default function ChatView({
     () => shortcutLabelForCommand(keybindings, "diff.toggle"),
     [keybindings],
   );
+  const rightDockToggleShortcutLabel = useMemo(
+    () => shortcutLabelForCommand(keybindings, "rightDock.toggle"),
+    [keybindings],
+  );
   const chatSplitShortcutLabel = useMemo(
     () => shortcutLabelForCommand(keybindings, "chat.split"),
     [keybindings],
@@ -6408,6 +6412,14 @@ export default function ChatView({
         return;
       }
 
+      if (command === "rightDock.toggle") {
+        if (!onToggleRightDock) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onToggleRightDock();
+        return;
+      }
+
       if (command === "git.commitAndPush") {
         if (commitAndPushTriggerRef.current) {
           event.preventDefault();
@@ -6479,6 +6491,7 @@ export default function ChatView({
     terminalWorkspaceTerminalTabActive,
     onToggleBrowser,
     onToggleDiff,
+    onToggleRightDock,
     onInterruptFromStopControl,
     onSplitSurface,
     showGitActions,
@@ -11533,6 +11546,7 @@ export default function ChatView({
           keybindings={keybindings}
           availableEditors={availableEditors}
           diffToggleShortcutLabel={diffPanelShortcutLabel}
+          rightDockToggleShortcutLabel={rightDockToggleShortcutLabel}
           handoffBadgeLabel={handoffBadgeLabel}
           handoffActionLabel={handoffActionLabel}
           handoffDisabled={handoffDisabled}

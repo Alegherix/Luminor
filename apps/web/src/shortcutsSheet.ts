@@ -182,6 +182,11 @@ const AVAILABLE_NOW_DEFINITIONS: readonly ShortcutDefinition[] = [
     description: "Reveal the built-in browser panel for the active thread.",
   },
   {
+    command: "rightDock.toggle",
+    label: "Toggle right sidebar",
+    description: "Open or fold the right side menu for the active thread.",
+  },
+  {
     command: "chat.visible.previous",
     label: "Previous visible thread",
     description: "Cycle to the previous thread that is currently visible in the sidebar.",
