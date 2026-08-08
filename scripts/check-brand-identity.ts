@@ -59,16 +59,16 @@ const approvedAttributions: readonly ApprovedAttribution[] = [
   {
     path: "README.md",
     markdownSection: "## Origins",
-    line: `Synara began as a clone of [${retiredFirstDisplayName}](https://github.com/pingdotgg/${retiredFirstName}), but it has since become a substantially different product with its own branding, packaging, release system, provider orchestration, desktop app behavior, and product direction.`,
+    line: `Luminor began as a clone of [${retiredFirstDisplayName}](https://github.com/pingdotgg/${retiredFirstName}), but it has since become a substantially different product with its own branding, packaging, release system, provider orchestration, desktop app behavior, and product direction.`,
   },
   {
     path: "CHANGELOG.md",
     markdownSection: "## 0.7.0 - 2026-08-05",
-    line: `**A review of the Synara codebase found an analytics configuration that came from the original ${retiredFirstSpacedDisplayName} codebase when Synara was created as a clone in March. We did not add it, and we have no access to the PostHog project receiving the events.**`,
+    line: `**A review of the Luminor codebase found an analytics configuration that came from the original ${retiredFirstSpacedDisplayName} codebase when Luminor was created as a clone in March. We did not add it, and we have no access to the PostHog project receiving the events.**`,
   },
   {
     path: "apps/web/src/whatsNew/entries.ts",
-    line: `"A review of the Synara codebase found an analytics configuration that came from the original ${retiredFirstSpacedDisplayName} codebase when Synara was created as a clone in March.",`,
+    line: `"A review of the Luminor codebase found an analytics configuration that came from the original ${retiredFirstSpacedDisplayName} codebase when Luminor was created as a clone in March.",`,
   },
 ];
 
@@ -78,11 +78,11 @@ const approvedAttributions: readonly ApprovedAttribution[] = [
 const approvedVisualAssetDigests = new Map<string, string>([
   [
     "apps/marketing/public/screenshot.jpeg",
-    "0b4be139f13dd08885a1aac26fc1f7c623697db157777d16360e985c93d47bcf",
+    "ed9d92729dfe1b614ec13e990e78c257644f10d63a435bceb316f382fe4118b3",
   ],
   [
     "assets/prod/readme-screenshot.jpeg",
-    "0b4be139f13dd08885a1aac26fc1f7c623697db157777d16360e985c93d47bcf",
+    "ed9d92729dfe1b614ec13e990e78c257644f10d63a435bceb316f382fe4118b3",
   ],
 ]);
 
@@ -198,7 +198,7 @@ function main(): void {
     ...findVisualBrandAssetViolations(trackedFiles),
   ];
   if (violations.length === 0) {
-    console.log("Synara identity check passed.");
+    console.log("Luminor identity check passed.");
     return;
   }
 

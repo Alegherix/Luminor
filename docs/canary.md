@@ -1,17 +1,17 @@
-# Synara Canary
+# Luminor Canary
 
-Synara Canary is a frozen local build of a chosen remote Git ref. It is intentionally separate
-from both Synara Stable and the HMR development process.
+Luminor Canary is a frozen local build of a chosen remote Git ref. It is intentionally separate
+from both Luminor Stable and the HMR development process.
 
 ## Isolation
 
-- App name: `Synara Canary`
-- Bundle ID: `com.emanueledipietro.synara.canary`
-- Desktop origin: `synara-canary://app`
-- Synara data: `~/.synara-canary`
-- Electron profile: `synara-canary`
-- Managed source: `~/.cache/synara-canary/source`
-- Runtime log: `~/.synara-canary/canary.log`
+- App name: `Luminor Canary`
+- Bundle ID: `com.emanueledipietro.luminor.canary`
+- Desktop origin: `luminor-canary://app`
+- Luminor data: `~/.luminor-canary`
+- Electron profile: `luminor-canary`
+- Managed source: `~/.cache/luminor-canary/source`
+- Runtime log: `~/.luminor-canary/canary.log`
 - Updates: only through the Canary scripts; the production updater is disabled
 
 Canary starts with an empty data directory. It never copies or shares Stable data.
@@ -32,7 +32,7 @@ affect the running Canary.
 While this change is still a stacked PR, it can be tested explicitly from its remote branch:
 
 ```bash
-bun run canary:setup -- --ref codex/synara-canary
+bun run canary:setup -- --ref codex/luminor-canary
 ```
 
 Later `canary:update` calls keep using that tracked ref automatically. After this PR lands on `main`,
@@ -58,8 +58,8 @@ the previous commit before restarting Canary.
 Paths can be overridden without touching Stable:
 
 ```bash
-SYNARA_CANARY_HOME=/path/to/data \
-SYNARA_CANARY_SOURCE=/path/to/source \
+LUMINOR_CANARY_HOME=/path/to/data \
+LUMINOR_CANARY_SOURCE=/path/to/source \
 bun run canary:update
 ```
 
@@ -68,9 +68,9 @@ bun run canary:update
 Use a named dev instance and a separate home:
 
 ```bash
-env -u SYNARA_AUTH_TOKEN \
-  SYNARA_DEV_INSTANCE=my-feature \
-  bun run dev -- --home-dir ./.synara/dev-my-feature
+env -u LUMINOR_AUTH_TOKEN \
+  LUMINOR_DEV_INSTANCE=my-feature \
+  bun run dev -- --home-dir ./.luminor/dev-my-feature
 ```
 
 Canary remains pinned to its compiled commit while the development instance continues to use HMR.

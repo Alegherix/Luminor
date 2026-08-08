@@ -77,4 +77,23 @@ describe("ComposerImageIntakeQueue", () => {
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:stale");
     URL.revokeObjectURL = originalRevokeObjectUrl;
   });
+
+  it("accepts jobs after a Strict Mode cleanup and reactivation", async () => {
+    const queue = new ComposerImageIntakeQueue();
+    const commitImages = vi.fn(() => 1);
+
+    queue.activate();
+    queue.dispose();
+    queue.activate();
+
+    await queue.enqueue({
+      files: [new File(["image"], "image.png", { type: "image/png" })],
+      existingAttachmentCount: () => 0,
+      commitImages,
+      onError: vi.fn(),
+      prepareFiles: async () => ({ images: [preparedImage("remounted")], error: null }),
+    });
+
+    expect(commitImages).toHaveBeenCalledOnce();
+  });
 });

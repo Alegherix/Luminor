@@ -5,7 +5,7 @@ import {
   type OrchestrationCommand,
   type OrchestrationShellSnapshot,
   type ProviderSession,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it, vi } from "vitest";
 

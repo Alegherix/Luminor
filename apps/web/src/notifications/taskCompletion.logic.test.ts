@@ -7,7 +7,7 @@ import {
   ThreadId,
   TurnId,
   type OrchestrationPendingInteraction,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import {
   buildInputNeededCopy,
   buildTaskCompletionCopy,

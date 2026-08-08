@@ -10,7 +10,7 @@
 // Layer: Chat/editor file-preview UI
 // Exports: WorkspaceFilePreviewHeader
 
-import { isWorkspaceRelativePathSafe, joinWorkspaceRelativePath } from "@synara/shared/path";
+import { isWorkspaceRelativePathSafe, joinWorkspaceRelativePath } from "@luminor/shared/path";
 import { Fragment } from "react";
 
 import { basenameOfPath } from "~/file-icons";

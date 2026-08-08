@@ -1,5 +1,5 @@
-import type { PinnedMessage } from "@synara/contracts";
-import { MessageId } from "@synara/contracts";
+import type { PinnedMessage } from "@luminor/contracts";
+import { MessageId } from "@luminor/contracts";
 import { describe, expect, it } from "vitest";
 
 import {

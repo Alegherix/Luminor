@@ -16,10 +16,10 @@ import {
   buildAcceptLanguageHeader,
   buildChromeClientHints,
   deriveChromeUserAgent,
-} from "@synara/shared/browserSession";
+} from "@luminor/shared/browserSession";
 import { LOCAL_HTML_PREVIEW_SCHEME, LocalHtmlPreviewRegistry } from "./localHtmlPreviewProtocol";
 
-export const BROWSER_SESSION_PARTITION = "persist:synara-browser";
+export const BROWSER_SESSION_PARTITION = "persist:luminor-browser";
 
 export interface BrowserSessionDownloadEvent {
   readonly event: Electron.Event;

@@ -37,30 +37,30 @@ import {
   OrchestrationThreadActivity,
   ProviderInteractionMode,
   RuntimeMode,
-} from "@synara/contracts";
-import { automationRequiresTargetThread } from "@synara/shared/automationMode";
-import { respondingInteractionReclaimAt } from "@synara/shared/pendingInteractions";
-import { providerSupportsNativeTurnSteering } from "@synara/shared/providerMetadata";
-import { getModelCapabilities, normalizeModelSlug } from "@synara/shared/model";
+} from "@luminor/contracts";
+import { automationRequiresTargetThread } from "@luminor/shared/automationMode";
+import { respondingInteractionReclaimAt } from "@luminor/shared/pendingInteractions";
+import { providerSupportsNativeTurnSteering } from "@luminor/shared/providerMetadata";
+import { getModelCapabilities, normalizeModelSlug } from "@luminor/shared/model";
 import {
   resolveLatestTailUserMessageEditTarget,
   resolveTailUserMessageEditTarget,
-} from "@synara/shared/conversationEdit";
-import { threadExportBlockedReason } from "@synara/shared/threadExport";
-import { pendingRequestInstanceKey } from "@synara/shared/threadSummary";
+} from "@luminor/shared/conversationEdit";
+import { threadExportBlockedReason } from "@luminor/shared/threadExport";
+import { pendingRequestInstanceKey } from "@luminor/shared/threadSummary";
 import {
   buildPromptThreadTitleFallback,
   GENERIC_CHAT_THREAD_TITLE,
-} from "@synara/shared/chatThreads";
+} from "@luminor/shared/chatThreads";
 import {
   resolveThreadWorkspaceState,
   resolveThreadBranchSourceCwd,
   resolveThreadWorkspaceCwd as resolveSharedThreadWorkspaceCwd,
-} from "@synara/shared/threadEnvironment";
+} from "@luminor/shared/threadEnvironment";
 import {
   deriveAssociatedWorktreeMetadata,
   workspaceRootsEqual,
-} from "@synara/shared/threadWorkspace";
+} from "@luminor/shared/threadWorkspace";
 import {
   lazy,
   Suspense,
@@ -78,7 +78,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Debouncer, useDebouncedValue } from "@tanstack/react-pacer";
 import { useNavigate } from "@tanstack/react-router";
 import { type LegendListRef } from "@legendapp/list/react";
-import { buildTemporaryWorktreeBranchName } from "@synara/shared/git";
+import { buildTemporaryWorktreeBranchName } from "@luminor/shared/git";
 import {
   GIT_WORKING_TREE_DIFF_LIVE_REFETCH_INTERVAL_MS,
   gitCreateDetachedWorktreeMutationOptions,
@@ -295,7 +295,7 @@ import {
   normalizeRuntimeModeForProvider,
   providerModelSupportsAutoRuntimeMode,
 } from "../lib/runtimeMode";
-import { SynaraLogo } from "./SynaraLogo";
+import { LuminorLogo } from "./LuminorLogo";
 import { ThreadWorktreeHandoffDialog } from "./ThreadWorktreeHandoffDialog";
 import {
   formatShortcutLabel,
@@ -1136,7 +1136,7 @@ function composerPromptStillMatchesRestoredQueuedDraft(
 
 // Builds an ephemeral transcript bubble for the conversational automation-setup
 // exchange. These never reach a provider and are not persisted; they render the
-// back-and-forth (user request, Synara's clarifying questions) inline like Codex.
+// back-and-forth (user request, Luminor's clarifying questions) inline like Codex.
 function makeAutomationSetupBubble(role: "user" | "assistant", text: string): ChatMessage {
   return {
     id: newMessageId(),
@@ -4837,7 +4837,7 @@ export default function ChatView({
             toastManager.add({
               type: "error",
               title: "Could not update access mode",
-              description: "Synara is not connected to the server.",
+              description: "Luminor is not connected to the server.",
             });
             return false;
           }
@@ -5257,7 +5257,7 @@ export default function ChatView({
         toastManager.add({
           type: "warning",
           title: "Select a unique phrase to mark it.",
-          description: "Try including a few more words so Synara can find the exact place.",
+          description: "Try including a few more words so Luminor can find the exact place.",
         });
         return;
       }
@@ -6826,7 +6826,7 @@ export default function ChatView({
                 type: "warning",
                 title: "Thread note not added",
                 description:
-                  "The automation was created, but Synara could not add the activity note.",
+                  "The automation was created, but Luminor could not add the activity note.",
               });
             }
           })();
@@ -6846,7 +6846,7 @@ export default function ChatView({
             type: "error",
             title: "Could not create automation",
             description:
-              error instanceof Error ? error.message : "Synara could not save the automation.",
+              error instanceof Error ? error.message : "Luminor could not save the automation.",
           });
           return false;
         })
@@ -6920,7 +6920,7 @@ export default function ChatView({
           toastManager.add({
             type: "error",
             title: "Could not create chat",
-            description: "Synara could not promote this draft before saving the automation.",
+            description: "Luminor could not promote this draft before saving the automation.",
           });
           return null;
         }
@@ -6947,7 +6947,7 @@ export default function ChatView({
           description:
             error instanceof Error
               ? error.message
-              : "Synara could not promote this draft before saving the automation.",
+              : "Luminor could not promote this draft before saving the automation.",
         });
         return null;
       }
@@ -11675,7 +11675,7 @@ export default function ChatView({
                       CHAT_COLUMN_FRAME_CLASS_NAME,
                     )}
                   >
-                    <SynaraLogo aria-label="Synara logo" className="size-10" />
+                    <LuminorLogo aria-label="Luminor logo" className="size-[100px]" />
                     <h2
                       data-testid="empty-landing-heading"
                       className="text-[26px] font-normal leading-[1.15] tracking-[-0.015em] text-foreground/95 sm:text-[30px]"

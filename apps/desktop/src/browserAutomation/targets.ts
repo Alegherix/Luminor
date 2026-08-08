@@ -4,7 +4,7 @@ import type {
   BrowserNodeTarget,
   BrowserPointerTarget,
   BrowserTabId,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 
 import type { BrowserAutomationVisibleRuntime } from "../browserManager";
 import {
@@ -283,7 +283,7 @@ export const resolveBrowserTarget = async (
 
   const object = await evaluateInContext(
     runtime,
-    "globalThis.__synaraBrowserAutomationV1.currentTarget",
+    "globalThis.__luminorBrowserAutomationV1.currentTarget",
     {
       contextId,
       returnByValue: false,

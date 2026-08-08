@@ -5,13 +5,13 @@
 import * as FS from "node:fs";
 import * as Path from "node:path";
 
-import type { SynaraStorageSnapshot } from "@synara/contracts";
+import type { LuminorStorageSnapshot } from "@luminor/contracts";
 
-export const SYNARA_STORAGE_SNAPSHOT_FILE_NAME = "synara-storage-origin-v1.json";
-export const SYNARA_STORAGE_SNAPSHOT_MAX_BYTES = 16 * 1024 * 1024;
-export const SYNARA_STORAGE_SNAPSHOT_MAX_ENTRIES = 2_048;
-export const SYNARA_STORAGE_SNAPSHOT_MAX_KEY_LENGTH = 512;
-export const SYNARA_STORAGE_SNAPSHOT_MAX_VALUE_LENGTH = 16 * 1024 * 1024;
+export const LUMINOR_STORAGE_SNAPSHOT_FILE_NAME = "luminor-storage-origin-v1.json";
+export const LUMINOR_STORAGE_SNAPSHOT_MAX_BYTES = 16 * 1024 * 1024;
+export const LUMINOR_STORAGE_SNAPSHOT_MAX_ENTRIES = 2_048;
+export const LUMINOR_STORAGE_SNAPSHOT_MAX_KEY_LENGTH = 512;
+export const LUMINOR_STORAGE_SNAPSHOT_MAX_VALUE_LENGTH = 16 * 1024 * 1024;
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -21,11 +21,11 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null;
 }
 
-export function isSynaraStorageKey(key: string): boolean {
-  return key.startsWith("synara:") || key.startsWith("synara.");
+export function isLuminorStorageKey(key: string): boolean {
+  return key.startsWith("luminor:") || key.startsWith("luminor.");
 }
 
-export function validateSynaraStorageSnapshot(value: unknown): SynaraStorageSnapshot | null {
+export function validateLuminorStorageSnapshot(value: unknown): LuminorStorageSnapshot | null {
   if (!isPlainRecord(value) || value.version !== 1 || !isPlainRecord(value.entries)) {
     return null;
   }
@@ -34,24 +34,24 @@ export function validateSynaraStorageSnapshot(value: unknown): SynaraStorageSnap
   }
 
   const entries = Object.entries(value.entries);
-  if (entries.length > SYNARA_STORAGE_SNAPSHOT_MAX_ENTRIES) {
+  if (entries.length > LUMINOR_STORAGE_SNAPSHOT_MAX_ENTRIES) {
     return null;
   }
   for (const [key, entryValue] of entries) {
     if (
-      !isSynaraStorageKey(key) ||
+      !isLuminorStorageKey(key) ||
       key.length === 0 ||
-      key.length > SYNARA_STORAGE_SNAPSHOT_MAX_KEY_LENGTH ||
+      key.length > LUMINOR_STORAGE_SNAPSHOT_MAX_KEY_LENGTH ||
       typeof entryValue !== "string" ||
-      entryValue.length > SYNARA_STORAGE_SNAPSHOT_MAX_VALUE_LENGTH
+      entryValue.length > LUMINOR_STORAGE_SNAPSHOT_MAX_VALUE_LENGTH
     ) {
       return null;
     }
   }
 
-  const snapshot = value as unknown as SynaraStorageSnapshot;
+  const snapshot = value as unknown as LuminorStorageSnapshot;
   try {
-    if (Buffer.byteLength(JSON.stringify(snapshot), "utf8") > SYNARA_STORAGE_SNAPSHOT_MAX_BYTES) {
+    if (Buffer.byteLength(JSON.stringify(snapshot), "utf8") > LUMINOR_STORAGE_SNAPSHOT_MAX_BYTES) {
       return null;
     }
   } catch {
@@ -60,32 +60,32 @@ export function validateSynaraStorageSnapshot(value: unknown): SynaraStorageSnap
   return snapshot;
 }
 
-export function resolveSynaraStorageSnapshotPath(userDataPath: string): string {
-  return Path.join(userDataPath, SYNARA_STORAGE_SNAPSHOT_FILE_NAME);
+export function resolveLuminorStorageSnapshotPath(userDataPath: string): string {
+  return Path.join(userDataPath, LUMINOR_STORAGE_SNAPSHOT_FILE_NAME);
 }
 
-export function readSynaraStorageSnapshot(snapshotPath: string): SynaraStorageSnapshot | null {
+export function readLuminorStorageSnapshot(snapshotPath: string): LuminorStorageSnapshot | null {
   try {
     const stats = FS.statSync(snapshotPath);
-    if (!stats.isFile() || stats.size > SYNARA_STORAGE_SNAPSHOT_MAX_BYTES) {
+    if (!stats.isFile() || stats.size > LUMINOR_STORAGE_SNAPSHOT_MAX_BYTES) {
       return null;
     }
-    return validateSynaraStorageSnapshot(JSON.parse(FS.readFileSync(snapshotPath, "utf8")));
+    return validateLuminorStorageSnapshot(JSON.parse(FS.readFileSync(snapshotPath, "utf8")));
   } catch {
     return null;
   }
 }
 
-export async function saveSynaraStorageSnapshot(
+export async function saveLuminorStorageSnapshot(
   snapshotPath: string,
   input: unknown,
 ): Promise<boolean> {
-  const snapshot = validateSynaraStorageSnapshot(input);
+  const snapshot = validateLuminorStorageSnapshot(input);
   if (!snapshot) {
     return false;
   }
 
-  const current = readSynaraStorageSnapshot(snapshotPath);
+  const current = readLuminorStorageSnapshot(snapshotPath);
   if (current && Date.parse(current.exportedAt) > Date.parse(snapshot.exportedAt)) {
     return false;
   }
@@ -110,6 +110,6 @@ export async function saveSynaraStorageSnapshot(
   }
 }
 
-export async function acknowledgeSynaraStorageSnapshot(snapshotPath: string): Promise<void> {
+export async function acknowledgeLuminorStorageSnapshot(snapshotPath: string): Promise<void> {
   await FS.promises.rm(snapshotPath, { force: true }).catch(() => undefined);
 }

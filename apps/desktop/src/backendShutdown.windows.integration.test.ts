@@ -460,27 +460,27 @@ function makeIsolatedServerEnvironment(input: {
 }): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = { ...process.env };
   for (const key of [
-    "SYNARA_ALLOW_INSECURE_REMOTE",
-    "SYNARA_AUTH_TOKEN",
-    "SYNARA_HOME",
-    "SYNARA_HOST",
-    "SYNARA_MODE",
-    "SYNARA_PORT",
-    "SYNARA_PUBLIC_URL",
+    "LUMINOR_ALLOW_INSECURE_REMOTE",
+    "LUMINOR_AUTH_TOKEN",
+    "LUMINOR_HOME",
+    "LUMINOR_HOST",
+    "LUMINOR_MODE",
+    "LUMINOR_PORT",
+    "LUMINOR_PUBLIC_URL",
     "VITE_DEV_SERVER_URL",
   ]) {
     delete environment[key];
   }
   return {
     ...environment,
-    SYNARA_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "0",
-    SYNARA_CLAUDE_KEEPALIVE: "0",
-    SYNARA_DESKTOP_SHUTDOWN_TOKEN: input.shutdownToken,
-    SYNARA_HOME: input.homeDir,
-    SYNARA_HOST: "127.0.0.1",
-    SYNARA_MODE: "desktop",
-    SYNARA_NO_BROWSER: "1",
-    SYNARA_PORT: String(input.port),
+    LUMINOR_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "0",
+    LUMINOR_CLAUDE_KEEPALIVE: "0",
+    LUMINOR_DESKTOP_SHUTDOWN_TOKEN: input.shutdownToken,
+    LUMINOR_HOME: input.homeDir,
+    LUMINOR_HOST: "127.0.0.1",
+    LUMINOR_MODE: "desktop",
+    LUMINOR_NO_BROWSER: "1",
+    LUMINOR_PORT: String(input.port),
   };
 }
 
@@ -563,7 +563,7 @@ describeWindows("Windows desktop backend shutdown integration", () => {
   it("authenticates a real server, deduplicates shutdown, drains its runtime, and clears its finalizer artifact", async () => {
     const resources = new TestResources();
     try {
-      const homeDir = await resources.makeTempDir("synara-windows-shutdown-");
+      const homeDir = await resources.makeTempDir("luminor-windows-shutdown-");
       const port = await reserveLoopbackPort(resources);
       const shutdownToken = Crypto.randomBytes(32).toString("hex");
       const runtimeStatePath = Path.join(homeDir, RUNTIME_STATE_RELATIVE_PATH);

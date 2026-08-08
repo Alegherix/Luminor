@@ -1,4 +1,4 @@
-import type { ProjectScript } from "@synara/contracts";
+import type { ProjectScript } from "@luminor/contracts";
 
 import { runProcess } from "./processRunner.ts";
 

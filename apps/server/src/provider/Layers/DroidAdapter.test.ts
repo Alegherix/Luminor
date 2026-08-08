@@ -1,6 +1,6 @@
-import { TurnId } from "@synara/contracts";
+import { TurnId } from "@luminor/contracts";
 import { describe, expect, it } from "vitest";
-import { SYNARA_HARNESS_POLICY_MARKER } from "../../agentGateway/harnessPolicy.ts";
+import { LUMINOR_HARNESS_POLICY_MARKER } from "../../agentGateway/harnessPolicy.ts";
 
 import {
   classifyDroidPromptTurnCompletion,
@@ -12,16 +12,16 @@ import {
   scopeDroidRuntimeItemIdForTurn,
   scopeDroidToolCallStateForTurn,
   shouldIgnoreDroidInterrupt,
-  takeDroidSynaraHarnessPolicyTextPart,
+  takeDroidLuminorHarnessPolicyTextPart,
 } from "./DroidAdapter.ts";
 
-describe("Droid Synara harness policy", () => {
+describe("Droid Luminor harness policy", () => {
   it("delivers private scoped host context once", () => {
     const state: { harnessPolicyDelivered?: boolean } = {};
-    expect(takeDroidSynaraHarnessPolicyTextPart(state, true)?.text).toContain(
-      SYNARA_HARNESS_POLICY_MARKER,
+    expect(takeDroidLuminorHarnessPolicyTextPart(state, true)?.text).toContain(
+      LUMINOR_HARNESS_POLICY_MARKER,
     );
-    expect(takeDroidSynaraHarnessPolicyTextPart(state, true)).toBeNull();
+    expect(takeDroidLuminorHarnessPolicyTextPart(state, true)).toBeNull();
   });
 });
 

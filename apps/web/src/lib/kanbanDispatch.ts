@@ -11,9 +11,9 @@ import type {
   ProviderStartOptions,
   ThreadEnvironmentMode,
   ThreadId,
-} from "@synara/contracts";
-import { buildPromptThreadTitleFallback } from "@synara/shared/chatThreads";
-import { isPendingThreadWorktree } from "@synara/shared/threadEnvironment";
+} from "@luminor/contracts";
+import { buildPromptThreadTitleFallback } from "@luminor/shared/chatThreads";
+import { isPendingThreadWorktree } from "@luminor/shared/threadEnvironment";
 import {
   buildKanbanComposerDraftSnapshot,
   resolveKanbanDraftOpenThreadReason,

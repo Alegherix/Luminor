@@ -4,7 +4,7 @@ import {
   MessageId,
   ThreadId,
   type OrchestrationCommand,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import { describe, expect, it } from "vitest";
 
 import { fingerprintOrchestrationCommand } from "./commandFingerprint";

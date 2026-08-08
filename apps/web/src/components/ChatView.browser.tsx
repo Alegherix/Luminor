@@ -18,11 +18,11 @@ import {
   type WsWelcomePayload,
   WS_METHODS,
   OrchestrationSessionStatus,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import {
   ATTACHMENT_CANCEL_ROUTE_PATH,
   ATTACHMENT_UPLOAD_ROUTE_PATH,
-} from "@synara/shared/binaryTransfer";
+} from "@luminor/shared/binaryTransfer";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { HttpResponse, http, ws } from "msw";
 import { setupWorker } from "msw/browser";
@@ -655,7 +655,7 @@ function withStudioProject(snapshot: OrchestrationReadModel): OrchestrationReadM
         id: STUDIO_PROJECT_ID,
         kind: "studio",
         title: "Studio",
-        workspaceRoot: "/Users/tester/Documents/Synara/Studio",
+        workspaceRoot: "/Users/tester/Documents/Luminor/Studio",
         defaultModelSelection: {
           provider: "codex",
           model: "gpt-5",
@@ -1222,7 +1222,7 @@ function resolveWsRpc(body: WsRequestEnvelope["body"]): unknown {
   if (tag === WS_METHODS.gitCreateDetachedWorktree) {
     return {
       worktree: {
-        path: "/repo/.codex/worktrees/generated/synara",
+        path: "/repo/.codex/worktrees/generated/luminor",
         ref: "0123456789abcdef0123456789abcdef01234567",
         branch: typeof body.newBranch === "string" ? body.newBranch : null,
       },
@@ -4094,7 +4094,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             threadId: THREAD_ID,
             cwd: "/repo/project",
             env: {
-              SYNARA_PROJECT_ROOT: "/repo/project",
+              LUMINOR_PROJECT_ROOT: "/repo/project",
             },
           });
         },
@@ -4173,8 +4173,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
             threadId: THREAD_ID,
             cwd: "/repo/worktrees/feature-draft",
             env: {
-              SYNARA_PROJECT_ROOT: "/repo/project",
-              SYNARA_WORKTREE_PATH: "/repo/worktrees/feature-draft",
+              LUMINOR_PROJECT_ROOT: "/repo/project",
+              LUMINOR_WORKTREE_PATH: "/repo/worktrees/feature-draft",
             },
           });
         },
@@ -4747,7 +4747,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("steers a running turn when Follow-up behavior is set to Steer", async () => {
-    localStorage.setItem("synara:app-settings:v1", JSON.stringify({ followUpBehavior: "steer" }));
+    localStorage.setItem("luminor:app-settings:v1", JSON.stringify({ followUpBehavior: "steer" }));
     useComposerDraftStore.getState().setPrompt(THREAD_ID, "steer this running turn");
 
     const mounted = await mountChatView({
@@ -5512,8 +5512,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
         nextFixture.welcome = {
           ...nextFixture.welcome,
           homeDir: "/Users/tester",
-          chatWorkspaceRoot: "/Users/tester/Documents/Synara",
-          studioWorkspaceRoot: "/Users/tester/Documents/Synara/Studio",
+          chatWorkspaceRoot: "/Users/tester/Documents/Luminor",
+          studioWorkspaceRoot: "/Users/tester/Documents/Luminor/Studio",
         };
       },
     });
@@ -5611,7 +5611,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         nextFixture.welcome = {
           ...nextFixture.welcome,
           homeDir: "/Users/tester",
-          chatWorkspaceRoot: "/Users/tester/Documents/Synara",
+          chatWorkspaceRoot: "/Users/tester/Documents/Luminor",
         };
       },
     });
@@ -5697,7 +5697,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         nextFixture.welcome = {
           ...nextFixture.welcome,
           homeDir: "/Users/tester",
-          chatWorkspaceRoot: "/Users/tester/Documents/Synara",
+          chatWorkspaceRoot: "/Users/tester/Documents/Luminor",
         };
         nextFixture.gitBranchByCwd = {
           "/Users/tester": "home-main",
@@ -6265,7 +6265,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           expect(createWorktreeRequest).toBeTruthy();
           const temporaryBranch = createWorktreeRequest?.newBranch;
           expect(typeof temporaryBranch).toBe("string");
-          expect(temporaryBranch).toMatch(/^synara\/[0-9a-f]{8}$/);
+          expect(temporaryBranch).toMatch(/^luminor\/[0-9a-f]{8}$/);
 
           const createThreadRequest = wsRequests.find(
             (request) =>
@@ -6281,8 +6281,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           expect(createThreadRequest?.command).toMatchObject({
             envMode: "worktree",
             branch: temporaryBranch,
-            worktreePath: "/repo/.codex/worktrees/generated/synara",
-            associatedWorktreePath: "/repo/.codex/worktrees/generated/synara",
+            worktreePath: "/repo/.codex/worktrees/generated/luminor",
+            associatedWorktreePath: "/repo/.codex/worktrees/generated/luminor",
             associatedWorktreeBranch: temporaryBranch,
             associatedWorktreeRef: "0123456789abcdef0123456789abcdef01234567",
           });
@@ -6405,7 +6405,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         { timeout: 10_000, interval: 16 },
       );
       const createWorktreeIndex = wsRequests.indexOf(createWorktreeRequest);
-      const worktreePath = "/repo/.codex/worktrees/generated/synara";
+      const worktreePath = "/repo/.codex/worktrees/generated/luminor";
 
       const terminalOpenRequest = await vi.waitFor(
         () => {
@@ -6434,8 +6434,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
         _tag: WS_METHODS.terminalOpen,
         cwd: worktreePath,
         env: {
-          SYNARA_PROJECT_ROOT: "/repo/project",
-          SYNARA_WORKTREE_PATH: worktreePath,
+          LUMINOR_PROJECT_ROOT: "/repo/project",
+          LUMINOR_WORKTREE_PATH: worktreePath,
         },
       });
 

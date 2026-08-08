@@ -35,14 +35,14 @@ describe("trustedOrigins", () => {
     ).toBe(true);
     expect(
       isTrustedAppOrigin({
-        origin: "synara://app",
+        origin: "luminor://app",
         requestOrigin: "http://127.0.0.1:58090",
         config,
       }),
     ).toBe(true);
     expect(
       isTrustedAppOrigin({
-        origin: "synara-canary://app",
+        origin: "luminor-canary://app",
         requestOrigin: "http://127.0.0.1:58090",
         config,
       }),
@@ -94,12 +94,12 @@ describe("trustedOrigins", () => {
     const remoteConfig = {
       ...config,
       host: "0.0.0.0",
-      publicUrl: new URL("https://synara.example.test/"),
+      publicUrl: new URL("https://luminor.example.test/"),
     };
     expect(
       isTrustedAppOrigin({
-        origin: "https://synara.example.test",
-        requestOrigin: "http://synara.example.test",
+        origin: "https://luminor.example.test",
+        requestOrigin: "http://luminor.example.test",
         config: remoteConfig,
       }),
     ).toBe(true);
@@ -113,8 +113,8 @@ describe("trustedOrigins", () => {
   });
 
   it("normalizes desktop origins with trailing slashes", () => {
-    expect(normalizeCorsOrigin("synara://app/")).toBe("synara://app");
-    expect(normalizeCorsOrigin("synara-canary://app/")).toBe("synara-canary://app");
+    expect(normalizeCorsOrigin("luminor://app/")).toBe("luminor://app");
+    expect(normalizeCorsOrigin("luminor-canary://app/")).toBe("luminor-canary://app");
   });
 
   it("rejects present but untrusted request origins for websocket-style gates", () => {
@@ -194,7 +194,7 @@ describe("trustedOrigins", () => {
       requiresWebSocketAuthentication({
         host: "127.0.0.1",
         authToken: undefined,
-        publicUrl: new URL("https://synara.example.test/"),
+        publicUrl: new URL("https://luminor.example.test/"),
       }),
     ).toBe(true);
   });

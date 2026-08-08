@@ -8,7 +8,7 @@ import {
   ProjectId,
   ThreadId,
   TurnId,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Stream } from "effect";
@@ -79,7 +79,7 @@ const exists = (filePath: string) =>
     return fileInfo._tag === "Success";
   });
 
-const BaseTestLayer = makeProjectionPipelinePrefixedTestLayer("synara-projection-pipeline-test-");
+const BaseTestLayer = makeProjectionPipelinePrefixedTestLayer("luminor-projection-pipeline-test-");
 
 it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   it.effect("bootstraps all projection states and writes projection rows", () =>
@@ -629,7 +629,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   );
 });
 
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("synara-message-identity-scope-")))(
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("luminor-message-identity-scope-")))(
   "OrchestrationProjectionPipeline",
   (it) => {
     it.effect("keeps reused provider message ids thread-scoped through replay", () =>
@@ -766,7 +766,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("synara-message-ide
   },
 );
 
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("synara-approval-identity-scope-")))(
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("luminor-approval-identity-scope-")))(
   "OrchestrationProjectionPipeline",
   (it) => {
     it.effect("keeps reused provider request ids thread-scoped through replay", () =>
@@ -1111,7 +1111,7 @@ it.effect("fast-forwards lagging hot projector cursors before restart replay", (
     Effect.provide(
       Layer.provideMerge(
         ServerConfig.layerTest(process.cwd(), {
-          prefix: "synara-projection-pipeline-fast-forward-",
+          prefix: "luminor-projection-pipeline-fast-forward-",
         }),
         NodeServices.layer,
       ),
@@ -1266,7 +1266,7 @@ it.effect("drains 2,501 file-backed events to a captured high-water fence", () =
     Effect.provide(
       Layer.provideMerge(
         ServerConfig.layerTest(process.cwd(), {
-          prefix: "synara-projection-pipeline-paged-",
+          prefix: "luminor-projection-pipeline-paged-",
         }),
         NodeServices.layer,
       ),
@@ -1274,7 +1274,7 @@ it.effect("drains 2,501 file-backed events to a captured high-water fence", () =
   ),
 );
 
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("synara-base-")))(
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("luminor-base-")))(
   "OrchestrationProjectionPipeline",
   (it) => {
     it.effect("stores message attachment references without mutating payloads", () =>
@@ -1341,7 +1341,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("synara-base-")))(
 );
 
 it.layer(
-  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("synara-projection-pipeline-approvals-")),
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("luminor-projection-pipeline-approvals-")),
 )("OrchestrationProjectionPipeline", (it) => {
   it.effect("refreshes stored thread approval summary after approval-response-requested", () =>
     Effect.gen(function* () {
@@ -2036,7 +2036,7 @@ it.layer(
 });
 
 it.layer(
-  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("synara-projection-attachments-safe-")),
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("luminor-projection-attachments-safe-")),
 )("OrchestrationProjectionPipeline", (it) => {
   it.effect("preserves mixed image attachment metadata as-is", () =>
     Effect.gen(function* () {
@@ -2243,7 +2243,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
 });
 
 it.layer(
-  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("synara-projection-attachments-overwrite-")),
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("luminor-projection-attachments-overwrite-")),
 )("OrchestrationProjectionPipeline", (it) => {
   it.effect("overwrites stored attachment references when a message updates attachments", () =>
     Effect.gen(function* () {
@@ -2386,7 +2386,7 @@ it.layer(
 });
 
 it.layer(
-  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("synara-projection-attachments-rollback-")),
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("luminor-projection-attachments-rollback-")),
 )("OrchestrationProjectionPipeline", (it) => {
   it.effect("does not persist attachment files when projector transaction rolls back", () =>
     Effect.gen(function* () {
@@ -2804,7 +2804,7 @@ it.layer(
 });
 
 it.layer(
-  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("synara-projection-attachments-overwrite-")),
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("luminor-projection-attachments-overwrite-")),
 )("OrchestrationProjectionPipeline", (it) => {
   it.effect("prunes legacy and managed attachments through their existing authorities", () =>
     Effect.gen(function* () {
@@ -3144,7 +3144,7 @@ it.layer(
 });
 
 it.layer(
-  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("synara-projection-attachments-revert-")),
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("luminor-projection-attachments-revert-")),
 )("OrchestrationProjectionPipeline", (it) => {
   it.effect("removes thread attachment directory when thread is deleted", () =>
     Effect.gen(function* () {
@@ -3270,7 +3270,7 @@ it.layer(
 });
 
 it.layer(
-  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("synara-projection-attachments-delete-")),
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("luminor-projection-attachments-delete-")),
 )("OrchestrationProjectionPipeline", (it) => {
   it.effect("ignores unsafe thread ids for attachment cleanup paths", () =>
     Effect.gen(function* () {
@@ -4050,7 +4050,7 @@ it.effect("restores pending turn-start metadata across projection pipeline resta
     Effect.provide(
       Layer.provideMerge(
         ServerConfig.layerTest(process.cwd(), {
-          prefix: "synara-projection-pipeline-restart-",
+          prefix: "luminor-projection-pipeline-restart-",
         }),
         NodeServices.layer,
       ),
@@ -4067,7 +4067,7 @@ const engineLayer = it.layer(
     Layer.provideMerge(SqlitePersistenceMemory),
     Layer.provideMerge(
       ServerConfig.layerTest(process.cwd(), {
-        prefix: "synara-projection-pipeline-engine-dispatch-",
+        prefix: "luminor-projection-pipeline-engine-dispatch-",
       }),
     ),
     Layer.provideMerge(NodeServices.layer),
@@ -4282,7 +4282,7 @@ engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
 });
 
 it.layer(
-  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("synara-projection-pipeline-turn-finish-")),
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("luminor-projection-pipeline-turn-finish-")),
 )("OrchestrationProjectionPipeline", (it) => {
   it.effect("keeps assistant message completions from settling a running turn early", () =>
     Effect.gen(function* () {

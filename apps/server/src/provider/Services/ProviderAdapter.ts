@@ -40,7 +40,7 @@ import type {
   ThreadId,
   ProviderTurnStartResult,
   TurnId,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import type { Effect } from "effect";
 import type { Stream } from "effect";
 

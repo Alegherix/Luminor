@@ -1,4 +1,4 @@
-import { ThreadId, type ModelSelection, type ProviderModelOptions } from "@synara/contracts";
+import { ThreadId, type ModelSelection, type ProviderModelOptions } from "@luminor/contracts";
 import {
   useComposerDraftStore,
   type ComposerFileAttachment,

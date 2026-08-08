@@ -1,5 +1,5 @@
 import { type ChildProcess as ChildProcessHandle, spawn, spawnSync } from "node:child_process";
-import { prepareWindowsSafeProcess } from "@synara/shared/windowsProcess";
+import { prepareWindowsSafeProcess } from "@luminor/shared/windowsProcess";
 
 export interface ProcessRunOptions {
   cwd?: string | undefined;

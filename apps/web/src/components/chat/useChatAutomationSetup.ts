@@ -1,4 +1,4 @@
-import { type AutomationDefinition, type MessageId, type ThreadId } from "@synara/contracts";
+import { type AutomationDefinition, type MessageId, type ThreadId } from "@luminor/contracts";
 import {
   type MutableRefObject,
   useCallback,

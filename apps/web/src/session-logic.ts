@@ -5,8 +5,8 @@ import {
   type ProviderKind,
   type ThreadId,
   type TurnId,
-} from "@synara/contracts";
-import { PROVIDER_DESCRIPTORS } from "@synara/shared/providerMetadata";
+} from "@luminor/contracts";
+import { PROVIDER_DESCRIPTORS } from "@luminor/shared/providerMetadata";
 
 import { orderedActivities } from "./workLog";
 
@@ -40,8 +40,8 @@ export {
   type WorkLogLiveActivityState,
   type WorkLogSubagent,
   type WorkLogSubagentAction,
-  type WorkLogSynaraCreatedThread,
-  type WorkLogSynaraThreadCreation,
+  type WorkLogLuminorCreatedThread,
+  type WorkLogLuminorThreadCreation,
 } from "./workLog";
 
 export type ProviderPickerKind = ProviderKind;

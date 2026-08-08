@@ -1,21 +1,21 @@
 // FILE: desktopIdentity.ts
 // Purpose: Defines the canonical desktop application identity across packaging and runtime.
 
-export const SYNARA_DESKTOP_SCHEME = "synara";
-export const SYNARA_DESKTOP_ORIGIN = `${SYNARA_DESKTOP_SCHEME}://app`;
-export const SYNARA_DESKTOP_ENTRY_URL = `${SYNARA_DESKTOP_ORIGIN}/index.html`;
-export const SYNARA_DESKTOP_UPDATE_CHANNEL = "synara";
-export const SYNARA_PRODUCTION_BUNDLE_ID = "com.emanueledipietro.synara";
-export const SYNARA_DEVELOPMENT_BUNDLE_ID = `${SYNARA_PRODUCTION_BUNDLE_ID}.dev`;
-export const SYNARA_CANARY_BUNDLE_ID = `${SYNARA_PRODUCTION_BUNDLE_ID}.canary`;
-export const SYNARA_CANARY_DESKTOP_SCHEME = "synara-canary";
-export const SYNARA_CANARY_DESKTOP_ORIGIN = `${SYNARA_CANARY_DESKTOP_SCHEME}://app`;
-export const SYNARA_CANARY_DESKTOP_ENTRY_URL = `${SYNARA_CANARY_DESKTOP_ORIGIN}/index.html`;
+export const LUMINOR_DESKTOP_SCHEME = "luminor";
+export const LUMINOR_DESKTOP_ORIGIN = `${LUMINOR_DESKTOP_SCHEME}://app`;
+export const LUMINOR_DESKTOP_ENTRY_URL = `${LUMINOR_DESKTOP_ORIGIN}/index.html`;
+export const LUMINOR_DESKTOP_UPDATE_CHANNEL = "luminor";
+export const LUMINOR_PRODUCTION_BUNDLE_ID = "com.emanueledipietro.luminor";
+export const LUMINOR_DEVELOPMENT_BUNDLE_ID = `${LUMINOR_PRODUCTION_BUNDLE_ID}.dev`;
+export const LUMINOR_CANARY_BUNDLE_ID = `${LUMINOR_PRODUCTION_BUNDLE_ID}.canary`;
+export const LUMINOR_CANARY_DESKTOP_SCHEME = "luminor-canary";
+export const LUMINOR_CANARY_DESKTOP_ORIGIN = `${LUMINOR_CANARY_DESKTOP_SCHEME}://app`;
+export const LUMINOR_CANARY_DESKTOP_ENTRY_URL = `${LUMINOR_CANARY_DESKTOP_ORIGIN}/index.html`;
 
-export type SynaraDesktopFlavor = "production" | "development" | "canary";
+export type LuminorDesktopFlavor = "production" | "development" | "canary";
 
-export interface SynaraDesktopIdentity {
-  readonly flavor: SynaraDesktopFlavor;
+export interface LuminorDesktopIdentity {
+  readonly flavor: LuminorDesktopFlavor;
   readonly displayName: string;
   readonly bundleId: string;
   readonly scheme: string;
@@ -26,56 +26,56 @@ export interface SynaraDesktopIdentity {
   readonly usesScriptedUpdates: boolean;
 }
 
-export function resolveSynaraDesktopFlavor(input: {
+export function resolveLuminorDesktopFlavor(input: {
   readonly isDevelopment: boolean;
   readonly requestedFlavor?: string | undefined;
-}): SynaraDesktopFlavor {
+}): LuminorDesktopFlavor {
   if (input.requestedFlavor?.trim().toLowerCase() === "canary") {
     return "canary";
   }
   return input.isDevelopment ? "development" : "production";
 }
 
-export function synaraDesktopIdentity(flavor: SynaraDesktopFlavor): SynaraDesktopIdentity {
+export function luminorDesktopIdentity(flavor: LuminorDesktopFlavor): LuminorDesktopIdentity {
   if (flavor === "canary") {
     return {
       flavor,
-      displayName: "Synara Canary",
-      bundleId: SYNARA_CANARY_BUNDLE_ID,
-      scheme: SYNARA_CANARY_DESKTOP_SCHEME,
-      origin: SYNARA_CANARY_DESKTOP_ORIGIN,
-      entryUrl: SYNARA_CANARY_DESKTOP_ENTRY_URL,
-      userDataDirectoryName: "synara-canary",
-      defaultHomeDirectoryName: ".synara-canary",
+      displayName: "Luminor Canary",
+      bundleId: LUMINOR_CANARY_BUNDLE_ID,
+      scheme: LUMINOR_CANARY_DESKTOP_SCHEME,
+      origin: LUMINOR_CANARY_DESKTOP_ORIGIN,
+      entryUrl: LUMINOR_CANARY_DESKTOP_ENTRY_URL,
+      userDataDirectoryName: "luminor-canary",
+      defaultHomeDirectoryName: ".luminor-canary",
       usesScriptedUpdates: true,
     };
   }
   if (flavor === "development") {
     return {
       flavor,
-      displayName: "Synara (Dev)",
-      bundleId: SYNARA_DEVELOPMENT_BUNDLE_ID,
-      scheme: SYNARA_DESKTOP_SCHEME,
-      origin: SYNARA_DESKTOP_ORIGIN,
-      entryUrl: SYNARA_DESKTOP_ENTRY_URL,
-      userDataDirectoryName: "synara-dev",
-      defaultHomeDirectoryName: ".synara",
+      displayName: "Luminor (Dev)",
+      bundleId: LUMINOR_DEVELOPMENT_BUNDLE_ID,
+      scheme: LUMINOR_DESKTOP_SCHEME,
+      origin: LUMINOR_DESKTOP_ORIGIN,
+      entryUrl: LUMINOR_DESKTOP_ENTRY_URL,
+      userDataDirectoryName: "luminor-dev",
+      defaultHomeDirectoryName: ".luminor",
       usesScriptedUpdates: false,
     };
   }
   return {
     flavor,
-    displayName: "Synara",
-    bundleId: SYNARA_PRODUCTION_BUNDLE_ID,
-    scheme: SYNARA_DESKTOP_SCHEME,
-    origin: SYNARA_DESKTOP_ORIGIN,
-    entryUrl: SYNARA_DESKTOP_ENTRY_URL,
-    userDataDirectoryName: "synara",
-    defaultHomeDirectoryName: ".synara",
+    displayName: "Luminor",
+    bundleId: LUMINOR_PRODUCTION_BUNDLE_ID,
+    scheme: LUMINOR_DESKTOP_SCHEME,
+    origin: LUMINOR_DESKTOP_ORIGIN,
+    entryUrl: LUMINOR_DESKTOP_ENTRY_URL,
+    userDataDirectoryName: "luminor",
+    defaultHomeDirectoryName: ".luminor",
     usesScriptedUpdates: false,
   };
 }
 
-export function synaraBundleId(isDevelopment: boolean): string {
-  return synaraDesktopIdentity(isDevelopment ? "development" : "production").bundleId;
+export function luminorBundleId(isDevelopment: boolean): string {
+  return luminorDesktopIdentity(isDevelopment ? "development" : "production").bundleId;
 }

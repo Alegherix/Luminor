@@ -5,8 +5,8 @@ import type {
   ProjectId,
   SpaceId,
   ThreadId,
-} from "@synara/contracts";
-import { OrchestrationCommand, ORCHESTRATION_WS_METHODS } from "@synara/contracts";
+} from "@luminor/contracts";
+import { OrchestrationCommand, ORCHESTRATION_WS_METHODS } from "@luminor/contracts";
 import {
   Cause,
   Deferred,
@@ -1286,7 +1286,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
                     commandId: "repair-local-state",
                     commandType: ORCHESTRATION_WS_METHODS.repairState,
                     detail:
-                      "Projection repair failed and its staged backup could not be restored. Restart Synara before retrying repair.",
+                      "Projection repair failed and its staged backup could not be restored. Restart Luminor before retrying repair.",
                   }),
                 ),
               ),

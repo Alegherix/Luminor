@@ -4,7 +4,7 @@ import type {
   PullRequestComment,
   PullRequestCommit,
   PullRequestDetailInput,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 
 import type { RightDockPane } from "~/rightDockStore.logic";
 

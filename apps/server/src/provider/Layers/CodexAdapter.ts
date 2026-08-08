@@ -30,7 +30,7 @@ import {
   ProviderItemId,
   ThreadId,
   TurnId,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import { Cause, Effect, Layer, Option, Queue, Schema, ServiceMap, Stream } from "effect";
 
 import {
@@ -69,7 +69,7 @@ import { ServerConfig } from "../../config.ts";
 import { makeRuntimeTaskListItem } from "../runtimeTaskList.ts";
 import { extractProposedPlanMarkdown } from "../planMode.ts";
 import { appendFileAttachmentsPromptBlock } from "../attachmentProjection.ts";
-import { synaraSkillsDir } from "../skillsCatalog.ts";
+import { luminorSkillsDir } from "../skillsCatalog.ts";
 import { makeBoundedCallbackIngress } from "../boundedCallbackIngress.ts";
 import { assignDerivedProviderRuntimeEventIds } from "../providerRuntimeEventIdentity.ts";
 import {
@@ -88,9 +88,9 @@ const PROVIDER = "codex" as const;
 // activity at all for this long, abort it instead of showing "Working" forever.
 // Every turn-scoped event (reasoning, tool output, deltas) resets the clock and
 // a pending question/approval pauses it, so only a wedged child trips this.
-// Generous by design; override with SYNARA_CODEX_TURN_IDLE_TIMEOUT_MS.
+// Generous by design; override with LUMINOR_CODEX_TURN_IDLE_TIMEOUT_MS.
 const CODEX_TURN_IDLE_TIMEOUT_MS = resolveAcpTurnIdleTimeoutMs({
-  envVar: "SYNARA_CODEX_TURN_IDLE_TIMEOUT_MS",
+  envVar: "LUMINOR_CODEX_TURN_IDLE_TIMEOUT_MS",
   defaultMs: 900_000,
 });
 const CODEX_TURN_WATCHDOG_INTERVAL_MS = 15_000;
@@ -118,7 +118,7 @@ function compactCodexNativeEventForIngress(event: ProviderEvent): ProviderEvent 
   return {
     ...event,
     payload: {
-      synaraTruncated: true,
+      luminorTruncated: true,
       reason: "Codex native event exceeded the callback ingress size limit",
       originalBytes,
     },
@@ -1677,7 +1677,7 @@ const makeCodexAdapter = (options?: CodexAdapterLiveOptions) =>
   Effect.gen(function* () {
     const serverConfig = yield* Effect.service(ServerConfig);
     // Optional so adapter tests can run without the gateway layer; when
-    // present, every session gets the synara_* MCP tools.
+    // present, every session gets the luminor_* MCP tools.
     const agentGatewayCredentials = Option.getOrUndefined(
       yield* Effect.serviceOption(AgentGatewayCredentials),
     );
@@ -1698,7 +1698,7 @@ const makeCodexAdapter = (options?: CodexAdapterLiveOptions) =>
         return (
           options?.makeManager?.(services) ??
           new CodexAppServerManager(services, {
-            synaraSkillsDir: synaraSkillsDir(serverConfig.baseDir),
+            luminorSkillsDir: luminorSkillsDir(serverConfig.baseDir),
             ...(agentGatewayCredentials
               ? {
                   agentGatewayMcp: {

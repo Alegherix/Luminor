@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@synara/monorepo",
+      "name": "@luminor/monorepo",
       "devDependencies": {
         "@types/node": "catalog:",
         "oxfmt": "^0.40.0",
@@ -13,7 +13,7 @@
       },
     },
     "apps/desktop": {
-      "name": "@synara/desktop",
+      "name": "@luminor/desktop",
       "version": "0.7.0",
       "dependencies": {
         "effect": "catalog:",
@@ -21,8 +21,8 @@
         "electron-updater": "^6.6.2",
       },
       "devDependencies": {
-        "@synara/contracts": "workspace:*",
-        "@synara/shared": "workspace:*",
+        "@luminor/contracts": "workspace:*",
+        "@luminor/shared": "workspace:*",
         "@types/node": "catalog:",
         "tsdown": "catalog:",
         "typescript": "catalog:",
@@ -31,7 +31,7 @@
       },
     },
     "apps/marketing": {
-      "name": "@synara/marketing",
+      "name": "@luminor/marketing",
       "version": "0.0.0",
       "dependencies": {
         "astro": "^6.4.6",
@@ -42,11 +42,11 @@
       },
     },
     "apps/server": {
-      "name": "@synara/cli",
+      "name": "@luminor/cli",
       "version": "0.7.0",
       "bin": {
-        "synara": "dist/index.mjs",
-        "synara-restore-migration-backup": "dist/restoreMigrationBackup.mjs",
+        "luminor": "dist/index.mjs",
+        "luminor-restore-migration-backup": "dist/restoreMigrationBackup.mjs",
       },
       "dependencies": {
         "@agentclientprotocol/sdk": "1.2.1",
@@ -69,9 +69,9 @@
       "devDependencies": {
         "@effect/language-service": "catalog:",
         "@effect/vitest": "catalog:",
-        "@synara/contracts": "workspace:*",
-        "@synara/shared": "workspace:*",
-        "@synara/web": "workspace:*",
+        "@luminor/contracts": "workspace:*",
+        "@luminor/shared": "workspace:*",
+        "@luminor/web": "workspace:*",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@types/ws": "^8.5.13",
@@ -82,7 +82,7 @@
       },
     },
     "apps/web": {
-      "name": "@synara/web",
+      "name": "@luminor/web",
       "version": "0.7.0",
       "dependencies": {
         "@base-ui/react": "^1.5.0",
@@ -95,8 +95,8 @@
         "@legendapp/list": "3.3.3",
         "@lexical/react": "^0.41.0",
         "@pierre/diffs": "^1.2.12",
-        "@synara/contracts": "workspace:*",
-        "@synara/shared": "workspace:*",
+        "@luminor/contracts": "workspace:*",
+        "@luminor/shared": "workspace:*",
         "@tabler/icons-react": "^3.44.0",
         "@tanstack/react-pacer": "^0.19.4",
         "@tanstack/react-query": "^5.90.0",
@@ -151,7 +151,7 @@
       },
     },
     "packages/contracts": {
-      "name": "@synara/contracts",
+      "name": "@luminor/contracts",
       "version": "0.7.0",
       "dependencies": {
         "effect": "catalog:",
@@ -165,10 +165,10 @@
       },
     },
     "packages/shared": {
-      "name": "@synara/shared",
+      "name": "@luminor/shared",
       "version": "0.0.0-alpha.1",
       "dependencies": {
-        "@synara/contracts": "workspace:*",
+        "@luminor/contracts": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -180,12 +180,12 @@
       },
     },
     "scripts": {
-      "name": "@synara/scripts",
+      "name": "@luminor/scripts",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.3.207",
         "@effect/platform-node": "catalog:",
-        "@synara/contracts": "workspace:*",
-        "@synara/shared": "workspace:*",
+        "@luminor/contracts": "workspace:*",
+        "@luminor/shared": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -958,19 +958,19 @@
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
-    "@synara/cli": ["@synara/cli@workspace:apps/server"],
+    "@luminor/cli": ["@luminor/cli@workspace:apps/server"],
 
-    "@synara/contracts": ["@synara/contracts@workspace:packages/contracts"],
+    "@luminor/contracts": ["@luminor/contracts@workspace:packages/contracts"],
 
-    "@synara/desktop": ["@synara/desktop@workspace:apps/desktop"],
+    "@luminor/desktop": ["@luminor/desktop@workspace:apps/desktop"],
 
-    "@synara/marketing": ["@synara/marketing@workspace:apps/marketing"],
+    "@luminor/marketing": ["@luminor/marketing@workspace:apps/marketing"],
 
-    "@synara/scripts": ["@synara/scripts@workspace:scripts"],
+    "@luminor/scripts": ["@luminor/scripts@workspace:scripts"],
 
-    "@synara/shared": ["@synara/shared@workspace:packages/shared"],
+    "@luminor/shared": ["@luminor/shared@workspace:packages/shared"],
 
-    "@synara/web": ["@synara/web@workspace:apps/web"],
+    "@luminor/web": ["@luminor/web@workspace:apps/web"],
 
     "@szmarczak/http-timer": ["@szmarczak/http-timer@4.0.6", "", { "dependencies": { "defer-to-connect": "^2.0.0" } }, "sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w=="],
 

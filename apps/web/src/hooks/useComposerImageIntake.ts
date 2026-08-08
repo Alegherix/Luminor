@@ -2,7 +2,7 @@
 // Purpose: Serializes image preparation, exposes pending UI state, and cancels stale draft work.
 // Layer: Web composer hook
 
-import { PROVIDER_SEND_TURN_MAX_ATTACHMENTS, type ThreadId } from "@synara/contracts";
+import { PROVIDER_SEND_TURN_MAX_ATTACHMENTS, type ThreadId } from "@luminor/contracts";
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 import type { ComposerImageAttachment } from "../composerDraftStore";
@@ -47,6 +47,10 @@ export class ComposerImageIntakeQueue {
 
   readonly pendingCount = (): number => this.#pendingCount;
 
+  activate(): void {
+    this.#disposed = false;
+  }
+
   enqueue(job: ComposerImageIntakeJob): Promise<void> {
     if (this.#disposed || job.files.length === 0) return Promise.resolve();
     const generation = this.#generation;
@@ -73,7 +77,7 @@ export class ComposerImageIntakeQueue {
       })
       .catch((cause) => {
         if (this.#isStale(generation)) return;
-        job.onError(cause instanceof Error ? cause.message : "Synara could not prepare image.");
+        job.onError(cause instanceof Error ? cause.message : "Luminor could not prepare image.");
       })
       .finally(() => this.#setPendingCount(Math.max(0, this.#pendingCount - job.files.length)));
     this.#tail = task;
@@ -113,7 +117,10 @@ export function useComposerImageIntake(input: {
   readonly onError: (error: string | null) => void;
 }) {
   const queue = useMemo(() => new ComposerImageIntakeQueue(), [input.threadId]);
-  useEffect(() => () => queue.dispose(), [queue]);
+  useEffect(() => {
+    queue.activate();
+    return () => queue.dispose();
+  }, [queue]);
   const pendingCount = useSyncExternalStore(
     queue.subscribe,
     queue.pendingCount,

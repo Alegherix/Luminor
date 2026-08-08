@@ -7,7 +7,7 @@ import {
   ThreadId,
   type OrchestrationCommand,
   type OrchestrationReadModel,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import { Effect } from "effect";
 
 import {

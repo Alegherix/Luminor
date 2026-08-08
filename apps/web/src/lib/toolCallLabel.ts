@@ -2,14 +2,14 @@
 // Purpose: Normalizes generic tool-call titles and humanizes command executions for timeline rows.
 // Layer: UI utility
 // Exports: deriveReadableToolTitle, deriveReadableCommandDisplay, deriveFriendlyCommandTarget, command icon classifiers, deriveInlineCommandCall, normalizeCompactToolLabel, isGenericToolTitle, extractWebFetchUrl
-// Depends on: @synara/contracts tool lifecycle item types
+// Depends on: @luminor/contracts tool lifecycle item types
 
 import {
   BROWSER_TOOL_NAMES,
   type BrowserToolName,
   type ToolLifecycleItemType,
-} from "@synara/contracts";
-import { BROWSER_TOOL_TITLES } from "@synara/shared/browserAutomationPresentation";
+} from "@luminor/contracts";
+import { BROWSER_TOOL_TITLES } from "@luminor/shared/browserAutomationPresentation";
 import { basenameOfPath } from "../file-icons";
 import { extractToolArgumentField } from "./toolArgumentSummary";
 
@@ -113,249 +113,249 @@ export interface ReadableToolTitleInput {
   readonly isRunning?: boolean;
 }
 
-interface SynaraMcpToolPresentation {
+interface LuminorMcpToolPresentation {
   readonly running: string;
   readonly completed: string;
   readonly failed: string;
 }
 
-type SynaraBrowserToolName = `synara_${BrowserToolName}`;
+type LuminorBrowserToolName = `luminor_${BrowserToolName}`;
 const BROWSER_TOOL_NAME_SET = new Set<string>(BROWSER_TOOL_NAMES);
 
-const SYNARA_BROWSER_TOOL_PRESENTATIONS = Object.fromEntries(
+const LUMINOR_BROWSER_TOOL_PRESENTATIONS = Object.fromEntries(
   BROWSER_TOOL_NAMES.map((toolName) => {
     const title = BROWSER_TOOL_TITLES[toolName];
-    return [`synara_${toolName}`, { running: title, completed: title, failed: title }];
+    return [`luminor_${toolName}`, { running: title, completed: title, failed: title }];
   }),
-) as Record<SynaraBrowserToolName, SynaraMcpToolPresentation>;
+) as Record<LuminorBrowserToolName, LuminorMcpToolPresentation>;
 
-const SYNARA_MCP_TOOL_PRESENTATIONS = {
-  synara_context: {
-    running: "Synara is checking its context",
-    completed: "Synara checked its context",
-    failed: "Synara couldn't check its context",
+const LUMINOR_MCP_TOOL_PRESENTATIONS = {
+  luminor_context: {
+    running: "Luminor is checking its context",
+    completed: "Luminor checked its context",
+    failed: "Luminor couldn't check its context",
   },
-  synara_capabilities: {
-    running: "Synara is checking available agents",
-    completed: "Synara checked available agents",
-    failed: "Synara couldn't check available agents",
+  luminor_capabilities: {
+    running: "Luminor is checking available agents",
+    completed: "Luminor checked available agents",
+    failed: "Luminor couldn't check available agents",
   },
-  synara_overview: {
-    running: "Synara is gathering an overview",
-    completed: "Synara gathered an overview",
-    failed: "Synara couldn't gather an overview",
+  luminor_overview: {
+    running: "Luminor is gathering an overview",
+    completed: "Luminor gathered an overview",
+    failed: "Luminor couldn't gather an overview",
   },
-  synara_list_allowed_projects: {
-    running: "Synara is listing allowed projects",
-    completed: "Synara listed allowed projects",
-    failed: "Synara couldn't list allowed projects",
+  luminor_list_allowed_projects: {
+    running: "Luminor is listing allowed projects",
+    completed: "Luminor listed allowed projects",
+    failed: "Luminor couldn't list allowed projects",
   },
-  synara_create_task: {
-    running: "Synara is creating a task",
-    completed: "Synara created a task",
-    failed: "Synara couldn't create a task",
+  luminor_create_task: {
+    running: "Luminor is creating a task",
+    completed: "Luminor created a task",
+    failed: "Luminor couldn't create a task",
   },
-  synara_wait_for_task: {
-    running: "Synara is waiting for a task",
-    completed: "Synara finished waiting for a task",
-    failed: "Synara couldn't wait for a task",
+  luminor_wait_for_task: {
+    running: "Luminor is waiting for a task",
+    completed: "Luminor finished waiting for a task",
+    failed: "Luminor couldn't wait for a task",
   },
-  synara_read_task: {
-    running: "Synara is reading a task",
-    completed: "Synara read a task",
-    failed: "Synara couldn't read a task",
+  luminor_read_task: {
+    running: "Luminor is reading a task",
+    completed: "Luminor read a task",
+    failed: "Luminor couldn't read a task",
   },
-  synara_list_projects: {
-    running: "Synara is listing projects",
-    completed: "Synara listed projects",
-    failed: "Synara couldn't list projects",
+  luminor_list_projects: {
+    running: "Luminor is listing projects",
+    completed: "Luminor listed projects",
+    failed: "Luminor couldn't list projects",
   },
-  synara_list_threads: {
-    running: "Synara is listing threads",
-    completed: "Synara listed threads",
-    failed: "Synara couldn't list threads",
+  luminor_list_threads: {
+    running: "Luminor is listing threads",
+    completed: "Luminor listed threads",
+    failed: "Luminor couldn't list threads",
   },
-  synara_read_thread: {
-    running: "Synara is reading a thread",
-    completed: "Synara read a thread",
-    failed: "Synara couldn't read a thread",
+  luminor_read_thread: {
+    running: "Luminor is reading a thread",
+    completed: "Luminor read a thread",
+    failed: "Luminor couldn't read a thread",
   },
-  synara_read_thread_activity: {
-    running: "Synara is reading thread activity",
-    completed: "Synara read thread activity",
-    failed: "Synara couldn't read thread activity",
+  luminor_read_thread_activity: {
+    running: "Luminor is reading thread activity",
+    completed: "Luminor read thread activity",
+    failed: "Luminor couldn't read thread activity",
   },
-  synara_read_thread_events: {
-    running: "Synara is reading thread events",
-    completed: "Synara read thread events",
-    failed: "Synara couldn't read thread events",
+  luminor_read_thread_events: {
+    running: "Luminor is reading thread events",
+    completed: "Luminor read thread events",
+    failed: "Luminor couldn't read thread events",
   },
-  synara_read_thread_runtime_events: {
-    running: "Synara is reading thread runtime events",
-    completed: "Synara read thread runtime events",
-    failed: "Synara couldn't read thread runtime events",
+  luminor_read_thread_runtime_events: {
+    running: "Luminor is reading thread runtime events",
+    completed: "Luminor read thread runtime events",
+    failed: "Luminor couldn't read thread runtime events",
   },
-  synara_diagnose_thread: {
-    running: "Synara is diagnosing a thread",
-    completed: "Synara diagnosed a thread",
-    failed: "Synara couldn't diagnose a thread",
+  luminor_diagnose_thread: {
+    running: "Luminor is diagnosing a thread",
+    completed: "Luminor diagnosed a thread",
+    failed: "Luminor couldn't diagnose a thread",
   },
-  synara_create_thread: {
-    running: "Synara is creating a thread",
-    completed: "Synara created a thread",
-    failed: "Synara couldn't create a thread",
+  luminor_create_thread: {
+    running: "Luminor is creating a thread",
+    completed: "Luminor created a thread",
+    failed: "Luminor couldn't create a thread",
   },
-  synara_create_threads: {
-    running: "Synara is creating threads",
-    completed: "Synara created threads",
-    failed: "Synara couldn't create threads",
+  luminor_create_threads: {
+    running: "Luminor is creating threads",
+    completed: "Luminor created threads",
+    failed: "Luminor couldn't create threads",
   },
-  synara_wait_for_threads: {
-    running: "Synara is waiting for threads",
-    completed: "Synara finished waiting for threads",
-    failed: "Synara couldn't wait for threads",
+  luminor_wait_for_threads: {
+    running: "Luminor is waiting for threads",
+    completed: "Luminor finished waiting for threads",
+    failed: "Luminor couldn't wait for threads",
   },
-  synara_send_message: {
-    running: "Synara is sending a message",
-    completed: "Synara sent a message",
-    failed: "Synara couldn't send a message",
+  luminor_send_message: {
+    running: "Luminor is sending a message",
+    completed: "Luminor sent a message",
+    failed: "Luminor couldn't send a message",
   },
-  synara_interrupt_thread: {
-    running: "Synara is interrupting a thread",
-    completed: "Synara interrupted a thread",
-    failed: "Synara couldn't interrupt a thread",
+  luminor_interrupt_thread: {
+    running: "Luminor is interrupting a thread",
+    completed: "Luminor interrupted a thread",
+    failed: "Luminor couldn't interrupt a thread",
   },
-  synara_set_thread_title: {
-    running: "Synara is renaming a thread",
-    completed: "Synara renamed a thread",
-    failed: "Synara couldn't rename a thread",
+  luminor_set_thread_title: {
+    running: "Luminor is renaming a thread",
+    completed: "Luminor renamed a thread",
+    failed: "Luminor couldn't rename a thread",
   },
-  synara_set_thread_archived: {
-    running: "Synara is updating a thread",
-    completed: "Synara updated a thread",
-    failed: "Synara couldn't update a thread",
+  luminor_set_thread_archived: {
+    running: "Luminor is updating a thread",
+    completed: "Luminor updated a thread",
+    failed: "Luminor couldn't update a thread",
   },
-  synara_create_automation: {
-    running: "Synara is creating an automation",
-    completed: "Synara created an automation",
-    failed: "Synara couldn't create an automation",
+  luminor_create_automation: {
+    running: "Luminor is creating an automation",
+    completed: "Luminor created an automation",
+    failed: "Luminor couldn't create an automation",
   },
-  synara_list_automations: {
-    running: "Synara is listing automations",
-    completed: "Synara listed automations",
-    failed: "Synara couldn't list automations",
+  luminor_list_automations: {
+    running: "Luminor is listing automations",
+    completed: "Luminor listed automations",
+    failed: "Luminor couldn't list automations",
   },
-  synara_view_automation: {
-    running: "Synara is viewing an automation",
-    completed: "Synara viewed an automation",
-    failed: "Synara couldn't view an automation",
+  luminor_view_automation: {
+    running: "Luminor is viewing an automation",
+    completed: "Luminor viewed an automation",
+    failed: "Luminor couldn't view an automation",
   },
-  synara_update_automation: {
-    running: "Synara is updating an automation",
-    completed: "Synara updated an automation",
-    failed: "Synara couldn't update an automation",
+  luminor_update_automation: {
+    running: "Luminor is updating an automation",
+    completed: "Luminor updated an automation",
+    failed: "Luminor couldn't update an automation",
   },
-  synara_update_automation_memory: {
-    running: "Synara is updating automation memory",
-    completed: "Synara updated automation memory",
-    failed: "Synara couldn't update automation memory",
+  luminor_update_automation_memory: {
+    running: "Luminor is updating automation memory",
+    completed: "Luminor updated automation memory",
+    failed: "Luminor couldn't update automation memory",
   },
-  synara_report_automation_result: {
-    running: "Synara is reporting an automation result",
-    completed: "Synara reported an automation result",
-    failed: "Synara couldn't report an automation result",
+  luminor_report_automation_result: {
+    running: "Luminor is reporting an automation result",
+    completed: "Luminor reported an automation result",
+    failed: "Luminor couldn't report an automation result",
   },
-  synara_cancel_automation: {
-    running: "Synara is stopping an automation",
-    completed: "Synara stopped an automation",
-    failed: "Synara couldn't stop an automation",
+  luminor_cancel_automation: {
+    running: "Luminor is stopping an automation",
+    completed: "Luminor stopped an automation",
+    failed: "Luminor couldn't stop an automation",
   },
-  ...SYNARA_BROWSER_TOOL_PRESENTATIONS,
-} as const satisfies Record<string, SynaraMcpToolPresentation>;
+  ...LUMINOR_BROWSER_TOOL_PRESENTATIONS,
+} as const satisfies Record<string, LuminorMcpToolPresentation>;
 
-function normalizeSynaraMcpIdentifier(value: string): string {
+function normalizeLuminorMcpIdentifier(value: string): string {
   return value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 }
 
-const SYNARA_BROWSER_TOOL_NAME_BY_PRESENTATION = new Map<string, SynaraBrowserToolName>(
+const LUMINOR_BROWSER_TOOL_NAME_BY_PRESENTATION = new Map<string, LuminorBrowserToolName>(
   BROWSER_TOOL_NAMES.map((toolName) => [
-    normalizeSynaraMcpIdentifier(BROWSER_TOOL_TITLES[toolName]),
-    `synara_${toolName}`,
+    normalizeLuminorMcpIdentifier(BROWSER_TOOL_TITLES[toolName]),
+    `luminor_${toolName}`,
   ]),
 );
 
-const SYNARA_MCP_TOOL_PRESENTATION_ENTRIES = Object.entries(SYNARA_MCP_TOOL_PRESENTATIONS).map(
+const LUMINOR_MCP_TOOL_PRESENTATION_ENTRIES = Object.entries(LUMINOR_MCP_TOOL_PRESENTATIONS).map(
   ([toolName, presentation]) => ({
     toolName,
     presentation,
-    normalizedRunning: normalizeSynaraMcpIdentifier(presentation.running),
-    normalizedCompleted: normalizeSynaraMcpIdentifier(presentation.completed),
-    normalizedFailed: normalizeSynaraMcpIdentifier(presentation.failed),
+    normalizedRunning: normalizeLuminorMcpIdentifier(presentation.running),
+    normalizedCompleted: normalizeLuminorMcpIdentifier(presentation.completed),
+    normalizedFailed: normalizeLuminorMcpIdentifier(presentation.failed),
   }),
 );
 
-function extractSynaraMcpToolName(normalizedCandidate: string): string | null {
+function extractLuminorMcpToolName(normalizedCandidate: string): string | null {
   if (BROWSER_TOOL_NAME_SET.has(normalizedCandidate)) {
-    return `synara_${normalizedCandidate}`;
+    return `luminor_${normalizedCandidate}`;
   }
-  if (normalizedCandidate.startsWith("mcp_synara_synara_")) {
-    return normalizedCandidate.slice("mcp_synara_".length);
+  if (normalizedCandidate.startsWith("mcp_luminor_luminor_")) {
+    return normalizedCandidate.slice("mcp_luminor_".length);
   }
-  if (normalizedCandidate.startsWith("mcp_synara_")) {
-    return `synara_${normalizedCandidate.slice("mcp_synara_".length)}`;
+  if (normalizedCandidate.startsWith("mcp_luminor_")) {
+    return `luminor_${normalizedCandidate.slice("mcp_luminor_".length)}`;
   }
-  if (normalizedCandidate.startsWith("synara_synara_")) {
-    return normalizedCandidate.slice("synara_".length);
+  if (normalizedCandidate.startsWith("luminor_luminor_")) {
+    return normalizedCandidate.slice("luminor_".length);
   }
-  if (normalizedCandidate.startsWith("synara_")) {
+  if (normalizedCandidate.startsWith("luminor_")) {
     return normalizedCandidate;
   }
   return null;
 }
 
-function resolveSynaraBrowserToolName(
+function resolveLuminorBrowserToolName(
   candidates: ReadonlyArray<string | null | undefined>,
-): SynaraBrowserToolName | null {
+): LuminorBrowserToolName | null {
   for (const candidate of candidates) {
     if (!candidate) continue;
-    const normalizedCandidate = normalizeSynaraMcpIdentifier(candidate);
-    const extractedToolName = extractSynaraMcpToolName(normalizedCandidate);
+    const normalizedCandidate = normalizeLuminorMcpIdentifier(candidate);
+    const extractedToolName = extractLuminorMcpToolName(normalizedCandidate);
     const candidateToolName =
       extractedToolName ??
-      SYNARA_BROWSER_TOOL_NAME_BY_PRESENTATION.get(normalizedCandidate) ??
+      LUMINOR_BROWSER_TOOL_NAME_BY_PRESENTATION.get(normalizedCandidate) ??
       normalizedCandidate;
-    if (candidateToolName in SYNARA_BROWSER_TOOL_PRESENTATIONS) {
-      return candidateToolName as SynaraBrowserToolName;
+    if (candidateToolName in LUMINOR_BROWSER_TOOL_PRESENTATIONS) {
+      return candidateToolName as LuminorBrowserToolName;
     }
   }
   return null;
 }
 
-function fallbackSynaraMcpToolPresentation(toolName: string): SynaraMcpToolPresentation {
+function fallbackLuminorMcpToolPresentation(toolName: string): LuminorMcpToolPresentation {
   const action =
     toolName
-      .replace(/^synara_/, "")
+      .replace(/^luminor_/, "")
       .replace(/_+/g, " ")
       .trim() || "an action";
   return {
-    running: `Synara is handling ${action}`,
-    completed: `Synara handled ${action}`,
-    failed: `Synara couldn't handle ${action}`,
+    running: `Luminor is handling ${action}`,
+    completed: `Luminor handled ${action}`,
+    failed: `Luminor couldn't handle ${action}`,
   };
 }
 
-function resolveSynaraMcpToolPresentation(
+function resolveLuminorMcpToolPresentation(
   candidates: ReadonlyArray<string | null | undefined>,
-): SynaraMcpToolPresentation | null {
+): LuminorMcpToolPresentation | null {
   for (const candidate of candidates) {
     if (!candidate) {
       continue;
     }
-    const normalizedCandidate = normalizeSynaraMcpIdentifier(candidate);
-    for (const entry of SYNARA_MCP_TOOL_PRESENTATION_ENTRIES) {
+    const normalizedCandidate = normalizeLuminorMcpIdentifier(candidate);
+    for (const entry of LUMINOR_MCP_TOOL_PRESENTATION_ENTRIES) {
       if (
         normalizedCandidate === entry.normalizedRunning ||
         normalizedCandidate === entry.normalizedCompleted ||
@@ -364,62 +364,62 @@ function resolveSynaraMcpToolPresentation(
         return entry.presentation;
       }
     }
-    const toolName = extractSynaraMcpToolName(normalizedCandidate);
+    const toolName = extractLuminorMcpToolName(normalizedCandidate);
     const knownPresentation = toolName
-      ? (SYNARA_MCP_TOOL_PRESENTATIONS[toolName as keyof typeof SYNARA_MCP_TOOL_PRESENTATIONS] as
-          | SynaraMcpToolPresentation
+      ? (LUMINOR_MCP_TOOL_PRESENTATIONS[toolName as keyof typeof LUMINOR_MCP_TOOL_PRESENTATIONS] as
+          | LuminorMcpToolPresentation
           | undefined)
       : undefined;
     if (knownPresentation) {
       return knownPresentation;
     }
     // Free-text summaries (e.g. reconciler activity lines) can begin with the
-    // word "Synara" and normalize into a fake tool identifier; only
+    // word "Luminor" and normalize into a fake tool identifier; only
     // identifier-shaped candidates may take an invented fallback presentation.
     if (/\s/.test(candidate.trim())) {
       continue;
     }
-    if (normalizedCandidate.startsWith("synara_is_handling_")) {
-      return fallbackSynaraMcpToolPresentation(
-        `synara_${normalizedCandidate.slice("synara_is_handling_".length)}`,
+    if (normalizedCandidate.startsWith("luminor_is_handling_")) {
+      return fallbackLuminorMcpToolPresentation(
+        `luminor_${normalizedCandidate.slice("luminor_is_handling_".length)}`,
       );
     }
-    if (normalizedCandidate.startsWith("synara_handled_")) {
-      return fallbackSynaraMcpToolPresentation(
-        `synara_${normalizedCandidate.slice("synara_handled_".length)}`,
+    if (normalizedCandidate.startsWith("luminor_handled_")) {
+      return fallbackLuminorMcpToolPresentation(
+        `luminor_${normalizedCandidate.slice("luminor_handled_".length)}`,
       );
     }
-    if (normalizedCandidate.startsWith("synara_couldn_t_handle_")) {
-      return fallbackSynaraMcpToolPresentation(
-        `synara_${normalizedCandidate.slice("synara_couldn_t_handle_".length)}`,
+    if (normalizedCandidate.startsWith("luminor_couldn_t_handle_")) {
+      return fallbackLuminorMcpToolPresentation(
+        `luminor_${normalizedCandidate.slice("luminor_couldn_t_handle_".length)}`,
       );
     }
     if (!toolName) {
       continue;
     }
-    return fallbackSynaraMcpToolPresentation(toolName);
+    return fallbackLuminorMcpToolPresentation(toolName);
   }
   return null;
 }
 
-export type SynaraMcpToolStatus = "running" | "completed" | "failed" | "cancelled";
+export type LuminorMcpToolStatus = "running" | "completed" | "failed" | "cancelled";
 
-export interface SynaraMcpToolTitleInput {
+export interface LuminorMcpToolTitleInput {
   readonly toolName?: string | null | undefined;
   readonly title?: string | null | undefined;
   readonly fallbackLabel?: string | null | undefined;
-  readonly status?: SynaraMcpToolStatus | undefined;
+  readonly status?: LuminorMcpToolStatus | undefined;
 }
 
-export function isSynaraBrowserToolCall(input: SynaraMcpToolTitleInput): boolean {
-  return resolveSynaraBrowserToolName([input.toolName, input.title, input.fallbackLabel]) !== null;
+export function isLuminorBrowserToolCall(input: LuminorMcpToolTitleInput): boolean {
+  return resolveLuminorBrowserToolName([input.toolName, input.title, input.fallbackLabel]) !== null;
 }
 
-// Every provider exposes Synara's MCP tools differently: MCP, dynamic, and even
+// Every provider exposes Luminor's MCP tools differently: MCP, dynamic, and even
 // file-change rows can all represent the same gateway action. Normalize by tool
 // identity instead of provider item type so transport details never reach the UI.
-export function deriveSynaraMcpToolTitle(input: SynaraMcpToolTitleInput): string | null {
-  const presentation = resolveSynaraMcpToolPresentation([
+export function deriveLuminorMcpToolTitle(input: LuminorMcpToolTitleInput): string | null {
+  const presentation = resolveLuminorMcpToolPresentation([
     input.toolName,
     input.title,
     input.fallbackLabel,
@@ -435,23 +435,23 @@ export function deriveSynaraMcpToolTitle(input: SynaraMcpToolTitleInput): string
     case "failed":
       return presentation.failed;
     case "cancelled":
-      return presentation.running.startsWith("Synara is ")
-        ? `Synara stopped ${presentation.running.slice("Synara is ".length)}`
+      return presentation.running.startsWith("Luminor is ")
+        ? `Luminor stopped ${presentation.running.slice("Luminor is ".length)}`
         : `Cancelled ${presentation.running}`;
   }
 }
 
-export function sanitizeSynaraMcpToolPreview(input: {
+export function sanitizeLuminorMcpToolPreview(input: {
   readonly preview?: string | null | undefined;
   readonly heading: string;
-  readonly status?: SynaraMcpToolStatus | undefined;
+  readonly status?: LuminorMcpToolStatus | undefined;
 }): string | null {
   const preview = input.preview?.trim();
   if (!preview) return null;
-  const previewTitle = deriveSynaraMcpToolTitle({ title: preview, status: input.status });
+  const previewTitle = deriveLuminorMcpToolTitle({ title: preview, status: input.status });
   if (
     previewTitle &&
-    normalizeSynaraMcpIdentifier(previewTitle) === normalizeSynaraMcpIdentifier(input.heading)
+    normalizeLuminorMcpIdentifier(previewTitle) === normalizeLuminorMcpIdentifier(input.heading)
   ) {
     return null;
   }

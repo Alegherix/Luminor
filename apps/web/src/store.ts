@@ -10,9 +10,9 @@ import {
   type OrchestrationShellStreamEvent,
   type SpaceId,
   type ThreadId,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import { Debouncer } from "@tanstack/react-pacer";
-import { resolveThreadBranchRegressionGuard } from "@synara/shared/git";
+import { resolveThreadBranchRegressionGuard } from "@luminor/shared/git";
 import { create } from "zustand";
 
 import { resolveCreateBranchFlowCompletedMerge } from "./storeNormalization";

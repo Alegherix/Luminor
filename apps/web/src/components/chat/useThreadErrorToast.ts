@@ -3,8 +3,8 @@
 // Layer: Chat status presentation
 // Exports: useThreadErrorToast, buildThreadErrorToastOptions, threadErrorToastId
 
-import type { ThreadId } from "@synara/contracts";
-import { isProviderDeliveryBlockDetail } from "@synara/shared/providerDeliveryBlock";
+import type { ThreadId } from "@luminor/contracts";
+import { isProviderDeliveryBlockDetail } from "@luminor/shared/providerDeliveryBlock";
 import { useEffect, useRef, type RefObject } from "react";
 
 import { toastManager } from "../ui/toast";

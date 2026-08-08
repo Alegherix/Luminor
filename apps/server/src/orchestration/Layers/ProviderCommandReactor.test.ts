@@ -14,7 +14,7 @@ import type {
   ProviderForkThreadResult,
   ProviderRuntimeEvent,
   ProviderSession,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import {
   ApprovalRequestId,
   type ChatAttachment,
@@ -26,8 +26,8 @@ import {
   ProjectId,
   ThreadId,
   TurnId,
-} from "@synara/contracts";
-import { PROVIDER_DELIVERY_BLOCK_SUMMARY } from "@synara/shared/providerDeliveryBlock";
+} from "@luminor/contracts";
+import { PROVIDER_DELIVERY_BLOCK_SUMMARY } from "@luminor/shared/providerDeliveryBlock";
 import {
   Duration,
   Effect,
@@ -208,7 +208,7 @@ describe("ProviderCommandReactor", () => {
     readonly gatewayOperationId?: string;
   }) {
     const now = new Date().toISOString();
-    const baseDir = input?.baseDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "synara-reactor-"));
+    const baseDir = input?.baseDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "luminor-reactor-"));
     createdBaseDirs.add(baseDir);
     const { stateDir } = deriveServerPathsSync(baseDir, undefined);
     createdStateDirs.add(stateDir);
@@ -600,7 +600,7 @@ describe("ProviderCommandReactor", () => {
         worktreePath: null,
         ...(input?.gatewayOperationId
           ? {
-              creationSource: "synara_mcp" as const,
+              creationSource: "luminor_mcp" as const,
               gatewayOperationId: input.gatewayOperationId,
               gatewayOperationIndex: 0,
             }
@@ -4366,11 +4366,11 @@ describe("ProviderCommandReactor", () => {
         commandId: CommandId.makeUnsafe("cmd-thread-worktree-bootstrap"),
         threadId: ThreadId.makeUnsafe("thread-1"),
         envMode: "worktree",
-        branch: "synara/cb661f0d",
+        branch: "luminor/cb661f0d",
         worktreePath: "/tmp/provider-project/.worktrees/cb661f0d",
         associatedWorktreePath: "/tmp/provider-project/.worktrees/cb661f0d",
-        associatedWorktreeBranch: "synara/cb661f0d",
-        associatedWorktreeRef: "synara/cb661f0d",
+        associatedWorktreeBranch: "luminor/cb661f0d",
+        associatedWorktreeRef: "luminor/cb661f0d",
       }),
     );
 
@@ -4398,19 +4398,19 @@ describe("ProviderCommandReactor", () => {
     await waitFor(async () => {
       const thread = await readHarnessThread(harness);
       return (
-        thread?.branch === "synara/app-startup-crash" &&
-        thread.associatedWorktreeBranch === "synara/app-startup-crash" &&
-        thread.associatedWorktreeRef === "synara/app-startup-crash"
+        thread?.branch === "luminor/app-startup-crash" &&
+        thread.associatedWorktreeBranch === "luminor/app-startup-crash" &&
+        thread.associatedWorktreeRef === "luminor/app-startup-crash"
       );
     });
 
     const thread = await readHarnessThread(harness);
     expect(thread).toMatchObject({
-      branch: "synara/app-startup-crash",
+      branch: "luminor/app-startup-crash",
       worktreePath: "/tmp/provider-project/.worktrees/cb661f0d",
       associatedWorktreePath: "/tmp/provider-project/.worktrees/cb661f0d",
-      associatedWorktreeBranch: "synara/app-startup-crash",
-      associatedWorktreeRef: "synara/app-startup-crash",
+      associatedWorktreeBranch: "luminor/app-startup-crash",
+      associatedWorktreeRef: "luminor/app-startup-crash",
     });
   });
 
@@ -4430,11 +4430,11 @@ describe("ProviderCommandReactor", () => {
         commandId: CommandId.makeUnsafe("cmd-gateway-worktree-bootstrap"),
         threadId: ThreadId.makeUnsafe("thread-1"),
         envMode: "worktree",
-        branch: "synara/cb661f0d",
+        branch: "luminor/cb661f0d",
         worktreePath: "/tmp/provider-project/.worktrees/cb661f0d",
         associatedWorktreePath: "/tmp/provider-project/.worktrees/cb661f0d",
-        associatedWorktreeBranch: "synara/cb661f0d",
-        associatedWorktreeRef: "synara/cb661f0d",
+        associatedWorktreeBranch: "luminor/cb661f0d",
+        associatedWorktreeRef: "luminor/cb661f0d",
       }),
     );
     await Effect.runPromise(
@@ -4475,11 +4475,11 @@ describe("ProviderCommandReactor", () => {
         commandId: CommandId.makeUnsafe("cmd-missing-gateway-worktree-bootstrap"),
         threadId: ThreadId.makeUnsafe("thread-1"),
         envMode: "worktree",
-        branch: "synara/cb661f0d",
+        branch: "luminor/cb661f0d",
         worktreePath: "/tmp/provider-project/.worktrees/cb661f0d",
         associatedWorktreePath: "/tmp/provider-project/.worktrees/cb661f0d",
-        associatedWorktreeBranch: "synara/cb661f0d",
-        associatedWorktreeRef: "synara/cb661f0d",
+        associatedWorktreeBranch: "luminor/cb661f0d",
+        associatedWorktreeRef: "luminor/cb661f0d",
       }),
     );
     await Effect.runPromise(
@@ -4515,11 +4515,11 @@ describe("ProviderCommandReactor", () => {
         commandId: CommandId.makeUnsafe("cmd-thread-worktree-bootstrap-antigravity"),
         threadId: ThreadId.makeUnsafe("thread-1"),
         envMode: "worktree",
-        branch: "synara/cb661f0d",
+        branch: "luminor/cb661f0d",
         worktreePath: "/tmp/provider-project/.worktrees/cb661f0d",
         associatedWorktreePath: "/tmp/provider-project/.worktrees/cb661f0d",
-        associatedWorktreeBranch: "synara/cb661f0d",
-        associatedWorktreeRef: "synara/cb661f0d",
+        associatedWorktreeBranch: "luminor/cb661f0d",
+        associatedWorktreeRef: "luminor/cb661f0d",
       }),
     );
 
@@ -4547,13 +4547,13 @@ describe("ProviderCommandReactor", () => {
     await waitFor(() => harness.renameBranch.mock.calls.length === 1);
     expect(harness.generateBranchName).not.toHaveBeenCalled();
     expect(harness.renameBranch.mock.calls[0]?.[0]).toMatchObject({
-      oldBranch: "synara/cb661f0d",
-      newBranch: "synara/fix-provider-startup-timeouts",
+      oldBranch: "luminor/cb661f0d",
+      newBranch: "luminor/fix-provider-startup-timeouts",
     });
 
     await waitFor(
       async () =>
-        (await readHarnessThread(harness))?.branch === "synara/fix-provider-startup-timeouts",
+        (await readHarnessThread(harness))?.branch === "luminor/fix-provider-startup-timeouts",
     );
   });
 

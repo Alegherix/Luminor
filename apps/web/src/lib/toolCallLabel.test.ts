@@ -4,13 +4,13 @@ import {
   deriveInlineCommandCall,
   deriveReadableCommandDisplay,
   deriveReadableToolTitle,
-  deriveSynaraMcpToolTitle,
+  deriveLuminorMcpToolTitle,
   extractWebFetchUrl,
   isInspectCommand,
-  isSynaraBrowserToolCall,
+  isLuminorBrowserToolCall,
   normalizeCompactToolLabel,
   resolveCommandVisualKind,
-  sanitizeSynaraMcpToolPreview,
+  sanitizeLuminorMcpToolPreview,
 } from "./toolCallLabel";
 
 describe("extractWebFetchUrl", () => {
@@ -61,217 +61,217 @@ describe("normalizeCompactToolLabel", () => {
   });
 });
 
-describe("deriveSynaraMcpToolTitle", () => {
-  it("uses stable action-first names for Synara browser tools", () => {
+describe("deriveLuminorMcpToolTitle", () => {
+  it("uses stable action-first names for Luminor browser tools", () => {
     for (const status of ["running", "completed", "failed"] as const) {
       expect(
-        deriveSynaraMcpToolTitle({
-          toolName: "mcp__synara__browser_open",
+        deriveLuminorMcpToolTitle({
+          toolName: "mcp__luminor__browser_open",
           status,
         }),
       ).toBe("Open browser tab");
     }
 
     expect(
-      deriveSynaraMcpToolTitle({
-        title: "Synara: Browser Snapshot",
+      deriveLuminorMcpToolTitle({
+        title: "Luminor: Browser Snapshot",
         status: "completed",
       }),
     ).toBe("Snapshot browser page");
   });
 
-  it("has intentional running and completed copy for every Synara gateway action", () => {
+  it("has intentional running and completed copy for every Luminor gateway action", () => {
     const cases = [
-      ["synara_context", "Synara is checking its context", "Synara checked its context"],
+      ["luminor_context", "Luminor is checking its context", "Luminor checked its context"],
       [
-        "synara_capabilities",
-        "Synara is checking available agents",
-        "Synara checked available agents",
+        "luminor_capabilities",
+        "Luminor is checking available agents",
+        "Luminor checked available agents",
       ],
-      ["synara_list_projects", "Synara is listing projects", "Synara listed projects"],
-      ["synara_list_threads", "Synara is listing threads", "Synara listed threads"],
-      ["synara_read_thread", "Synara is reading a thread", "Synara read a thread"],
+      ["luminor_list_projects", "Luminor is listing projects", "Luminor listed projects"],
+      ["luminor_list_threads", "Luminor is listing threads", "Luminor listed threads"],
+      ["luminor_read_thread", "Luminor is reading a thread", "Luminor read a thread"],
       [
-        "synara_read_thread_activity",
-        "Synara is reading thread activity",
-        "Synara read thread activity",
+        "luminor_read_thread_activity",
+        "Luminor is reading thread activity",
+        "Luminor read thread activity",
       ],
-      ["synara_read_thread_events", "Synara is reading thread events", "Synara read thread events"],
+      ["luminor_read_thread_events", "Luminor is reading thread events", "Luminor read thread events"],
       [
-        "synara_read_thread_runtime_events",
-        "Synara is reading thread runtime events",
-        "Synara read thread runtime events",
+        "luminor_read_thread_runtime_events",
+        "Luminor is reading thread runtime events",
+        "Luminor read thread runtime events",
       ],
-      ["synara_diagnose_thread", "Synara is diagnosing a thread", "Synara diagnosed a thread"],
-      ["synara_create_thread", "Synara is creating a thread", "Synara created a thread"],
-      ["synara_create_threads", "Synara is creating threads", "Synara created threads"],
+      ["luminor_diagnose_thread", "Luminor is diagnosing a thread", "Luminor diagnosed a thread"],
+      ["luminor_create_thread", "Luminor is creating a thread", "Luminor created a thread"],
+      ["luminor_create_threads", "Luminor is creating threads", "Luminor created threads"],
       [
-        "synara_wait_for_threads",
-        "Synara is waiting for threads",
-        "Synara finished waiting for threads",
+        "luminor_wait_for_threads",
+        "Luminor is waiting for threads",
+        "Luminor finished waiting for threads",
       ],
-      ["synara_send_message", "Synara is sending a message", "Synara sent a message"],
-      ["synara_interrupt_thread", "Synara is interrupting a thread", "Synara interrupted a thread"],
-      ["synara_set_thread_title", "Synara is renaming a thread", "Synara renamed a thread"],
-      ["synara_set_thread_archived", "Synara is updating a thread", "Synara updated a thread"],
+      ["luminor_send_message", "Luminor is sending a message", "Luminor sent a message"],
+      ["luminor_interrupt_thread", "Luminor is interrupting a thread", "Luminor interrupted a thread"],
+      ["luminor_set_thread_title", "Luminor is renaming a thread", "Luminor renamed a thread"],
+      ["luminor_set_thread_archived", "Luminor is updating a thread", "Luminor updated a thread"],
       [
-        "synara_create_automation",
-        "Synara is creating an automation",
-        "Synara created an automation",
+        "luminor_create_automation",
+        "Luminor is creating an automation",
+        "Luminor created an automation",
       ],
-      ["synara_list_automations", "Synara is listing automations", "Synara listed automations"],
+      ["luminor_list_automations", "Luminor is listing automations", "Luminor listed automations"],
       [
-        "synara_cancel_automation",
-        "Synara is stopping an automation",
-        "Synara stopped an automation",
+        "luminor_cancel_automation",
+        "Luminor is stopping an automation",
+        "Luminor stopped an automation",
       ],
-      ["synara_overview", "Synara is gathering an overview", "Synara gathered an overview"],
+      ["luminor_overview", "Luminor is gathering an overview", "Luminor gathered an overview"],
       [
-        "synara_list_allowed_projects",
-        "Synara is listing allowed projects",
-        "Synara listed allowed projects",
+        "luminor_list_allowed_projects",
+        "Luminor is listing allowed projects",
+        "Luminor listed allowed projects",
       ],
-      ["synara_create_task", "Synara is creating a task", "Synara created a task"],
+      ["luminor_create_task", "Luminor is creating a task", "Luminor created a task"],
       [
-        "synara_wait_for_task",
-        "Synara is waiting for a task",
-        "Synara finished waiting for a task",
+        "luminor_wait_for_task",
+        "Luminor is waiting for a task",
+        "Luminor finished waiting for a task",
       ],
-      ["synara_read_task", "Synara is reading a task", "Synara read a task"],
+      ["luminor_read_task", "Luminor is reading a task", "Luminor read a task"],
     ] as const;
 
     for (const [toolName, running, completed] of cases) {
-      expect(deriveSynaraMcpToolTitle({ toolName, status: "running" })).toBe(running);
-      expect(deriveSynaraMcpToolTitle({ toolName, status: "completed" })).toBe(completed);
+      expect(deriveLuminorMcpToolTitle({ toolName, status: "running" })).toBe(running);
+      expect(deriveLuminorMcpToolTitle({ toolName, status: "completed" })).toBe(completed);
     }
 
     expect(
-      deriveSynaraMcpToolTitle({
-        toolName: "synara_create_threads",
+      deriveLuminorMcpToolTitle({
+        toolName: "luminor_create_threads",
         status: "failed",
       }),
-    ).toBe("Synara couldn't create threads");
+    ).toBe("Luminor couldn't create threads");
     expect(
-      deriveSynaraMcpToolTitle({
-        toolName: "synara_create_thread",
+      deriveLuminorMcpToolTitle({
+        toolName: "luminor_create_thread",
         status: "cancelled",
       }),
-    ).toBe("Synara stopped creating a thread");
+    ).toBe("Luminor stopped creating a thread");
   });
 
   it("turns provider-specific create-thread identifiers into activity sentences", () => {
     expect(
-      deriveSynaraMcpToolTitle({
-        toolName: "Synara__synara_create_thread",
+      deriveLuminorMcpToolTitle({
+        toolName: "Luminor__luminor_create_thread",
         status: "running",
       }),
-    ).toBe("Synara is creating a thread");
+    ).toBe("Luminor is creating a thread");
     expect(
-      deriveSynaraMcpToolTitle({
-        toolName: "mcp__synara__synara_create_thread",
+      deriveLuminorMcpToolTitle({
+        toolName: "mcp__luminor__luminor_create_thread",
         status: "completed",
       }),
-    ).toBe("Synara created a thread");
+    ).toBe("Luminor created a thread");
   });
 
-  it("recognizes bare and already-humanized Synara tool names", () => {
-    expect(deriveSynaraMcpToolTitle({ toolName: "synara_send_message", status: "running" })).toBe(
-      "Synara is sending a message",
+  it("recognizes bare and already-humanized Luminor tool names", () => {
+    expect(deriveLuminorMcpToolTitle({ toolName: "luminor_send_message", status: "running" })).toBe(
+      "Luminor is sending a message",
     );
     expect(
-      deriveSynaraMcpToolTitle({ title: "Synara: Synara List Threads", status: "completed" }),
-    ).toBe("Synara listed threads");
+      deriveLuminorMcpToolTitle({ title: "Luminor: Luminor List Threads", status: "completed" }),
+    ).toBe("Luminor listed threads");
   });
 
   it("ignores tools from other MCP servers", () => {
     expect(
-      deriveSynaraMcpToolTitle({
+      deriveLuminorMcpToolTitle({
         toolName: "mcp__codex_apps__github_fetch_pr",
         status: "running",
       }),
     ).toBeNull();
   });
 
-  it("keeps future Synara actions branded without exposing raw identifiers", () => {
+  it("keeps future Luminor actions branded without exposing raw identifiers", () => {
     expect(
-      deriveSynaraMcpToolTitle({
-        toolName: "mcp__synara__synara_delete_project",
+      deriveLuminorMcpToolTitle({
+        toolName: "mcp__luminor__luminor_delete_project",
         status: "running",
       }),
-    ).toBe("Synara is handling delete project");
+    ).toBe("Luminor is handling delete project");
     expect(
-      deriveSynaraMcpToolTitle({
-        toolName: "Synara__synara_delete_project",
+      deriveLuminorMcpToolTitle({
+        toolName: "Luminor__luminor_delete_project",
         status: "completed",
       }),
-    ).toBe("Synara handled delete project");
+    ).toBe("Luminor handled delete project");
     expect(
-      deriveSynaraMcpToolTitle({
-        toolName: "synara_is_handling_delete_project",
+      deriveLuminorMcpToolTitle({
+        toolName: "luminor_is_handling_delete_project",
         status: "completed",
       }),
-    ).toBe("Synara handled delete project");
+    ).toBe("Luminor handled delete project");
   });
 
   it("does not reinterpret free text beginning with fallback status copy", () => {
     expect(
-      deriveSynaraMcpToolTitle({
-        title: "Synara is handling delete project after recovery",
+      deriveLuminorMcpToolTitle({
+        title: "Luminor is handling delete project after recovery",
         status: "completed",
       }),
     ).toBeNull();
     expect(
-      deriveSynaraMcpToolTitle({
-        title: "Synara handled delete project after recovery",
+      deriveLuminorMcpToolTitle({
+        title: "Luminor handled delete project after recovery",
         status: "running",
       }),
     ).toBeNull();
     expect(
-      deriveSynaraMcpToolTitle({
-        title: "Synara couldn't handle delete project after recovery",
+      deriveLuminorMcpToolTitle({
+        title: "Luminor couldn't handle delete project after recovery",
         status: "failed",
       }),
     ).toBeNull();
   });
 
-  it("leaves free-text activity summaries starting with Synara untouched", () => {
+  it("leaves free-text activity summaries starting with Luminor untouched", () => {
     expect(
-      deriveSynaraMcpToolTitle({
-        title: "Synara recovered a stale running state",
+      deriveLuminorMcpToolTitle({
+        title: "Luminor recovered a stale running state",
         status: "completed",
       }),
     ).toBeNull();
     expect(
-      deriveSynaraMcpToolTitle({
-        fallbackLabel: "Synara restarted the provider session",
+      deriveLuminorMcpToolTitle({
+        fallbackLabel: "Luminor restarted the provider session",
         status: "running",
       }),
     ).toBeNull();
   });
 
-  it("removes transport identifiers without hiding meaningful Synara details", () => {
+  it("removes transport identifiers without hiding meaningful Luminor details", () => {
     expect(
-      sanitizeSynaraMcpToolPreview({
-        preview: "Synara__synara_create_threads",
-        heading: "Synara created threads",
+      sanitizeLuminorMcpToolPreview({
+        preview: "Luminor__luminor_create_threads",
+        heading: "Luminor created threads",
         status: "completed",
       }),
     ).toBeNull();
     expect(
-      sanitizeSynaraMcpToolPreview({
+      sanitizeLuminorMcpToolPreview({
         preview: 'Unexpected key "reasoningEffort" for Claude Agent',
-        heading: "Synara couldn't create threads",
+        heading: "Luminor couldn't create threads",
         status: "failed",
       }),
     ).toBe('Unexpected key "reasoningEffort" for Claude Agent');
   });
 });
 
-describe("isSynaraBrowserToolCall", () => {
+describe("isLuminorBrowserToolCall", () => {
   it("recognizes canonical presentation titles without a tool identifier", () => {
-    expect(isSynaraBrowserToolCall({ title: "Open browser tab" })).toBe(true);
-    expect(isSynaraBrowserToolCall({ fallbackLabel: "Snapshot browser page" })).toBe(true);
-    expect(isSynaraBrowserToolCall({ title: "Synara listed threads" })).toBe(false);
+    expect(isLuminorBrowserToolCall({ title: "Open browser tab" })).toBe(true);
+    expect(isLuminorBrowserToolCall({ fallbackLabel: "Snapshot browser page" })).toBe(true);
+    expect(isLuminorBrowserToolCall({ title: "Luminor listed threads" })).toBe(false);
   });
 });
 
@@ -453,13 +453,13 @@ describe("deriveReadableCommandDisplay", () => {
   it("removes env and timeout wrappers from inline command summaries", () => {
     expect(
       deriveReadableCommandDisplay(
-        "env -u SYNARA_AUTH_TOKEN SYNARA_PORT_OFFSET=3158 timeout 180s bun run dev",
+        "env -u LUMINOR_AUTH_TOKEN LUMINOR_PORT_OFFSET=3158 timeout 180s bun run dev",
         true,
       ),
     ).toEqual({
       verb: "Running",
       target: "bun run dev",
-      fullCommand: "env -u SYNARA_AUTH_TOKEN SYNARA_PORT_OFFSET=3158 timeout 180s bun run dev",
+      fullCommand: "env -u LUMINOR_AUTH_TOKEN LUMINOR_PORT_OFFSET=3158 timeout 180s bun run dev",
     });
   });
 

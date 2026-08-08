@@ -60,11 +60,11 @@ describe("workspacePathsStore", () => {
 
     const { useWorkspacePathsStore } = await import("./workspacePathsStore");
 
-    useWorkspacePathsStore.getState().setChatWorkspaceRoot("/Users/tester/Documents/Synara");
+    useWorkspacePathsStore.getState().setChatWorkspaceRoot("/Users/tester/Documents/Luminor");
     useWorkspacePathsStore.getState().setChatWorkspaceRoot(undefined);
 
     expect(useWorkspacePathsStore.getState().chatWorkspaceRoot).toBe(
-      "/Users/tester/Documents/Synara",
+      "/Users/tester/Documents/Luminor",
     );
   });
 
@@ -76,11 +76,11 @@ describe("workspacePathsStore", () => {
 
     useWorkspacePathsStore
       .getState()
-      .setStudioWorkspaceRoot("/Users/tester/Documents/Synara/Studio");
+      .setStudioWorkspaceRoot("/Users/tester/Documents/Luminor/Studio");
     useWorkspacePathsStore.getState().setStudioWorkspaceRoot(undefined);
 
     expect(useWorkspacePathsStore.getState().studioWorkspaceRoot).toBe(
-      "/Users/tester/Documents/Synara/Studio",
+      "/Users/tester/Documents/Luminor/Studio",
     );
   });
 
@@ -92,16 +92,16 @@ describe("workspacePathsStore", () => {
 
     useWorkspacePathsStore.getState().setServerWorkspacePaths({
       homeDir: "/Users/tester",
-      chatWorkspaceRoot: "/Users/tester/Documents/Synara",
-      studioWorkspaceRoot: "/Users/tester/Documents/Synara/Studio",
+      chatWorkspaceRoot: "/Users/tester/Documents/Luminor",
+      studioWorkspaceRoot: "/Users/tester/Documents/Luminor/Studio",
     });
 
     expect(useWorkspacePathsStore.getState().homeDir).toBe("/Users/tester");
     expect(useWorkspacePathsStore.getState().chatWorkspaceRoot).toBe(
-      "/Users/tester/Documents/Synara",
+      "/Users/tester/Documents/Luminor",
     );
     expect(useWorkspacePathsStore.getState().studioWorkspaceRoot).toBe(
-      "/Users/tester/Documents/Synara/Studio",
+      "/Users/tester/Documents/Luminor/Studio",
     );
   });
 
@@ -112,8 +112,8 @@ describe("workspacePathsStore", () => {
     let workspaceModule = await import("./workspacePathsStore");
     workspaceModule.useWorkspacePathsStore.getState().setServerWorkspacePaths({
       homeDir: "/Users/tester",
-      chatWorkspaceRoot: "/Users/tester/Documents/Synara",
-      studioWorkspaceRoot: "/Users/tester/Documents/Synara/Studio",
+      chatWorkspaceRoot: "/Users/tester/Documents/Luminor",
+      studioWorkspaceRoot: "/Users/tester/Documents/Luminor/Studio",
     });
 
     vi.resetModules();
@@ -121,7 +121,7 @@ describe("workspacePathsStore", () => {
 
     expect(workspaceModule.useWorkspacePathsStore.getState().homeDir).toBe("/Users/tester");
     expect(workspaceModule.useWorkspacePathsStore.getState().chatWorkspaceRoot).toBe(
-      "/Users/tester/Documents/Synara",
+      "/Users/tester/Documents/Luminor",
     );
     expect(workspaceModule.useWorkspacePathsStore.getState().studioWorkspaceRoot).toBeNull();
   });
@@ -129,11 +129,11 @@ describe("workspacePathsStore", () => {
   it("migrates cached paths without retaining legacy workspace pages", async () => {
     installMemoryLocalStorage();
     localStorage.setItem(
-      "synara:workspace-pages:v2",
+      "luminor:workspace-pages:v2",
       JSON.stringify({
         state: {
           homeDir: "/Users/legacy",
-          chatWorkspaceRoot: "/Users/legacy/Documents/Synara",
+          chatWorkspaceRoot: "/Users/legacy/Documents/Luminor",
           workspacePages: [{ id: "retired-workspace", title: "Workspace 1" }],
         },
         version: 2,
@@ -145,12 +145,12 @@ describe("workspacePathsStore", () => {
 
     expect(useWorkspacePathsStore.getState().homeDir).toBe("/Users/legacy");
     expect(useWorkspacePathsStore.getState().chatWorkspaceRoot).toBe(
-      "/Users/legacy/Documents/Synara",
+      "/Users/legacy/Documents/Luminor",
     );
     expect(useWorkspacePathsStore.getState()).not.toHaveProperty("workspacePages");
 
     useWorkspacePathsStore.getState().setHomeDir("/Users/current");
-    expect(localStorage.getItem("synara:workspace-pages:v2")).toBeNull();
-    expect(localStorage.getItem("synara:workspace-paths:v1")).not.toBeNull();
+    expect(localStorage.getItem("luminor:workspace-pages:v2")).toBeNull();
+    expect(localStorage.getItem("luminor:workspace-paths:v1")).not.toBeNull();
   });
 });

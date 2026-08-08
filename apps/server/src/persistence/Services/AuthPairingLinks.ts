@@ -73,4 +73,4 @@ export interface AuthPairingLinkRepositoryShape {
 export class AuthPairingLinkRepository extends ServiceMap.Service<
   AuthPairingLinkRepository,
   AuthPairingLinkRepositoryShape
->()("synara/persistence/Services/AuthPairingLinks/AuthPairingLinkRepository") {}
+>()("luminor/persistence/Services/AuthPairingLinks/AuthPairingLinkRepository") {}

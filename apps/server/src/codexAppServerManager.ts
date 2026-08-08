@@ -33,11 +33,11 @@ import {
   type ServerVoiceTranscriptionInput,
   type ServerVoiceTranscriptionResult,
   type UserInputQuestion,
-} from "@synara/contracts";
-import { prewarmChatGptVoiceTranscriptionConnection } from "@synara/shared/chatGptVoiceTranscription";
-import { getModelSelectionBooleanOptionValue, normalizeModelSlug } from "@synara/shared/model";
-import { decodeSubagentReceiverThreadIds } from "@synara/shared/subagents";
-import { prepareWindowsSafeProcess } from "@synara/shared/windowsProcess";
+} from "@luminor/contracts";
+import { prewarmChatGptVoiceTranscriptionConnection } from "@luminor/shared/chatGptVoiceTranscription";
+import { getModelSelectionBooleanOptionValue, normalizeModelSlug } from "@luminor/shared/model";
+import { decodeSubagentReceiverThreadIds } from "@luminor/shared/subagents";
+import { prepareWindowsSafeProcess } from "@luminor/shared/windowsProcess";
 import { Effect, ServiceMap } from "effect";
 
 import {
@@ -49,9 +49,9 @@ import {
 } from "./provider/codexCliVersion";
 import {
   buildCodexMcpConfigToml,
-  SYNARA_AGENT_GATEWAY_TOKEN_ENV,
+  LUMINOR_AGENT_GATEWAY_TOKEN_ENV,
 } from "./agentGateway/mcpInjection.ts";
-import { SYNARA_GATEWAY_HARNESS_POLICY } from "./agentGateway/harnessPolicy.ts";
+import { LUMINOR_GATEWAY_HARNESS_POLICY } from "./agentGateway/harnessPolicy.ts";
 import {
   AGENT_GATEWAY_TURN_AUTHORITY_RETIRED,
   type AgentGatewaySessionLease,
@@ -421,7 +421,7 @@ const CODEX_BROWSER_TOOL_ROUTING_INSTRUCTIONS = `
 
 ## Browser tool routing
 
-Prefer Synara's built-in browser for browser work. It may continue in the background without changing the user's active chat. In code mode, call its MCP methods directly inside \`functions.exec\` with the exact \`tools.mcp__synara__browser_*\` prefix (for example, \`await tools.mcp__synara__browser_open({ url })\` and \`await tools.mcp__synara__browser_snapshot({})\`). The available suffixes are ${BROWSER_TOOL_NAMES.map((name) => `\`${name.slice("browser_".length)}\``).join(", ")}.
+Prefer Luminor's built-in browser for browser work. It may continue in the background without changing the user's active chat. In code mode, call its MCP methods directly inside \`functions.exec\` with the exact \`tools.mcp__luminor__browser_*\` prefix (for example, \`await tools.mcp__luminor__browser_open({ url })\` and \`await tools.mcp__luminor__browser_snapshot({})\`). The available suffixes are ${BROWSER_TOOL_NAMES.map((name) => `\`${name.slice("browser_".length)}\``).join(", ")}.
 
 For element actions, keep the \`snapshotId\` returned by the fresh snapshot and use the exact shapes \`browser_type({ target: { ref, snapshotId }, text })\`, \`browser_click({ target: { ref, snapshotId } })\`, and \`browser_press({ keys: ["Enter"] })\`. Wait for observable changes with \`browser_wait({ conditions: [{ kind: "url", glob: "*expected*" }] })\` or another published condition. Never pass a bare \`ref\` without its \`snapshotId\`.
 
@@ -554,7 +554,7 @@ plan content should be human and agent digestible. The final plan must be plan-o
 Do not ask "should I proceed?" in the final output. The user can easily switch out of Plan mode and request implementation if you have included a \`<proposed_plan>\` block in your response. Alternatively, they can decide to stay in Plan mode and continue refining the plan.
 
 Only produce at most one \`<proposed_plan>\` block per turn, and only when you are presenting a complete spec.
-</collaboration_mode>${CODEX_BROWSER_TOOL_ROUTING_INSTRUCTIONS}\n\n${SYNARA_GATEWAY_HARNESS_POLICY}`;
+</collaboration_mode>${CODEX_BROWSER_TOOL_ROUTING_INSTRUCTIONS}\n\n${LUMINOR_GATEWAY_HARNESS_POLICY}`;
 
 export const CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS = `<collaboration_mode># Collaboration Mode: Default
 
@@ -567,9 +567,9 @@ Your active mode changes only when new developer instructions with a different \
 The \`request_user_input\` tool is unavailable in Default mode. If you call it while in Default mode, it will return an error.
 
 In Default mode, strongly prefer making reasonable assumptions and executing the user's request rather than stopping to ask questions. If you absolutely must ask a question because the answer cannot be discovered from local context and a reasonable assumption would be risky, ask the user directly with a concise plain-text question. Never write a multiple choice question as a textual assistant message.
-</collaboration_mode>${CODEX_BROWSER_TOOL_ROUTING_INSTRUCTIONS}\n\n${SYNARA_GATEWAY_HARNESS_POLICY}`;
+</collaboration_mode>${CODEX_BROWSER_TOOL_ROUTING_INSTRUCTIONS}\n\n${LUMINOR_GATEWAY_HARNESS_POLICY}`;
 
-// Maps Synara's simple runtime toggle to Codex thread-level permission overrides.
+// Maps Luminor's simple runtime toggle to Codex thread-level permission overrides.
 function mapCodexRuntimeMode(runtimeMode: RuntimeMode): {
   readonly approvalPolicy: CodexApprovalPolicy;
   readonly approvalsReviewer: CodexApprovalsReviewer;
@@ -633,7 +633,7 @@ const CODEX_ALWAYS_ALLOW_SESSION_TURN_OVERRIDES: CodexSessionApprovalOverride = 
   sandboxPolicy: { type: "dangerFullAccess" },
 };
 
-// Synara re-sends turn-level Codex permission overrides, so keep "always allow"
+// Luminor re-sends turn-level Codex permission overrides, so keep "always allow"
 // as live session state instead of relying on one native approval reply.
 function resolveCodexTurnOverrides(context: CodexSessionContext): {
   readonly approvalPolicy: CodexApprovalPolicy;
@@ -695,8 +695,8 @@ export function normalizeCodexModelSlug(
 export function buildCodexInitializeParams() {
   return {
     clientInfo: {
-      name: "synara_desktop",
-      title: "Synara Desktop",
+      name: "luminor_desktop",
+      title: "Luminor Desktop",
       version: "0.1.0",
     },
     capabilities: {
@@ -905,7 +905,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   private readonly modelCache = new Map<string, ProviderListModelsResult>();
 
   private runPromise: (effect: Effect.Effect<unknown, never>) => Promise<unknown>;
-  private readonly synaraSkillsDir: string | undefined;
+  private readonly luminorSkillsDir: string | undefined;
   private readonly agentGatewayMcp:
     | {
         readonly endpointUrl: () => string;
@@ -917,7 +917,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   constructor(
     services?: ServiceMap.ServiceMap<never>,
     options?: {
-      readonly synaraSkillsDir?: string;
+      readonly luminorSkillsDir?: string;
       readonly agentGatewayMcp?: {
         readonly endpointUrl: () => string;
         readonly acquireSessionLease: (threadId: ThreadId) => AgentGatewaySessionLease;
@@ -928,13 +928,13 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   ) {
     super();
     this.runPromise = services ? Effect.runPromiseWith(services) : Effect.runPromise;
-    this.synaraSkillsDir = options?.synaraSkillsDir;
+    this.luminorSkillsDir = options?.luminorSkillsDir;
     this.agentGatewayMcp = options?.agentGatewayMcp;
     this.teardownProcessTree = options?.teardownProcessTree ?? teardownProviderProcessTree;
     this.taskCompleteFallbackGraceMs = Math.max(0, options?.taskCompleteFallbackGraceMs ?? 750);
   }
 
-  // The Synara MCP server rides on the shared overlay config (no secrets),
+  // The Luminor MCP server rides on the shared overlay config (no secrets),
   // while the per-thread bearer token travels through the app-server process
   // env referenced by `bearer_token_env_var`.
   private async buildSessionProcessEnv(
@@ -948,25 +948,25 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         : {}),
     });
     if (gatewayBearerToken) {
-      env[SYNARA_AGENT_GATEWAY_TOKEN_ENV] = gatewayBearerToken;
+      env[LUMINOR_AGENT_GATEWAY_TOKEN_ENV] = gatewayBearerToken;
     }
     return env;
   }
 
-  // Registers `~/.synara/skills` as a codex skill root so portable skills are
+  // Registers `~/.luminor/skills` as a codex skill root so portable skills are
   // first-class: skills/list returns them and turn/start `skill` items inject
   // their instructions. Verified live: skill items with paths outside known
   // roots are silently ignored by codex app-server, so this call is required.
-  private async registerSynaraSkillsRoot(context: CodexSessionContext): Promise<void> {
-    if (!this.synaraSkillsDir) {
+  private async registerLuminorSkillsRoot(context: CodexSessionContext): Promise<void> {
+    if (!this.luminorSkillsDir) {
       return;
     }
     try {
       await this.sendRequest(context, "skills/extraRoots/set", {
-        extraRoots: [this.synaraSkillsDir],
+        extraRoots: [this.luminorSkillsDir],
       });
     } catch (error) {
-      // Older codex builds (< extra-roots support) keep working; Synara-only
+      // Older codex builds (< extra-roots support) keep working; Luminor-only
       // skills simply stay invisible to codex on those versions.
       log.warn("skills/extraRoots/set unavailable", { error });
     }
@@ -1050,7 +1050,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       await this.sendRequest(context, "initialize", buildCodexInitializeParams());
 
       await this.writeMessage(context, { method: "initialized" });
-      await this.registerSynaraSkillsRoot(context);
+      await this.registerLuminorSkillsRoot(context);
       // Model discovery is lazy and cached by listModels(). Keeping model/list
       // out of this serial cold-start path avoids an otherwise unused request
       // with its own 20-second deadline.
@@ -1810,7 +1810,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
 
       await this.sendRequest(context, "initialize", buildCodexInitializeParams());
       await this.writeMessage(context, { method: "initialized" });
-      await this.registerSynaraSkillsRoot(context);
+      await this.registerLuminorSkillsRoot(context);
       try {
         const accountReadResponse = await this.sendRequest(context, "account/read", {});
         context.account = readCodexAccountSnapshot(accountReadResponse);
@@ -2698,7 +2698,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     try {
       await this.sendRequest(context, "initialize", buildCodexInitializeParams());
       await this.writeMessage(context, { method: "initialized" });
-      await this.registerSynaraSkillsRoot(context);
+      await this.registerLuminorSkillsRoot(context);
       try {
         const accountReadResponse = await this.sendRequest(context, "account/read", {});
         context.account = readCodexAccountSnapshot(accountReadResponse);
@@ -3307,7 +3307,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         return;
       }
 
-      const detail = "Codex asked a question Synara could not render, so it was declined.";
+      const detail = "Codex asked a question Luminor could not render, so it was declined.";
       this.emitErrorEvent(context, "item/tool/requestUserInput/unrenderable", detail);
       await this.writeMessage(context, {
         id: request.id,

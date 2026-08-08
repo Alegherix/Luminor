@@ -2,7 +2,7 @@ import type {
   ProjectScript,
   ProjectScriptIcon,
   ResolvedKeybindingsConfig,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import {
   BugIcon,
   ChevronDownIcon,

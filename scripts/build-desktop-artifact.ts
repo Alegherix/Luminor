@@ -20,7 +20,7 @@ import {
   MAC_APPSNAP_HELPER_STAGE_PATH,
   validateDesktopNativeBuildHost,
 } from "./lib/desktop-platform-build-config.ts";
-import { SYNARA_PRODUCTION_BUNDLE_ID } from "@synara/shared/desktopIdentity";
+import { LUMINOR_PRODUCTION_BUNDLE_ID } from "@luminor/shared/desktopIdentity";
 import { parseBooleanEnvValue } from "./lib/env-bool.ts";
 import { finalizeSignedMacDmg } from "./lib/mac-dmg-finalize.ts";
 import { finalizeMacUpdateZip } from "./lib/mac-update-zip-finalize.ts";
@@ -218,10 +218,10 @@ interface StagePackageJson {
   readonly name: string;
   readonly version: string;
   readonly buildVersion: string;
-  readonly synaraCommitHash: string;
-  readonly synaraLockfileSha256: string;
-  readonly synaraSourceTag: string | null;
-  readonly synaraWindowsPublisherSubject: string | null;
+  readonly luminorCommitHash: string;
+  readonly luminorLockfileSha256: string;
+  readonly luminorSourceTag: string | null;
+  readonly luminorWindowsPublisherSubject: string | null;
   readonly private: true;
   readonly description: string;
   readonly author: string;
@@ -250,20 +250,20 @@ const AzureTrustedSigningOptionsConfig = Config.all({
 });
 
 const BuildEnvConfig = Config.all({
-  platform: Config.schema(BuildPlatform, "SYNARA_DESKTOP_PLATFORM").pipe(Config.option),
-  target: Config.string("SYNARA_DESKTOP_TARGET").pipe(Config.option),
-  arch: Config.schema(BuildArch, "SYNARA_DESKTOP_ARCH").pipe(Config.option),
-  version: Config.string("SYNARA_DESKTOP_VERSION").pipe(Config.option),
-  sourceCommit: Config.string("SYNARA_SOURCE_COMMIT").pipe(Config.option),
-  sourceTag: Config.string("SYNARA_SOURCE_TAG").pipe(Config.option),
-  lockfileSha256: Config.string("SYNARA_LOCKFILE_SHA256").pipe(Config.option),
-  outputDir: Config.string("SYNARA_DESKTOP_OUTPUT_DIR").pipe(Config.option),
-  skipBuild: Config.string("SYNARA_DESKTOP_SKIP_BUILD").pipe(Config.option),
-  keepStage: Config.string("SYNARA_DESKTOP_KEEP_STAGE").pipe(Config.option),
-  signed: Config.string("SYNARA_DESKTOP_SIGNED").pipe(Config.option),
-  verbose: Config.string("SYNARA_DESKTOP_VERBOSE").pipe(Config.option),
-  mockUpdates: Config.string("SYNARA_DESKTOP_MOCK_UPDATES").pipe(Config.option),
-  mockUpdateServerPort: Config.string("SYNARA_DESKTOP_MOCK_UPDATE_SERVER_PORT").pipe(Config.option),
+  platform: Config.schema(BuildPlatform, "LUMINOR_DESKTOP_PLATFORM").pipe(Config.option),
+  target: Config.string("LUMINOR_DESKTOP_TARGET").pipe(Config.option),
+  arch: Config.schema(BuildArch, "LUMINOR_DESKTOP_ARCH").pipe(Config.option),
+  version: Config.string("LUMINOR_DESKTOP_VERSION").pipe(Config.option),
+  sourceCommit: Config.string("LUMINOR_SOURCE_COMMIT").pipe(Config.option),
+  sourceTag: Config.string("LUMINOR_SOURCE_TAG").pipe(Config.option),
+  lockfileSha256: Config.string("LUMINOR_LOCKFILE_SHA256").pipe(Config.option),
+  outputDir: Config.string("LUMINOR_DESKTOP_OUTPUT_DIR").pipe(Config.option),
+  skipBuild: Config.string("LUMINOR_DESKTOP_SKIP_BUILD").pipe(Config.option),
+  keepStage: Config.string("LUMINOR_DESKTOP_KEEP_STAGE").pipe(Config.option),
+  signed: Config.string("LUMINOR_DESKTOP_SIGNED").pipe(Config.option),
+  verbose: Config.string("LUMINOR_DESKTOP_VERBOSE").pipe(Config.option),
+  mockUpdates: Config.string("LUMINOR_DESKTOP_MOCK_UPDATES").pipe(Config.option),
+  mockUpdateServerPort: Config.string("LUMINOR_DESKTOP_MOCK_UPDATE_SERVER_PORT").pipe(Config.option),
 });
 
 const resolveBooleanFlag = (flag: Option.Option<boolean>, envValue: boolean) =>
@@ -309,11 +309,11 @@ export const resolveBuildOptions = Effect.fn("resolveBuildOptions")(function* (
   const sourceCommit = mergeOptions(input.sourceCommit, env.sourceCommit, undefined);
   const sourceTag = mergeOptions(input.sourceTag, env.sourceTag, undefined);
   const lockfileSha256 = mergeOptions(input.lockfileSha256, env.lockfileSha256, undefined);
-  const envSkipBuild = yield* resolveBooleanEnv("SYNARA_DESKTOP_SKIP_BUILD", env.skipBuild);
-  const envKeepStage = yield* resolveBooleanEnv("SYNARA_DESKTOP_KEEP_STAGE", env.keepStage);
-  const envSigned = yield* resolveBooleanEnv("SYNARA_DESKTOP_SIGNED", env.signed);
-  const envVerbose = yield* resolveBooleanEnv("SYNARA_DESKTOP_VERBOSE", env.verbose);
-  const envMockUpdates = yield* resolveBooleanEnv("SYNARA_DESKTOP_MOCK_UPDATES", env.mockUpdates);
+  const envSkipBuild = yield* resolveBooleanEnv("LUMINOR_DESKTOP_SKIP_BUILD", env.skipBuild);
+  const envKeepStage = yield* resolveBooleanEnv("LUMINOR_DESKTOP_KEEP_STAGE", env.keepStage);
+  const envSigned = yield* resolveBooleanEnv("LUMINOR_DESKTOP_SIGNED", env.signed);
+  const envVerbose = yield* resolveBooleanEnv("LUMINOR_DESKTOP_VERBOSE", env.verbose);
+  const envMockUpdates = yield* resolveBooleanEnv("LUMINOR_DESKTOP_MOCK_UPDATES", env.mockUpdates);
   const releaseDir = resolveBooleanFlag(input.mockUpdates, envMockUpdates)
     ? "release-mock"
     : "release";
@@ -423,7 +423,7 @@ function stageMacIcons(stageResourcesDir: string, verbose: boolean) {
     }
 
     const tmpRoot = yield* fs.makeTempDirectoryScoped({
-      prefix: "synara-icon-build-",
+      prefix: "luminor-icon-build-",
     });
 
     const iconPngPath = path.join(stageResourcesDir, "icon.png");
@@ -540,7 +540,7 @@ function resolveGitHubPublishConfig():
     }
   | undefined {
   const rawRepo =
-    process.env.SYNARA_DESKTOP_UPDATE_REPOSITORY?.trim() ||
+    process.env.LUMINOR_DESKTOP_UPDATE_REPOSITORY?.trim() ||
     process.env.GITHUB_REPOSITORY?.trim() ||
     "";
   if (!rawRepo) return undefined;
@@ -567,7 +567,7 @@ const verifyStagedNodePty = Effect.fn("verifyStagedNodePty")(function* (
       cwd: stageAppDir,
       env: {
         ...process.env,
-        SYNARA_NODE_PTY_SMOKE_REQUIRE_ROOT: stageAppDir,
+        LUMINOR_NODE_PTY_SMOKE_REQUIRE_ROOT: stageAppDir,
       },
       ...commandOutputOptions(verbose),
       shell: process.platform === "win32",
@@ -724,9 +724,9 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   mockUpdateServerPort: string | undefined,
 ) {
   const buildConfig: Record<string, unknown> = {
-    appId: SYNARA_PRODUCTION_BUNDLE_ID,
+    appId: LUMINOR_PRODUCTION_BUNDLE_ID,
     productName,
-    artifactName: "Synara-${version}-${arch}.${ext}",
+    artifactName: "Luminor-${version}-${arch}.${ext}",
     directories: {
       buildResources: "apps/desktop/resources",
     },
@@ -952,7 +952,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   }
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({
-    prefix: `synara-desktop-${options.platform}-stage-`,
+    prefix: `luminor-desktop-${options.platform}-stage-`,
   });
 
   const stageAppDir = path.join(stageRoot, "app");
@@ -1012,22 +1012,22 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   const resolvedBuildConfig = yield* createBuildConfig(
     options.platform,
     options.target,
-    desktopPackageJson.productName ?? "Synara",
+    desktopPackageJson.productName ?? "Luminor",
     options.signed,
     options.mockUpdates,
     options.mockUpdateServerPort,
   );
 
   const stagePackageJson: StagePackageJson = {
-    name: "synara-desktop",
+    name: "luminor-desktop",
     version: appVersion,
     buildVersion: appVersion,
-    synaraCommitHash: commitHash,
-    synaraLockfileSha256: resolvedLockfileSha256,
-    synaraSourceTag: options.sourceTag ?? null,
-    synaraWindowsPublisherSubject: resolvedBuildConfig.windowsPublisherSubject,
+    luminorCommitHash: commitHash,
+    luminorLockfileSha256: resolvedLockfileSha256,
+    luminorSourceTag: options.sourceTag ?? null,
+    luminorWindowsPublisherSubject: resolvedBuildConfig.windowsPublisherSubject,
     private: true,
-    description: "Synara desktop build",
+    description: "Luminor desktop build",
     author: "Emanuele Di Pietro",
     main: "apps/desktop/dist-electron/main.js",
     build: resolvedBuildConfig.buildConfig,
@@ -1173,69 +1173,69 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
 const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
   platform: Flag.choice("platform", BuildPlatform.literals).pipe(
-    Flag.withDescription("Build platform (env: SYNARA_DESKTOP_PLATFORM)."),
+    Flag.withDescription("Build platform (env: LUMINOR_DESKTOP_PLATFORM)."),
     Flag.optional,
   ),
   target: Flag.string("target").pipe(
     Flag.withDescription(
-      "Artifact target, for example dmg/AppImage/nsis (env: SYNARA_DESKTOP_TARGET).",
+      "Artifact target, for example dmg/AppImage/nsis (env: LUMINOR_DESKTOP_TARGET).",
     ),
     Flag.optional,
   ),
   arch: Flag.choice("arch", BuildArch.literals).pipe(
-    Flag.withDescription("Build arch, for example arm64/x64/universal (env: SYNARA_DESKTOP_ARCH)."),
+    Flag.withDescription("Build arch, for example arm64/x64/universal (env: LUMINOR_DESKTOP_ARCH)."),
     Flag.optional,
   ),
   buildVersion: Flag.string("build-version").pipe(
-    Flag.withDescription("Artifact version metadata (env: SYNARA_DESKTOP_VERSION)."),
+    Flag.withDescription("Artifact version metadata (env: LUMINOR_DESKTOP_VERSION)."),
     Flag.optional,
   ),
   sourceCommit: Flag.string("source-commit").pipe(
-    Flag.withDescription("Expected full source commit (env: SYNARA_SOURCE_COMMIT)."),
+    Flag.withDescription("Expected full source commit (env: LUMINOR_SOURCE_COMMIT)."),
     Flag.optional,
   ),
   sourceTag: Flag.string("source-tag").pipe(
-    Flag.withDescription("Exact source tag when building a release (env: SYNARA_SOURCE_TAG)."),
+    Flag.withDescription("Exact source tag when building a release (env: LUMINOR_SOURCE_TAG)."),
     Flag.optional,
   ),
   lockfileSha256: Flag.string("lockfile-sha256").pipe(
-    Flag.withDescription("Expected bun.lock SHA-256 (env: SYNARA_LOCKFILE_SHA256)."),
+    Flag.withDescription("Expected bun.lock SHA-256 (env: LUMINOR_LOCKFILE_SHA256)."),
     Flag.optional,
   ),
   outputDir: Flag.string("output-dir").pipe(
-    Flag.withDescription("Output directory for artifacts (env: SYNARA_DESKTOP_OUTPUT_DIR)."),
+    Flag.withDescription("Output directory for artifacts (env: LUMINOR_DESKTOP_OUTPUT_DIR)."),
     Flag.optional,
   ),
   skipBuild: Flag.boolean("skip-build").pipe(
     Flag.withDescription(
-      "Skip `bun run build:desktop` and use existing dist artifacts (env: SYNARA_DESKTOP_SKIP_BUILD).",
+      "Skip `bun run build:desktop` and use existing dist artifacts (env: LUMINOR_DESKTOP_SKIP_BUILD).",
     ),
     Flag.optional,
   ),
   keepStage: Flag.boolean("keep-stage").pipe(
-    Flag.withDescription("Keep temporary staging files (env: SYNARA_DESKTOP_KEEP_STAGE)."),
+    Flag.withDescription("Keep temporary staging files (env: LUMINOR_DESKTOP_KEEP_STAGE)."),
     Flag.optional,
   ),
   signed: Flag.boolean("signed").pipe(
     Flag.withDescription(
-      "Enable signing/notarization discovery; Windows uses Azure Trusted Signing (env: SYNARA_DESKTOP_SIGNED).",
+      "Enable signing/notarization discovery; Windows uses Azure Trusted Signing (env: LUMINOR_DESKTOP_SIGNED).",
     ),
     Flag.optional,
   ),
   verbose: Flag.boolean("verbose").pipe(
-    Flag.withDescription("Stream subprocess stdout (env: SYNARA_DESKTOP_VERBOSE)."),
+    Flag.withDescription("Stream subprocess stdout (env: LUMINOR_DESKTOP_VERBOSE)."),
     Flag.optional,
   ),
   mockUpdates: Flag.boolean("mock-updates").pipe(
-    Flag.withDescription("Enable mock updates (env: SYNARA_DESKTOP_MOCK_UPDATES)."),
+    Flag.withDescription("Enable mock updates (env: LUMINOR_DESKTOP_MOCK_UPDATES)."),
     Flag.optional,
   ),
   mockUpdateServerPort: Flag.string("mock-update-server-port").pipe(
-    Flag.withDescription("Mock update server port (env: SYNARA_DESKTOP_MOCK_UPDATE_SERVER_PORT)."),
+    Flag.withDescription("Mock update server port (env: LUMINOR_DESKTOP_MOCK_UPDATE_SERVER_PORT)."),
     Flag.optional,
   ),
 }).pipe(
-  Command.withDescription("Build a desktop artifact for Synara."),
+  Command.withDescription("Build a desktop artifact for Luminor."),
   Command.withHandler((input) => Effect.flatMap(resolveBuildOptions(input), buildDesktopArtifact)),
 );
 

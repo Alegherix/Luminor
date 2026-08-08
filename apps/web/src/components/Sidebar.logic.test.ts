@@ -53,7 +53,7 @@ import {
   sortProjectsForSidebar,
   sortThreadsForSidebar,
 } from "./Sidebar.logic";
-import { ProjectId, ThreadId } from "@synara/contracts";
+import { ProjectId, ThreadId } from "@luminor/contracts";
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -207,24 +207,24 @@ describe("resolveThreadHoverCardMetadata", () => {
     const metadata = resolveThreadHoverCardMetadata({
       thread: makeSidebarThreadSummary({
         envMode: "worktree",
-        branch: "codex/synara-mobile",
+        branch: "codex/luminor-mobile",
         worktreePath: "/Users/me/.codex/worktrees/1234/Remodex",
         associatedWorktreePath: "/Users/me/.codex/worktrees/1234/Remodex",
-        associatedWorktreeBranch: "codex/synara-mobile",
+        associatedWorktreeBranch: "codex/luminor-mobile",
       }),
       project: {
         kind: "project",
-        name: "synara-mobile",
+        name: "luminor-mobile",
         folderName: "Remodex",
         cwd: "/Users/me/Developer/Remodex",
       },
     });
 
     expect(metadata).toEqual({
-      projectName: "synara-mobile",
+      projectName: "luminor-mobile",
       projectCwd: "/Users/me/Developer/Remodex",
       sourceProjectName: "Remodex",
-      branch: "codex/synara-mobile",
+      branch: "codex/luminor-mobile",
       worktreeName: "Remodex",
     });
   });
@@ -236,33 +236,33 @@ describe("resolveThreadHoverCardMetadata", () => {
       }),
       project: {
         kind: "project",
-        name: "synara",
-        folderName: "synara",
-        cwd: "/Users/me/Developer/synara",
+        name: "luminor",
+        folderName: "luminor",
+        cwd: "/Users/me/Developer/luminor",
       },
     });
 
     expect(metadata).toEqual({
-      projectName: "synara",
-      projectCwd: "/Users/me/Developer/synara",
+      projectName: "luminor",
+      projectCwd: "/Users/me/Developer/luminor",
       sourceProjectName: null,
       branch: "main",
       worktreeName: null,
     });
   });
 
-  it("labels project-less chat containers as Synara instead of the slug folder", () => {
+  it("labels project-less chat containers as Luminor instead of the slug folder", () => {
     const metadata = resolveThreadHoverCardMetadata({
       thread: makeSidebarThreadSummary({ branch: null }),
       project: {
         kind: "chat",
         name: "open-the-browser-search-house-music",
         folderName: "open-the-browser-search-house-music",
-        cwd: "/Users/me/Documents/Synara/2026-08-01/open-the-browser-search-house-music",
+        cwd: "/Users/me/Documents/Luminor/2026-08-01/open-the-browser-search-house-music",
       },
     });
 
-    expect(metadata.projectName).toBe("Synara");
+    expect(metadata.projectName).toBe("Luminor");
   });
 });
 
@@ -639,7 +639,7 @@ describe("add-project error helpers", () => {
 
   it("explains root-absolute add-project paths that probably missed the home directory", () => {
     expect(
-      describeAddProjectError("Failed to create project directory: /Developer/Testing/synara"),
+      describeAddProjectError("Failed to create project directory: /Developer/Testing/luminor"),
     ).toContain("/Users/<name>/Developer");
   });
 

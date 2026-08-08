@@ -5,7 +5,7 @@ import type {
   BrowserWaitCondition,
   BrowserWaitInput,
   BrowserWaitOutput,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 
 import type { BrowserAutomationVisibleRuntime } from "../browserManager";
 import {

@@ -19,18 +19,18 @@ export const WS_STREAM_LIMITS = {
 } as const;
 
 export const WS_COMPATIBILITY_QUERY = {
-  clientBuild: "x-synara-client-build",
-  protocolEpoch: "x-synara-protocol-epoch",
-  protocolRevision: "x-synara-protocol-revision",
-  serverInstanceId: "x-synara-server-instance",
+  clientBuild: "x-luminor-client-build",
+  protocolEpoch: "x-luminor-protocol-epoch",
+  protocolRevision: "x-luminor-protocol-revision",
+  serverInstanceId: "x-luminor-server-instance",
 } as const;
 
 export const WS_NEGOTIATE_QUERY = {
-  clientBuild: "x-synara-client-build",
-  protocolEpoch: "x-synara-protocol-epoch",
-  minRevision: "x-synara-protocol-min-revision",
-  maxRevision: "x-synara-protocol-max-revision",
-  requiredCapability: "x-synara-required-capability",
+  clientBuild: "x-luminor-client-build",
+  protocolEpoch: "x-luminor-protocol-epoch",
+  minRevision: "x-luminor-protocol-min-revision",
+  maxRevision: "x-luminor-protocol-max-revision",
+  requiredCapability: "x-luminor-required-capability",
 } as const;
 
 export const WS_GITHUB_PROJECT_PROVISIONING_CAPABILITY = "projects.github-provisioning";

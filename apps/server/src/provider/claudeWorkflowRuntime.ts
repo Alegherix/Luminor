@@ -8,7 +8,7 @@
 // update", never to a thrown error.
 
 import { Effect, FileSystem } from "effect";
-import type { WorkflowAgentRuntimeSnapshot } from "@synara/contracts";
+import type { WorkflowAgentRuntimeSnapshot } from "@luminor/contracts";
 
 import { WORKFLOW_PROMPT_PREVIEW_CHARS } from "./claudeWorkflowScript.ts";
 

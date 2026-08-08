@@ -12,10 +12,10 @@ import type {
   OpenCodeModelSelection,
   OpenCodeModelOptions,
   ProviderStartOptions,
-} from "@synara/contracts";
-import { sanitizeGeneratedThreadTitle } from "@synara/shared/chatThreads";
-import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@synara/shared/git";
-import { getModelSelectionStringOptionValue } from "@synara/shared/model";
+} from "@luminor/contracts";
+import { sanitizeGeneratedThreadTitle } from "@luminor/shared/chatThreads";
+import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@luminor/shared/git";
+import { getModelSelectionStringOptionValue } from "@luminor/shared/model";
 
 import { resolveProviderAttachmentPath } from "../../provider/providerAttachmentPaths.ts";
 import { ServerConfig } from "../../config.ts";
@@ -388,7 +388,7 @@ const makeOpenCodeCompatibleTextGeneration = (config: OpenCodeCompatibleTextGene
               cliSpec: config.cliSpec,
             });
             const sessionCreateInput = {
-              title: `Synara ${input.operation}`,
+              title: `Luminor ${input.operation}`,
               model: {
                 providerID: providerId,
                 id: modelId,

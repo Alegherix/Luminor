@@ -4,9 +4,9 @@
 // Layer: UI logic (no React, no stores) so the board math stays unit-testable.
 // Exports: deriveKanbanColumn, buildKanbanBoard, ordering + drop-action helpers.
 
-import type { ProjectId, ProviderKind, ThreadEnvironmentMode, ThreadId } from "@synara/contracts";
-import { buildPromptThreadTitleFallback } from "@synara/shared/chatThreads";
-import { isPendingThreadWorktree } from "@synara/shared/threadEnvironment";
+import type { ProjectId, ProviderKind, ThreadEnvironmentMode, ThreadId } from "@luminor/contracts";
+import { buildPromptThreadTitleFallback } from "@luminor/shared/chatThreads";
+import { isPendingThreadWorktree } from "@luminor/shared/threadEnvironment";
 import type { ComposerThreadDraftState } from "../../composerDraftStore";
 import {
   canSessionAnswerPendingRequests,

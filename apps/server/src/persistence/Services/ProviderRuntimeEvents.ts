@@ -1,4 +1,4 @@
-import type { ProviderRuntimeEvent } from "@synara/contracts";
+import type { ProviderRuntimeEvent } from "@luminor/contracts";
 import { ServiceMap } from "effect";
 import type { Effect } from "effect";
 
@@ -73,4 +73,4 @@ export interface ProviderRuntimeEventRepositoryShape {
 export class ProviderRuntimeEventRepository extends ServiceMap.Service<
   ProviderRuntimeEventRepository,
   ProviderRuntimeEventRepositoryShape
->()("synara/persistence/Services/ProviderRuntimeEvents/ProviderRuntimeEventRepository") {}
+>()("luminor/persistence/Services/ProviderRuntimeEvents/ProviderRuntimeEventRepository") {}

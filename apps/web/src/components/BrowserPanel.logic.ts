@@ -8,14 +8,14 @@ import {
   BROWSER_BLANK_URL,
   BROWSER_SEARCH_URL_PREFIX,
   normalizeBrowserUrlInput,
-} from "@synara/shared/browserSession";
+} from "@luminor/shared/browserSession";
 import type {
   BrowserAnnotationEvent,
   BrowserAnnotationMarker,
   BrowserAnnotationTheme,
   BrowserTabState,
   ThreadId,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import type { BrowserHistoryEntry } from "../browserStateStore";
 import type { BrowserAnnotationDraft } from "../lib/browserAnnotations";
 
@@ -354,7 +354,7 @@ export function browserAddressDisplayValue(
 export const normalizeBrowserAddressInput = normalizeBrowserUrlInput;
 
 // A raw file:// URL must never reach Electron's renderer-owned <webview>. Main translates it
-// to Synara's directory-scoped preview protocol after adopting the guest.
+// to Luminor's directory-scoped preview protocol after adopting the guest.
 export function browserWebviewInitialUrl(url: string): string {
   try {
     return new URL(url).protocol === "file:" ? BROWSER_BLANK_URL : url;

@@ -6,7 +6,7 @@
 
 import nodePath from "node:path";
 
-import type { ServerProviderUsageLimit, ServerProviderUsageLine } from "@synara/contracts";
+import type { ServerProviderUsageLimit, ServerProviderUsageLine } from "@luminor/contracts";
 
 import { decodeJwtExpMs, readKeychainPassword } from "../credentials";
 import { fetchJson, isAuthFailureStatus } from "../http";

@@ -1,5 +1,5 @@
 {
-  "name": "@synara/desktop",
+  "name": "@luminor/desktop",
   "version": "0.7.0",
   "private": true,
   "main": "dist-electron/main.js",
@@ -19,13 +19,13 @@
     "electron-updater": "^6.6.2"
   },
   "devDependencies": {
-    "@synara/contracts": "workspace:*",
-    "@synara/shared": "workspace:*",
+    "@luminor/contracts": "workspace:*",
+    "@luminor/shared": "workspace:*",
     "@types/node": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "wait-on": "^8.0.2"
   },
-  "productName": "Synara"
+  "productName": "Luminor"
 }

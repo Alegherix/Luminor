@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ProjectId, ThreadId } from "@synara/contracts";
+import { ProjectId, ThreadId } from "@luminor/contracts";
 import { DEFAULT_INTERACTION_MODE } from "../../types";
 import type { SidebarThreadSummary, ThreadSession } from "../../types";
 import {
@@ -75,7 +75,7 @@ function makeSidebarThreadSummary(
 
 function makeBoardInput(overrides: Partial<BuildKanbanBoardInput> = {}): BuildKanbanBoardInput {
   return {
-    projects: [{ id: ProjectId.makeUnsafe("project-1"), kind: "project", name: "Synara" }],
+    projects: [{ id: ProjectId.makeUnsafe("project-1"), kind: "project", name: "Luminor" }],
     threads: [],
     draftThreads: [],
     composerDraftByThreadId: {},
@@ -932,7 +932,7 @@ describe("resolveDraftDropAction", () => {
       resolveDraftDropAction({
         ...baseCard,
         envMode: "worktree",
-        worktreePath: "/tmp/synara-worktree",
+        worktreePath: "/tmp/luminor-worktree",
       }),
     ).toBe("dispatch");
   });
@@ -962,7 +962,7 @@ describe("flattenProjectBoardForOverview", () => {
 
     const flattened = flattenProjectBoardForOverview({
       projectId: ProjectId.makeUnsafe("project-1"),
-      projectName: "Synara",
+      projectName: "Luminor",
       projectKind: "project",
       draft: [card("d", "draft")],
       inProgress: [card("w", "inProgress")],

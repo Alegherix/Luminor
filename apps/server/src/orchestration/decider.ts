@@ -5,7 +5,7 @@ import type {
   OrchestrationThread,
   ProjectKind,
   ThreadMarker,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import {
   EventId,
   MAX_PINNED_PROJECTS,
@@ -14,20 +14,20 @@ import {
   SPACES_MAX_COUNT,
   THREAD_MARKERS_MAX_COUNT,
   TurnId,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import {
   deriveAssociatedWorktreeMetadata,
   deriveAssociatedWorktreeMetadataPatch,
   workspaceRootsEqual,
-} from "@synara/shared/threadWorkspace";
-import { doThreadMarkerRangesOverlap } from "@synara/shared/threadMarkers";
-import { collectSubagentDescendants } from "@synara/shared/threadHierarchy";
-import { autoRuntimeModeSelectionIssue } from "@synara/shared/runtimeMode";
-import { providerSupportsNativeTurnSteering } from "@synara/shared/providerMetadata";
+} from "@luminor/shared/threadWorkspace";
+import { doThreadMarkerRangesOverlap } from "@luminor/shared/threadMarkers";
+import { collectSubagentDescendants } from "@luminor/shared/threadHierarchy";
+import { autoRuntimeModeSelectionIssue } from "@luminor/shared/runtimeMode";
+import { providerSupportsNativeTurnSteering } from "@luminor/shared/providerMetadata";
 import {
   collectTailTurnIds,
   resolveTailUserMessageEditTarget,
-} from "@synara/shared/conversationEdit";
+} from "@luminor/shared/conversationEdit";
 import { Effect } from "effect";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
@@ -884,7 +884,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         threadId: command.threadId,
       });
       // Provider-native threads mirror subagents the provider already runs;
-      // Synara never starts a session for them, so the Auto-mode capability
+      // Luminor never starts a session for them, so the Auto-mode capability
       // check can only reject the projection (and durably poison the runtime
       // journal replaying it), never prevent an unverified Auto session.
       if (command.creationSource !== "provider_native") {

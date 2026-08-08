@@ -2,7 +2,7 @@ import type {
   BrowserScreenshotHostOutput,
   BrowserScreenshotInput,
   BrowserTabId,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 
 import type { BrowserAutomationVisibleRuntime } from "../browserManager";
 import { drainOnAbort, sendCdpCommand, throwIfAborted } from "./cdpRuntime";

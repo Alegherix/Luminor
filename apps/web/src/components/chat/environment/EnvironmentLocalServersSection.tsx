@@ -5,9 +5,9 @@
 
 import type { ReactNode } from "react";
 
-import type { ServerLocalServerProcess } from "@synara/contracts";
+import type { ServerLocalServerProcess } from "@luminor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { localServerPrimaryLabel } from "@synara/shared/localServers";
+import { localServerPrimaryLabel } from "@luminor/shared/localServers";
 
 import { LocalServerIdentity } from "../../LocalServerIdentity";
 import { ComposerPickerMenuPopup } from "../ComposerPickerMenuPopup";

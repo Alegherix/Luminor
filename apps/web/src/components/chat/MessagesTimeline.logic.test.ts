@@ -1,4 +1,4 @@
-import { CheckpointRef, MessageId, OrchestrationProposedPlanId, TurnId } from "@synara/contracts";
+import { CheckpointRef, MessageId, OrchestrationProposedPlanId, TurnId } from "@luminor/contracts";
 import { describe, expect, it } from "vitest";
 import {
   buildTurnDiffSummaryByAssistantMessageId,
@@ -383,7 +383,7 @@ describe("computeStableMessagesTimelineRows", () => {
             tone: "info",
             automation: {
               id: "automation-7",
-              name: "Watch Synara PR 231",
+              name: "Watch Luminor PR 231",
               cadenceLabel: "Every 5m",
             },
           },
@@ -1204,22 +1204,22 @@ describe("deriveMessagesTimelineRows", () => {
     expect(collapsedSignature(messageRow(rows, "a2")!)).toEqual(["narration:a1", "work:w1"]);
   });
 
-  it("preserves Synara tool calls when a separate creation recap is present", () => {
+  it("preserves Luminor tool calls when a separate creation recap is present", () => {
     const createTool = workEntry(
-      "synara-create-tool",
+      "luminor-create-tool",
       "2026-01-01T00:00:01Z",
-      "Synara created threads",
+      "Luminor created threads",
     );
     const creationRecap: TimelineEntry = {
-      id: "entry-synara-create-recap",
+      id: "entry-luminor-create-recap",
       kind: "work",
       createdAt: "2026-01-01T00:00:02Z",
       entry: {
-        id: "synara-create-recap",
+        id: "luminor-create-recap",
         createdAt: "2026-01-01T00:00:02Z",
-        label: "Created 2 Synara threads",
+        label: "Created 2 Luminor threads",
         tone: "info",
-        synaraThreadCreation: {
+        luminorThreadCreation: {
           operationId: "gateway:create:two",
           requestedCount: 2,
           createdCount: 2,
@@ -1259,8 +1259,8 @@ describe("deriveMessagesTimelineRows", () => {
     });
 
     expect(collapsedSignature(messageRow(rows, "a1")!)).toEqual([
-      "work:synara-create-tool",
-      "work:synara-create-recap",
+      "work:luminor-create-tool",
+      "work:luminor-create-recap",
     ]);
   });
 

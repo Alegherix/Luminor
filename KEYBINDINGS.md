@@ -1,8 +1,8 @@
 # Keybindings
 
-Synara reads keybindings from:
+Luminor reads keybindings from:
 
-- `~/.synara/userdata/keybindings.json`
+- `~/.luminor/userdata/keybindings.json`
 
 The file must be a JSON array of rules:
 

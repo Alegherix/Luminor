@@ -22,16 +22,16 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
     const globalEnv = new Set(turboConfig.globalEnv ?? []);
 
     for (const name of [
-      "SYNARA_MODE",
-      "SYNARA_PORT",
-      "SYNARA_HOME",
-      "SYNARA_NO_BROWSER",
-      "SYNARA_AUTH_TOKEN",
-      "SYNARA_PUBLIC_URL",
-      "SYNARA_ALLOW_INSECURE_REMOTE",
-      "SYNARA_HOST",
-      "SYNARA_LOG_WS_EVENTS",
-      "SYNARA_AUTO_BOOTSTRAP_PROJECT_FROM_CWD",
+      "LUMINOR_MODE",
+      "LUMINOR_PORT",
+      "LUMINOR_HOME",
+      "LUMINOR_NO_BROWSER",
+      "LUMINOR_AUTH_TOKEN",
+      "LUMINOR_PUBLIC_URL",
+      "LUMINOR_ALLOW_INSECURE_REMOTE",
+      "LUMINOR_HOST",
+      "LUMINOR_LOG_WS_EVENTS",
+      "LUMINOR_AUTO_BOOTSTRAP_PROJECT_FROM_CWD",
       "VITE_WS_URL",
       "VITE_DEV_SERVER_URL",
     ]) {
@@ -40,12 +40,12 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
   });
 
   describe("resolveOffset", () => {
-    it.effect("uses explicit SYNARA_PORT_OFFSET when provided", () =>
+    it.effect("uses explicit LUMINOR_PORT_OFFSET when provided", () =>
       Effect.sync(() => {
         const result = resolveOffset({ portOffset: 12, devInstance: undefined });
         assert.deepStrictEqual(result, {
           offset: 12,
-          source: "SYNARA_PORT_OFFSET=12",
+          source: "LUMINOR_PORT_OFFSET=12",
         });
       }),
     );
@@ -67,7 +67,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           }),
         );
 
-        assert.ok(error.includes("Invalid SYNARA_PORT_OFFSET"));
+        assert.ok(error.includes("Invalid LUMINOR_PORT_OFFSET"));
       }),
     );
   });
@@ -122,7 +122,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
     it.effect("rejects invalid boolean environment values", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          readDevRunnerBooleanEnvironment({ SYNARA_LOG_WS_EVENTS: "sometimes" }),
+          readDevRunnerBooleanEnvironment({ LUMINOR_LOG_WS_EVENTS: "sometimes" }),
         );
 
         assert.match(String(error), /Failed to read boolean development-runner configuration/);
@@ -138,7 +138,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           baseEnv: { PATH: "/opt/homebrew/bin:/usr/bin" },
           serverOffset: 0,
           webOffset: 0,
-          synaraHome: undefined,
+          luminorHome: undefined,
           authToken: undefined,
           noBrowser: undefined,
           autoBootstrapProjectFromCwd: undefined,
@@ -148,19 +148,19 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: undefined,
         });
 
-        assert.equal(env.SYNARA_PATH_HYDRATED, "1");
+        assert.equal(env.LUMINOR_PATH_HYDRATED, "1");
         assert.match(env.PATH ?? "", /\/opt\/homebrew\/bin/);
       }),
     );
 
-    it.effect("defaults SYNARA_HOME to ~/.synara when not provided", () =>
+    it.effect("defaults LUMINOR_HOME to ~/.luminor when not provided", () =>
       Effect.gen(function* () {
         const env = yield* createDevRunnerEnv({
           mode: "dev",
           baseEnv: {},
           serverOffset: 0,
           webOffset: 0,
-          synaraHome: undefined,
+          luminorHome: undefined,
           authToken: undefined,
           noBrowser: undefined,
           autoBootstrapProjectFromCwd: undefined,
@@ -170,8 +170,8 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: undefined,
         });
 
-        assert.equal(env.SYNARA_HOME, resolve(homedir(), ".synara"));
-        assert.equal(env.SYNARA_HOST, "127.0.0.1");
+        assert.equal(env.LUMINOR_HOME, resolve(homedir(), ".luminor"));
+        assert.equal(env.LUMINOR_HOST, "127.0.0.1");
         assert.equal(env.VITE_WS_URL, "ws://127.0.0.1:3773");
       }),
     );
@@ -183,7 +183,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           baseEnv: {},
           serverOffset: 0,
           webOffset: 0,
-          synaraHome: undefined,
+          luminorHome: undefined,
           authToken: undefined,
           noBrowser: undefined,
           autoBootstrapProjectFromCwd: undefined,
@@ -193,7 +193,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: undefined,
         });
 
-        assert.equal(env.SYNARA_HOST, "::1");
+        assert.equal(env.LUMINOR_HOST, "::1");
         assert.equal(env.VITE_WS_URL, "ws://[::1]:3773");
       }),
     );
@@ -205,7 +205,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           baseEnv: {},
           serverOffset: 0,
           webOffset: 0,
-          synaraHome: "/tmp/custom-synara",
+          luminorHome: "/tmp/custom-luminor",
           authToken: "secret",
           noBrowser: true,
           autoBootstrapProjectFromCwd: false,
@@ -215,12 +215,12 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: new URL("http://localhost:7331"),
         });
 
-        assert.equal(env.SYNARA_HOME, resolve("/tmp/custom-synara"));
-        assert.equal(env.SYNARA_PORT, "4222");
-        assert.equal(env.SYNARA_NO_BROWSER, "1");
-        assert.equal(env.SYNARA_AUTO_BOOTSTRAP_PROJECT_FROM_CWD, "0");
-        assert.equal(env.SYNARA_LOG_WS_EVENTS, "1");
-        assert.equal(env.SYNARA_HOST, "0.0.0.0");
+        assert.equal(env.LUMINOR_HOME, resolve("/tmp/custom-luminor"));
+        assert.equal(env.LUMINOR_PORT, "4222");
+        assert.equal(env.LUMINOR_NO_BROWSER, "1");
+        assert.equal(env.LUMINOR_AUTO_BOOTSTRAP_PROJECT_FROM_CWD, "0");
+        assert.equal(env.LUMINOR_LOG_WS_EVENTS, "1");
+        assert.equal(env.LUMINOR_HOST, "0.0.0.0");
         assert.equal(env.VITE_WS_URL, "ws://127.0.0.1:4222");
         assert.equal(env.VITE_DEV_SERVER_URL, "http://localhost:7331/");
       }),
@@ -231,11 +231,11 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         const env = yield* createDevRunnerEnv({
           mode: "dev",
           baseEnv: {
-            SYNARA_LOG_WS_EVENTS: "keep-me-out",
+            LUMINOR_LOG_WS_EVENTS: "keep-me-out",
           },
           serverOffset: 0,
           webOffset: 0,
-          synaraHome: undefined,
+          luminorHome: undefined,
           authToken: undefined,
           noBrowser: undefined,
           autoBootstrapProjectFromCwd: undefined,
@@ -245,8 +245,8 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: undefined,
         });
 
-        assert.equal(env.SYNARA_MODE, "web");
-        assert.equal(env.SYNARA_LOG_WS_EVENTS, undefined);
+        assert.equal(env.LUMINOR_MODE, "web");
+        assert.equal(env.LUMINOR_LOG_WS_EVENTS, undefined);
       }),
     );
 
@@ -257,7 +257,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           baseEnv: {},
           serverOffset: 0,
           webOffset: 0,
-          synaraHome: undefined,
+          luminorHome: undefined,
           authToken: undefined,
           noBrowser: undefined,
           autoBootstrapProjectFromCwd: undefined,
@@ -267,18 +267,18 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: undefined,
         });
 
-        assert.equal(env.SYNARA_LOG_WS_EVENTS, "0");
+        assert.equal(env.LUMINOR_LOG_WS_EVENTS, "0");
       }),
     );
 
-    it.effect("uses custom synaraHome when provided", () =>
+    it.effect("uses custom luminorHome when provided", () =>
       Effect.gen(function* () {
         const env = yield* createDevRunnerEnv({
           mode: "dev",
           baseEnv: {},
           serverOffset: 0,
           webOffset: 0,
-          synaraHome: "/tmp/my-synara",
+          luminorHome: "/tmp/my-luminor",
           authToken: undefined,
           noBrowser: undefined,
           autoBootstrapProjectFromCwd: undefined,
@@ -288,9 +288,9 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: undefined,
         });
 
-        assert.equal(env.SYNARA_HOME, resolve("/tmp/my-synara"));
-        assert.equal(env.SYNARA_HOME, resolve("/tmp/my-synara"));
-        assert.equal(env.SYNARA_HOME, resolve("/tmp/my-synara"));
+        assert.equal(env.LUMINOR_HOME, resolve("/tmp/my-luminor"));
+        assert.equal(env.LUMINOR_HOME, resolve("/tmp/my-luminor"));
+        assert.equal(env.LUMINOR_HOME, resolve("/tmp/my-luminor"));
       }),
     );
   });

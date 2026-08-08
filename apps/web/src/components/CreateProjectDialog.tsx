@@ -4,9 +4,9 @@
 // Layer: Web UI dialog
 // Exports: CreateProjectDialog, CreateProjectSubmitValue
 
-import { type GitHubProjectProvisionProgressEvent, type SpaceId } from "@synara/contracts";
-import { parseGitHubRepositoryInput } from "@synara/shared/githubRepository";
-import { normalizeProjectDirectoryName } from "@synara/shared/projectDirectoryName";
+import { type GitHubProjectProvisionProgressEvent, type SpaceId } from "@luminor/contracts";
+import { parseGitHubRepositoryInput } from "@luminor/shared/githubRepository";
+import { normalizeProjectDirectoryName } from "@luminor/shared/projectDirectoryName";
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
 import { isElectron } from "../env";
@@ -303,7 +303,7 @@ export function CreateProjectDialog(props: {
       return;
     }
     if (source === "github" && !props.githubProvisioningAvailable) {
-      setFormError("Update the Synara server before adding a project from GitHub.");
+      setFormError("Update the Luminor server before adding a project from GitHub.");
       return;
     }
     if (source === "github" && trimmedDestinationParent.length === 0) {

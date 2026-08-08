@@ -1,13 +1,13 @@
 // FILE: appSnapShortcut.ts
-// Purpose: Detect AppSnap shortcut overlap with Synara's renderer keybindings.
+// Purpose: Detect AppSnap shortcut overlap with Luminor's renderer keybindings.
 
 import type {
   DesktopAppSnapKeyChord,
   KeybindingCommand,
   KeybindingShortcut,
   ResolvedKeybindingsConfig,
-} from "@synara/contracts";
-import { appSnapShortcutKeyLabel } from "@synara/shared/appSnapShortcut";
+} from "@luminor/contracts";
+import { appSnapShortcutKeyLabel } from "@luminor/shared/appSnapShortcut";
 
 import { DEFAULT_SHORTCUT_FALLBACKS } from "./keybindings";
 

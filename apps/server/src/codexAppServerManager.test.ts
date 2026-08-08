@@ -19,12 +19,12 @@ import {
   ThreadId,
   TurnId,
   type RuntimeMode,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 
 import {
   buildCodexProcessEnv,
   disableCodexConfigSections,
-  SYNARA_COMPETING_BROWSER_PLUGIN_SECTION_HEADERS,
+  LUMINOR_COMPETING_BROWSER_PLUGIN_SECTION_HEADERS,
 } from "./codexProcessEnv";
 import {
   buildCodexInitializeParams,
@@ -44,7 +44,7 @@ import {
 } from "./codexWorkingDirectory";
 import { CodexJsonlFramer, CodexJsonlWriter } from "./codexAppServerTransport";
 import { ensureIsolatedScratchWorkspace } from "./scratchWorkspaces";
-import { SYNARA_HARNESS_POLICY_MARKER } from "./agentGateway/harnessPolicy.ts";
+import { LUMINOR_HARNESS_POLICY_MARKER } from "./agentGateway/harnessPolicy.ts";
 import {
   AGENT_GATEWAY_TURN_AUTHORITY_RETIRED,
   acquireAgentGatewaySessionLease,
@@ -68,17 +68,17 @@ const autoTurnOverrides = {
   sandboxPolicy: { type: "workspaceWrite" },
 } as const;
 
-describe("Codex Synara harness policy", () => {
+describe("Codex Luminor harness policy", () => {
   it("keeps the same host policy exactly once in default and plan instructions", () => {
     for (const instructions of [
       CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
       CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
     ]) {
-      expect(instructions).toContain(SYNARA_HARNESS_POLICY_MARKER);
-      expect(instructions.split(SYNARA_HARNESS_POLICY_MARKER)).toHaveLength(2);
-      expect(instructions).toContain("Synara is the host and harness");
-      expect(instructions).toContain("one exact synara_create_threads plan");
-      expect(instructions).toContain("tools.mcp__synara__browser_open");
+      expect(instructions).toContain(LUMINOR_HARNESS_POLICY_MARKER);
+      expect(instructions.split(LUMINOR_HARNESS_POLICY_MARKER)).toHaveLength(2);
+      expect(instructions).toContain("Luminor is the host and harness");
+      expect(instructions).toContain("one exact luminor_create_threads plan");
+      expect(instructions).toContain("tools.mcp__luminor__browser_open");
       for (const name of BROWSER_TOOL_NAMES) {
         expect(instructions, name).toContain(`\`${name.slice("browser_".length)}\``);
       }
@@ -88,9 +88,9 @@ describe("Codex Synara harness policy", () => {
   });
 
   it("resolves the gateway endpoint when each session environment is built", async () => {
-    const homePath = mkdtempSync(path.join(os.tmpdir(), "synara-codex-gateway-endpoint-"));
-    const previousSynaraHome = process.env.SYNARA_HOME;
-    process.env.SYNARA_HOME = path.join(homePath, "synara-home");
+    const homePath = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-gateway-endpoint-"));
+    const previousLuminorHome = process.env.LUMINOR_HOME;
+    process.env.LUMINOR_HOME = path.join(homePath, "luminor-home");
     let endpointUrl = "http://127.0.0.1:0/mcp";
     try {
       const manager = new CodexAppServerManager(undefined, {
@@ -116,10 +116,10 @@ describe("Codex Synara harness policy", () => {
       const configPath = path.join(env.CODEX_HOME ?? homePath, "config.toml");
       expect(readFileSync(configPath, "utf8")).toContain('url = "http://127.0.0.1:48123/mcp"');
     } finally {
-      if (previousSynaraHome === undefined) {
-        delete process.env.SYNARA_HOME;
+      if (previousLuminorHome === undefined) {
+        delete process.env.LUMINOR_HOME;
       } else {
-        process.env.SYNARA_HOME = previousSynaraHome;
+        process.env.LUMINOR_HOME = previousLuminorHome;
       }
       rmSync(homePath, { recursive: true, force: true });
     }
@@ -701,10 +701,10 @@ describe("classifyCodexStderrLine", () => {
 
 describe("codex CLI version gate", () => {
   it("memoizes the version probe per binary and shares concurrent probes", async () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-version-"));
+    const dir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-version-"));
     const homePath = path.join(dir, "codex-home");
     mkdirSync(homePath, { recursive: true });
-    vi.stubEnv("SYNARA_HOME", path.join(dir, "runtime"));
+    vi.stubEnv("LUMINOR_HOME", path.join(dir, "runtime"));
 
     const isWindows = process.platform === "win32";
     const counterPath = path.join(dir, "calls.log");
@@ -760,10 +760,10 @@ describe("codex CLI version gate", () => {
   });
 
   it("does not reuse a general-version verdict for the stricter Auto floor", async () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-version-auto-floor-"));
+    const dir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-version-auto-floor-"));
     const homePath = path.join(dir, "codex-home");
     mkdirSync(homePath, { recursive: true });
-    vi.stubEnv("SYNARA_HOME", path.join(dir, "runtime"));
+    vi.stubEnv("LUMINOR_HOME", path.join(dir, "runtime"));
 
     const isWindows = process.platform === "win32";
     const counterPath = path.join(dir, "calls.log");
@@ -804,10 +804,10 @@ describe("codex CLI version gate", () => {
   });
 
   it("fails closed for Auto when the Codex CLI version cannot be parsed", async () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-version-auto-unknown-"));
+    const dir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-version-auto-unknown-"));
     const homePath = path.join(dir, "codex-home");
     mkdirSync(homePath, { recursive: true });
-    vi.stubEnv("SYNARA_HOME", path.join(dir, "runtime"));
+    vi.stubEnv("LUMINOR_HOME", path.join(dir, "runtime"));
 
     const isWindows = process.platform === "win32";
     const binaryPath = path.join(dir, isWindows ? "codex.cmd" : "codex.sh");
@@ -840,10 +840,10 @@ describe("codex CLI version gate", () => {
   });
 
   it("re-probes when the binary behind an unchanged path is replaced", async () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-version-swap-"));
+    const dir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-version-swap-"));
     const homePath = path.join(dir, "codex-home");
     mkdirSync(homePath, { recursive: true });
-    vi.stubEnv("SYNARA_HOME", path.join(dir, "runtime"));
+    vi.stubEnv("LUMINOR_HOME", path.join(dir, "runtime"));
 
     const isWindows = process.platform === "win32";
     const binaryPath = path.join(dir, isWindows ? "codex.cmd" : "codex.sh");
@@ -869,7 +869,7 @@ describe("codex CLI version gate", () => {
       writeBinary("0.1.0", "replaced-in-place-by-a-downgrade");
       await expect(
         assertSupportedCodexCliVersion({ binaryPath, cwd: dir, homePath }),
-      ).rejects.toThrow(/too old for Synara/);
+      ).rejects.toThrow(/too old for Luminor/);
     } finally {
       reset();
       vi.unstubAllEnvs();
@@ -882,10 +882,10 @@ describe("codex CLI version gate", () => {
     // survives PATH resolution. It is taken from the same env object handed to the spawn a few
     // lines later, which is what keeps it pointed at the binary actually being probed even when
     // that env carries a login-shell PATH the process itself never had.
-    const dir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-version-path-"));
+    const dir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-version-path-"));
     const homePath = path.join(dir, "codex-home");
     mkdirSync(homePath, { recursive: true });
-    vi.stubEnv("SYNARA_HOME", path.join(dir, "runtime"));
+    vi.stubEnv("LUMINOR_HOME", path.join(dir, "runtime"));
 
     const isWindows = process.platform === "win32";
     const binaryPath = path.join(dir, isWindows ? "codex.cmd" : "codex");
@@ -910,7 +910,7 @@ describe("codex CLI version gate", () => {
       writeBinary("0.1.0", "replaced-in-place-by-a-downgrade");
       await expect(
         assertSupportedCodexCliVersion({ binaryPath: "codex", cwd: dir, homePath }),
-      ).rejects.toThrow(/too old for Synara/);
+      ).rejects.toThrow(/too old for Luminor/);
     } finally {
       reset();
       vi.unstubAllEnvs();
@@ -919,10 +919,10 @@ describe("codex CLI version gate", () => {
   });
 
   it("rejects an unsupported codex version without caching the failure", async () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-version-old-"));
+    const dir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-version-old-"));
     const homePath = path.join(dir, "codex-home");
     mkdirSync(homePath, { recursive: true });
-    vi.stubEnv("SYNARA_HOME", path.join(dir, "runtime"));
+    vi.stubEnv("LUMINOR_HOME", path.join(dir, "runtime"));
 
     const isWindows = process.platform === "win32";
     const counterPath = path.join(dir, "calls.log");
@@ -947,10 +947,10 @@ describe("codex CLI version gate", () => {
     try {
       await expect(
         assertSupportedCodexCliVersion({ binaryPath, cwd: dir, homePath }),
-      ).rejects.toThrow(/too old for Synara/);
+      ).rejects.toThrow(/too old for Luminor/);
       await expect(
         assertSupportedCodexCliVersion({ binaryPath, cwd: dir, homePath }),
-      ).rejects.toThrow(/too old for Synara/);
+      ).rejects.toThrow(/too old for Luminor/);
       // Failures are re-probed so installing or upgrading Codex takes effect at once.
       expect(probeCount()).toBe(2);
     } finally {
@@ -963,7 +963,7 @@ describe("codex CLI version gate", () => {
 
 describe("buildCodexProcessEnv", () => {
   it("hydrates the active custom provider env_key from the effective CODEX_HOME", async () => {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-env-"));
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-env-"));
     try {
       writeFileSync(
         path.join(tempDir, "config.toml"),
@@ -1024,36 +1024,36 @@ describe("buildCodexProcessEnv", () => {
   });
 
   it("keeps the private desktop browser host out of the Codex process", async () => {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-private-host-"));
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-private-host-"));
     const codexHome = path.join(tempDir, "codex-home");
     mkdirSync(codexHome, { recursive: true });
     try {
       const env = await buildCodexProcessEnv({
         env: {
           CODEX_HOME: codexHome,
-          SYNARA_HOME: tempDir,
-          SYNARA_BROWSER_HOST_PIPE_PATH: "/tmp/synara-browser-host.sock",
-          SYNARA_BROWSER_USE_PIPE_PATH: "/tmp/legacy-browser-use.sock",
-          SYNARA_BROWSER_HOST_CAPABILITY: "desktop-capability",
-          SYNARA_BROWSER_HOST_CAPABILITY_FD: "3",
+          LUMINOR_HOME: tempDir,
+          LUMINOR_BROWSER_HOST_PIPE_PATH: "/tmp/luminor-browser-host.sock",
+          LUMINOR_BROWSER_USE_PIPE_PATH: "/tmp/legacy-browser-use.sock",
+          LUMINOR_BROWSER_HOST_CAPABILITY: "desktop-capability",
+          LUMINOR_BROWSER_HOST_CAPABILITY_FD: "3",
           NODE_REPL_SANDBOX_ALLOWED_UNIX_SOCKETS: "/tmp/existing.sock",
         },
         platform: "darwin",
       });
 
-      expect(env.SYNARA_BROWSER_HOST_PIPE_PATH).toBeUndefined();
-      expect(env.SYNARA_BROWSER_USE_PIPE_PATH).toBeUndefined();
-      expect(env.SYNARA_BROWSER_HOST_CAPABILITY).toBeUndefined();
-      expect(env.SYNARA_BROWSER_HOST_CAPABILITY_FD).toBeUndefined();
+      expect(env.LUMINOR_BROWSER_HOST_PIPE_PATH).toBeUndefined();
+      expect(env.LUMINOR_BROWSER_USE_PIPE_PATH).toBeUndefined();
+      expect(env.LUMINOR_BROWSER_HOST_CAPABILITY).toBeUndefined();
+      expect(env.LUMINOR_BROWSER_HOST_CAPABILITY_FD).toBeUndefined();
       expect(env.NODE_REPL_SANDBOX_ALLOWED_UNIX_SOCKETS).toBeUndefined();
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
-  it("applies durable section suppressions inside Synara's Codex overlay", async () => {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-env-"));
-    const runtimeHome = mkdtempSync(path.join(os.tmpdir(), "synara-runtime-home-"));
+  it("applies durable section suppressions inside Luminor's Codex overlay", async () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-env-"));
+    const runtimeHome = mkdtempSync(path.join(os.tmpdir(), "luminor-runtime-home-"));
     try {
       writeFileSync(
         path.join(tempDir, "config.toml"),
@@ -1061,7 +1061,7 @@ describe("buildCodexProcessEnv", () => {
           '[plugins."github@openai-curated"]',
           "enabled = true",
           "",
-          ...SYNARA_COMPETING_BROWSER_PLUGIN_SECTION_HEADERS.flatMap((header) => [
+          ...LUMINOR_COMPETING_BROWSER_PLUGIN_SECTION_HEADERS.flatMap((header) => [
             header,
             "enabled = true",
             "",
@@ -1075,7 +1075,7 @@ describe("buildCodexProcessEnv", () => {
       const overlayHome = path.join(runtimeHome, "codex-home-overlay");
       mkdirSync(overlayHome, { recursive: true });
       writeFileSync(
-        path.join(overlayHome, "synara-config-suppressions-v1.json"),
+        path.join(overlayHome, "luminor-config-suppressions-v1.json"),
         `${JSON.stringify({
           version: 1,
           sectionHeaders: ['[plugins."historical-plugin@local"]'],
@@ -1084,7 +1084,7 @@ describe("buildCodexProcessEnv", () => {
       );
 
       const env = await buildCodexProcessEnv({
-        env: { SYNARA_HOME: runtimeHome },
+        env: { LUMINOR_HOME: runtimeHome },
         homePath: tempDir,
         platform: "darwin",
       });
@@ -1097,7 +1097,7 @@ describe("buildCodexProcessEnv", () => {
       expect(readFileSync(path.join(codexHome, "config.toml"), "utf8")).toContain(
         '[plugins."historical-plugin@local"]\nenabled = false',
       );
-      for (const header of SYNARA_COMPETING_BROWSER_PLUGIN_SECTION_HEADERS) {
+      for (const header of LUMINOR_COMPETING_BROWSER_PLUGIN_SECTION_HEADERS) {
         expect(readFileSync(path.join(codexHome, "config.toml"), "utf8")).toContain(
           `${header}\nenabled = false`,
         );
@@ -1115,8 +1115,8 @@ describe("buildCodexProcessEnv", () => {
   });
 
   it("seeds markerless suppressions for conflicting local browser plugins", async () => {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-env-"));
-    const runtimeHome = mkdtempSync(path.join(os.tmpdir(), "synara-runtime-home-"));
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-env-"));
+    const runtimeHome = mkdtempSync(path.join(os.tmpdir(), "luminor-runtime-home-"));
     try {
       const conflictingHeader = '[plugins."bridge-browser@local"]';
       writeFileSync(
@@ -1129,7 +1129,7 @@ describe("buildCodexProcessEnv", () => {
 
       const overlayHome = path.join(runtimeHome, "codex-home-overlay");
       const env = await buildCodexProcessEnv({
-        env: { SYNARA_HOME: runtimeHome },
+        env: { LUMINOR_HOME: runtimeHome },
         homePath: tempDir,
         platform: "darwin",
       });
@@ -1142,7 +1142,7 @@ describe("buildCodexProcessEnv", () => {
         `${conflictingHeader}\nenabled = true`,
       );
       const suppressionMarker = JSON.parse(
-        readFileSync(path.join(overlayHome, "synara-config-suppressions-v1.json"), "utf8"),
+        readFileSync(path.join(overlayHome, "luminor-config-suppressions-v1.json"), "utf8"),
       ) as { sectionHeaders?: string[] };
       expect(suppressionMarker.sectionHeaders).toContain(conflictingHeader);
     } finally {
@@ -1152,15 +1152,15 @@ describe("buildCodexProcessEnv", () => {
   });
 
   it("preserves a recorded suppression after its plugin disappears from source config", async () => {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-env-"));
-    const runtimeHome = mkdtempSync(path.join(os.tmpdir(), "synara-runtime-home-"));
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-env-"));
+    const runtimeHome = mkdtempSync(path.join(os.tmpdir(), "luminor-runtime-home-"));
     try {
       writeFileSync(path.join(tempDir, "config.toml"), 'model = "gpt-5.5"', "utf8");
 
       const overlayHome = path.join(runtimeHome, "codex-home-overlay");
       mkdirSync(overlayHome, { recursive: true });
       writeFileSync(
-        path.join(overlayHome, "synara-config-suppressions-v1.json"),
+        path.join(overlayHome, "luminor-config-suppressions-v1.json"),
         `${JSON.stringify({
           version: 1,
           sectionHeaders: ['[plugins."historical-plugin@local"]'],
@@ -1169,7 +1169,7 @@ describe("buildCodexProcessEnv", () => {
       );
 
       const env = await buildCodexProcessEnv({
-        env: { SYNARA_HOME: runtimeHome },
+        env: { LUMINOR_HOME: runtimeHome },
         homePath: tempDir,
         platform: "darwin",
       });
@@ -1190,9 +1190,9 @@ describe("buildCodexProcessEnv", () => {
     }
   });
 
-  it("repairs stale real files in Synara's Codex home overlay", async () => {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-env-"));
-    const runtimeHome = mkdtempSync(path.join(os.tmpdir(), "synara-runtime-home-"));
+  it("repairs stale real files in Luminor's Codex home overlay", async () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-env-"));
+    const runtimeHome = mkdtempSync(path.join(os.tmpdir(), "luminor-runtime-home-"));
     try {
       const sourceMemoryPath = path.join(tempDir, "memories_1.sqlite");
       writeFileSync(path.join(tempDir, "config.toml"), 'model = "gpt-5.5"', "utf8");
@@ -1204,7 +1204,7 @@ describe("buildCodexProcessEnv", () => {
       writeFileSync(overlayMemoryPath, "stale-overlay-db", "utf8");
 
       const env = await buildCodexProcessEnv({
-        env: { SYNARA_HOME: runtimeHome },
+        env: { LUMINOR_HOME: runtimeHome },
         homePath: tempDir,
         platform: "darwin",
       });
@@ -1218,9 +1218,9 @@ describe("buildCodexProcessEnv", () => {
     }
   });
 
-  it("repairs stale auth.json files in Synara's Codex home overlay", async () => {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-env-"));
-    const runtimeHome = mkdtempSync(path.join(os.tmpdir(), "synara-runtime-home-"));
+  it("repairs stale auth.json files in Luminor's Codex home overlay", async () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-env-"));
+    const runtimeHome = mkdtempSync(path.join(os.tmpdir(), "luminor-runtime-home-"));
     try {
       const sourceAuthPath = path.join(tempDir, "auth.json");
       writeFileSync(path.join(tempDir, "config.toml"), 'model = "gpt-5.5"', "utf8");
@@ -1232,7 +1232,7 @@ describe("buildCodexProcessEnv", () => {
       writeFileSync(overlayAuthPath, '{"tokens":{"access_token":"stale"}}', "utf8");
 
       const env = await buildCodexProcessEnv({
-        env: { SYNARA_HOME: runtimeHome },
+        env: { LUMINOR_HOME: runtimeHome },
         homePath: tempDir,
         platform: "darwin",
       });
@@ -1247,9 +1247,9 @@ describe("buildCodexProcessEnv", () => {
     }
   });
 
-  it("preserves real generated image directories in Synara's Codex home overlay", async () => {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), "synara-codex-env-"));
-    const runtimeHome = mkdtempSync(path.join(os.tmpdir(), "synara-runtime-home-"));
+  it("preserves real generated image directories in Luminor's Codex home overlay", async () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "luminor-codex-env-"));
+    const runtimeHome = mkdtempSync(path.join(os.tmpdir(), "luminor-runtime-home-"));
     try {
       writeFileSync(path.join(tempDir, "config.toml"), 'model = "gpt-5.5"', "utf8");
       const sourceGeneratedImagesDir = path.join(tempDir, "generated_images");
@@ -1263,7 +1263,7 @@ describe("buildCodexProcessEnv", () => {
       writeFileSync(overlayImagePath, "overlay-image", "utf8");
 
       const env = await buildCodexProcessEnv({
-        env: { SYNARA_HOME: runtimeHome },
+        env: { LUMINOR_HOME: runtimeHome },
         homePath: tempDir,
         platform: "darwin",
       });
@@ -1328,7 +1328,7 @@ describe("handleStdoutLine", () => {
       }
     ).handleStdoutLine.bind(manager);
 
-    for (const line of ["{", "[", '{"scripts": {', "{}", "[]", '{"name":"synara"}']) {
+    for (const line of ["{", "[", '{"scripts": {', "{}", "[]", '{"name":"luminor"}']) {
       handleStdoutLine(context, line);
     }
 
@@ -1454,8 +1454,8 @@ describe("startSession", () => {
   it("enables Codex experimental api capabilities during initialize", () => {
     expect(buildCodexInitializeParams()).toEqual({
       clientInfo: {
-        name: "synara_desktop",
-        title: "Synara Desktop",
+        name: "luminor_desktop",
+        title: "Luminor Desktop",
         version: "0.1.0",
       },
       capabilities: {
@@ -1466,11 +1466,11 @@ describe("startSession", () => {
 
   it("uses an isolated scratch workspace path when no cwd is provided", () => {
     const cwd = ensureIsolatedScratchWorkspace(asThreadId("thread-1"));
-    expect(cwd).toContain(`${path.sep}synara-codex-workspaces${path.sep}thread-1`);
+    expect(cwd).toContain(`${path.sep}luminor-codex-workspaces${path.sep}thread-1`);
   });
 
   it("reports a missing project working directory instead of a missing Codex CLI", () => {
-    const missingCwd = path.join(os.tmpdir(), `synara-missing-cwd-${randomUUID()}`, "old-project");
+    const missingCwd = path.join(os.tmpdir(), `luminor-missing-cwd-${randomUUID()}`, "old-project");
     expect(() => assertCodexWorkingDirectoryExists(missingCwd)).toThrow(
       formatMissingCodexWorkingDirectoryError(missingCwd),
     );
@@ -1483,7 +1483,7 @@ describe("startSession", () => {
   });
 
   it("accepts an existing project working directory", () => {
-    const cwd = mkdtempSync(path.join(os.tmpdir(), "synara-existing-cwd-"));
+    const cwd = mkdtempSync(path.join(os.tmpdir(), "luminor-existing-cwd-"));
     try {
       expect(() => assertCodexWorkingDirectoryExists(cwd)).not.toThrow();
     } finally {
@@ -1503,7 +1503,7 @@ describe("startSession", () => {
     });
     const missingCwd = path.join(
       os.tmpdir(),
-      `synara-missing-session-cwd-${randomUUID()}`,
+      `luminor-missing-session-cwd-${randomUUID()}`,
       "old-project",
     );
 
@@ -1558,7 +1558,7 @@ describe("startSession", () => {
       )
       .mockImplementation(() => {
         throw new Error(
-          "Codex CLI v0.36.0 is too old for Synara. Upgrade to v0.37.0 or newer and restart Synara.",
+          "Codex CLI v0.36.0 is too old for Luminor. Upgrade to v0.37.0 or newer and restart Luminor.",
         );
       });
 
@@ -1570,7 +1570,7 @@ describe("startSession", () => {
           runtimeMode: "full-access",
         }),
       ).rejects.toThrow(
-        "Codex CLI v0.36.0 is too old for Synara. Upgrade to v0.37.0 or newer and restart Synara.",
+        "Codex CLI v0.36.0 is too old for Luminor. Upgrade to v0.37.0 or newer and restart Luminor.",
       );
       expect(versionCheck).toHaveBeenCalledTimes(1);
       expect(events).toEqual([
@@ -1578,7 +1578,7 @@ describe("startSession", () => {
           method: "session/startFailed",
           kind: "error",
           message:
-            "Codex CLI v0.36.0 is too old for Synara. Upgrade to v0.37.0 or newer and restart Synara.",
+            "Codex CLI v0.36.0 is too old for Luminor. Upgrade to v0.37.0 or newer and restart Luminor.",
         },
       ]);
     } finally {

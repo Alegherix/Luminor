@@ -9,7 +9,7 @@ import {
   type GitPullRequestSnapshotResult,
   type GitResolvedPullRequest,
   type GitStatusResult,
-} from "@synara/contracts";
+} from "@luminor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
@@ -24,7 +24,7 @@ const threadId = ThreadId.makeUnsafe("thread-pr-fix-actions");
 const pullRequest = {
   number: 321,
   title: "Keep PR context visible",
-  url: "https://github.com/example/synara/pull/321",
+  url: "https://github.com/example/luminor/pull/321",
   baseBranch: "main",
   headBranch: "fix/pr-panel",
   state: "open",
@@ -101,7 +101,7 @@ describe("EnvironmentPullRequestSection", () => {
           enabled
           activeThreadId={threadId}
           projectId={null}
-          configuredRepositories={[{ nameWithOwner: "example/synara" }]}
+          configuredRepositories={[{ nameWithOwner: "example/luminor" }]}
           onOpenUrl={vi.fn()}
           onClose={onClose}
         />
@@ -141,7 +141,7 @@ describe("EnvironmentPullRequestSection", () => {
           enabled
           activeThreadId={threadId}
           projectId={null}
-          configuredRepositories={[{ nameWithOwner: "example/synara" }]}
+          configuredRepositories={[{ nameWithOwner: "example/luminor" }]}
           onOpenUrl={vi.fn()}
           onClose={vi.fn()}
         />

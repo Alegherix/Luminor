@@ -1,4 +1,4 @@
-import type { ProviderKind, ThreadId } from "@synara/contracts";
+import type { ProviderKind, ThreadId } from "@luminor/contracts";
 import { Effect, Exit } from "effect";
 
 import type {
@@ -18,7 +18,7 @@ type AgentGatewaySessionLeaseCredentials = Pick<
   >;
 
 export const AGENT_GATEWAY_CREDENTIAL_ROTATION_REQUIRED = "agentGatewayCredentialRotationRequired";
-export const AGENT_GATEWAY_TURN_AUTHORITY_RETIRED = "synaraGatewayTurnAuthorityRetired";
+export const AGENT_GATEWAY_TURN_AUTHORITY_RETIRED = "luminorGatewayTurnAuthorityRetired";
 
 /**
  * One provider runtime's ownership of one gateway credential.
