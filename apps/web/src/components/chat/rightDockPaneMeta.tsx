@@ -15,6 +15,7 @@ import {
   GlobeIcon,
   InfoIcon,
   MessageCircleIcon,
+  MonitorPlayIcon,
   TerminalIcon,
 } from "~/lib/icons";
 import {
@@ -32,6 +33,10 @@ export interface RightDockPaneMeta {
 
 export interface RightDockLauncherItem extends RightDockPaneMeta {
   kind: RightDockPaneKind;
+  // A gated tool the thread cannot use yet stays visible but inert, with the
+  // reason surfaced as its tooltip (Preview without a worktree).
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 export const RIGHT_DOCK_PANE_META: Record<RightDockPaneKind, RightDockPaneMeta> = {
@@ -40,6 +45,7 @@ export const RIGHT_DOCK_PANE_META: Record<RightDockPaneKind, RightDockPaneMeta> 
   explorer: { label: "Explorer", Icon: FoldersIcon },
   file: { label: "File", Icon: FileIcon },
   terminal: { label: "Terminal", Icon: TerminalIcon },
+  preview: { label: "Preview", Icon: MonitorPlayIcon },
   sidechat: { label: "Side chats", Icon: MessageCircleIcon },
   git: { label: "Git", Icon: GitCommitIcon },
   pullRequest: { label: "Pull request", Icon: GitPullRequestIcon },
@@ -76,10 +82,13 @@ const RIGHT_DOCK_LAUNCHER_ORDER: readonly RightDockPaneKind[] = [
   "diff",
   "terminal",
   "browser",
+  "preview",
   "explorer",
   "sidechat",
   "git",
 ];
+
+export const PREVIEW_REQUIRES_WORKTREE_TOOLTIP = "Preview requires a worktree";
 
 const RIGHT_DOCK_LAUNCHER_LABELS: Partial<Record<RightDockPaneKind, string>> = {
   diff: "Review",
@@ -92,6 +101,7 @@ export function resolveRightDockLauncherItems(input: {
   hasWorkspace: boolean;
   hasGitRepository: boolean;
   hasReview: boolean;
+  hasWorktree: boolean;
 }): readonly RightDockLauncherItem[] {
   return RIGHT_DOCK_LAUNCHER_ORDER.flatMap((kind) => {
     if (kind === "diff" && !input.hasReview) {
@@ -104,11 +114,16 @@ export function resolveRightDockLauncherItems(input: {
       return [];
     }
     const meta = getRightDockPaneMeta(kind);
+    const gate =
+      kind === "preview" && !input.hasWorktree
+        ? { disabled: true, disabledReason: PREVIEW_REQUIRES_WORKTREE_TOOLTIP }
+        : {};
     return [
       {
         kind,
         Icon: meta.Icon,
         label: RIGHT_DOCK_LAUNCHER_LABELS[kind] ?? meta.label,
+        ...gate,
       },
     ];
   });

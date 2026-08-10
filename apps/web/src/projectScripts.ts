@@ -4,7 +4,20 @@ import {
   type KeybindingCommand,
   type ProjectScript,
 } from "@luminor/contracts";
+import {
+  previewProjectScript,
+  projectScriptCwd,
+  projectScriptRuntimeEnv,
+  type ProjectScriptRuntimeEnvInput,
+} from "@luminor/shared/projectScripts";
 import { Schema } from "effect";
+
+export {
+  previewProjectScript,
+  projectScriptCwd,
+  projectScriptRuntimeEnv,
+  type ProjectScriptRuntimeEnvInput,
+};
 
 function normalizeScriptId(value: string): string {
   const cleaned = value
@@ -55,14 +68,6 @@ export function nextProjectScriptId(name: string, existingIds: Iterable<string>)
   return `${baseId}-${Date.now()}`.slice(0, MAX_SCRIPT_ID_LENGTH);
 }
 
-interface ProjectScriptRuntimeEnvInput {
-  project: {
-    cwd: string;
-  };
-  worktreePath?: string | null;
-  extraEnv?: Record<string, string>;
-}
-
 export interface ProjectScriptRunOptions {
   cwd?: string;
   env?: Record<string, string>;
@@ -74,30 +79,6 @@ export interface ProjectScriptRunOptions {
 
 export interface ProjectScriptRunResult {
   terminalId: string;
-}
-
-export function projectScriptCwd(input: {
-  project: {
-    cwd: string;
-  };
-  worktreePath?: string | null;
-}): string {
-  return input.worktreePath ?? input.project.cwd;
-}
-
-export function projectScriptRuntimeEnv(
-  input: ProjectScriptRuntimeEnvInput,
-): Record<string, string> {
-  const env: Record<string, string> = {
-    LUMINOR_PROJECT_ROOT: input.project.cwd,
-  };
-  if (input.worktreePath) {
-    env.LUMINOR_WORKTREE_PATH = input.worktreePath;
-  }
-  if (input.extraEnv) {
-    return { ...env, ...input.extraEnv };
-  }
-  return env;
 }
 
 export function primaryProjectScript(scripts: ProjectScript[]): ProjectScript | null {

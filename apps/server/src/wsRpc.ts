@@ -20,6 +20,7 @@ import {
   type OrchestrationCommand,
   type OrchestrationEvent,
   type ProjectDevServerEvent,
+  type ThreadPreviewEvent,
   type OrchestrationShellStreamEvent,
   type OrchestrationShellStreamItem,
   type OrchestrationThreadDetailSnapshot,
@@ -54,6 +55,7 @@ import {
   STUDIO_WORKSPACE_SUBDIRECTORIES,
 } from "./studioWorkspaceScaffold";
 import { DevServerManager, findProjectDevServerForLocalServer } from "./devServerManager";
+import { ThreadPreviewManager } from "./threadPreviewManager";
 import { GitCore } from "./git/Services/GitCore";
 import { GitHubCli } from "./git/Services/GitHubCli";
 import { GitManager } from "./git/Services/GitManager";
@@ -327,6 +329,7 @@ const makeWsRpcHandlersLayer = () =>
       const automationService = yield* AutomationService;
       const config = yield* ServerConfig;
       const devServerManager = yield* DevServerManager;
+      const threadPreviewManager = yield* ThreadPreviewManager;
       const fileSystem = yield* FileSystem.FileSystem;
       const externalMcp = yield* ExternalMcpService;
       const git = yield* GitCore;
@@ -1144,6 +1147,33 @@ const makeWsRpcHandlersLayer = () =>
               ),
               bufferLiveUiStream(devServerManager.stream, {
                 label: "projects.dev-servers",
+                onDroppedEvents: failLiveUiStreamForSnapshotResync,
+              }),
+            ),
+          ),
+        [WS_METHODS.previewStart]: (input) =>
+          rpcEffect(threadPreviewManager.start(input), "Failed to start preview"),
+        [WS_METHODS.previewStop]: (input) =>
+          rpcEffect(threadPreviewManager.stopPreview(input.threadId), "Failed to stop preview"),
+        [WS_METHODS.previewList]: () =>
+          rpcEffect(threadPreviewManager.list, "Failed to list previews"),
+        [WS_METHODS.subscribePreviewEvents]: (_, { clientId }) =>
+          streamAdmission.guard(
+            clientId,
+            { key: "threads.previews" },
+            Stream.concat(
+              Stream.fromEffect(
+                threadPreviewManager.list.pipe(
+                  Effect.map(
+                    (result): ThreadPreviewEvent => ({
+                      type: "snapshot",
+                      previews: result.previews,
+                    }),
+                  ),
+                ),
+              ),
+              bufferLiveUiStream(threadPreviewManager.stream, {
+                label: "threads.previews",
                 onDroppedEvents: failLiveUiStreamForSnapshotResync,
               }),
             ),

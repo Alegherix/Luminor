@@ -31,6 +31,7 @@ import {
   type OrchestrationShellStreamItem,
   type OrchestrationThreadStreamItem,
   type ProjectDevServerEvent,
+  type ThreadPreviewEvent,
   type ServerConfigStreamEvent,
   type ServerLifecycleStreamEvent,
   type ServerProviderStatusesUpdatedPayload,
@@ -1238,6 +1239,14 @@ export class WsTransport {
             (event: ProjectDevServerEvent) => this.emit(WS_CHANNELS.projectDevServerEvent, event),
             restartChannel,
           );
+        } else if (channel === WS_CHANNELS.previewStatus) {
+          this.startStream(
+            client,
+            "thread.previews",
+            client[WS_METHODS.subscribePreviewEvents]({}),
+            (event: ThreadPreviewEvent) => this.emit(WS_CHANNELS.previewStatus, event),
+            restartChannel,
+          );
         } else if (channel === WS_CHANNELS.automationEvent) {
           this.startStream(
             client,
@@ -1278,6 +1287,7 @@ export class WsTransport {
     else if (channel === WS_CHANNELS.serverSettingsUpdated) this.stopStream("server.settings");
     else if (channel === WS_CHANNELS.terminalEvent) this.stopStream("terminal.events");
     else if (channel === WS_CHANNELS.projectDevServerEvent) this.stopStream("project.devServers");
+    else if (channel === WS_CHANNELS.previewStatus) this.stopStream("thread.previews");
     else if (channel === WS_CHANNELS.automationEvent) this.stopStream("automation.events");
     else if (channel === ORCHESTRATION_WS_CHANNELS.domainEvent)
       this.stopStream("orchestration.domain");
