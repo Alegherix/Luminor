@@ -41,7 +41,7 @@ export function selectPrimaryProjectRunCommand(input: {
   discoveredTargets?: readonly ProjectDiscoveredScriptTarget[];
 }): ProjectRunCommandTarget | null {
   const savedScript = primaryProjectScript(input.project.scripts);
-  if (savedScript && !savedScript.runOnWorktreeCreate) {
+  if (savedScript?.kind === "manual") {
     return {
       source: "saved",
       label: savedScript.name,
@@ -74,7 +74,7 @@ export function selectPrimaryProjectRunCommand(input: {
 // Persists the command typed in the run dialog as the project's primary run
 // script, so the next launch defaults to the same command. Returns the updated
 // scripts array, or null when nothing needs to change (empty or identical
-// command). Mirrors `selectPrimaryProjectRunCommand`: a non-setup script is the
+// command). Mirrors `selectPrimaryProjectRunCommand`: a manual script is the
 // canonical holder of the run command.
 export function upsertProjectRunCommandScripts(input: {
   scripts: ProjectScript[];
@@ -85,7 +85,7 @@ export function upsertProjectRunCommandScripts(input: {
     return null;
   }
   const existing = primaryProjectScript(input.scripts);
-  if (existing && !existing.runOnWorktreeCreate) {
+  if (existing?.kind === "manual") {
     if (existing.command === command) {
       return null;
     }
@@ -102,7 +102,7 @@ export function upsertProjectRunCommandScripts(input: {
     name: DEFAULT_RUN_SCRIPT_NAME,
     command,
     icon: "play",
-    runOnWorktreeCreate: false,
+    kind: "manual",
   };
   return [...input.scripts, runScript];
 }

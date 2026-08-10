@@ -20,14 +20,14 @@ const scripts: ProjectScript[] = [
     name: "Test",
     command: "bun run test",
     icon: "test",
-    runOnWorktreeCreate: false,
+    kind: "manual",
   },
   {
     id: "setup",
     name: "Setup",
     command: "bun install",
     icon: "configure",
-    runOnWorktreeCreate: true,
+    kind: "setup",
   },
 ];
 
@@ -57,7 +57,7 @@ describe("worktree setup", () => {
 
   it("does nothing when no setup script is configured", async () => {
     await runWorktreeSetupScript(
-      scripts.filter((script) => !script.runOnWorktreeCreate),
+      scripts.filter((script) => script.kind === "manual"),
       "/tmp",
     );
     expect(runProcess).not.toHaveBeenCalled();

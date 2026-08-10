@@ -2398,7 +2398,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             name: "Dev",
             command: "bun run dev",
             icon: "play",
-            runOnWorktreeCreate: false,
+            kind: "manual",
           },
         ],
       );
@@ -2466,9 +2466,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         expect(arrowCenterX - buttonCenterX).toBeCloseTo(0, 2);
         expect(arrowCenterY - buttonCenterY).toBeCloseTo(1, 2);
         expect(getComputedStyle(sendButton).boxShadow).toBe("none");
-        expect(getComputedStyle(sendArrow).mask).toContain(
-          "/central-icons-reversed/arrow-up.svg",
-        );
+        expect(getComputedStyle(sendArrow).mask).toContain("/central-icons-reversed/arrow-up.svg");
       };
 
       expect(sendButton.disabled).toBe(true);
@@ -4068,7 +4066,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           name: "Lint",
           command: "bun run lint",
           icon: "lint",
-          runOnWorktreeCreate: false,
+          kind: "manual",
         },
       ]),
     });
@@ -4146,7 +4144,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           name: "Test",
           command: "bun run test",
           icon: "test",
-          runOnWorktreeCreate: false,
+          kind: "manual",
         },
       ]),
     });
@@ -6314,7 +6312,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             name: "Setup",
             command: "printf setup",
             icon: "configure",
-            runOnWorktreeCreate: true,
+            kind: "setup",
           },
         ],
       ),

@@ -73,7 +73,7 @@ describe("ProjectScriptsControl", () => {
       name: "Setup",
       command: "bun install",
       icon: "configure",
-      runOnWorktreeCreate: true,
+      kind: "setup",
     };
     await using control = await mountProjectScriptsControl({
       scripts: [setupScript],
@@ -94,7 +94,7 @@ describe("ProjectScriptsControl", () => {
       name: "Setup",
       command: "bun install",
       icon: "configure",
-      runOnWorktreeCreate: true,
+      kind: "setup",
     };
     await using _ = await mountProjectScriptsControl({
       scripts: [setupScript],

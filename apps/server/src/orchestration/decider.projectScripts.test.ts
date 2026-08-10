@@ -249,7 +249,7 @@ describe("decider project scripts", () => {
         name: "Lint",
         command: "bun run lint",
         icon: "lint",
-        runOnWorktreeCreate: false,
+        kind: "manual",
       },
     ] as const;
 
@@ -268,6 +268,85 @@ describe("decider project scripts", () => {
     const event = Array.isArray(result) ? result[0] : result;
     expect(event.type).toBe("project.meta-updated");
     expect((event.payload as { scripts?: unknown[] }).scripts).toEqual(scripts);
+  });
+
+  it("normalizes duplicate setup and preview roles in project.meta.update", async () => {
+    const now = new Date().toISOString();
+    const initial = createEmptyReadModel(now);
+    const projectId = asProjectId("project-script-roles");
+    const readModel = await Effect.runPromise(
+      projectEvent(initial, {
+        sequence: 1,
+        eventId: asEventId("evt-project-script-roles"),
+        aggregateKind: "project",
+        aggregateId: projectId,
+        type: "project.created",
+        occurredAt: now,
+        commandId: CommandId.makeUnsafe("cmd-project-script-roles-create"),
+        causationEventId: null,
+        correlationId: CommandId.makeUnsafe("cmd-project-script-roles-create"),
+        metadata: {},
+        payload: {
+          projectId,
+          title: "Script roles",
+          workspaceRoot: "/tmp/script-roles",
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+      }),
+    );
+    const scripts = [
+      {
+        id: "setup-a",
+        name: "Setup A",
+        command: "a",
+        icon: "configure" as const,
+        kind: "setup" as const,
+      },
+      {
+        id: "setup-b",
+        name: "Setup B",
+        command: "b",
+        icon: "configure" as const,
+        kind: "setup" as const,
+      },
+      {
+        id: "preview-a",
+        name: "Preview A",
+        command: "c",
+        icon: "play" as const,
+        kind: "preview" as const,
+      },
+      {
+        id: "preview-b",
+        name: "Preview B",
+        command: "d",
+        icon: "play" as const,
+        kind: "preview" as const,
+      },
+    ];
+
+    const result = await Effect.runPromise(
+      decideOrchestrationCommand({
+        command: {
+          type: "project.meta.update",
+          commandId: CommandId.makeUnsafe("cmd-project-script-roles-update"),
+          projectId,
+          scripts,
+        },
+        readModel,
+      }),
+    );
+
+    const event = Array.isArray(result) ? result[0] : result;
+    expect((event.payload as { scripts?: Array<{ id: string; kind: string }> }).scripts).toEqual([
+      { ...scripts[0], kind: "setup" },
+      { ...scripts[1], kind: "manual" },
+      { ...scripts[2], kind: "preview" },
+      { ...scripts[3], kind: "manual" },
+    ]);
   });
 
   it("rejects pinning more than three active projects", async () => {

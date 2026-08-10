@@ -3284,7 +3284,7 @@ describe("AgentGateway", () => {
           name: "Setup",
           command: 'node -e "setTimeout(() => {}, 30000)"',
           icon: "configure",
-          runOnWorktreeCreate: true,
+          kind: "setup",
         },
       ],
     });

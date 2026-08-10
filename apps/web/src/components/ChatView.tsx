@@ -322,6 +322,7 @@ import { randomTerminalId } from "./terminal/terminalIds";
 import { cn, isMacPlatform, randomUUID } from "~/lib/utils";
 import { toastManager } from "./ui/toast";
 import { decodeProjectScriptKeybindingRule } from "~/lib/projectScriptKeybindings";
+import { normalizeProjectScriptRoles } from "@luminor/shared/projectScripts";
 import { type NewProjectScriptInput } from "./ProjectScriptsControl";
 import {
   commandForProjectScript,
@@ -2608,10 +2609,7 @@ export default function ChatView({
   const nextUserInputResponseReclaimAt = useMemo(() => {
     let earliest: string | null = null;
     for (const interaction of activeThread?.pendingInteractions ?? []) {
-      if (
-        interaction.interactionKind !== "userInput" ||
-        interaction.status !== "responding"
-      ) {
+      if (interaction.interactionKind !== "userInput" || interaction.status !== "responding") {
         continue;
       }
       if (interaction.responseRequestedAt === null) {
@@ -4737,16 +4735,12 @@ export default function ChatView({
         name: input.name,
         command: input.command,
         icon: input.icon,
-        runOnWorktreeCreate: input.runOnWorktreeCreate,
+        kind: input.kind,
       };
-      const nextScripts = input.runOnWorktreeCreate
-        ? [
-            ...activeProject.scripts.map((script) =>
-              script.runOnWorktreeCreate ? { ...script, runOnWorktreeCreate: false } : script,
-            ),
-            nextScript,
-          ]
-        : [...activeProject.scripts, nextScript];
+      const nextScripts = normalizeProjectScriptRoles(
+        [...activeProject.scripts, nextScript],
+        nextId,
+      );
 
       await persistProjectScripts({
         projectId: activeProject.id,
@@ -4772,14 +4766,11 @@ export default function ChatView({
         name: input.name,
         command: input.command,
         icon: input.icon,
-        runOnWorktreeCreate: input.runOnWorktreeCreate,
+        kind: input.kind,
       };
-      const nextScripts = activeProject.scripts.map((script) =>
-        script.id === scriptId
-          ? updatedScript
-          : input.runOnWorktreeCreate
-            ? { ...script, runOnWorktreeCreate: false }
-            : script,
+      const nextScripts = normalizeProjectScriptRoles(
+        activeProject.scripts.map((script) => (script.id === scriptId ? updatedScript : script)),
+        scriptId,
       );
 
       await persistProjectScripts({

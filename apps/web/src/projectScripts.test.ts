@@ -31,19 +31,27 @@ describe("projectScripts helpers", () => {
         name: "Setup",
         command: "bun install",
         icon: "configure" as const,
-        runOnWorktreeCreate: true,
+        kind: "setup" as const,
+      },
+      {
+        id: "preview",
+        name: "Preview",
+        command: "bun dev",
+        icon: "play" as const,
+        kind: "preview" as const,
       },
       {
         id: "test",
         name: "Test",
         command: "bun test",
         icon: "test" as const,
-        runOnWorktreeCreate: false,
+        kind: "manual" as const,
       },
     ];
 
     expect(primaryProjectScript(scripts)?.id).toBe("test");
     expect(setupProjectScript(scripts)?.id).toBe("setup");
+    expect(primaryProjectScript(scripts.slice(0, 2))).toBeNull();
   });
 
   it("builds default runtime env for scripts", () => {

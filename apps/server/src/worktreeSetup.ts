@@ -7,7 +7,7 @@ const WORKTREE_SETUP_TIMEOUT_MS = 10 * 60_000;
 export function findWorktreeSetupScript(
   scripts: ReadonlyArray<ProjectScript>,
 ): ProjectScript | null {
-  return scripts.find((script) => script.runOnWorktreeCreate) ?? null;
+  return scripts.find((script) => script.kind === "setup") ?? null;
 }
 
 /** Run the project's configured setup command in a freshly-created worktree. */
