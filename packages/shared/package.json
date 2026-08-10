@@ -136,6 +136,10 @@
       "types": "./src/projectDirectoryName.ts",
       "import": "./src/projectDirectoryName.ts"
     },
+    "./projectScripts": {
+      "types": "./src/projectScripts.ts",
+      "import": "./src/projectScripts.ts"
+    },
     "./pinnedMessages": {
       "types": "./src/pinnedMessages.ts",
       "import": "./src/pinnedMessages.ts"

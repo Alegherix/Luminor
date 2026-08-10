@@ -101,10 +101,9 @@ export function projectScriptRuntimeEnv(
 }
 
 export function primaryProjectScript(scripts: ProjectScript[]): ProjectScript | null {
-  const regular = scripts.find((script) => !script.runOnWorktreeCreate);
-  return regular ?? scripts[0] ?? null;
+  return scripts.find((script) => script.kind === "manual") ?? null;
 }
 
 export function setupProjectScript(scripts: ProjectScript[]): ProjectScript | null {
-  return scripts.find((script) => script.runOnWorktreeCreate) ?? null;
+  return scripts.find((script) => script.kind === "setup") ?? null;
 }

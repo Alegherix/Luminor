@@ -90,7 +90,7 @@ export interface NewProjectScriptInput {
   name: string;
   command: string;
   icon: ProjectScriptIcon;
-  runOnWorktreeCreate: boolean;
+  kind: ProjectScript["kind"];
   keybinding: string | null;
 }
 
@@ -178,7 +178,7 @@ export default function ProjectScriptsControl({
   const [command, setCommand] = useState("");
   const [icon, setIcon] = useState<ProjectScriptIcon>("play");
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
-  const [runOnWorktreeCreate, setRunOnWorktreeCreate] = useState(false);
+  const [kind, setKind] = useState<ProjectScript["kind"]>("manual");
   const [keybinding, setKeybinding] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -236,7 +236,7 @@ export default function ProjectScriptsControl({
         name: trimmedName,
         command: trimmedCommand,
         icon,
-        runOnWorktreeCreate,
+        kind,
         keybinding: keybindingRule?.key ?? null,
       } satisfies NewProjectScriptInput;
       if (editingScriptId) {
@@ -257,7 +257,7 @@ export default function ProjectScriptsControl({
     setCommand("");
     setIcon("play");
     setIconPickerOpen(false);
-    setRunOnWorktreeCreate(false);
+    setKind("manual");
     setKeybinding("");
     setValidationError(null);
     setDialogOpen(true);
@@ -269,7 +269,7 @@ export default function ProjectScriptsControl({
     setCommand(script.command);
     setIcon(script.icon);
     setIconPickerOpen(false);
-    setRunOnWorktreeCreate(script.runOnWorktreeCreate);
+    setKind(script.kind);
     setKeybinding(keybindingValueForCommand(keybindings, commandForProjectScript(script.id)) ?? "");
     setValidationError(null);
     setDialogOpen(true);
@@ -333,7 +333,7 @@ export default function ProjectScriptsControl({
                   >
                     <ScriptIcon icon={script.icon} className="size-4 text-muted-foreground" />
                     <span className="min-w-0 truncate">
-                      {script.runOnWorktreeCreate ? `${script.name} (setup)` : script.name}
+                      {script.kind === "manual" ? script.name : `${script.name} (${script.kind})`}
                     </span>
                     <span className="flex min-w-0 items-center justify-end">
                       {shortcutLabel && (
@@ -397,7 +397,7 @@ export default function ProjectScriptsControl({
           setName("");
           setCommand("");
           setIcon("play");
-          setRunOnWorktreeCreate(false);
+          setKind("manual");
           setKeybinding("");
           setValidationError(null);
         }}
@@ -488,8 +488,8 @@ export default function ProjectScriptsControl({
               <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm">
                 <span>Run automatically on worktree creation</span>
                 <Switch
-                  checked={runOnWorktreeCreate}
-                  onCheckedChange={(checked) => setRunOnWorktreeCreate(Boolean(checked))}
+                  checked={kind === "setup"}
+                  onCheckedChange={(checked) => setKind(checked ? "setup" : "manual")}
                 />
               </label>
               {validationError && <p className="text-sm text-destructive">{validationError}</p>}
