@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { watch } from "node:fs";
+import { readFileSync, watch } from "node:fs";
 import { join } from "node:path";
 import waitOn from "wait-on";
 
@@ -25,6 +25,35 @@ const forcedShutdownTimeoutMs = 1_500;
 const restartDebounceMs = 120;
 const childTreeGracePeriodMs = 1_200;
 const staleComputerUseGracePeriodMs = 300;
+const DEFAULT_LUMINOR_DEV_SYSTEMD_UNIT = "luminor-dev.service";
+
+function readProcessCgroup() {
+  try {
+    return readFileSync("/proc/self/cgroup", "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function resolveSystemdUnitName() {
+  const fromEnv = (process.env.LUMINOR_DEV_SYSTEMD_UNIT ?? "").trim();
+  if (fromEnv.length > 0) {
+    return fromEnv;
+  }
+  // Turbo does not always pass custom env into package scripts; detect the
+  // Rofi user unit via the process cgroup instead.
+  const cgroup = readProcessCgroup();
+  if (cgroup.includes(`${DEFAULT_LUMINOR_DEV_SYSTEMD_UNIT}`)) {
+    return DEFAULT_LUMINOR_DEV_SYSTEMD_UNIT;
+  }
+  return "";
+}
+
+const systemdUnit = resolveSystemdUnitName();
+const serviceMode =
+  systemdUnit.length > 0 ||
+  process.env.LUMINOR_DEV_SERVICE === "1" ||
+  process.env.LUMINOR_DEV_SERVICE === "true";
 
 if (process.platform === "darwin") {
   buildAppSnapHelper({ arch: process.arch });
@@ -152,6 +181,21 @@ function warnIfAlphaAppRunning() {
   console.error(`[desktop-dev] Running Luminor process IDs: ${pids.join(", ")}`);
 }
 
+function requestSystemdUnitStop() {
+  if (!systemdUnit || process.platform === "win32") {
+    return false;
+  }
+
+  console.error(
+    `[desktop-dev] Electron closed cleanly; stopping systemd unit ${systemdUnit} (no-block).`,
+  );
+  // --no-block avoids deadlocking while we ourselves still live inside the unit.
+  const result = spawnSync("systemctl", ["--user", "stop", "--no-block", systemdUnit], {
+    stdio: "ignore",
+  });
+  return result.status === 0;
+}
+
 function startApp() {
   if (shuttingDown || currentApp !== null) {
     return;
@@ -171,11 +215,18 @@ function startApp() {
   );
 
   currentApp = app;
+  console.error(
+    `[desktop-dev] Electron started pid=${String(app.pid ?? "unknown")} url=${devServerUrl} serviceMode=${String(serviceMode)} unit=${systemdUnit || "none"}`,
+  );
 
-  app.once("error", () => {
+  app.once("error", (error) => {
     if (currentApp === app) {
       currentApp = null;
     }
+
+    console.error(
+      `[desktop-dev] Electron spawn error: ${error instanceof Error ? error.message : String(error)}`,
+    );
 
     if (!shuttingDown) {
       scheduleRestart();
@@ -187,9 +238,29 @@ function startApp() {
       currentApp = null;
     }
 
+    const expected = expectedExits.has(app);
+    const codeLabel = code === null ? "null" : String(code);
+    const signalLabel = signal ?? "null";
+    console.error(
+      `[desktop-dev] Electron exited code=${codeLabel} signal=${signalLabel} expected=${String(expected)} shuttingDown=${String(shuttingDown)} serviceMode=${String(serviceMode)}`,
+    );
+
+    if (shuttingDown || expected) {
+      return;
+    }
+
     const exitedAbnormally = signal !== null || code !== 0;
-    if (!shuttingDown && !expectedExits.has(app) && exitedAbnormally) {
+    if (exitedAbnormally) {
       scheduleRestart();
+      return;
+    }
+
+    // Clean exit = user closed the window (or app.quit()). In service mode the
+    // whole turbo/vite cgroup must die so systemd becomes inactive and Rofi's
+    // next start is a real start on the pinned origin — not a zombie no-op.
+    if (serviceMode) {
+      requestSystemdUnitStop();
+      void shutdown(0);
     }
   });
 }
