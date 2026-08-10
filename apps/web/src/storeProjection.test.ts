@@ -370,7 +370,28 @@ describe("store projection", () => {
         snapshotSequence: 1,
         updatedAt: "2026-02-27T00:00:00.000Z",
         spaces: [],
-        folders: [],
+        folders: [
+          {
+            id: FolderId.makeUnsafe("folder-shell"),
+            projectId: ProjectId.makeUnsafe("project-shell"),
+            name: "Shell folder",
+            sortOrder: 0,
+            isPinned: false,
+            createdAt: "2026-02-27T00:00:00.000Z",
+            updatedAt: "2026-02-27T00:00:00.000Z",
+            deletedAt: null,
+          },
+          {
+            id: FolderId.makeUnsafe("folder-other"),
+            projectId: ProjectId.makeUnsafe("project-other"),
+            name: "Other folder",
+            sortOrder: 0,
+            isPinned: false,
+            createdAt: "2026-02-27T00:00:00.000Z",
+            updatedAt: "2026-02-27T00:00:00.000Z",
+            deletedAt: null,
+          },
+        ],
         projects: [
           makeReadModelProject({
             id: ProjectId.makeUnsafe("project-shell"),
@@ -402,6 +423,9 @@ describe("store projection", () => {
 
     expect(next.projects.map((project) => project.id)).toEqual([
       ProjectId.makeUnsafe("project-other"),
+    ]);
+    expect(next.folders.map((folder) => folder.id)).toEqual([
+      FolderId.makeUnsafe("folder-other"),
     ]);
     expect(threadsOf(next).map((thread) => thread.id)).toEqual([
       ThreadId.makeUnsafe("thread-project-2"),

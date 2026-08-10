@@ -1102,20 +1102,26 @@ function removeProjectState(state: AppState, projectId: Project["id"]): AppState
   const nextProjects = state.projects.some((project) => project.id === projectId)
     ? state.projects.filter((project) => project.id !== projectId)
     : state.projects;
+  const nextFolders = (state.folders ?? []).some((folder) => folder.projectId === projectId)
+    ? (state.folders ?? []).filter((folder) => folder.projectId !== projectId)
+    : (state.folders ?? []);
   const nextState = [...threadIds].reduce((currentState, threadId) => {
     return removeThreadState(currentState, threadId);
   }, state);
 
-  if (nextProjects === state.projects && nextState === state) {
+  if (
+    nextProjects === state.projects &&
+    nextFolders === (state.folders ?? []) &&
+    nextState === state
+  ) {
     return state;
   }
 
-  return nextProjects === nextState.projects
-    ? nextState
-    : {
-        ...nextState,
-        projects: nextProjects,
-      };
+  return {
+    ...nextState,
+    ...(nextProjects === nextState.projects ? {} : { projects: nextProjects }),
+    ...(nextFolders === (nextState.folders ?? []) ? {} : { folders: nextFolders }),
+  };
 }
 
 export function removeDeletedProjectFromClientState(

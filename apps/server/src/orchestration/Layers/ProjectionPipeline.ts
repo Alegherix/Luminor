@@ -492,8 +492,23 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
         );
       case "project.created":
       case "project.meta-updated":
+        return applyProjectMetadataProjection({ event, projectionProjectRepository }).pipe(
+          Effect.asVoid,
+        );
       case "project.deleted":
         return applyProjectMetadataProjection({ event, projectionProjectRepository }).pipe(
+          Effect.andThen(
+            projectionFolderRepository.markDeletedByProjectId({
+              projectId: event.payload.projectId,
+              deletedAt: event.payload.deletedAt,
+            }),
+          ),
+          Effect.andThen(
+            projectionThreadRepository.clearFolderMembershipsByProjectId({
+              projectId: event.payload.projectId,
+              updatedAt: event.payload.deletedAt,
+            }),
+          ),
           Effect.asVoid,
         );
       case "space.created":
@@ -2170,8 +2185,22 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
         );
       case "project.created":
       case "project.meta-updated":
-      case "project.deleted":
         return applyProjectMetadataProjection({ event, projectionProjectRepository });
+      case "project.deleted":
+        return applyProjectMetadataProjection({ event, projectionProjectRepository }).pipe(
+          Effect.andThen(
+            projectionFolderRepository.markDeletedByProjectId({
+              projectId: event.payload.projectId,
+              deletedAt: event.payload.deletedAt,
+            }),
+          ),
+          Effect.andThen(
+            projectionThreadRepository.clearFolderMembershipsByProjectId({
+              projectId: event.payload.projectId,
+              updatedAt: event.payload.deletedAt,
+            }),
+          ),
+        );
     }
   };
 

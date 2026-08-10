@@ -515,6 +515,25 @@ export function projectEvent(
                 }
               : project,
           ),
+          folders: nextBase.folders.map((folder) =>
+            folder.projectId === payload.projectId && folder.deletedAt === null
+              ? {
+                  ...folder,
+                  deletedAt: payload.deletedAt,
+                  updatedAt: payload.deletedAt,
+                }
+              : folder,
+          ),
+          threads: nextBase.threads.map((thread) =>
+            thread.projectId === payload.projectId && thread.folderId !== null
+              ? {
+                  ...thread,
+                  folderId: null,
+                  updatedAt:
+                    thread.updatedAt > payload.deletedAt ? thread.updatedAt : payload.deletedAt,
+                }
+              : thread,
+          ),
         })),
       );
 
