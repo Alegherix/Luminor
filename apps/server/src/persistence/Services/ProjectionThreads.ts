@@ -11,6 +11,7 @@ import {
   ModelSelection,
   NonNegativeInt,
   OrchestrationThreadPullRequest,
+  FolderId,
   ThreadNotes,
   ThreadPinnedMessages,
   ThreadMarkers,
@@ -30,6 +31,7 @@ import type { ProjectionRepositoryError } from "../Errors.ts";
 export const ProjectionThread = Schema.Struct({
   threadId: ThreadId,
   projectId: ProjectId,
+  folderId: Schema.NullOr(FolderId),
   title: Schema.String,
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,

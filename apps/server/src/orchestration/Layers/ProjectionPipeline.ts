@@ -538,6 +538,7 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
           yield* projectionThreadRepository.upsert({
             threadId: event.payload.threadId,
             projectId: event.payload.projectId,
+            folderId: null,
             title: event.payload.title,
             modelSelection: event.payload.modelSelection,
             runtimeMode: event.payload.runtimeMode,
@@ -608,6 +609,7 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
                   : undefined;
             return {
               ...thread,
+              ...(event.payload.folderId !== undefined ? { folderId: event.payload.folderId } : {}),
               ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
               ...(event.payload.modelSelection !== undefined
                 ? { modelSelection: event.payload.modelSelection }

@@ -164,7 +164,7 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { useLatestProjectStore } from "../latestProjectStore";
 import { resolveThreadEnvironmentPresentation } from "../lib/threadEnvironment";
 import { dispatchThreadRename } from "../lib/threadRename";
-import { createFolder, deleteFolder, renameFolder } from "../lib/folders";
+import { createFolder, deleteFolder, moveThreadToFolder, renameFolder } from "../lib/folders";
 import { quotePosixShellArgument } from "../lib/shellQuote";
 import {
   DEFAULT_THREAD_TERMINAL_ID,
@@ -328,6 +328,7 @@ import {
   resolveThreadStatusTrailingIndicator,
   type ThreadStatusPill,
   type SidebarDerivedProjectData,
+  type SidebarProjectEntry,
   type SidebarActionBadge,
   type SidebarView,
   shouldShowDebugFeatureFlagsMenu,
@@ -2994,6 +2995,27 @@ export default function Sidebar() {
         envMode: thread.envMode,
         worktreePath: thread.worktreePath,
       });
+      const projectFolders = foldersByProjectId.get(thread.projectId) ?? [];
+      const folderMoveItems = thread.parentThreadId
+        ? []
+        : [
+            ...(thread.folderId
+              ? [
+                  {
+                    id: "move-folder:none",
+                    label: "Move out of folder",
+                    separatorBefore: true,
+                  },
+                ]
+              : []),
+            ...projectFolders
+              .filter((folder) => folder.id !== thread.folderId)
+              .map((folder, index) => ({
+                id: `move-folder:${folder.id}`,
+                label: `Move to “${folder.name}”`,
+                separatorBefore: !thread.folderId && index === 0,
+              })),
+          ];
       const clicked = await api.contextMenu.show(
         [
           { id: "rename", label: "Rename thread" },
@@ -3002,6 +3024,7 @@ export default function Sidebar() {
             ? [{ id: "clear-notification", label: "Clear notification" }]
             : []),
           { id: "mark-unread", label: "Mark unread" },
+          ...folderMoveItems,
           ...handoffItems,
           { id: "copy-path", label: "Copy Path", separatorBefore: true },
           ...(threadWorkspacePath
@@ -3037,6 +3060,23 @@ export default function Sidebar() {
       if (clicked === "mark-unread") {
         clearDismissedThreadStatus(threadId);
         markThreadUnread(threadId);
+        return;
+      }
+      if (typeof clicked === "string" && clicked.startsWith("move-folder:")) {
+        const targetFolderId = clicked.slice("move-folder:".length);
+        try {
+          await moveThreadToFolder({
+            api,
+            threadId,
+            folderId: targetFolderId === "none" ? null : FolderId.makeUnsafe(targetFolderId),
+          });
+        } catch (error) {
+          toastManager.add({
+            type: "error",
+            title: "Unable to move thread",
+            description: error instanceof Error ? error.message : "Try again.",
+          });
+        }
         return;
       }
       if (clicked === "clear-notification") {
@@ -3169,6 +3209,7 @@ export default function Sidebar() {
       copyThreadIdToClipboard,
       clearDismissedThreadStatus,
       clearThreadNotification,
+      foldersByProjectId,
       handoffThread,
       markThreadUnread,
       navigate,
@@ -3680,7 +3721,14 @@ export default function Sidebar() {
         return;
       }
       if (clicked !== "delete") return;
-      const confirmed = await api.dialogs.confirm(`Delete empty folder “${folder.name}”?`);
+      const memberCount = sidebarTreeThreads.filter(
+        (thread) => !thread.parentThreadId && thread.folderId === folder.id,
+      ).length;
+      const confirmed = await api.dialogs.confirm(
+        memberCount === 0
+          ? `Delete empty folder “${folder.name}”?`
+          : `Delete folder “${folder.name}”? Its ${memberCount} ${pluralize(memberCount, "thread")} will move back to the project.`,
+      );
       if (!confirmed) return;
       try {
         await deleteFolder({ api, folderId: folder.id });
@@ -3698,7 +3746,7 @@ export default function Sidebar() {
         });
       }
     },
-    [],
+    [sidebarTreeThreads],
   );
 
   const projectDnDSensors = useSensors(
@@ -3961,6 +4009,7 @@ export default function Sidebar() {
       deriveSidebarProjectData({
         projects: standardProjects,
         sortedSidebarThreadsByProjectId,
+        foldersByProjectId,
         pinnedThreadIds,
         threadListExtraPagesByProjectCwd,
         normalizeProjectCwd: normalizeSidebarProjectThreadListCwd,
@@ -3973,6 +4022,7 @@ export default function Sidebar() {
       activeSidebarThreadId,
       threadListExtraPagesByProjectCwd,
       pinnedThreadIds,
+      foldersByProjectId,
       sortedSidebarThreadsByProjectId,
       standardProjects,
       resolveThreadStatusForSidebar,
@@ -4897,7 +4947,11 @@ export default function Sidebar() {
     );
   }
 
-  function renderFolderRow(folder: Folder) {
+  function renderFolderRow(
+    folder: Folder,
+    entries: SidebarProjectEntry[],
+    orderedProjectThreadIds: readonly ThreadId[],
+  ) {
     const expanded = expandedFolderIds.has(folder.id);
     return (
       <SidebarMenuSubItem key={folder.id} className="w-full">
@@ -4928,16 +4982,25 @@ export default function Sidebar() {
           </SidebarLeadingIcon>
           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
         </SidebarMenuSubButton>
-        <div className={cn(disclosureShellClassName(expanded), "pl-9")}>
+        <div className={disclosureShellClassName(expanded)}>
           <div className={DISCLOSURE_INNER_CLASS}>
-            <div
+            <SidebarMenuSub
               className={cn(
-                "py-1 text-[length:var(--app-font-size-ui-xs,10px)] text-muted-foreground/55",
+                "mx-0 my-0 w-full translate-x-0 border-l-0 px-0 py-0",
+                SIDEBAR_NESTED_LIST_GAP_CLASS_NAME,
                 disclosureContentClassName(expanded),
               )}
             >
-              Empty folder
-            </div>
+              {entries.length === 0 ? (
+                <div className="py-1 pl-9 text-[length:var(--app-font-size-ui-xs,10px)] text-muted-foreground/55">
+                  Empty folder
+                </div>
+              ) : (
+                entries.map((entry) =>
+                  renderThreadRow(entry.thread, orderedProjectThreadIds, entry.depth + 1),
+                )
+              )}
+            </SidebarMenuSub>
           </div>
         </div>
       </SidebarMenuSubItem>
@@ -4958,6 +5021,8 @@ export default function Sidebar() {
       allProjectThreadCount,
       projectStatus,
       visibleEntries,
+      pinnedFolderGroups,
+      unpinnedFolderGroups,
       threadListExtraPages,
       canShowMoreThreads,
       canShowLessThreads,
@@ -4966,7 +5031,6 @@ export default function Sidebar() {
       ? "opacity-0"
       : sidebarHoverRevealHideClassName("project-header");
     const projectRun = projectRunsByProjectId[project.id] ?? null;
-    const projectFolders = foldersByProjectId.get(project.id) ?? [];
     const projectRunServer = projectRunServerByProjectId.get(project.id) ?? null;
     // A project reads as "running" when Luminor tracks a run for it or when a
     // local server (possibly started outside Luminor) is attributed by cwd.
@@ -5183,7 +5247,12 @@ export default function Sidebar() {
                 disclosureContentClassName(project.expanded),
               )}
             >
-              {projectFolders.map(renderFolderRow)}
+              {pinnedFolderGroups.map(({ folder, entries }) =>
+                renderFolderRow(folder, entries, orderedProjectThreadIds),
+              )}
+              {unpinnedFolderGroups.map(({ folder, entries }) =>
+                renderFolderRow(folder, entries, orderedProjectThreadIds),
+              )}
 
               {visibleEntries.map((entry) =>
                 renderThreadRow(entry.thread, orderedProjectThreadIds, entry.depth),

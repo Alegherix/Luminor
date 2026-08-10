@@ -928,6 +928,8 @@ function applyOrchestrationEvent(
 
           if (
             (event.payload.title === undefined || event.payload.title === thread.title) &&
+            (event.payload.folderId === undefined ||
+              (event.payload.folderId ?? null) === (thread.folderId ?? null)) &&
             modelSelection === thread.modelSelection &&
             (event.payload.envMode === undefined || event.payload.envMode === thread.envMode) &&
             nextBranch === thread.branch &&
@@ -965,6 +967,7 @@ function applyOrchestrationEvent(
 
           return {
             ...thread,
+            ...(event.payload.folderId !== undefined ? { folderId: event.payload.folderId } : {}),
             ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
             modelSelection,
             ...(event.payload.envMode !== undefined ? { envMode: event.payload.envMode } : {}),

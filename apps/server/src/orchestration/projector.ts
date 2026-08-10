@@ -533,6 +533,7 @@ export function projectEvent(
           {
             id: payload.threadId,
             projectId: payload.projectId,
+            folderId: null,
             title: payload.title,
             modelSelection: payload.modelSelection,
             runtimeMode: payload.runtimeMode,
@@ -642,6 +643,7 @@ export function projectEvent(
           return {
             ...nextBase,
             threads: updateThread(nextBase.threads, payload.threadId, {
+              ...(payload.folderId !== undefined ? { folderId: payload.folderId } : {}),
               ...(payload.title !== undefined ? { title: payload.title } : {}),
               ...(payload.modelSelection !== undefined
                 ? { modelSelection: payload.modelSelection }

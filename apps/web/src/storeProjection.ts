@@ -349,6 +349,7 @@ function sidebarThreadSummariesEqual(
     left !== undefined &&
     left.id === right.id &&
     left.projectId === right.projectId &&
+    (left.folderId ?? null) === (right.folderId ?? null) &&
     left.title === right.title &&
     left.modelSelection === right.modelSelection &&
     left.interactionMode === right.interactionMode &&
@@ -391,6 +392,7 @@ function buildSidebarThreadSummary(
   const nextSummary: SidebarThreadSummary = {
     id: thread.id,
     projectId: thread.projectId,
+    folderId: thread.folderId ?? null,
     title: thread.title,
     modelSelection: thread.modelSelection,
     interactionMode: thread.interactionMode,

@@ -377,6 +377,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         {
           id: ThreadId.makeUnsafe("thread-1"),
           projectId: asProjectId("project-1"),
+          folderId: null,
           title: "Thread 1",
           modelSelection: {
             provider: "codex",
@@ -1677,6 +1678,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         {
           id: ThreadId.makeUnsafe("thread-shell"),
           projectId: asProjectId("project-shell"),
+          folderId: null,
           title: "Shell Thread",
           modelSelection: {
             provider: "codex",

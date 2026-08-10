@@ -150,6 +150,7 @@ export function threadShellsEqual(left: ThreadShell | undefined, right: ThreadSh
     left.id === right.id &&
     left.codexThreadId === right.codexThreadId &&
     left.projectId === right.projectId &&
+    (left.folderId ?? null) === (right.folderId ?? null) &&
     left.title === right.title &&
     left.modelSelection === right.modelSelection &&
     left.runtimeMode === right.runtimeMode &&
@@ -1571,6 +1572,7 @@ export function normalizeThreadFromReadModel(
   if (
     previous &&
     previous.projectId === incoming.projectId &&
+    (previous.folderId ?? null) === (incoming.folderId ?? null) &&
     previous.title === incoming.title &&
     previous.modelSelection === modelSelection &&
     previous.runtimeMode === incoming.runtimeMode &&
@@ -1623,6 +1625,7 @@ export function normalizeThreadFromReadModel(
     id: incoming.id,
     codexThreadId: null,
     projectId: incoming.projectId,
+    folderId: incoming.folderId ?? null,
     title: incoming.title,
     modelSelection,
     runtimeMode: incoming.runtimeMode,
@@ -1728,6 +1731,7 @@ export function normalizeThreadShellSnapshot(
     id: incoming.id,
     codexThreadId: previous?.codexThreadId ?? null,
     projectId: incoming.projectId,
+    folderId: incoming.folderId ?? null,
     title: incoming.title,
     modelSelection,
     runtimeMode: incoming.runtimeMode,

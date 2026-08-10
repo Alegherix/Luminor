@@ -1717,6 +1717,80 @@ describe("partitionSidebarThreadsByProjectIds", () => {
 });
 
 describe("deriveSidebarProjectData", () => {
+  it("partitions pinned Folders, unpinned Folders, and unfiled root Threads", () => {
+    const project = makeProject();
+    const pinnedFolder = {
+      id: FolderId.makeUnsafe("folder-pinned"),
+      projectId: project.id,
+      name: "Pinned folder",
+      sortOrder: 2,
+      isPinned: true,
+      createdAt: "2026-08-10T10:00:00.000Z",
+      updatedAt: "2026-08-10T10:00:00.000Z",
+    };
+    const folder = {
+      ...pinnedFolder,
+      id: FolderId.makeUnsafe("folder"),
+      name: "Folder",
+      isPinned: false,
+    };
+    const pinnedMember = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-pinned-member"),
+      folderId: pinnedFolder.id,
+      title: "Pinned member",
+    });
+    const subagent = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-subagent"),
+      parentThreadId: pinnedMember.id,
+      title: "Subagent",
+    });
+    const member = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-member"),
+      folderId: folder.id,
+      title: "Member",
+    });
+    const unfiled = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-unfiled"),
+      title: "Unfiled",
+    });
+    const pinnedUnfiled = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-pinned-unfiled"),
+      title: "Pinned unfiled",
+    });
+
+    const data = deriveSidebarProjectData({
+      projects: [project],
+      sortedSidebarThreadsByProjectId: groupSidebarThreadsByProjectId([
+        pinnedMember,
+        subagent,
+        member,
+        unfiled,
+        pinnedUnfiled,
+      ]),
+      foldersByProjectId: new Map([[project.id, [folder, pinnedFolder]]]),
+      pinnedThreadIds: [pinnedMember.id, pinnedUnfiled.id],
+      threadListExtraPagesByProjectCwd: new Map(),
+      normalizeProjectCwd: (cwd) => cwd,
+      activeSidebarThreadId: subagent.id,
+      previewLimit: 5,
+      previewPageSize: 5,
+    }).get(project.id);
+
+    expect(data?.pinnedFolderGroups.map((group) => group.folder.id)).toEqual([pinnedFolder.id]);
+    expect(data?.unpinnedFolderGroups.map((group) => group.folder.id)).toEqual([folder.id]);
+    expect(data?.pinnedFolderGroups[0]?.entries).toEqual([
+      expect.objectContaining({ rowId: pinnedMember.id, rootRowId: pinnedMember.id, depth: 0 }),
+      expect.objectContaining({ rowId: subagent.id, rootRowId: pinnedMember.id, depth: 1 }),
+    ]);
+    expect(data?.unpinnedFolderGroups[0]?.entries).toEqual([
+      expect.objectContaining({ rowId: member.id, rootRowId: member.id, depth: 0 }),
+    ]);
+    expect(data?.visibleEntries).toEqual([
+      expect.objectContaining({ rowId: unfiled.id, rootRowId: unfiled.id, depth: 0 }),
+    ]);
+    expect(data?.orderedProjectThreadIds).not.toContain(pinnedUnfiled.id);
+  });
+
   it("keeps pinned threads in the total project thread count", () => {
     const project = makeProject();
     const pinnedThread = makeSidebarThreadSummary({

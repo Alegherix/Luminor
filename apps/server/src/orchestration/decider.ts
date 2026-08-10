@@ -476,7 +476,25 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
     case "folder.delete": {
       yield* requireFolder({ readModel, command, folderId: command.folderId });
       const occurredAt = nowIso();
-      return {
+      const unfileEvents = readModel.threads
+        .filter((thread) => thread.deletedAt === null && thread.folderId === command.folderId)
+        .map(
+          (thread): Omit<OrchestrationEvent, "sequence"> => ({
+            ...withEventBase({
+              aggregateKind: "thread",
+              aggregateId: thread.id,
+              occurredAt,
+              commandId: command.commandId,
+            }),
+            type: "thread.meta-updated",
+            payload: {
+              threadId: thread.id,
+              folderId: null,
+              updatedAt: occurredAt,
+            },
+          }),
+        );
+      const deleteEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...withEventBase({
           aggregateKind: "folder",
           aggregateId: command.folderId,
@@ -486,6 +504,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         type: "folder.deleted",
         payload: { folderId: command.folderId, deletedAt: occurredAt },
       };
+      return unfileEvents.length === 0 ? deleteEvent : [...unfileEvents, deleteEvent];
     }
 
     case "space.create": {
@@ -1307,6 +1326,19 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         threadId: command.threadId,
       });
       const project = readModel.projects.find((candidate) => candidate.id === thread.projectId);
+      if (command.folderId !== undefined && command.folderId !== null) {
+        const folder = yield* requireFolder({
+          readModel,
+          command,
+          folderId: command.folderId,
+        });
+        if (folder.projectId !== thread.projectId) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `Folder '${command.folderId}' does not belong to thread project '${thread.projectId}'.`,
+          });
+        }
+      }
       // Provider-native threads: see thread.create — the selection mirrors the
       // provider's own subagent, so the Auto-mode capability check doesn't apply.
       if (command.modelSelection !== undefined && thread.creationSource !== "provider_native") {
@@ -1323,6 +1355,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         type: "thread.meta-updated",
         payload: {
           threadId: command.threadId,
+          ...(command.folderId !== undefined ? { folderId: command.folderId } : {}),
           ...(command.title !== undefined ? { title: command.title } : {}),
           ...(command.modelSelection !== undefined
             ? { modelSelection: command.modelSelection }

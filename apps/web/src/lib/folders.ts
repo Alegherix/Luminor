@@ -1,4 +1,4 @@
-import type { FolderId, NativeApi, ProjectId } from "@luminor/contracts";
+import type { FolderId, NativeApi, ProjectId, ThreadId } from "@luminor/contracts";
 
 import { newCommandId, newFolderId } from "./utils";
 
@@ -36,6 +36,19 @@ export async function deleteFolder(input: { api: NativeApi; folderId: FolderId }
   await input.api.orchestration.dispatchCommand({
     type: "folder.delete",
     commandId: newCommandId(),
+    folderId: input.folderId,
+  });
+}
+
+export async function moveThreadToFolder(input: {
+  api: NativeApi;
+  threadId: ThreadId;
+  folderId: FolderId | null;
+}): Promise<void> {
+  await input.api.orchestration.dispatchCommand({
+    type: "thread.meta.update",
+    commandId: newCommandId(),
+    threadId: input.threadId,
     folderId: input.folderId,
   });
 }
