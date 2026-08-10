@@ -27,6 +27,28 @@ async function dispatch(
   return { events: eventBases, readModel: next };
 }
 
+function threadCreateCommand(input: {
+  commandId: string;
+  threadId: ThreadId;
+  projectId: ProjectId;
+  title: string;
+  createdAt: string;
+}): Extract<OrchestrationCommand, { type: "thread.create" }> {
+  return {
+    type: "thread.create",
+    commandId: CommandId.makeUnsafe(input.commandId),
+    threadId: input.threadId,
+    projectId: input.projectId,
+    title: input.title,
+    modelSelection: { provider: "codex", model: "gpt-5.6-sol" },
+    interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+    runtimeMode: "approval-required",
+    branch: null,
+    worktreePath: null,
+    createdAt: input.createdAt,
+  };
+}
+
 describe("Folders", () => {
   it("projects create, rename, and delete commands into the read model", async () => {
     const createdAt = "2026-08-10T10:00:00.000Z";
@@ -534,5 +556,200 @@ describe("Folders", () => {
     readModel = deletion.readModel;
     expect(deletion.events.map((event) => event.type)).toEqual(["folder.pinned", "thread.deleted"]);
     expect(readModel.folders[0]).toMatchObject({ id: folderId, isPinned: false, deletedAt: null });
+  });
+
+  it("creates threads unfiled by default and inside a same-project Folder on request", async () => {
+    const createdAt = "2026-08-10T10:00:00.000Z";
+    const projectId = ProjectId.makeUnsafe("project-create-in-folder");
+    const folderId = FolderId.makeUnsafe("folder-create-target");
+    const unfiledThreadId = ThreadId.makeUnsafe("thread-unfiled");
+    const filedThreadId = ThreadId.makeUnsafe("thread-filed");
+    let readModel = createEmptyReadModel(createdAt);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-project-create"),
+      projectId,
+      title: "Luminor",
+      workspaceRoot: "/tmp/luminor-create-in-folder",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-folder-create"),
+      folderId,
+      projectId,
+      name: "Feature work",
+      createdAt,
+    }));
+
+    ({ readModel } = await dispatch(readModel, {
+      ...threadCreateCommand({
+        commandId: "cmd-thread-unfiled",
+        threadId: unfiledThreadId,
+        projectId,
+        title: "Unfiled",
+        createdAt,
+      }),
+    }));
+    expect(readModel.threads.find((thread) => thread.id === unfiledThreadId)?.folderId).toBeNull();
+
+    const filedCreation = await dispatch(readModel, {
+      ...threadCreateCommand({
+        commandId: "cmd-thread-filed",
+        threadId: filedThreadId,
+        projectId,
+        title: "Filed",
+        createdAt,
+      }),
+      folderId,
+    });
+    readModel = filedCreation.readModel;
+    expect(filedCreation.events[0]?.payload).toMatchObject({ folderId });
+    expect(readModel.threads.find((thread) => thread.id === filedThreadId)?.folderId).toBe(
+      folderId,
+    );
+  });
+
+  it("rejects creating a Thread in a missing or cross-project Folder", async () => {
+    const createdAt = "2026-08-10T10:00:00.000Z";
+    const projectId = ProjectId.makeUnsafe("project-create-reject");
+    const otherProjectId = ProjectId.makeUnsafe("project-create-reject-other");
+    const otherProjectFolderId = FolderId.makeUnsafe("folder-other-project");
+    const threadId = ThreadId.makeUnsafe("thread-create-reject");
+    let readModel = createEmptyReadModel(createdAt);
+
+    for (const [id, workspaceRoot] of [
+      [projectId, "/tmp/create-reject"],
+      [otherProjectId, "/tmp/create-reject-other"],
+    ] as const) {
+      ({ readModel } = await dispatch(readModel, {
+        type: "project.create",
+        commandId: CommandId.makeUnsafe(`cmd-${id}`),
+        projectId: id,
+        title: id,
+        workspaceRoot,
+        createdAt,
+      }));
+    }
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-folder-other-project"),
+      folderId: otherProjectFolderId,
+      projectId: otherProjectId,
+      name: "Other project folder",
+      createdAt,
+    }));
+
+    await expect(
+      Effect.runPromise(
+        decideOrchestrationCommand({
+          command: {
+            ...threadCreateCommand({
+              commandId: "cmd-thread-missing-folder",
+              threadId,
+              projectId,
+              title: "Missing folder",
+              createdAt,
+            }),
+            folderId: FolderId.makeUnsafe("folder-missing"),
+          },
+          readModel,
+        }),
+      ),
+    ).rejects.toThrow(/does not exist/i);
+
+    await expect(
+      Effect.runPromise(
+        decideOrchestrationCommand({
+          command: {
+            ...threadCreateCommand({
+              commandId: "cmd-thread-cross-project-folder",
+              threadId,
+              projectId,
+              title: "Cross project folder",
+              createdAt,
+            }),
+            folderId: otherProjectFolderId,
+          },
+          readModel,
+        }),
+      ),
+    ).rejects.toThrow(/does not belong/i);
+
+    expect(readModel.threads).toEqual([]);
+  });
+
+  it("inherits Folder membership for subagent and sidechat children", async () => {
+    const createdAt = "2026-08-10T10:00:00.000Z";
+    const projectId = ProjectId.makeUnsafe("project-inherit");
+    const folderId = FolderId.makeUnsafe("folder-inherit");
+    const parentThreadId = ThreadId.makeUnsafe("thread-parent");
+    const subagentThreadId = ThreadId.makeUnsafe("thread-subagent");
+    const sidechatThreadId = ThreadId.makeUnsafe("thread-sidechat");
+    let readModel = createEmptyReadModel(createdAt);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-project-create"),
+      projectId,
+      title: "Luminor",
+      workspaceRoot: "/tmp/luminor-inherit",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-folder-create"),
+      folderId,
+      projectId,
+      name: "Feature work",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      ...threadCreateCommand({
+        commandId: "cmd-thread-parent",
+        threadId: parentThreadId,
+        projectId,
+        title: "Parent",
+        createdAt,
+      }),
+      folderId,
+    }));
+
+    ({ readModel } = await dispatch(readModel, {
+      ...threadCreateCommand({
+        commandId: "cmd-thread-subagent",
+        threadId: subagentThreadId,
+        projectId,
+        title: "Subagent",
+        createdAt,
+      }),
+      parentThreadId,
+      subagentAgentId: "builder",
+    }));
+    expect(readModel.threads.find((thread) => thread.id === subagentThreadId)).toMatchObject({
+      folderId,
+      parentThreadId,
+    });
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "thread.fork.create",
+      commandId: CommandId.makeUnsafe("cmd-thread-sidechat"),
+      threadId: sidechatThreadId,
+      sourceThreadId: parentThreadId,
+      projectId,
+      title: "Sidechat",
+      modelSelection: { provider: "codex", model: "gpt-5.6-sol" },
+      interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+      runtimeMode: "approval-required",
+      branch: null,
+      worktreePath: null,
+      sidechatSourceThreadId: parentThreadId,
+      importedMessages: [],
+      createdAt,
+    }));
+    expect(readModel.threads.find((thread) => thread.id === sidechatThreadId)?.folderId).toBe(
+      folderId,
+    );
   });
 });

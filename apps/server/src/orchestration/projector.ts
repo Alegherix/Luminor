@@ -565,7 +565,7 @@ export function projectEvent(
           {
             id: payload.threadId,
             projectId: payload.projectId,
-            folderId: null,
+            folderId: payload.folderId ?? null,
             title: payload.title,
             modelSelection: payload.modelSelection,
             runtimeMode: payload.runtimeMode,

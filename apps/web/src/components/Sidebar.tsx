@@ -3833,18 +3833,47 @@ export default function Sidebar() {
     [folderEditorState, resolveFolderMoveThreads, settleFolderMove],
   );
 
+  const handleNewThreadInFolder = useCallback(
+    (folder: Folder) => {
+      setExpandedFolderIds((current) => {
+        if (current.has(folder.id)) return current;
+        const next = new Set(current);
+        next.add(folder.id);
+        return next;
+      });
+      prefetchModelsForProjectNewThread(folder.projectId, { includeDroid: true });
+      void handleNewThread(folder.projectId, {
+        envMode: resolveSidebarNewThreadEnvMode({
+          defaultEnvMode: appSettings.defaultThreadEnvMode,
+        }),
+        folderId: folder.id,
+        fresh: true,
+      }).catch(() => undefined);
+    },
+    [appSettings.defaultThreadEnvMode, handleNewThread, prefetchModelsForProjectNewThread],
+  );
+
   const handleFolderContextMenu = useCallback(
     async (folder: Folder, position: { x: number; y: number }) => {
       const api = readNativeApi();
       if (!api) return;
       const clicked = await api.contextMenu.show(
         [
-          { id: "toggle-pin", label: pinActionLabel("folder", folder.isPinned) },
+          { id: "new-thread", label: "New thread in folder" },
+          {
+            id: "toggle-pin",
+            label: pinActionLabel("folder", folder.isPinned),
+            separatorBefore: true,
+          },
           { id: "rename", label: "Rename folder" },
           { id: "delete", label: "Delete folder", destructive: true, separatorBefore: true },
         ],
         position,
       );
+      if (clicked === "new-thread") {
+        handleNewThreadInFolder(folder);
+        return;
+      }
       if (clicked === "toggle-pin") {
         await setFolderPinned({ api, folderId: folder.id, isPinned: !folder.isPinned }).catch(
           (error) => {
@@ -3887,7 +3916,7 @@ export default function Sidebar() {
         });
       }
     },
-    [sidebarTreeThreads],
+    [handleNewThreadInFolder, sidebarTreeThreads],
   );
 
   const projectDnDSensors = useSensors(

@@ -2608,10 +2608,7 @@ export default function ChatView({
   const nextUserInputResponseReclaimAt = useMemo(() => {
     let earliest: string | null = null;
     for (const interaction of activeThread?.pendingInteractions ?? []) {
-      if (
-        interaction.interactionKind !== "userInput" ||
-        interaction.status !== "responding"
-      ) {
+      if (interaction.interactionKind !== "userInput" || interaction.status !== "responding") {
         continue;
       }
       if (interaction.responseRequestedAt === null) {
@@ -6912,6 +6909,8 @@ export default function ChatView({
             commandId: newCommandId(),
             threadId: activeThread.id,
             projectId: activeProject.id,
+            folderId:
+              activeThread.projectId === activeProject.id ? (activeThread.folderId ?? null) : null,
             title,
             modelSelection: input.threadModelSelection,
             runtimeMode: input.threadRuntimeMode,
@@ -8101,12 +8100,17 @@ export default function ChatView({
           threadNotes,
           projectInstructions: inheritedProjectInstructions,
         });
+        const folderIdForSend =
+          targetProjectIdForSend === activeThread.projectId
+            ? (activeThread.folderId ?? null)
+            : null;
         await promoteThreadCreate(
           {
             type: "thread.create",
             commandId: newCommandId(),
             threadId: threadIdForSend,
             projectId: targetProjectIdForSend,
+            folderId: folderIdForSend,
             title,
             modelSelection: threadCreateModelSelection,
             runtimeMode: nextRuntimeModeForSend,
@@ -9110,6 +9114,8 @@ export default function ChatView({
         commandId: newCommandId(),
         threadId: nextThreadId,
         projectId: activeProject.id,
+        folderId:
+          activeThread.projectId === activeProject.id ? (activeThread.folderId ?? null) : null,
         title: nextThreadTitle,
         modelSelection: nextThreadModelSelection,
         runtimeMode,
@@ -10654,6 +10660,7 @@ export default function ChatView({
       createIfMissing: isLocalDraftThread
         ? {
             projectId: activeThread.projectId,
+            folderId: activeThread.folderId ?? null,
             modelSelection: activeThread.modelSelection,
             runtimeMode: activeThread.runtimeMode,
             interactionMode: activeThread.interactionMode,

@@ -269,6 +269,7 @@ async function dispatchKanbanDraftThreadOnce(
           commandId: newCommandId(),
           threadId,
           projectId,
+          folderId: draftThread?.folderId ?? null,
           title: fallbackTitle,
           modelSelection,
           runtimeMode,

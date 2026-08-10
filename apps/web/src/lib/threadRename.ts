@@ -5,6 +5,7 @@
 // `thread.create` invariant failures as user-visible toasts.
 
 import {
+  type FolderId,
   type ModelSelection,
   type OrchestrationThreadPullRequest,
   type ProjectId,
@@ -26,6 +27,7 @@ export async function dispatchThreadRename(input: {
   createIfMissing?:
     | {
         projectId: ProjectId;
+        folderId?: FolderId | null;
         modelSelection: ModelSelection;
         runtimeMode: RuntimeMode;
         interactionMode: ProviderInteractionMode;
@@ -58,6 +60,7 @@ export async function dispatchThreadRename(input: {
         commandId: newCommandId(),
         threadId: input.threadId,
         projectId: input.createIfMissing.projectId,
+        folderId: input.createIfMissing.folderId ?? null,
         title: trimmed,
         modelSelection: input.createIfMissing.modelSelection,
         runtimeMode: input.createIfMissing.runtimeMode,

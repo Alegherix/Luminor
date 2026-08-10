@@ -434,6 +434,8 @@ export function useComposerSlashCommands(input: {
         activeThread.envMode ?? (activeThread.worktreePath ? "worktree" : "local");
       const nextWorkingDirectory = activeThread.workingDirectory ?? null;
       const nextLastKnownPr = activeThread.lastKnownPr ?? null;
+      const nextFolderId =
+        activeThread.projectId === activeProject.id ? (activeThread.folderId ?? null) : null;
       const reviewTarget =
         target === "base-branch"
           ? ({ type: "baseBranch", branch: activeRootBranch! } as const)
@@ -445,6 +447,7 @@ export function useComposerSlashCommands(input: {
           commandId: newCommandId(),
           threadId: nextThreadId,
           projectId: activeProject.id,
+          folderId: nextFolderId,
           title: nextThreadTitle,
           modelSelection: selectedModelSelection,
           runtimeMode,

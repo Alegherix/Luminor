@@ -1791,6 +1791,48 @@ describe("deriveSidebarProjectData", () => {
     expect(data?.orderedProjectThreadIds).not.toContain(pinnedUnfiled.id);
   });
 
+  it("keeps subagents nested under their parent even when they carry the inherited folder", () => {
+    const project = makeProject();
+    const folder = {
+      id: FolderId.makeUnsafe("folder"),
+      projectId: project.id,
+      name: "Folder",
+      sortOrder: 0,
+      isPinned: false,
+      createdAt: "2026-08-10T10:00:00.000Z",
+      updatedAt: "2026-08-10T10:00:00.000Z",
+    };
+    const parent = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-parent"),
+      folderId: folder.id,
+      title: "Parent",
+    });
+    const subagent = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-subagent"),
+      folderId: folder.id,
+      parentThreadId: parent.id,
+      title: "Subagent",
+    });
+
+    const data = deriveSidebarProjectData({
+      projects: [project],
+      sortedSidebarThreadsByProjectId: groupSidebarThreadsByProjectId([parent, subagent]),
+      foldersByProjectId: new Map([[project.id, [folder]]]),
+      pinnedThreadIds: [],
+      threadListExtraPagesByProjectCwd: new Map(),
+      normalizeProjectCwd: (cwd) => cwd,
+      activeSidebarThreadId: subagent.id,
+      previewLimit: 5,
+      previewPageSize: 5,
+    }).get(project.id);
+
+    expect(data?.unpinnedFolderGroups[0]?.entries).toEqual([
+      expect.objectContaining({ rowId: parent.id, rootRowId: parent.id, depth: 0 }),
+      expect.objectContaining({ rowId: subagent.id, rootRowId: parent.id, depth: 1 }),
+    ]);
+    expect(data?.visibleEntries).toEqual([]);
+  });
+
   it("keeps pinned threads in the total project thread count", () => {
     const project = makeProject();
     const pinnedThread = makeSidebarThreadSummary({

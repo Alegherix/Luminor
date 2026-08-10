@@ -49,6 +49,7 @@ import {
   requireProject,
   requireFolder,
   requireFolderAbsent,
+  requireFolderInProject,
   requireFolderNameAvailable,
   requireProjectAbsent,
   requireProjectHasNoThreads,
@@ -359,6 +360,30 @@ function resolveCreatedThreadWorkspaceMetadata(
         : {}),
     }),
   };
+}
+
+function resolveCreatedThreadFolderId(input: {
+  readModel: OrchestrationReadModel;
+  command: Extract<OrchestrationCommand, { type: "thread.create" }>;
+}): Effect.Effect<OrchestrationThread["folderId"], OrchestrationCommandInvariantError> {
+  const { command, readModel } = input;
+  if (command.folderId !== undefined && command.folderId !== null) {
+    return requireFolderInProject({
+      readModel,
+      command,
+      folderId: command.folderId,
+      projectId: command.projectId,
+    }).pipe(Effect.map((folder) => folder.id));
+  }
+  if (command.parentThreadId === null || command.parentThreadId === undefined) {
+    return Effect.succeed(null);
+  }
+  const parentThread = readModel.threads.find((thread) => thread.id === command.parentThreadId);
+  return Effect.succeed(
+    parentThread && parentThread.deletedAt === null && parentThread.projectId === command.projectId
+      ? parentThread.folderId
+      : null,
+  );
 }
 
 function resolveThreadWorkspaceMetadataPatch(
@@ -1050,6 +1075,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       if (command.creationSource !== "provider_native") {
         yield* validateAutoRuntimeMode(command, command.modelSelection, command.runtimeMode);
       }
+      const folderId = yield* resolveCreatedThreadFolderId({ readModel, command });
       return {
         ...withEventBase({
           aggregateKind: "thread",
@@ -1061,6 +1087,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         payload: {
           threadId: command.threadId,
           projectId: command.projectId,
+          folderId,
           title: command.title,
           modelSelection: command.modelSelection,
           runtimeMode: command.runtimeMode,
@@ -1234,6 +1261,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         payload: {
           threadId: command.threadId,
           projectId: command.projectId,
+          folderId: sourceThread.folderId,
           title: command.title,
           modelSelection: command.modelSelection,
           runtimeMode: command.runtimeMode,
@@ -1390,17 +1418,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
       const project = readModel.projects.find((candidate) => candidate.id === thread.projectId);
       if (command.folderId !== undefined && command.folderId !== null) {
-        const folder = yield* requireFolder({
+        yield* requireFolderInProject({
           readModel,
           command,
           folderId: command.folderId,
+          projectId: thread.projectId,
         });
-        if (folder.projectId !== thread.projectId) {
-          return yield* new OrchestrationCommandInvariantError({
-            commandType: command.type,
-            detail: `Folder '${command.folderId}' does not belong to thread project '${thread.projectId}'.`,
-          });
-        }
       }
       // Provider-native threads: see thread.create — the selection mirrors the
       // provider's own subagent, so the Auto-mode capability check doesn't apply.

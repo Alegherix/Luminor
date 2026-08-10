@@ -5,6 +5,7 @@
 
 import {
   DEFAULT_RUNTIME_MODE,
+  type FolderId,
   type ModelSelection,
   type OrchestrationThreadPullRequest,
   type ProjectId,
@@ -24,6 +25,7 @@ import {
 import { DEFAULT_INTERACTION_MODE, type Thread, type ThreadPrimarySurface } from "../types";
 
 export interface NewThreadOptions {
+  folderId?: FolderId | null;
   branch?: string | null;
   worktreePath?: string | null;
   workingDirectory?: string | null;
@@ -161,6 +163,7 @@ export function createActiveDraftThreadSnapshot(
   }
   return {
     projectId: activeDraftThread.projectId,
+    folderId: activeDraftThread.folderId ?? null,
     createdAt: activeDraftThread.createdAt,
     runtimeMode: activeDraftThread.runtimeMode,
     interactionMode: activeDraftThread.interactionMode,
@@ -214,6 +217,7 @@ export function createFreshDraftThreadSeed(input: {
 }): Omit<DraftThreadState, "projectId" | "interactionMode"> {
   return {
     createdAt: input.createdAt,
+    folderId: input.options?.folderId ?? null,
     branch: input.options?.branch ?? null,
     worktreePath: input.options?.worktreePath ?? null,
     workingDirectory: input.options?.workingDirectory ?? null,

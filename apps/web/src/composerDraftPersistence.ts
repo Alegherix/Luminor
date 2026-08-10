@@ -3,6 +3,7 @@
 // Exports: Persist middleware transitions and persisted state type.
 
 import {
+  FolderId,
   ModelSelection,
   OrchestrationProposedPlanId,
   OrchestrationThreadPullRequest,
@@ -290,6 +291,7 @@ type LegacyPersistedComposerDraftStoreState = PersistedComposerDraftStoreState &
 
 const PersistedDraftThreadState = Schema.Struct({
   projectId: ProjectId,
+  folderId: Schema.optionalKey(Schema.NullOr(FolderId)),
   createdAt: Schema.String,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
@@ -735,8 +737,11 @@ function normalizePersistedDraftThreads(
       if (typeof projectId !== "string" || projectId.length === 0) {
         continue;
       }
+      const folderId = candidateDraftThread.folderId;
       draftThreadsByThreadId[threadId as ThreadId] = {
         projectId: projectId as ProjectId,
+        folderId:
+          typeof folderId === "string" && folderId.length > 0 ? (folderId as FolderId) : null,
         createdAt:
           typeof createdAt === "string" && createdAt.length > 0
             ? createdAt

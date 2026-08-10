@@ -147,6 +147,26 @@ export function requireFolder(input: {
   );
 }
 
+export function requireFolderInProject(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly folderId: FolderId;
+  readonly projectId: ProjectId;
+}): Effect.Effect<OrchestrationFolder, OrchestrationCommandInvariantError> {
+  return requireFolder(input).pipe(
+    Effect.flatMap((folder) =>
+      folder.projectId === input.projectId
+        ? Effect.succeed(folder)
+        : Effect.fail(
+            invariantError(
+              input.command.type,
+              `Folder '${input.folderId}' does not belong to thread project '${input.projectId}'.`,
+            ),
+          ),
+    ),
+  );
+}
+
 export function requireFolderAbsent(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
