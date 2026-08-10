@@ -103,6 +103,13 @@ export const ListProjectionThreadsByProjectInput = Schema.Struct({
 });
 export type ListProjectionThreadsByProjectInput = typeof ListProjectionThreadsByProjectInput.Type;
 
+export const ClearProjectionThreadFolderMembershipsByProjectInput = Schema.Struct({
+  projectId: ProjectId,
+  updatedAt: IsoDateTime,
+});
+export type ClearProjectionThreadFolderMembershipsByProjectInput =
+  typeof ClearProjectionThreadFolderMembershipsByProjectInput.Type;
+
 /**
  * ProjectionThreadRepositoryShape - Service API for projected thread records.
  */
@@ -135,6 +142,11 @@ export interface ProjectionThreadRepositoryShape {
    */
   readonly deleteById: (
     input: DeleteProjectionThreadInput,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  /** Clear folder membership for every thread that belonged to a deleted project. */
+  readonly clearFolderMembershipsByProjectId: (
+    input: ClearProjectionThreadFolderMembershipsByProjectInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 }
 

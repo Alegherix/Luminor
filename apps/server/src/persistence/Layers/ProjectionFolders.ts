@@ -5,6 +5,7 @@ import { Effect, Layer, Schema } from "effect";
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
   GetProjectionFolderInput,
+  MarkProjectionFoldersDeletedByProjectInput,
   ProjectionFolder,
   ProjectionFolderRepository,
   type ProjectionFolderRepositoryShape,
@@ -69,6 +70,18 @@ const makeProjectionFolderRepository = Effect.gen(function* () {
     `,
   });
 
+  const markDeletedByProjectIdRow = SqlSchema.void({
+    Request: MarkProjectionFoldersDeletedByProjectInput,
+    execute: ({ projectId, deletedAt }) => sql`
+      UPDATE projection_folders
+      SET
+        deleted_at = ${deletedAt},
+        updated_at = ${deletedAt}
+      WHERE project_id = ${projectId}
+        AND deleted_at IS NULL
+    `,
+  });
+
   return {
     upsert: (row) =>
       upsertRow(row).pipe(
@@ -81,6 +94,12 @@ const makeProjectionFolderRepository = Effect.gen(function* () {
     listAll: () =>
       listRows().pipe(
         Effect.mapError(toPersistenceSqlError("ProjectionFolderRepository.listAll:query")),
+      ),
+    markDeletedByProjectId: (input) =>
+      markDeletedByProjectIdRow(input).pipe(
+        Effect.mapError(
+          toPersistenceSqlError("ProjectionFolderRepository.markDeletedByProjectId:query"),
+        ),
       ),
   } satisfies ProjectionFolderRepositoryShape;
 });

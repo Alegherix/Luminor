@@ -305,4 +305,108 @@ describe("Folders", () => {
       ),
     ).rejects.toThrow(/was deleted/i);
   });
+
+  it("cleans project Folders and membership when the Project is deleted", async () => {
+    const createdAt = "2026-08-10T10:00:00.000Z";
+    const deletedProjectId = ProjectId.makeUnsafe("project-deleted");
+    const keptProjectId = ProjectId.makeUnsafe("project-kept");
+    const deletedFolderId = FolderId.makeUnsafe("folder-deleted-project");
+    const keptFolderId = FolderId.makeUnsafe("folder-kept-project");
+    const deletedThreadId = ThreadId.makeUnsafe("thread-deleted-project");
+    const keptThreadId = ThreadId.makeUnsafe("thread-kept-project");
+    let readModel = createEmptyReadModel(createdAt);
+
+    for (const [projectId, workspaceRoot] of [
+      [deletedProjectId, "/tmp/project-deleted"],
+      [keptProjectId, "/tmp/project-kept"],
+    ] as const) {
+      ({ readModel } = await dispatch(readModel, {
+        type: "project.create",
+        commandId: CommandId.makeUnsafe(`cmd-${projectId}`),
+        projectId,
+        title: projectId,
+        workspaceRoot,
+        createdAt,
+      }));
+    }
+
+    for (const [folderId, projectId] of [
+      [deletedFolderId, deletedProjectId],
+      [keptFolderId, keptProjectId],
+    ] as const) {
+      ({ readModel } = await dispatch(readModel, {
+        type: "folder.create",
+        commandId: CommandId.makeUnsafe(`cmd-${folderId}`),
+        folderId,
+        projectId,
+        name: folderId,
+        createdAt,
+      }));
+    }
+
+    for (const [threadId, projectId, folderId] of [
+      [deletedThreadId, deletedProjectId, deletedFolderId],
+      [keptThreadId, keptProjectId, keptFolderId],
+    ] as const) {
+      ({ readModel } = await dispatch(readModel, {
+        type: "thread.create",
+        commandId: CommandId.makeUnsafe(`cmd-${threadId}-create`),
+        threadId,
+        projectId,
+        title: threadId,
+        modelSelection: { provider: "codex", model: "gpt-5.6-sol" },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        branch: null,
+        worktreePath: null,
+        createdAt,
+      }));
+      ({ readModel } = await dispatch(readModel, {
+        type: "thread.meta.update",
+        commandId: CommandId.makeUnsafe(`cmd-${threadId}-file`),
+        threadId,
+        folderId,
+      }));
+    }
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "thread.delete",
+      commandId: CommandId.makeUnsafe("cmd-thread-delete"),
+      threadId: deletedThreadId,
+    }));
+    expect(readModel.threads.find((thread) => thread.id === deletedThreadId)).toMatchObject({
+      folderId: deletedFolderId,
+      deletedAt: expect.any(String),
+    });
+
+    const deletion = await dispatch(readModel, {
+      type: "project.delete",
+      commandId: CommandId.makeUnsafe("cmd-project-delete"),
+      projectId: deletedProjectId,
+    });
+    expect(deletion.events.map((event) => event.type)).toEqual(["project.deleted"]);
+    expect(
+      deletion.readModel.folders.find((folder) => folder.id === deletedFolderId),
+    ).toMatchObject({
+      deletedAt: expect.any(String),
+    });
+    expect(deletion.readModel.folders.find((folder) => folder.id === keptFolderId)).toMatchObject({
+      deletedAt: null,
+    });
+    expect(
+      deletion.readModel.threads.find((thread) => thread.id === deletedThreadId),
+    ).toMatchObject({
+      folderId: null,
+      deletedAt: expect.any(String),
+    });
+    expect(deletion.readModel.threads.find((thread) => thread.id === keptThreadId)).toMatchObject({
+      folderId: keptFolderId,
+      deletedAt: null,
+    });
+    expect(
+      deletion.readModel.folders.filter(
+        (folder) => folder.projectId === deletedProjectId && folder.deletedAt === null,
+      ),
+    ).toEqual([]);
+  });
 });

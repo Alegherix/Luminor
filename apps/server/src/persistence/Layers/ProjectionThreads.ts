@@ -5,6 +5,7 @@ import * as SchemaGetter from "effect/SchemaGetter";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
+  ClearProjectionThreadFolderMembershipsByProjectInput,
   DeleteProjectionThreadInput,
   GetProjectionThreadInput,
   ListProjectionThreadsByProjectInput,
@@ -297,6 +298,19 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
       `,
   });
 
+  const clearFolderMembershipsByProjectIdRow = SqlSchema.void({
+    Request: ClearProjectionThreadFolderMembershipsByProjectInput,
+    execute: ({ projectId, updatedAt }) =>
+      sql`
+        UPDATE projection_threads
+        SET
+          folder_id = NULL,
+          updated_at = CASE WHEN updated_at > ${updatedAt} THEN updated_at ELSE ${updatedAt} END
+        WHERE project_id = ${projectId}
+          AND folder_id IS NOT NULL
+      `,
+  });
+
   const upsert: ProjectionThreadRepositoryShape["upsert"] = (row) =>
     upsertProjectionThreadRow(row).pipe(
       Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.upsert:query")),
@@ -317,11 +331,22 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.deleteById:query")),
     );
 
+  const clearFolderMembershipsByProjectId: ProjectionThreadRepositoryShape["clearFolderMembershipsByProjectId"] =
+    (input) =>
+      clearFolderMembershipsByProjectIdRow(input).pipe(
+        Effect.mapError(
+          toPersistenceSqlError(
+            "ProjectionThreadRepository.clearFolderMembershipsByProjectId:query",
+          ),
+        ),
+      );
+
   return {
     upsert,
     getById,
     listByProjectId,
     deleteById,
+    clearFolderMembershipsByProjectId,
   } satisfies ProjectionThreadRepositoryShape;
 });
 
