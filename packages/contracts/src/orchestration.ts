@@ -389,6 +389,7 @@ export const ProjectScript = Schema.Struct({
   command: TrimmedNonEmptyString,
   icon: ProjectScriptIcon,
   kind: ProjectScriptKind,
+  urlTemplate: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
 });
 export type ProjectScript = typeof ProjectScript.Type;
 

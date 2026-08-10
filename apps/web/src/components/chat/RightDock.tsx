@@ -28,6 +28,7 @@ import { resolveActivePane } from "~/rightDockStore.logic";
 import { Button } from "../ui/button";
 import { IconButton } from "../ui/icon-button";
 import { Menu, MenuItem, MenuTrigger } from "../ui/menu";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   Sidebar,
   SIDEBAR_OFFCANVAS_MOTION_CLASS,
@@ -92,21 +93,50 @@ function RightDockLauncher(props: {
       className="flex h-full min-h-0 items-center justify-center overflow-y-auto p-6"
     >
       <div className="flex w-full max-w-sm flex-col gap-1.5">
-        {props.items.map(({ kind, Icon, label }) => (
-          <Button
-            key={kind}
-            variant="subtle"
-            size="xl"
-            className="h-11 w-full justify-start gap-3 rounded-xl px-4 text-[length:var(--app-font-size-ui-lg,13px)] font-normal"
-            aria-label={`Open ${label}`}
-            onClick={() => props.onOpen(kind)}
-          >
-            <Icon className="size-4 shrink-0" />
-            <span>{label}</span>
-          </Button>
+        {props.items.map((item) => (
+          <RightDockLauncherEntry key={item.kind} item={item} onOpen={props.onOpen} />
         ))}
       </div>
     </nav>
+  );
+}
+
+// A gated tool keeps its launcher row so the dock always shows the full tool set;
+// it renders inert (aria-disabled, no click) with the reason as its tooltip.
+function RightDockLauncherEntry(props: {
+  item: RightDockLauncherItem;
+  onOpen: (kind: RightDockPaneKind) => void;
+}) {
+  const { kind, Icon, label, disabled, disabledReason } = props.item;
+  const button = (
+    <Button
+      variant="subtle"
+      size="xl"
+      className={cn(
+        "h-11 w-full justify-start gap-3 rounded-xl px-4 text-[length:var(--app-font-size-ui-lg,13px)] font-normal",
+        disabled && "cursor-not-allowed opacity-64",
+      )}
+      aria-label={`Open ${label}`}
+      aria-disabled={disabled ?? false}
+      onClick={() => {
+        if (disabled) {
+          return;
+        }
+        props.onOpen(kind);
+      }}
+    >
+      <Icon className="size-4 shrink-0" />
+      <span>{label}</span>
+    </Button>
+  );
+  if (!disabled || !disabledReason) {
+    return button;
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger render={button} />
+      <TooltipPopup side="left">{disabledReason}</TooltipPopup>
+    </Tooltip>
   );
 }
 

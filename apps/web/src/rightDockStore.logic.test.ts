@@ -24,6 +24,7 @@ describe("RIGHT_DOCK_PANE_KINDS (single source of truth)", () => {
       "explorer",
       "file",
       "terminal",
+      "preview",
       "sidechat",
       "git",
       "pullRequest",
@@ -34,6 +35,7 @@ describe("RIGHT_DOCK_PANE_KINDS (single source of truth)", () => {
     for (const kind of RIGHT_DOCK_PANE_KINDS) {
       expect(SINGLETON_PANE_KINDS.has(kind)).toBe(kind !== "file");
     }
+    expect(SINGLETON_PANE_KINDS.has("preview")).toBe(true);
   });
 });
 
@@ -45,6 +47,7 @@ describe("isRightDockPaneKind", () => {
       "explorer",
       "file",
       "terminal",
+      "preview",
       "sidechat",
       "git",
       "pullRequest",

@@ -15,6 +15,7 @@ export const RIGHT_DOCK_PANE_KINDS = [
   "explorer",
   "file",
   "terminal",
+  "preview",
   "sidechat",
   "git",
   "pullRequest",

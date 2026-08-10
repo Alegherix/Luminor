@@ -125,6 +125,14 @@ import type {
   ProjectWriteFileInput,
   ProjectWriteFileResult,
 } from "./project";
+import type {
+  ThreadPreviewEvent,
+  ThreadPreviewListResult,
+  ThreadPreviewStartInput,
+  ThreadPreviewStartResult,
+  ThreadPreviewStopInput,
+  ThreadPreviewStopResult,
+} from "./preview";
 import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem";
 import type { StudioListThreadOutputsInput, StudioListThreadOutputsResult } from "./studio";
 import type {
@@ -601,6 +609,12 @@ export interface NativeApi {
     onProvisionProgress: (
       callback: (event: GitHubProjectProvisionProgressEvent) => void,
     ) => () => void;
+  };
+  preview: {
+    start: (input: ThreadPreviewStartInput) => Promise<ThreadPreviewStartResult>;
+    stop: (input: ThreadPreviewStopInput) => Promise<ThreadPreviewStopResult>;
+    list: () => Promise<ThreadPreviewListResult>;
+    onStatusEvent: (callback: (event: ThreadPreviewEvent) => void) => () => void;
   };
   filesystem: {
     browse: (input: FilesystemBrowseInput) => Promise<FilesystemBrowseResult>;

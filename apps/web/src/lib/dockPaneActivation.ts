@@ -102,9 +102,12 @@ const DEFERRED_RUNTIME_PANE_KINDS: ReadonlySet<RightDockPaneKind> = new Set<Righ
 // search query, sidebar visibility) in local component state, so keep it mounted
 // while another tab is active — otherwise switching tabs would tear the subtree
 // down and reset the explorer to its workspace root on return.
+// The preview pane embeds a live page: unmounting it would reload the embedded
+// app (losing its route and in-page state) every time another tab is selected.
 const KEEP_MOUNTED_PANE_KINDS: ReadonlySet<RightDockPaneKind> = new Set<RightDockPaneKind>([
   "terminal",
   "explorer",
+  "preview",
 ]);
 
 export function dockPaneActivationKey(input: {

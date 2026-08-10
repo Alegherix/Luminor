@@ -116,6 +116,7 @@ const EditorWorkspaceView = lazy(() =>
   })),
 );
 const DockTerminalPane = lazy(() => import("./DockTerminalPane"));
+const DockPreviewPane = lazy(() => import("./DockPreviewPane"));
 const GitPanel = lazy(() => import("./GitPanel"));
 const DockExplorerPane = lazy(() =>
   import("./DockExplorerPane").then((module) => ({
@@ -221,12 +222,19 @@ export function SingleChatSurface(props: {
     gitCwd: workspaceRoot,
     isGitRepo: hasGitRepository,
   });
+  const threadWorktreePath =
+    threadWorkspaceMetadata.worktreePath ?? draftThread?.worktreePath ?? null;
   const dockLauncherItems = resolveRightDockLauncherItems({
     hasWorkspace: workspaceRoot !== null,
     hasGitRepository,
     hasReview: dockDiffTotals.fileCount > 0,
+    hasWorktree: threadWorktreePath !== null,
   });
-  const availableDockPaneKinds = dockLauncherItems.map(({ kind }) => kind);
+  // Gated tools stay visible in the launcher but must not be openable from the
+  // "+" menu until their prerequisite exists.
+  const availableDockPaneKinds = dockLauncherItems
+    .filter(({ disabled }) => !disabled)
+    .map(({ kind }) => kind);
   const projects = useStore((store) => store.projects);
   const threadsHydrated = useStore((store) => store.threadsHydrated);
   const { settings: appSettings } = useAppSettings();
@@ -794,6 +802,16 @@ export function SingleChatSurface(props: {
               hostThreadId={props.threadId}
               projectId={props.projectId}
               isActive={context.isActive && dockState.open}
+            />
+          </Suspense>
+        );
+      case "preview":
+        return (
+          <Suspense fallback={<PanelStateMessage>Loading preview...</PanelStateMessage>}>
+            <DockPreviewPane
+              hostThreadId={props.threadId}
+              hasWorktree={threadWorktreePath !== null}
+              onClose={() => closePane(props.threadId, pane.id)}
             />
           </Suspense>
         );

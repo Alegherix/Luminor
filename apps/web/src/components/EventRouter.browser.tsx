@@ -224,6 +224,9 @@ function resolveWsRpc(tag: string, body?: unknown): unknown {
   if (tag === WS_METHODS.projectsListDevServers) {
     return { servers: [] };
   }
+  if (tag === WS_METHODS.previewList) {
+    return { previews: [] };
+  }
   if (tag === WS_METHODS.automationList) {
     return { definitions: [], runs: [] };
   }
@@ -294,6 +297,7 @@ const worker = setupWorker(
         method === WS_METHODS.subscribeTerminalEvents ||
         method === WS_METHODS.subscribeOrchestrationDomainEvents ||
         method === WS_METHODS.subscribeProjectDevServerEvents ||
+        method === WS_METHODS.subscribePreviewEvents ||
         method === WS_METHODS.subscribeAutomationEvents
       ) {
         return;

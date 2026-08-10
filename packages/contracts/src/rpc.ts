@@ -148,6 +148,14 @@ import {
   ProjectWriteFileResult,
 } from "./project";
 import {
+  ThreadPreviewEvent,
+  ThreadPreviewListResult,
+  ThreadPreviewStartInput,
+  ThreadPreviewStartResult,
+  ThreadPreviewStopInput,
+  ThreadPreviewStopResult,
+} from "./preview";
+import {
   ServerConfig,
   ServerConfigStreamEvent,
   ServerDiagnosticsResult,
@@ -427,6 +435,31 @@ export const WsSubscribeProjectDevServerEventsRpc = Rpc.make(
     stream: true,
   },
 );
+
+export const WsPreviewStartRpc = Rpc.make(WS_METHODS.previewStart, {
+  payload: ThreadPreviewStartInput,
+  success: ThreadPreviewStartResult,
+  error: WsRpcError,
+});
+
+export const WsPreviewStopRpc = Rpc.make(WS_METHODS.previewStop, {
+  payload: ThreadPreviewStopInput,
+  success: ThreadPreviewStopResult,
+  error: WsRpcError,
+});
+
+export const WsPreviewListRpc = Rpc.make(WS_METHODS.previewList, {
+  payload: Schema.Struct({}),
+  success: ThreadPreviewListResult,
+  error: WsRpcError,
+});
+
+export const WsSubscribePreviewEventsRpc = Rpc.make(WS_METHODS.subscribePreviewEvents, {
+  payload: Schema.Struct({}),
+  success: ThreadPreviewEvent,
+  error: WsRpcError,
+  stream: true,
+});
 
 export const WsProjectsProvisionFromGitHubRpc = Rpc.make(WS_METHODS.projectsProvisionFromGitHub, {
   payload: GitHubProjectProvisionInput,
@@ -1039,6 +1072,10 @@ export const WsFeatureRpcGroup = RpcGroup.make(
   WsProjectsListDevServersRpc,
   WsSubscribeProjectDevServerEventsRpc,
   WsProjectsProvisionFromGitHubRpc,
+  WsPreviewStartRpc,
+  WsPreviewStopRpc,
+  WsPreviewListRpc,
+  WsSubscribePreviewEventsRpc,
   WsStudioListThreadOutputsRpc,
   WsFilesystemBrowseRpc,
   WsShellOpenInEditorRpc,
