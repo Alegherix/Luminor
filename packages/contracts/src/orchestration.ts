@@ -16,6 +16,7 @@ import {
   CheckpointRef,
   CommandId,
   EventId,
+  FolderId,
   IsoDateTime,
   MessageId,
   NonNegativeInt,
@@ -442,6 +443,33 @@ export const OrchestrationSpaceShell = Schema.Struct({
   updatedAt: IsoDateTime,
 });
 export type OrchestrationSpaceShell = typeof OrchestrationSpaceShell.Type;
+
+export const FOLDER_NAME_MAX_LENGTH = 80;
+export const FolderName = TrimmedNonEmptyString.check(Schema.isMaxLength(FOLDER_NAME_MAX_LENGTH));
+export type FolderName = typeof FolderName.Type;
+
+export const OrchestrationFolder = Schema.Struct({
+  id: FolderId,
+  projectId: ProjectId,
+  name: FolderName,
+  sortOrder: NonNegativeInt,
+  isPinned: Schema.Boolean,
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+  deletedAt: Schema.NullOr(IsoDateTime),
+});
+export type OrchestrationFolder = typeof OrchestrationFolder.Type;
+
+export const OrchestrationFolderShell = Schema.Struct({
+  id: FolderId,
+  projectId: ProjectId,
+  name: FolderName,
+  sortOrder: NonNegativeInt,
+  isPinned: Schema.Boolean,
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+export type OrchestrationFolderShell = typeof OrchestrationFolderShell.Type;
 
 export const OrchestrationProject = Schema.Struct({
   id: ProjectId,
@@ -874,6 +902,7 @@ export type OrchestrationThreadShell = typeof OrchestrationThreadShell.Type;
 export const OrchestrationReadModel = Schema.Struct({
   snapshotSequence: NonNegativeInt,
   spaces: Schema.Array(OrchestrationSpace),
+  folders: Schema.Array(OrchestrationFolder),
   projects: Schema.Array(OrchestrationProject),
   threads: Schema.Array(OrchestrationThread),
   updatedAt: IsoDateTime,
@@ -883,6 +912,7 @@ export type OrchestrationReadModel = typeof OrchestrationReadModel.Type;
 export const OrchestrationShellSnapshot = Schema.Struct({
   snapshotSequence: NonNegativeInt,
   spaces: Schema.Array(OrchestrationSpaceShell),
+  folders: Schema.Array(OrchestrationFolderShell),
   projects: Schema.Array(OrchestrationProjectShell),
   threads: Schema.Array(OrchestrationThreadShell),
   updatedAt: IsoDateTime,
@@ -905,6 +935,16 @@ export const OrchestrationShellStreamEvent = Schema.Union([
     kind: Schema.Literal("space-order-updated"),
     sequence: NonNegativeInt,
     orderedSpaceIds: Schema.Array(SpaceId),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("folder-upserted"),
+    sequence: NonNegativeInt,
+    folder: OrchestrationFolderShell,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("folder-removed"),
+    sequence: NonNegativeInt,
+    folderId: FolderId,
   }),
   Schema.Struct({
     kind: Schema.Literal("project-upserted"),
@@ -981,6 +1021,29 @@ export const SpaceProjectsAssignCommand = Schema.Struct({
     Schema.isMinLength(1),
     Schema.isMaxLength(SPACE_PROJECTS_ASSIGN_MAX_COUNT),
   ),
+});
+
+export const FolderCreateCommand = Schema.Struct({
+  type: Schema.Literal("folder.create"),
+  commandId: CommandId,
+  folderId: FolderId,
+  projectId: ProjectId,
+  name: FolderName,
+  isPinned: Schema.optional(Schema.Boolean).pipe(Schema.withDecodingDefault(() => false)),
+  createdAt: IsoDateTime,
+});
+
+export const FolderRenameCommand = Schema.Struct({
+  type: Schema.Literal("folder.rename"),
+  commandId: CommandId,
+  folderId: FolderId,
+  name: FolderName,
+});
+
+export const FolderDeleteCommand = Schema.Struct({
+  type: Schema.Literal("folder.delete"),
+  commandId: CommandId,
+  folderId: FolderId,
 });
 
 export const ProjectCreateCommand = Schema.Struct({
@@ -1437,6 +1500,9 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   SpaceReorderCommand,
   SpaceDeleteCommand,
   SpaceProjectsAssignCommand,
+  FolderCreateCommand,
+  FolderRenameCommand,
+  FolderDeleteCommand,
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
   ProjectDeleteCommand,
@@ -1477,6 +1543,9 @@ export const ClientOrchestrationCommand = Schema.Union([
   SpaceReorderCommand,
   SpaceDeleteCommand,
   SpaceProjectsAssignCommand,
+  FolderCreateCommand,
+  FolderRenameCommand,
+  FolderDeleteCommand,
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
   ProjectDeleteCommand,
@@ -1616,6 +1685,9 @@ export const OrchestrationEventType = Schema.Literals([
   "space.meta-updated",
   "space.order-updated",
   "space.deleted",
+  "folder.created",
+  "folder.renamed",
+  "folder.deleted",
   "project.created",
   "project.meta-updated",
   "project.deleted",
@@ -1656,7 +1728,7 @@ export const OrchestrationEventType = Schema.Literals([
 ]);
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
-export const OrchestrationAggregateKind = Schema.Literals(["space", "project", "thread"]);
+export const OrchestrationAggregateKind = Schema.Literals(["space", "folder", "project", "thread"]);
 export type OrchestrationAggregateKind = typeof OrchestrationAggregateKind.Type;
 export const OrchestrationActorKind = Schema.Literals(["client", "server", "provider"]);
 
@@ -1684,6 +1756,27 @@ export const SpaceOrderUpdatedPayload = Schema.Struct({
 
 export const SpaceDeletedPayload = Schema.Struct({
   spaceId: SpaceId,
+  deletedAt: IsoDateTime,
+});
+
+export const FolderCreatedPayload = Schema.Struct({
+  folderId: FolderId,
+  projectId: ProjectId,
+  name: FolderName,
+  sortOrder: NonNegativeInt,
+  isPinned: Schema.Boolean,
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+
+export const FolderRenamedPayload = Schema.Struct({
+  folderId: FolderId,
+  name: FolderName,
+  updatedAt: IsoDateTime,
+});
+
+export const FolderDeletedPayload = Schema.Struct({
+  folderId: FolderId,
   deletedAt: IsoDateTime,
 });
 
@@ -2044,7 +2137,7 @@ const EventBaseFields = {
   sequence: NonNegativeInt,
   eventId: EventId,
   aggregateKind: OrchestrationAggregateKind,
-  aggregateId: Schema.Union([SpaceId, ProjectId, ThreadId]),
+  aggregateId: Schema.Union([SpaceId, FolderId, ProjectId, ThreadId]),
   occurredAt: IsoDateTime,
   commandId: Schema.NullOr(CommandId),
   causationEventId: Schema.NullOr(EventId),
@@ -2072,6 +2165,21 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("space.deleted"),
     payload: SpaceDeletedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("folder.created"),
+    payload: FolderCreatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("folder.renamed"),
+    payload: FolderRenamedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("folder.deleted"),
+    payload: FolderDeletedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

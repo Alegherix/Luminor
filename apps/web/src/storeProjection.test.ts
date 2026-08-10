@@ -3,6 +3,7 @@
 
 import {
   EventId,
+  FolderId,
   MessageId,
   ProjectId,
   SpaceId,
@@ -47,6 +48,46 @@ import {
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Thread } from "./types";
 
 describe("store projection", () => {
+  it("hydrates Folder rows from shell snapshots and shell events", () => {
+    const thread = makeReadModelThread({});
+    const shell = makeShellSnapshot({
+      ...thread,
+      latestUserMessageAt: null,
+      hasPendingApprovals: false,
+      hasPendingUserInput: false,
+      hasActionableProposedPlan: false,
+    });
+    const folderId = FolderId.makeUnsafe("folder-shell");
+    const folder = {
+      id: folderId,
+      projectId: ProjectId.makeUnsafe("project-1"),
+      name: "Planning",
+      sortOrder: 0,
+      isPinned: false,
+      createdAt: "2026-08-10T10:00:00.000Z",
+      updatedAt: "2026-08-10T10:00:00.000Z",
+    };
+    const hydrated = syncServerShellSnapshot(makeState(makeThread()), {
+      ...shell,
+      folders: [folder],
+    });
+    expect(hydrated.folders).toEqual([folder]);
+
+    const renamed = applyShellEvent(hydrated, {
+      kind: "folder-upserted",
+      sequence: shell.snapshotSequence + 1,
+      folder: { ...folder, name: "Ready" },
+    });
+    expect(renamed.folders[0]?.name).toBe("Ready");
+    expect(
+      applyShellEvent(renamed, {
+        kind: "folder-removed",
+        sequence: shell.snapshotSequence + 2,
+        folderId,
+      }).folders,
+    ).toEqual([]);
+  });
+
   it("preserves a semantic branch when a temp worktree branch arrives from the read model", () => {
     const initialThread = makeThread({
       branch: "feature/semantic-branch",
@@ -230,6 +271,7 @@ describe("store projection", () => {
   it("reuses the existing project slot for shell upserts that keep the same workspace root", () => {
     const initialState: AppState = {
       spaces: [],
+      folders: [],
       projects: [
         makeProject({
           id: ProjectId.makeUnsafe("project-old"),
@@ -280,6 +322,7 @@ describe("store projection", () => {
           updatedAt: "2026-07-15T10:00:00.000Z",
         },
       ],
+      folders: [],
       projects: [
         makeProject({
           id: ProjectId.makeUnsafe("project-shell-space"),
@@ -309,6 +352,7 @@ describe("store projection", () => {
     const initialState = syncServerReadModel(
       {
         spaces: [],
+        folders: [],
         projects: [
           makeProject({
             id: ProjectId.makeUnsafe("project-shell"),
@@ -326,6 +370,7 @@ describe("store projection", () => {
         snapshotSequence: 1,
         updatedAt: "2026-02-27T00:00:00.000Z",
         spaces: [],
+        folders: [],
         projects: [
           makeReadModelProject({
             id: ProjectId.makeUnsafe("project-shell"),
@@ -1581,6 +1626,7 @@ describe("store projection", () => {
       snapshotSequence: 1,
       updatedAt: "2026-02-28T00:00:00.000Z",
       spaces: [],
+      folders: [],
       projects: [
         makeReadModelProject({
           defaultModelSelection: {
@@ -1683,6 +1729,7 @@ describe("deletion tombstone retirement", () => {
       snapshotSequence,
       updatedAt: "2026-02-27T00:10:00.000Z",
       spaces: [],
+      folders: [],
       projects: [],
       threads: [],
     };
@@ -2110,6 +2157,7 @@ describe("resume cursor lifecycle in projection transitions", () => {
       snapshotSequence: 60,
       updatedAt: "2026-02-27T00:10:00.000Z",
       spaces: [],
+      folders: [],
       projects: [],
       threads: [],
     });

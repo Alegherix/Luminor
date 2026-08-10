@@ -51,9 +51,10 @@ import {
   shouldPrunePinnedThreads,
   shouldClearThreadSelectionOnMouseDown,
   sortProjectsForSidebar,
+  sortProjectFolders,
   sortThreadsForSidebar,
 } from "./Sidebar.logic";
-import { ProjectId, ThreadId } from "@luminor/contracts";
+import { FolderId, ProjectId, ThreadId } from "@luminor/contracts";
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -61,6 +62,33 @@ import {
   type SidebarThreadSummary,
   type Thread,
 } from "../types";
+
+describe("sortProjectFolders", () => {
+  it("keeps pinned folders first and preserves stable project order", () => {
+    const projectId = ProjectId.makeUnsafe("project-1");
+    const makeFolder = (id: string, name: string, sortOrder: number, isPinned = false) => ({
+      id: FolderId.makeUnsafe(id),
+      projectId,
+      name,
+      sortOrder,
+      isPinned,
+      createdAt: "2026-08-10T10:00:00.000Z",
+      updatedAt: "2026-08-10T10:00:00.000Z",
+    });
+
+    expect(
+      sortProjectFolders([
+        makeFolder("folder-b", "Beta", 1),
+        makeFolder("folder-pinned", "Pinned", 9, true),
+        makeFolder("folder-a", "Alpha", 0),
+      ]).map((folder) => folder.id),
+    ).toEqual([
+      FolderId.makeUnsafe("folder-pinned"),
+      FolderId.makeUnsafe("folder-a"),
+      FolderId.makeUnsafe("folder-b"),
+    ]);
+  });
+});
 
 function makeLatestTurn(overrides?: {
   completedAt?: string | null;

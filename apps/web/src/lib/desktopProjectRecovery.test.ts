@@ -80,6 +80,7 @@ function makeSnapshot(overrides: Partial<OrchestrationReadModel> = {}): Orchestr
   return {
     snapshotSequence: 1,
     spaces: [],
+    folders: [],
     updatedAt: "2026-04-20T08:00:00.000Z",
     projects: [makeProject()],
     threads: [makeThread()],
@@ -95,6 +96,7 @@ function makeShellSnapshot(
   return {
     snapshotSequence: 1,
     spaces: [],
+    folders: [],
     updatedAt: "2026-04-20T08:00:00.000Z",
     projects: [
       {

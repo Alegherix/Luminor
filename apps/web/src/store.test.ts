@@ -189,6 +189,7 @@ describe("store facade", () => {
     const project3 = ProjectId.makeUnsafe("project-3");
     const state: AppState = {
       spaces: [],
+      folders: [],
       projects: [
         makeProject({
           id: project1,
@@ -226,6 +227,7 @@ describe("store facade", () => {
     const project2 = ProjectId.makeUnsafe("project-2");
     const state: AppState = {
       spaces: [],
+      folders: [],
       projects: [
         makeProject({
           id: project1,
@@ -258,6 +260,7 @@ describe("store facade", () => {
   it("collapses all projects when toggled off", () => {
     const state: AppState = {
       spaces: [],
+      folders: [],
       projects: [
         makeProject({
           id: ProjectId.makeUnsafe("project-1"),
@@ -288,6 +291,7 @@ describe("store facade", () => {
     const project2 = ProjectId.makeUnsafe("project-2");
     const state: AppState = {
       spaces: [],
+      folders: [],
       projects: [
         makeProject({
           id: project1,
@@ -335,6 +339,7 @@ describe("store facade", () => {
     const project3 = ProjectId.makeUnsafe("project-3");
     const initialState: AppState = {
       spaces: [],
+      folders: [],
       projects: [
         makeProject({
           id: project2,
@@ -358,6 +363,7 @@ describe("store facade", () => {
       snapshotSequence: 2,
       updatedAt: "2026-02-27T00:00:00.000Z",
       spaces: [],
+      folders: [],
       projects: [
         makeReadModelProject({
           id: project1,
@@ -388,6 +394,7 @@ describe("store facade", () => {
     const project2 = ProjectId.makeUnsafe("project-2");
     const initialState: AppState = {
       spaces: [],
+      folders: [],
       projects: [
         makeProject({
           id: project1,
@@ -412,6 +419,7 @@ describe("store facade", () => {
       snapshotSequence: 2,
       updatedAt: "2026-02-27T00:00:00.000Z",
       spaces: [],
+      folders: [],
       projects: [
         makeReadModelProject({
           id: project1,
@@ -425,6 +433,7 @@ describe("store facade", () => {
       snapshotSequence: 3,
       updatedAt: "2026-02-27T00:01:00.000Z",
       spaces: [],
+      folders: [],
       projects: [
         makeReadModelProject({
           id: project1,

@@ -10,6 +10,7 @@ import {
   CommandId,
   IsoDateTime,
   NonNegativeInt,
+  FolderId,
   OrchestrationAggregateKind,
   OrchestrationCommandReceiptStatus,
   PositiveInt,
@@ -27,7 +28,7 @@ const CommandFingerprint = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/
 const ReceiptFields = {
   commandId: CommandId,
   aggregateKind: OrchestrationAggregateKind,
-  aggregateId: Schema.Union([SpaceId, ProjectId, ThreadId]),
+  aggregateId: Schema.Union([SpaceId, FolderId, ProjectId, ThreadId]),
   acceptedAt: IsoDateTime,
   resultSequence: NonNegativeInt,
   status: OrchestrationCommandReceiptStatus,

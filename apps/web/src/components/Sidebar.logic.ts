@@ -14,7 +14,7 @@ import { resolveThreadEnvironmentMode } from "@luminor/shared/threadEnvironment"
 import { isWorkspaceRootWithin, workspaceRootsEqual } from "@luminor/shared/threadWorkspace";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "../appSettings";
 import { resolveRestorableThreadRoute, type LastThreadRoute } from "../chatRouteRestore";
-import type { ChatMessage, Project, SidebarThreadSummary, Thread } from "../types";
+import type { ChatMessage, Folder, Project, SidebarThreadSummary, Thread } from "../types";
 import { cn } from "../lib/utils";
 import {
   derivePinnedIds,
@@ -52,6 +52,16 @@ export type SidebarActionBadge = {
   readonly text: string;
   readonly accessibleLabel: string;
 };
+
+export function sortProjectFolders(folders: readonly Folder[]): Folder[] {
+  return folders.toSorted(
+    (left, right) =>
+      Number(right.isPinned) - Number(left.isPinned) ||
+      left.sortOrder - right.sortOrder ||
+      left.name.localeCompare(right.name, undefined, { sensitivity: "base" }) ||
+      left.id.localeCompare(right.id),
+  );
+}
 
 export function isProjectsSidebarSurface(input: {
   readonly isOnSettings: boolean;

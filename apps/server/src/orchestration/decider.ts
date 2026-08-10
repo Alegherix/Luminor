@@ -35,6 +35,7 @@ import { hasNativeHandoffMessages } from "./handoff.ts";
 import { resolveStableMessageTurnId } from "./messageTurnId.ts";
 import {
   findSpaceById,
+  listActiveFoldersByProjectId,
   isLegacyHomeChatContainerRow,
   CHECKPOINT_REVERT_STARTED_ACTIVITY_KIND,
   CHECKPOINT_REVERT_SUCCEEDED_ACTIVITY_KIND,
@@ -45,6 +46,9 @@ import {
   listActiveSpaces,
   listThreadsByProjectId,
   requireProject,
+  requireFolder,
+  requireFolderAbsent,
+  requireFolderNameAvailable,
   requireProjectAbsent,
   requireProjectHasNoThreads,
   requireProjectWorkspaceRootAvailable,
@@ -402,6 +406,88 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
   OrchestrationCommandInvariantError
 > {
   switch (command.type) {
+    case "folder.create": {
+      yield* requireFolderAbsent({ readModel, command, folderId: command.folderId });
+      const project = yield* requireProject({ readModel, command, projectId: command.projectId });
+      if (project.deletedAt !== null || project.kind !== "project") {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Folders can only be created under an active project.`,
+        });
+      }
+      yield* requireFolderNameAvailable({
+        readModel,
+        command,
+        projectId: command.projectId,
+        name: command.name,
+      });
+      const sortOrder = listActiveFoldersByProjectId(readModel, command.projectId).reduce(
+        (maximum, folder) => Math.max(maximum, folder.sortOrder + 1),
+        0,
+      );
+      return {
+        ...withEventBase({
+          aggregateKind: "folder",
+          aggregateId: command.folderId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        }),
+        type: "folder.created",
+        payload: {
+          folderId: command.folderId,
+          projectId: command.projectId,
+          name: command.name,
+          sortOrder,
+          isPinned: command.isPinned ?? false,
+          createdAt: command.createdAt,
+          updatedAt: command.createdAt,
+        },
+      };
+    }
+
+    case "folder.rename": {
+      const folder = yield* requireFolder({ readModel, command, folderId: command.folderId });
+      if (folder.name === command.name) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: "Folder rename must change the name.",
+        });
+      }
+      yield* requireFolderNameAvailable({
+        readModel,
+        command,
+        projectId: folder.projectId,
+        name: command.name,
+        excludeFolderId: command.folderId,
+      });
+      const occurredAt = nowIso();
+      return {
+        ...withEventBase({
+          aggregateKind: "folder",
+          aggregateId: command.folderId,
+          occurredAt,
+          commandId: command.commandId,
+        }),
+        type: "folder.renamed",
+        payload: { folderId: command.folderId, name: command.name, updatedAt: occurredAt },
+      };
+    }
+
+    case "folder.delete": {
+      yield* requireFolder({ readModel, command, folderId: command.folderId });
+      const occurredAt = nowIso();
+      return {
+        ...withEventBase({
+          aggregateKind: "folder",
+          aggregateId: command.folderId,
+          occurredAt,
+          commandId: command.commandId,
+        }),
+        type: "folder.deleted",
+        payload: { folderId: command.folderId, deletedAt: occurredAt },
+      };
+    }
+
     case "space.create": {
       yield* requireSpaceAbsent({ readModel, command, spaceId: command.spaceId });
       if (command.spaceId === RESERVED_VOID_SPACE_ID) {

@@ -356,6 +356,7 @@ const orchestrationEngine = {
     Effect.succeed({
       snapshotSequence: 0,
       spaces: [],
+      folders: [],
       projects: [],
       threads: [],
       updatedAt: now,
@@ -364,6 +365,7 @@ const orchestrationEngine = {
     Effect.succeed({
       snapshotSequence: 0,
       spaces: [],
+      folders: [],
       projects: [],
       threads: [],
       updatedAt: now,
@@ -388,6 +390,7 @@ const orchestrationEngine = {
     Effect.succeed({
       snapshotSequence: 0,
       spaces: [],
+      folders: [],
       projects: [],
       threads: [],
       updatedAt: now,
@@ -400,6 +403,7 @@ const projectionSnapshotQuery = {
     Effect.succeed({
       snapshotSequence: 0,
       spaces: [],
+      folders: [],
       projects: [],
       threads: [],
       updatedAt: now,
@@ -408,6 +412,7 @@ const projectionSnapshotQuery = {
     Effect.succeed({
       snapshotSequence: 0,
       spaces: [],
+      folders: [],
       projects: [],
       threads: [],
       updatedAt: now,
@@ -418,6 +423,7 @@ const projectionSnapshotQuery = {
     Effect.succeed({
       snapshotSequence: 0,
       spaces: [],
+      folders: [],
       projects: [project],
       threads: [],
       updatedAt: now,

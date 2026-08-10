@@ -26,6 +26,9 @@ import {
   SpaceDeletedPayload,
   SpaceMetaUpdatedPayload,
   SpaceOrderUpdatedPayload,
+  FolderCreatedPayload,
+  FolderRenamedPayload,
+  FolderDeletedPayload,
   ProjectCreatedPayload,
   ProjectDeletedPayload,
   ProjectMetaUpdatedPayload,
@@ -296,6 +299,7 @@ export function createEmptyReadModel(nowIso: string): OrchestrationReadModel {
   return {
     snapshotSequence: 0,
     spaces: [],
+    folders: [],
     projects: [],
     threads: [],
     updatedAt: nowIso,
@@ -313,6 +317,55 @@ export function projectEvent(
   };
 
   switch (event.type) {
+    case "folder.created":
+      return decodeForEvent(FolderCreatedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => {
+          const existing = nextBase.folders.find((entry) => entry.id === payload.folderId);
+          const nextFolder = {
+            id: payload.folderId,
+            projectId: payload.projectId,
+            name: payload.name,
+            sortOrder: payload.sortOrder,
+            isPinned: payload.isPinned,
+            createdAt: payload.createdAt,
+            updatedAt: payload.updatedAt,
+            deletedAt: null,
+          };
+          return {
+            ...nextBase,
+            folders: existing
+              ? nextBase.folders.map((entry) =>
+                  entry.id === payload.folderId ? nextFolder : entry,
+                )
+              : [...nextBase.folders, nextFolder],
+          };
+        }),
+      );
+
+    case "folder.renamed":
+      return decodeForEvent(FolderRenamedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          folders: nextBase.folders.map((folder) =>
+            folder.id === payload.folderId
+              ? { ...folder, name: payload.name, updatedAt: payload.updatedAt }
+              : folder,
+          ),
+        })),
+      );
+
+    case "folder.deleted":
+      return decodeForEvent(FolderDeletedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          folders: nextBase.folders.map((folder) =>
+            folder.id === payload.folderId
+              ? { ...folder, deletedAt: payload.deletedAt, updatedAt: payload.deletedAt }
+              : folder,
+          ),
+        })),
+      );
+
     case "space.created":
       return decodeForEvent(SpaceCreatedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => {

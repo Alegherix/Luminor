@@ -1,6 +1,7 @@
 import {
   CommandId,
   EventId,
+  FolderId,
   IsoDateTime,
   NonNegativeInt,
   OrchestrationActorKind,
@@ -36,7 +37,7 @@ const UnknownFromJsonString = Schema.fromJsonString(Schema.Unknown);
 const AppendEventRequestSchema = Schema.Struct({
   eventId: EventId,
   aggregateKind: OrchestrationAggregateKind,
-  streamId: Schema.Union([SpaceId, ProjectId, ThreadId]),
+  streamId: Schema.Union([SpaceId, FolderId, ProjectId, ThreadId]),
   type: OrchestrationEventType,
   causationEventId: Schema.NullOr(EventId),
   correlationId: Schema.NullOr(CommandId),

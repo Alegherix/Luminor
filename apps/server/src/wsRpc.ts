@@ -287,6 +287,9 @@ function isShellRelevantEvent(event: OrchestrationEvent): boolean {
     event.type === "space.meta-updated" ||
     event.type === "space.order-updated" ||
     event.type === "space.deleted" ||
+    event.type === "folder.created" ||
+    event.type === "folder.renamed" ||
+    event.type === "folder.deleted" ||
     event.type === "project.created" ||
     event.type === "project.meta-updated" ||
     event.type === "project.deleted" ||
@@ -715,6 +718,26 @@ const makeWsRpcHandlersLayer = () =>
         event: OrchestrationEvent,
       ): Effect.Effect<Option.Option<OrchestrationShellStreamEvent>, never> => {
         switch (event.type) {
+          case "folder.created":
+          case "folder.renamed":
+            return projectionReadModelQuery.getFolderShellById(event.payload.folderId).pipe(
+              Effect.map((folder) =>
+                Option.map(folder, (nextFolder) => ({
+                  kind: "folder-upserted" as const,
+                  sequence: event.sequence,
+                  folder: nextFolder,
+                })),
+              ),
+              Effect.catch(() => Effect.succeed(Option.none())),
+            );
+          case "folder.deleted":
+            return Effect.succeed(
+              Option.some({
+                kind: "folder-removed" as const,
+                sequence: event.sequence,
+                folderId: event.payload.folderId,
+              }),
+            );
           case "space.created":
           case "space.meta-updated":
             return projectionReadModelQuery.getSpaceShellById(event.payload.spaceId).pipe(

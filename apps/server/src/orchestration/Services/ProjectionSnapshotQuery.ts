@@ -10,6 +10,7 @@ import type {
   OrchestrationCheckpointSummary,
   OrchestrationProject,
   OrchestrationProjectShell,
+  OrchestrationFolderShell,
   OrchestrationSpaceShell,
   OrchestrationReadModel,
   OrchestrationShellSnapshot,
@@ -18,6 +19,7 @@ import type {
   OrchestrationThreadShell,
   CheckpointRef,
   ProjectId,
+  FolderId,
   ProjectKind,
   SpaceId,
   ThreadId,
@@ -171,6 +173,10 @@ export interface ProjectionSnapshotQueryShape {
   readonly getSpaceShellById: (
     spaceId: SpaceId,
   ) => Effect.Effect<Option.Option<OrchestrationSpaceShell>, ProjectionRepositoryError>;
+
+  readonly getFolderShellById: (
+    folderId: FolderId,
+  ) => Effect.Effect<Option.Option<OrchestrationFolderShell>, ProjectionRepositoryError>;
 
   /**
    * Read the earliest active thread for a project.

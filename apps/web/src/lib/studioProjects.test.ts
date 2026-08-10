@@ -60,6 +60,7 @@ vi.mock("../nativeApi", () => ({
             : nativeApiMock.shellSnapshotProjects;
         return {
           spaces: [],
+          folders: [],
           projects,
           threads: [],
           snapshotSequence: 1,
@@ -95,6 +96,7 @@ describe("studioProjects", () => {
     nativeApiMock.shellSnapshotProjectBatches = [];
     useStore.setState({
       spaces: [],
+      folders: [],
       projects: [],
       sidebarThreadSummaryById: {},
       threadIds: [],

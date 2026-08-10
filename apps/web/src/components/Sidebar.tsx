@@ -12,6 +12,7 @@ import {
   CopyIcon,
   ExternalLinkIcon,
   FolderOpenIcon,
+  FolderIcon,
   GiftIcon,
   KanbanIcon,
   KeyboardIcon,
@@ -82,6 +83,7 @@ import {
   type OrchestrationShellSnapshot,
   PROVIDER_DISPLAY_NAMES,
   ProjectId,
+  FolderId,
   SpaceId,
   type ProviderKind,
   ThreadId,
@@ -162,8 +164,14 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { useLatestProjectStore } from "../latestProjectStore";
 import { resolveThreadEnvironmentPresentation } from "../lib/threadEnvironment";
 import { dispatchThreadRename } from "../lib/threadRename";
+import { createFolder, deleteFolder, renameFolder } from "../lib/folders";
 import { quotePosixShellArgument } from "../lib/shellQuote";
-import { DEFAULT_THREAD_TERMINAL_ID, type SidebarThreadSummary, type Thread } from "../types";
+import {
+  DEFAULT_THREAD_TERMINAL_ID,
+  type Folder,
+  type SidebarThreadSummary,
+  type Thread,
+} from "../types";
 import {
   applyAutomationEvent,
   automationAttentionCount,
@@ -326,6 +334,7 @@ import {
   shouldPrunePinnedThreads,
   shouldClearThreadSelectionOnMouseDown,
   sortProjectsForSidebar,
+  sortProjectFolders,
   sortThreadsForSidebar,
 } from "./Sidebar.logic";
 import type { LastThreadRoute } from "../chatRouteRestore";
@@ -476,6 +485,7 @@ type ProjectContextMenuId =
   | "start-dev"
   | "stop-dev"
   | "open-dev-server"
+  | "new-folder"
   | "rename"
   | "toggle-pin"
   | "archive-threads"
@@ -1353,6 +1363,7 @@ export default function Sidebar() {
     readDebugFeatureFlagsMenuVisibility,
   );
   const projects = useStore((store) => store.projects);
+  const folders = useStore((store) => store.folders);
   const spaces = useStore((store) => store.spaces);
   // Selection state only; the handlers and sync effects live in useSpacesController.
   const storedActiveSpaceId = useSpacesUiStore((store) => store.activeSpaceId);
@@ -1590,6 +1601,12 @@ export default function Sidebar() {
   const projectAdditionLockRef = useRef(false);
   const [renameDialogThreadId, setRenameDialogThreadId] = useState<ThreadId | null>(null);
   const [renameProjectDialogId, setRenameProjectDialogId] = useState<ProjectId | null>(null);
+  const [folderEditorState, setFolderEditorState] = useState<
+    { mode: "create"; projectId: ProjectId } | { mode: "rename"; folderId: FolderId } | null
+  >(null);
+  const [expandedFolderIds, setExpandedFolderIds] = useState<ReadonlySet<FolderId>>(
+    () => new Set(),
+  );
   const [projectContextMenuState, setProjectContextMenuState] =
     useState<ProjectContextMenuState | null>(null);
   // "Show more" paging state: extra pages of THREAD_PREVIEW_PAGE_SIZE rows per project cwd.
@@ -1798,6 +1815,25 @@ export default function Sidebar() {
     () => new Map(projects.map((project) => [project.id, project] as const)),
     [projects],
   );
+  const foldersByProjectId = useMemo(() => {
+    const grouped = new Map<ProjectId, Folder[]>();
+    for (const folder of folders) {
+      const projectFolders = grouped.get(folder.projectId);
+      if (projectFolders) {
+        projectFolders.push(folder);
+      } else {
+        grouped.set(folder.projectId, [folder]);
+      }
+    }
+    for (const [projectId, projectFolders] of grouped) {
+      grouped.set(projectId, sortProjectFolders(projectFolders));
+    }
+    return grouped;
+  }, [folders]);
+  const editedFolder =
+    folderEditorState?.mode === "rename"
+      ? (folders.find((folder) => folder.id === folderEditorState.folderId) ?? null)
+      : null;
   const {
     pinnedThreadIds,
     pinnedThreadIdSet,
@@ -3493,6 +3529,10 @@ export default function Sidebar() {
         await handleOpenProjectRunServer(projectId);
         return;
       }
+      if (clicked === "new-folder") {
+        setFolderEditorState({ mode: "create", projectId });
+        return;
+      }
       if (clicked === "rename") {
         setRenameProjectDialogId(projectId);
         return;
@@ -3595,6 +3635,70 @@ export default function Sidebar() {
       setProjectContextMenuState({ projectId, position });
     },
     [projectById],
+  );
+
+  const handleFolderEditorSave = useCallback(
+    async (name: string) => {
+      const api = readNativeApi();
+      if (!api || !folderEditorState) {
+        throw new Error("The app server is unavailable.");
+      }
+      try {
+        if (folderEditorState.mode === "create") {
+          await createFolder({ api, projectId: folderEditorState.projectId, name });
+        } else {
+          await renameFolder({ api, folderId: folderEditorState.folderId, name });
+        }
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title:
+            folderEditorState.mode === "create"
+              ? "Unable to create folder"
+              : "Unable to rename folder",
+          description: error instanceof Error ? error.message : "Try again.",
+        });
+        throw error;
+      }
+    },
+    [folderEditorState],
+  );
+
+  const handleFolderContextMenu = useCallback(
+    async (folder: Folder, position: { x: number; y: number }) => {
+      const api = readNativeApi();
+      if (!api) return;
+      const clicked = await api.contextMenu.show(
+        [
+          { id: "rename", label: "Rename folder" },
+          { id: "delete", label: "Delete folder", destructive: true, separatorBefore: true },
+        ],
+        position,
+      );
+      if (clicked === "rename") {
+        setFolderEditorState({ mode: "rename", folderId: folder.id });
+        return;
+      }
+      if (clicked !== "delete") return;
+      const confirmed = await api.dialogs.confirm(`Delete empty folder “${folder.name}”?`);
+      if (!confirmed) return;
+      try {
+        await deleteFolder({ api, folderId: folder.id });
+        setExpandedFolderIds((current) => {
+          if (!current.has(folder.id)) return current;
+          const next = new Set(current);
+          next.delete(folder.id);
+          return next;
+        });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Unable to delete folder",
+          description: error instanceof Error ? error.message : "Try again.",
+        });
+      }
+    },
+    [],
   );
 
   const projectDnDSensors = useSensors(
@@ -4793,6 +4897,53 @@ export default function Sidebar() {
     );
   }
 
+  function renderFolderRow(folder: Folder) {
+    const expanded = expandedFolderIds.has(folder.id);
+    return (
+      <SidebarMenuSubItem key={folder.id} className="w-full">
+        <SidebarMenuSubButton
+          render={<button type="button" />}
+          size="sm"
+          aria-expanded={expanded}
+          className="h-7 w-full translate-x-0 justify-start rounded-lg pr-2 pl-5 text-left text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/88 hover:text-foreground"
+          onClick={() => {
+            setExpandedFolderIds((current) => {
+              const next = new Set(current);
+              if (next.has(folder.id)) {
+                next.delete(folder.id);
+              } else {
+                next.add(folder.id);
+              }
+              return next;
+            });
+          }}
+          onDoubleClick={() => setFolderEditorState({ mode: "rename", folderId: folder.id })}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            void handleFolderContextMenu(folder, { x: event.clientX, y: event.clientY });
+          }}
+        >
+          <SidebarLeadingIcon size="sm" tone="text-inherit">
+            <SidebarGlyph icon={expanded ? FolderOpenIcon : FolderIcon} variant="leading" />
+          </SidebarLeadingIcon>
+          <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+        </SidebarMenuSubButton>
+        <div className={cn(disclosureShellClassName(expanded), "pl-9")}>
+          <div className={DISCLOSURE_INNER_CLASS}>
+            <div
+              className={cn(
+                "py-1 text-[length:var(--app-font-size-ui-xs,10px)] text-muted-foreground/55",
+                disclosureContentClassName(expanded),
+              )}
+            >
+              Empty folder
+            </div>
+          </div>
+        </div>
+      </SidebarMenuSubItem>
+    );
+  }
+
   function renderProjectItem(
     project: (typeof sortedProjects)[number],
     dragHandleProps: SortableProjectHandleProps | null,
@@ -4815,6 +4966,7 @@ export default function Sidebar() {
       ? "opacity-0"
       : sidebarHoverRevealHideClassName("project-header");
     const projectRun = projectRunsByProjectId[project.id] ?? null;
+    const projectFolders = foldersByProjectId.get(project.id) ?? [];
     const projectRunServer = projectRunServerByProjectId.get(project.id) ?? null;
     // A project reads as "running" when Luminor tracks a run for it or when a
     // local server (possibly started outside Luminor) is attributed by cwd.
@@ -5031,6 +5183,8 @@ export default function Sidebar() {
                 disclosureContentClassName(project.expanded),
               )}
             >
+              {projectFolders.map(renderFolderRow)}
+
               {visibleEntries.map((entry) =>
                 renderThreadRow(entry.thread, orderedProjectThreadIds, entry.depth),
               )}
@@ -6480,6 +6634,18 @@ export default function Sidebar() {
                 <ProjectContextMenuIcon icon={CopyIcon} />
                 <span>Copy Path</span>
               </MenuItem>
+              <MenuItem
+                className={PROJECT_CONTEXT_MENU_ITEM_CLASS_NAME}
+                onClick={() =>
+                  void handleProjectContextMenuAction(
+                    projectContextMenuState.projectId,
+                    "new-folder",
+                  )
+                }
+              >
+                <ProjectContextMenuIcon icon={FolderIcon} />
+                <span>New folder…</span>
+              </MenuItem>
               <MenuSeparator />
               {projectContextMenuIsRunning ? (
                 <MenuItem
@@ -6739,6 +6905,22 @@ export default function Sidebar() {
             renameProjectDialogProject.localName,
           );
         }}
+      />
+
+      <RenameDialog
+        open={
+          folderEditorState?.mode === "create" ||
+          (folderEditorState?.mode === "rename" && editedFolder !== null)
+        }
+        title={folderEditorState?.mode === "create" ? "New folder" : "Rename folder"}
+        description="Folders organize threads within this project."
+        initialValue={editedFolder?.name ?? ""}
+        placeholder="Folder name"
+        saveLabel={folderEditorState?.mode === "create" ? "Create" : "Save"}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setFolderEditorState(null);
+        }}
+        onSave={handleFolderEditorSave}
       />
 
       {searchPaletteOpen ? (

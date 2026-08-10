@@ -52,6 +52,7 @@ function makeReadModel(threads: OrchestrationReadModel["threads"]): Orchestratio
   return {
     snapshotSequence: 0,
     spaces: [],
+    folders: [],
     projects: [],
     threads,
     updatedAt: "2026-04-20T00:00:00.000Z",

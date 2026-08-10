@@ -44,10 +44,12 @@ import {
   applySpaceOrder,
   applyThreadUpdate,
   removeSpace,
+  removeFolder,
   removeDeletedProjectFromClientState,
   removeDeletedThreadFromClientState,
   upsertProject,
   upsertSpace,
+  upsertFolder,
 } from "./storeProjection";
 import type { AppState } from "./storeState";
 import type { ChatMessage, Thread } from "./types";
@@ -756,6 +758,31 @@ function applyOrchestrationEvent(
   options?: ApplyOrchestrationEventOptions,
 ): AppState {
   switch (event.type) {
+    case "folder.created":
+      return upsertFolder(state, {
+        id: event.payload.folderId,
+        projectId: event.payload.projectId,
+        name: event.payload.name,
+        sortOrder: event.payload.sortOrder,
+        isPinned: event.payload.isPinned,
+        createdAt: event.payload.createdAt,
+        updatedAt: event.payload.updatedAt,
+      });
+
+    case "folder.renamed": {
+      const existing = state.folders.find((folder) => folder.id === event.payload.folderId);
+      return existing
+        ? upsertFolder(state, {
+            ...existing,
+            name: event.payload.name,
+            updatedAt: event.payload.updatedAt,
+          })
+        : state;
+    }
+
+    case "folder.deleted":
+      return removeFolder(state, event.payload.folderId);
+
     case "space.created":
       return upsertSpace(state, {
         id: event.payload.spaceId,

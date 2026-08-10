@@ -13,10 +13,12 @@ import type { Effect } from "effect";
 import type { ProjectionRepositoryError } from "../../persistence/Errors.ts";
 import type { ProjectMetadataOrchestrationEvent } from "../projectMetadataProjection.ts";
 import type { SpaceMetadataOrchestrationEvent } from "../spaceMetadataProjection.ts";
+import type { FolderMetadataOrchestrationEvent } from "../folderMetadataProjection.ts";
 
 export type ShellMetadataOrchestrationEvent =
   | ProjectMetadataOrchestrationEvent
-  | SpaceMetadataOrchestrationEvent;
+  | SpaceMetadataOrchestrationEvent
+  | FolderMetadataOrchestrationEvent;
 
 /**
  * OrchestrationProjectionPipelineShape - Service API for projection execution.

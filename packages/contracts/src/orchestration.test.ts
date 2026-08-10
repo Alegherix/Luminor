@@ -100,6 +100,7 @@ it.effect("preserves thread activity payloads through the RPC JSON codec", () =>
     const readModel = {
       snapshotSequence: 1,
       spaces: [],
+      folders: [],
       updatedAt: "2026-01-01T00:00:00.000Z",
       projects: [],
       threads: [

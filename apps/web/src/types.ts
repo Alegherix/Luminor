@@ -19,6 +19,7 @@ import type {
   ProjectScript as ContractProjectScript,
   ThreadId,
   ProjectId,
+  FolderId,
   SpaceId,
   SpaceIconName,
   TurnId,
@@ -189,6 +190,16 @@ export interface Space {
   name: string;
   icon: SpaceIconName;
   sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Folder {
+  id: FolderId;
+  projectId: ProjectId;
+  name: string;
+  sortOrder: number;
+  isPinned: boolean;
   createdAt: string;
   updatedAt: string;
 }

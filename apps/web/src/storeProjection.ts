@@ -8,6 +8,7 @@ import {
   type OrchestrationShellSnapshot,
   type OrchestrationShellStreamEvent,
   type OrchestrationSpaceShell,
+  type OrchestrationFolderShell,
   type ThreadId,
   type TurnId,
 } from "@luminor/contracts";
@@ -25,9 +26,11 @@ import {
   dedupeActivitiesById,
   deepEqualJson,
   mapProjects,
+  mapFolders,
   mapSpaces,
   mergeReadModelThreadDetailWithLiveHotPath,
   normalizeProject,
+  normalizeFolder,
   normalizeSpace,
   normalizeThreadFromReadModel,
   normalizeThreadShellSnapshot,
@@ -61,6 +64,7 @@ import {
 } from "./storeState";
 import type {
   ChatMessage,
+  Folder,
   Project,
   Space,
   SidebarThreadSummary,
@@ -265,6 +269,32 @@ export function upsertSpace(
       (left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id),
     ),
   };
+}
+
+export function upsertFolder(
+  state: AppState,
+  incoming: OrchestrationReadModel["folders"][number] | OrchestrationFolderShell,
+): AppState {
+  const existing = state.folders.find((folder) => folder.id === incoming.id);
+  const nextFolder = normalizeFolder(incoming, existing);
+  if (existing === nextFolder) return state;
+  const folders = existing
+    ? state.folders.map((folder) => (folder.id === incoming.id ? nextFolder : folder))
+    : [...state.folders, nextFolder];
+  return {
+    ...state,
+    folders: folders.toSorted(
+      (left, right) =>
+        left.projectId.localeCompare(right.projectId) ||
+        left.sortOrder - right.sortOrder ||
+        left.id.localeCompare(right.id),
+    ),
+  };
+}
+
+export function removeFolder(state: AppState, folderId: Folder["id"]): AppState {
+  const folders = state.folders.filter((folder) => folder.id !== folderId);
+  return folders.length === state.folders.length ? state : { ...state, folders };
 }
 
 export function removeSpace(
@@ -1240,6 +1270,7 @@ export function syncServerShellSnapshot(
     (project) => deletedProjectIdsById[project.id] === undefined,
   );
   const spaces = mapSpaces(snapshot.spaces ?? [], state.spaces ?? []);
+  const folders = mapFolders(snapshot.folders ?? [], state.folders ?? []);
   const projects = mapProjects(snapshotProjects, state.projects);
   const nextThreadIds = new Set(snapshotThreads.map((thread) => thread.id));
   // The retains below prune detail slices down to the snapshot's threads; any
@@ -1286,6 +1317,7 @@ export function syncServerShellSnapshot(
       ...normalizedState,
       shellSnapshotSequence: Math.max(state.shellSnapshotSequence ?? 0, snapshot.snapshotSequence),
       spaces,
+      folders,
       projects,
       sidebarThreadSummaryById,
       threadsHydrated: true,
@@ -1352,6 +1384,10 @@ export function applyShellEvent(state: AppState, event: OrchestrationShellStream
       return removeSpace(state, event.spaceId, event.updatedAt);
     case "space-order-updated":
       return applySpaceOrder(state, event.orderedSpaceIds);
+    case "folder-upserted":
+      return upsertFolder(state, event.folder);
+    case "folder-removed":
+      return removeFolder(state, event.folderId);
     case "project-upserted":
       return upsertProject(state, event.project, "id-or-cwd");
     case "project-removed":
@@ -1395,6 +1431,10 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
     (readModel.spaces ?? []).filter((space) => space.deletedAt === null),
     state.spaces ?? [],
   );
+  const folders = mapFolders(
+    (readModel.folders ?? []).filter((folder) => folder.deletedAt === null),
+    state.folders ?? [],
+  );
   const projects = mapProjects(
     readModel.projects.filter(
       (project) => project.deletedAt === null && deletedProjectIdsById[project.id] === undefined,
@@ -1421,6 +1461,7 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
   resetThreadDetailResumeCursors();
   let normalizedState: AppState = {
     ...state,
+    folders,
     threadIds: reuseThreadIdRegistry(state.threadIds, nextThreadIds),
     threadShellById: retainThreadScopedRecord(state.threadShellById, nextThreadIds),
     threadSessionById: retainThreadScopedRecord(state.threadSessionById, nextThreadIds),
@@ -1466,6 +1507,7 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
     : nextSidebarThreadSummaryById;
   if (
     spaces === state.spaces &&
+    folders === state.folders &&
     projects === state.projects &&
     sidebarThreadSummaryById === state.sidebarThreadSummaryById &&
     normalizedState.threadIds === state.threadIds &&

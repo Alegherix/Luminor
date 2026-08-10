@@ -39,6 +39,7 @@ function makeSnapshot(
   return {
     snapshotSequence: 2,
     spaces: [],
+    folders: [],
     projects,
     threads: [],
     updatedAt: NOW_ISO,

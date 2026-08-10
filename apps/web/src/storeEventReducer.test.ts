@@ -6,6 +6,7 @@ import {
   CheckpointRef,
   CommandId,
   EventId,
+  FolderId,
   MessageId,
   OrchestrationProposedPlanId,
   ProjectId,
@@ -37,6 +38,39 @@ import {
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE } from "./types";
 
 describe("store event reducer", () => {
+  it("creates, renames, and removes Folder rows from domain events", () => {
+    const folderId = FolderId.makeUnsafe("folder-live");
+    let state = applyOrchestrationEvents(makeState(makeThread()), [
+      makeDomainEvent("folder.created", {
+        folderId,
+        projectId: ProjectId.makeUnsafe("project-1"),
+        name: "Planning",
+        sortOrder: 0,
+        isPinned: false,
+        createdAt: "2026-08-10T10:00:00.000Z",
+        updatedAt: "2026-08-10T10:00:00.000Z",
+      }),
+    ]);
+    expect(state.folders[0]?.name).toBe("Planning");
+
+    state = applyOrchestrationEvents(state, [
+      makeDomainEvent("folder.renamed", {
+        folderId,
+        name: "Ready",
+        updatedAt: "2026-08-10T10:01:00.000Z",
+      }),
+    ]);
+    expect(state.folders[0]?.name).toBe("Ready");
+
+    state = applyOrchestrationEvents(state, [
+      makeDomainEvent("folder.deleted", {
+        folderId,
+        deletedAt: "2026-08-10T10:02:00.000Z",
+      }),
+    ]);
+    expect(state.folders).toEqual([]);
+  });
+
   it("hydrates and removes Spaces while clearing matching project assignments", () => {
     const spaceId = SpaceId.makeUnsafe("space-work");
     let state = applyOrchestrationEvents(makeState(makeThread()), [
@@ -249,6 +283,7 @@ describe("store event reducer", () => {
     const next = applyOrchestrationEvents(
       {
         spaces: [],
+        folders: [],
         projects: [],
         sidebarThreadSummaryById: {},
         threadsHydrated: false,
@@ -288,6 +323,7 @@ describe("store event reducer", () => {
   it("updates existing projects immediately from live project.meta-updated events", () => {
     const initialState: AppState = {
       spaces: [],
+      folders: [],
       projects: [
         makeProject({
           id: ProjectId.makeUnsafe("project-live"),
@@ -352,6 +388,7 @@ describe("store event reducer", () => {
     const next = applyOrchestrationEvents(
       {
         spaces: [],
+        folders: [],
         projects: [makeProject({ id: ProjectId.makeUnsafe("project-live") })],
         sidebarThreadSummaryById: {},
         threadsHydrated: true,

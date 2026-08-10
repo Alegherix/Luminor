@@ -117,6 +117,7 @@ export function makeState(thread: Thread): AppState {
   } = thread;
   return {
     spaces: [],
+    folders: [],
     projects: [makeProject()],
     sidebarThreadSummaryById: {},
     threadsHydrated: true,
@@ -204,6 +205,7 @@ export function makeReadModel(
     snapshotSequence: 1,
     updatedAt: "2026-02-27T00:00:00.000Z",
     spaces: [],
+    folders: [],
     projects: [
       {
         id: ProjectId.makeUnsafe("project-1"),
@@ -230,6 +232,7 @@ export function makeShellSnapshot(thread: OrchestrationShellSnapshot["threads"][
     snapshotSequence: 2,
     updatedAt: "2026-02-27T00:01:00.000Z",
     spaces: [],
+    folders: [],
     projects: [
       {
         id: ProjectId.makeUnsafe("project-1"),

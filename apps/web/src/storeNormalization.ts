@@ -6,6 +6,7 @@ import {
   MessageId,
   type OrchestrationReadModel,
   type OrchestrationSpaceShell,
+  type OrchestrationFolderShell,
   type OrchestrationSessionStatus,
   type OrchestrationShellSnapshot,
   type OrchestrationThreadActivity,
@@ -24,6 +25,7 @@ import { getRememberedProjectUiState, projectCwdKey } from "./storePersistence";
 import type {
   ChatAttachment,
   ChatMessage,
+  Folder,
   Project,
   Space,
   SidebarThreadSummary,
@@ -35,6 +37,7 @@ import type {
 
 type ReadModelProject = OrchestrationReadModel["projects"][number];
 type ReadModelSpace = OrchestrationReadModel["spaces"][number];
+type ReadModelFolder = OrchestrationReadModel["folders"][number];
 type ReadModelThread = OrchestrationReadModel["threads"][number];
 type ReadModelMessage = ReadModelThread["messages"][number];
 type ShellSnapshotThread = OrchestrationShellSnapshot["threads"][number];
@@ -402,6 +405,49 @@ export function mapSpaces(
   const next = incoming
     .map((space) => normalizeSpace(space, previousById.get(space.id)))
     .toSorted((left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id));
+  return arraysShallowEqual(previous, next) ? previous : next;
+}
+
+export function normalizeFolder(
+  incoming: ReadModelFolder | OrchestrationFolderShell,
+  previous: Folder | undefined,
+): Folder {
+  if (
+    previous &&
+    previous.id === incoming.id &&
+    previous.projectId === incoming.projectId &&
+    previous.name === incoming.name &&
+    previous.sortOrder === incoming.sortOrder &&
+    previous.isPinned === incoming.isPinned &&
+    previous.createdAt === incoming.createdAt &&
+    previous.updatedAt === incoming.updatedAt
+  ) {
+    return previous;
+  }
+  return {
+    id: incoming.id,
+    projectId: incoming.projectId,
+    name: incoming.name,
+    sortOrder: incoming.sortOrder,
+    isPinned: incoming.isPinned,
+    createdAt: incoming.createdAt,
+    updatedAt: incoming.updatedAt,
+  };
+}
+
+export function mapFolders(
+  incoming: ReadonlyArray<ReadModelFolder | OrchestrationFolderShell>,
+  previous: Folder[],
+): Folder[] {
+  const previousById = new Map(previous.map((folder) => [folder.id, folder] as const));
+  const next = incoming
+    .map((folder) => normalizeFolder(folder, previousById.get(folder.id)))
+    .toSorted(
+      (left, right) =>
+        left.projectId.localeCompare(right.projectId) ||
+        left.sortOrder - right.sortOrder ||
+        left.id.localeCompare(right.id),
+    );
   return arraysShallowEqual(previous, next) ? previous : next;
 }
 
