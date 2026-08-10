@@ -12,6 +12,7 @@ import ShortcutsDialog from "../components/ShortcutsDialog";
 import { RecentViewSwitcher } from "../components/RecentViewSwitcher";
 import { shouldRenderTerminalWorkspace } from "../components/ChatView.logic";
 import ThreadSidebar from "../components/Sidebar";
+import { UsageStatusBarShell } from "../components/statusBar/UsageStatusBarShell";
 import { isElectron } from "../env";
 import { useHandleNewChat } from "../hooks/useHandleNewChat";
 import { useHandleNewStudioChat } from "../hooks/useHandleNewStudioChat";
@@ -590,7 +591,7 @@ function ChatRouteLayout() {
   // would have gotten inside <Sidebar> (otherwise dragging to resize stops working).
   // `data-sidebar-side` on the provider selects the seam geometry.
   const mainContentShell = (
-    <div className="relative flex h-svh min-h-0 min-w-0 flex-1">
+    <div className="relative flex h-full min-h-0 min-w-0 flex-1">
       {isEditorView ? null : (
         <SidebarInstanceProvider side="left" resizable={THREAD_SIDEBAR_RESIZABLE}>
           <SidebarRail placement="content-seam" />
@@ -608,10 +609,12 @@ function ChatRouteLayout() {
       className="bg-[var(--app-shell-background)]"
       data-sidebar-side="left"
     >
-      <ThreadRetentionMaintenanceToast />
-      <ChatRouteGlobalShortcuts />
-      {sidebarElement}
-      {mainContentShell}
+      <UsageStatusBarShell>
+        <ThreadRetentionMaintenanceToast />
+        <ChatRouteGlobalShortcuts />
+        {sidebarElement}
+        {mainContentShell}
+      </UsageStatusBarShell>
     </SidebarProvider>
   );
 }

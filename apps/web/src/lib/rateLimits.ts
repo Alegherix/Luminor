@@ -4,6 +4,7 @@
 
 import type { OrchestrationThread } from "@luminor/contracts";
 import { providerUsageLearnMoreHref } from "@luminor/shared/providerUsage";
+import { formatUsageResetDuration } from "@luminor/shared/usageResetCountdown";
 
 export interface RateLimitWindow {
   window: string;
@@ -360,30 +361,23 @@ export function formatRateLimitRemainingPercent(remainingPercent: number | undef
   return `${Math.round(Math.min(100, Math.max(0, remainingPercent)))}%`;
 }
 
+/** Compact remaining-time label, e.g. "2h 16m" / "5d 11h"; null once the window elapsed. */
+export function formatRateLimitResetDuration(resetsAt: string): string | null {
+  const resetMs = Date.parse(resetsAt);
+  if (Number.isNaN(resetMs)) {
+    return null;
+  }
+  return formatUsageResetDuration(resetMs - Date.now());
+}
+
 /** Relative reset countdown, e.g. "Resets in 2h 16m" / "Resets in 5d 11h". */
 export function formatRateLimitResetCountdown(resetsAt: string): string {
   const resetMs = Date.parse(resetsAt);
   if (Number.isNaN(resetMs)) {
     return "";
   }
-  const diffMs = resetMs - Date.now();
-  if (diffMs <= 0) {
-    return "Resets soon";
-  }
-  const totalMinutes = Math.floor(diffMs / 60_000);
-  const days = Math.floor(totalMinutes / 1_440);
-  const hours = Math.floor((totalMinutes % 1_440) / 60);
-  const minutes = totalMinutes % 60;
-  if (days > 0) {
-    return `Resets in ${days}d ${hours}h`;
-  }
-  if (hours > 0) {
-    return `Resets in ${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `Resets in ${minutes}m`;
-  }
-  return "Resets soon";
+  const duration = formatUsageResetDuration(resetMs - Date.now());
+  return duration ? `Resets in ${duration}` : "Resets soon";
 }
 
 export function deriveRateLimitLearnMoreHref(

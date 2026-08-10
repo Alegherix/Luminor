@@ -220,6 +220,10 @@
       "types": "./src/providerUsage.ts",
       "import": "./src/providerUsage.ts"
     },
+    "./usageResetCountdown": {
+      "types": "./src/usageResetCountdown.ts",
+      "import": "./src/usageResetCountdown.ts"
+    },
     "./providerMetadata": {
       "types": "./src/providerMetadata.ts",
       "import": "./src/providerMetadata.ts"

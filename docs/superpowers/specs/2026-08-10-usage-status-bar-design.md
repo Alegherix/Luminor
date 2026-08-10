@@ -37,15 +37,15 @@ There is no status bar or app-level footer today.
 
 ## Decisions
 
-| Decision | Choice |
-| --- | --- |
-| Bar scope (v1) | Usage segments only. No resource/ports/update segments. |
-| Providers shown | Every usage-capable provider with a readable credential (Claude, Codex, Cursor, and the new Grok). Signed-out providers are hidden, not shown as "Sign in" rows. |
-| Chat-header chip | Removed. The bar replaces it. `EnvironmentUsageSection` and Settings → Usage keep using `ProviderUsageMenuControl` / `ProviderUsagePanelContent`. |
-| Percentage semantics | Luminor's existing **remaining** semantics (`48% left`, 10 %/25 % tone thresholds, pace marker). No `used` mode, no user-facing toggle. |
-| Popover contents | One row per provider, refresh button, "Usage details" link to Settings → Usage. No Detailed/Compact density toggle (YAGNI). No "Manage Accounts" — Luminor has no multi-account switching. |
-| Placement | Global, in the `_chat` app shell, visible in every view. Hidden entirely when no provider qualifies. |
-| Data flow | Approach A: extract the merge core into a pure module, add a multi-provider hook that shares one all-provider query. |
+| Decision             | Choice                                                                                                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Bar scope (v1)       | Usage segments only. No resource/ports/update segments.                                                                                                                                    |
+| Providers shown      | Every usage-capable provider with a readable credential (Claude, Codex, Cursor, and the new Grok). Signed-out providers are hidden, not shown as "Sign in" rows.                           |
+| Chat-header chip     | Removed. The bar replaces it. `EnvironmentUsageSection` and Settings → Usage keep using `ProviderUsageMenuControl` / `ProviderUsagePanelContent`.                                          |
+| Percentage semantics | Luminor's existing **remaining** semantics (`48% left`, 10 %/25 % tone thresholds, pace marker). No `used` mode, no user-facing toggle.                                                    |
+| Popover contents     | One row per provider, refresh button, "Usage details" link to Settings → Usage. No Detailed/Compact density toggle (YAGNI). No "Manage Accounts" — Luminor has no multi-account switching. |
+| Placement            | Global, in the `_chat` app shell, visible in every view. Hidden entirely when no provider qualifies.                                                                                       |
+| Data flow            | Approach A: extract the merge core into a pure module, add a multi-provider hook that shares one all-provider query.                                                                       |
 
 ### Rejected alternatives
 
@@ -161,11 +161,19 @@ closing "Usage details" row that navigates to `_chat.settings` section
 the bar and the popover so both classify loading / usage / unavailable / error
 identically.
 
-**Mounting.** `ChatRouteLayout` in `apps/web/src/routes/_chat.tsx` wraps its
-current output in a column flex with `<UsageStatusBar />` last. This requires
-`mainContentShell` to move from `h-svh` to `h-full min-h-0` and the
-`SidebarProvider` to become `flex-1 min-h-0`; otherwise the bar is pushed below
-the viewport. The bar renders nothing at all when no provider qualifies.
+**Mounting.** `apps/web/src/components/statusBar/UsageStatusBarShell.tsx` wraps
+the whole `_chat` shell (inside `SidebarProvider`) in a column flex: a
+`flex-1 min-h-0` row for the sidebars and `<Outlet />`, then the bar. The bar
+therefore spans the full shell width and owns its own row — content cannot push
+it off-screen. Because the sidebar drawers are `fixed` full-height surfaces that
+would otherwise paint over it, the shell publishes its height as
+`--app-status-bar-height` (default `0px` in `index.css`) and the drawer container
+in `apps/web/src/components/ui/sidebar.tsx` ends at
+`bottom-(--app-status-bar-height)` instead of `inset-y-0 h-svh`. That covers both
+the thread sidebar and the right dock. The shell owns the single
+`useAllProviderUsageSummaries()` call and passes it to the bar, so the height var
+and the bar's visibility come from one source; when no provider qualifies the var
+stays `0px` and nothing renders.
 
 **Chip removal.** Drop `ProviderUsageMenuControl` from
 `apps/web/src/components/chat/ChatHeader.tsx` (and its import). The component
@@ -185,15 +193,15 @@ Vitest, run with `bun run test`.
   hint; malformed `auth.json` → error without leaking the path.
 - `apps/web/src/lib/providerUsageMerge.test.ts` — live beats local; a non-ok live
   snapshot blocks fallbacks. Locks today's behavior ahead of the refactor.
-- `apps/web/src/hooks/useAllProviderUsageSummaries.test.tsx` — one shared
-  all-provider query; signed-out providers filtered out; `refresh()` invalidates
-  the expected keys.
 - `apps/web/src/lib/usageRosterRowState.test.ts` and
   `packages/shared/src/usageResetCountdown.test.ts` — cases ported from Orca's
-  corresponding tests.
-- `apps/web/src/components/statusBar/UsageStatusBar.test.tsx` — a segment per
-  signed-in provider; the bar is hidden when empty; the popover opens and lists
-  providers worst-first.
+  corresponding tests. `usageRosterRowState` is what decides which providers earn
+  a segment and which are hidden, so these cover the bar's visibility rules.
+
+`apps/web` has no React renderer in its test setup (no `@testing-library/react`;
+existing web tests such as `RateLimitsPanel.test.ts` are logic-only), so the bar
+and its hook are covered through the pure modules they delegate to rather than
+through component/hook render tests.
 
 ## Verification
 
