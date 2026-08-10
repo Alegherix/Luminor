@@ -1048,6 +1048,13 @@ export const FolderDeleteCommand = Schema.Struct({
   folderId: FolderId,
 });
 
+export const FolderPinCommand = Schema.Struct({
+  type: Schema.Literal("folder.pin"),
+  commandId: CommandId,
+  folderId: FolderId,
+  isPinned: Schema.Boolean,
+});
+
 export const ProjectCreateCommand = Schema.Struct({
   type: Schema.Literal("project.create"),
   commandId: CommandId,
@@ -1506,6 +1513,7 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   FolderCreateCommand,
   FolderRenameCommand,
   FolderDeleteCommand,
+  FolderPinCommand,
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
   ProjectDeleteCommand,
@@ -1549,6 +1557,7 @@ export const ClientOrchestrationCommand = Schema.Union([
   FolderCreateCommand,
   FolderRenameCommand,
   FolderDeleteCommand,
+  FolderPinCommand,
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
   ProjectDeleteCommand,
@@ -1691,6 +1700,7 @@ export const OrchestrationEventType = Schema.Literals([
   "folder.created",
   "folder.renamed",
   "folder.deleted",
+  "folder.pinned",
   "project.created",
   "project.meta-updated",
   "project.deleted",
@@ -1781,6 +1791,12 @@ export const FolderRenamedPayload = Schema.Struct({
 export const FolderDeletedPayload = Schema.Struct({
   folderId: FolderId,
   deletedAt: IsoDateTime,
+});
+
+export const FolderPinnedPayload = Schema.Struct({
+  folderId: FolderId,
+  isPinned: Schema.Boolean,
+  updatedAt: IsoDateTime,
 });
 
 export const ProjectCreatedPayload = Schema.Struct({
@@ -2184,6 +2200,11 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("folder.deleted"),
     payload: FolderDeletedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("folder.pinned"),
+    payload: FolderPinnedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

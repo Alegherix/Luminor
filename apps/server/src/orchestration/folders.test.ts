@@ -409,4 +409,130 @@ describe("Folders", () => {
       ),
     ).toEqual([]);
   });
+
+  it("pins and unpins a Folder without touching Thread pins", async () => {
+    const createdAt = "2026-08-10T10:00:00.000Z";
+    const projectId = ProjectId.makeUnsafe("project-pin");
+    const folderId = FolderId.makeUnsafe("folder-pin");
+    let readModel = createEmptyReadModel(createdAt);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-project-create"),
+      projectId,
+      title: "Luminor",
+      workspaceRoot: "/tmp/luminor-pin",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-folder-create"),
+      folderId,
+      projectId,
+      name: "Radar",
+      createdAt,
+    }));
+    expect(readModel.folders[0]?.isPinned).toBe(false);
+
+    const pin = await dispatch(readModel, {
+      type: "folder.pin",
+      commandId: CommandId.makeUnsafe("cmd-folder-pin"),
+      folderId,
+      isPinned: true,
+    });
+    readModel = pin.readModel;
+    expect(pin.events.map((event) => event.type)).toEqual(["folder.pinned"]);
+    expect(readModel.folders[0]?.isPinned).toBe(true);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.pin",
+      commandId: CommandId.makeUnsafe("cmd-folder-pin-again"),
+      folderId,
+      isPinned: true,
+    }));
+    expect(readModel.folders[0]?.isPinned).toBe(true);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.pin",
+      commandId: CommandId.makeUnsafe("cmd-folder-unpin"),
+      folderId,
+      isPinned: false,
+    }));
+    expect(readModel.folders[0]?.isPinned).toBe(false);
+  });
+
+  it("auto-unpins a pinned Folder once its last member Thread leaves", async () => {
+    const createdAt = "2026-08-10T10:00:00.000Z";
+    const projectId = ProjectId.makeUnsafe("project-auto-unpin");
+    const folderId = FolderId.makeUnsafe("folder-auto-unpin");
+    const stayingThreadId = ThreadId.makeUnsafe("thread-staying");
+    const leavingThreadId = ThreadId.makeUnsafe("thread-leaving");
+    let readModel = createEmptyReadModel(createdAt);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-project-create"),
+      projectId,
+      title: "Luminor",
+      workspaceRoot: "/tmp/luminor-auto-unpin",
+      createdAt,
+    }));
+    for (const threadId of [stayingThreadId, leavingThreadId]) {
+      ({ readModel } = await dispatch(readModel, {
+        type: "thread.create",
+        commandId: CommandId.makeUnsafe(`cmd-create-${threadId}`),
+        threadId,
+        projectId,
+        title: threadId,
+        modelSelection: { provider: "codex", model: "gpt-5.6-sol" },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        branch: null,
+        worktreePath: null,
+        createdAt,
+      }));
+    }
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-folder-create"),
+      folderId,
+      projectId,
+      name: "Radar",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.pin",
+      commandId: CommandId.makeUnsafe("cmd-folder-pin"),
+      folderId,
+      isPinned: true,
+    }));
+    for (const threadId of [stayingThreadId, leavingThreadId]) {
+      ({ readModel } = await dispatch(readModel, {
+        type: "thread.meta.update",
+        commandId: CommandId.makeUnsafe(`cmd-file-${threadId}`),
+        threadId,
+        folderId,
+      }));
+    }
+    expect(readModel.folders[0]?.isPinned).toBe(true);
+
+    const move = await dispatch(readModel, {
+      type: "thread.meta.update",
+      commandId: CommandId.makeUnsafe("cmd-move-out"),
+      threadId: leavingThreadId,
+      folderId: null,
+    });
+    readModel = move.readModel;
+    expect(move.events.map((event) => event.type)).toEqual(["thread.meta-updated"]);
+    expect(readModel.folders[0]?.isPinned).toBe(true);
+
+    const deletion = await dispatch(readModel, {
+      type: "thread.delete",
+      commandId: CommandId.makeUnsafe("cmd-delete-last-member"),
+      threadId: stayingThreadId,
+    });
+    readModel = deletion.readModel;
+    expect(deletion.events.map((event) => event.type)).toEqual(["folder.pinned", "thread.deleted"]);
+    expect(readModel.folders[0]).toMatchObject({ id: folderId, isPinned: false, deletedAt: null });
+  });
 });

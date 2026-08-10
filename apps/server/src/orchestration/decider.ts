@@ -34,6 +34,7 @@ import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { hasNativeHandoffMessages } from "./handoff.ts";
 import { resolveStableMessageTurnId } from "./messageTurnId.ts";
 import {
+  findFolderById,
   findSpaceById,
   listActiveFoldersByProjectId,
   isLegacyHomeChatContainerRow,
@@ -117,6 +118,41 @@ function withEventBase(
     correlationId: input.commandId,
     metadata: input.metadata ?? {},
   };
+}
+
+function folderAutoUnpinEvents(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly commandId: OrchestrationCommand["commandId"];
+  readonly occurredAt: string;
+  readonly folderId: OrchestrationThread["folderId"];
+  readonly departingThreadId: OrchestrationThread["id"];
+}): ReadonlyArray<Omit<OrchestrationEvent, "sequence">> {
+  const folderId = input.folderId ?? null;
+  if (folderId === null) return [];
+
+  const folder = findFolderById(input.readModel, folderId);
+  if (!folder || folder.deletedAt !== null || !folder.isPinned) return [];
+
+  const keepsMember = input.readModel.threads.some(
+    (thread) =>
+      thread.deletedAt === null &&
+      thread.id !== input.departingThreadId &&
+      (thread.folderId ?? null) === folderId,
+  );
+  if (keepsMember) return [];
+
+  return [
+    {
+      ...withEventBase({
+        aggregateKind: "folder",
+        aggregateId: folderId,
+        occurredAt: input.occurredAt,
+        commandId: input.commandId,
+      }),
+      type: "folder.pinned",
+      payload: { folderId, isPinned: false, updatedAt: input.occurredAt },
+    },
+  ];
 }
 
 function checkpointRevertSucceededEvent(input: {
@@ -505,6 +541,25 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         payload: { folderId: command.folderId, deletedAt: occurredAt },
       };
       return unfileEvents.length === 0 ? deleteEvent : [...unfileEvents, deleteEvent];
+    }
+
+    case "folder.pin": {
+      yield* requireFolder({ readModel, command, folderId: command.folderId });
+      const occurredAt = nowIso();
+      return {
+        ...withEventBase({
+          aggregateKind: "folder",
+          aggregateId: command.folderId,
+          occurredAt,
+          commandId: command.commandId,
+        }),
+        type: "folder.pinned",
+        payload: {
+          folderId: command.folderId,
+          isPinned: command.isPinned,
+          updatedAt: occurredAt,
+        },
+      };
     }
 
     case "space.create": {
@@ -1243,7 +1298,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         });
       }
       const occurredAt = nowIso();
-      return {
+      const deletedEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...withEventBase({
           aggregateKind: "thread",
           aggregateId: command.threadId,
@@ -1256,6 +1311,14 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           deletedAt: occurredAt,
         },
       };
+      const autoUnpinEvents = folderAutoUnpinEvents({
+        readModel,
+        commandId: command.commandId,
+        occurredAt,
+        folderId: thread.folderId,
+        departingThreadId: command.threadId,
+      });
+      return autoUnpinEvents.length === 0 ? deletedEvent : [...autoUnpinEvents, deletedEvent];
     }
 
     case "thread.archive": {
@@ -1345,7 +1408,18 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         yield* validateAutoRuntimeMode(command, command.modelSelection, thread.runtimeMode);
       }
       const occurredAt = nowIso();
-      return {
+      const leftFolderId =
+        command.folderId !== undefined && (command.folderId ?? null) !== (thread.folderId ?? null)
+          ? thread.folderId
+          : null;
+      const autoUnpinEvents = folderAutoUnpinEvents({
+        readModel,
+        commandId: command.commandId,
+        occurredAt,
+        folderId: leftFolderId,
+        departingThreadId: command.threadId,
+      });
+      const metaUpdatedEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...withEventBase({
           aggregateKind: "thread",
           aggregateId: command.threadId,
@@ -1384,6 +1458,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           updatedAt: occurredAt,
         },
       };
+      return autoUnpinEvents.length === 0
+        ? metaUpdatedEvent
+        : [...autoUnpinEvents, metaUpdatedEvent];
     }
 
     case "thread.pinned-message.add": {

@@ -53,13 +53,18 @@ export type SidebarActionBadge = {
   readonly accessibleLabel: string;
 };
 
+function compareFoldersByStableOrder(left: Folder, right: Folder): number {
+  return (
+    left.sortOrder - right.sortOrder ||
+    left.name.localeCompare(right.name, undefined, { sensitivity: "base" }) ||
+    left.id.localeCompare(right.id)
+  );
+}
+
 export function sortProjectFolders(folders: readonly Folder[]): Folder[] {
   return folders.toSorted(
     (left, right) =>
-      Number(right.isPinned) - Number(left.isPinned) ||
-      left.sortOrder - right.sortOrder ||
-      left.name.localeCompare(right.name, undefined, { sensitivity: "base" }) ||
-      left.id.localeCompare(right.id),
+      Number(right.isPinned) - Number(left.isPinned) || compareFoldersByStableOrder(left, right),
   );
 }
 
@@ -256,13 +261,48 @@ export type SidebarDerivedProjectData = {
 export type SidebarProjectFolderGroup = {
   folder: Folder;
   entries: SidebarProjectEntry[];
+  status: ThreadStatusPill | null;
+  memberThreadCount: number;
 };
+
+function resolveSidebarThreadStatus(
+  thread: SidebarThreadSummary,
+  override?: (thread: SidebarThreadSummary) => ThreadStatusPill | null,
+): ThreadStatusPill | null {
+  return override
+    ? override(thread)
+    : resolveThreadStatusPill({
+        thread,
+        hasPendingApprovals: thread.hasPendingApprovals,
+        hasPendingUserInput: thread.hasPendingUserInput,
+      });
+}
+
+export function resolveFolderAttentionRank(status: ThreadStatusPill | null): number {
+  return status === null ? 0 : THREAD_STATUS_PRIORITY[status.label];
+}
+
+export function sortProjectFolderGroups(
+  groups: readonly SidebarProjectFolderGroup[],
+): SidebarProjectFolderGroup[] {
+  return groups.toSorted(
+    (left, right) =>
+      Number(right.folder.isPinned) - Number(left.folder.isPinned) ||
+      (left.folder.isPinned
+        ? resolveFolderAttentionRank(right.status) - resolveFolderAttentionRank(left.status)
+        : 0) ||
+      compareFoldersByStableOrder(left.folder, right.folder),
+  );
+}
 
 export function partitionProjectThreadsByFolders(input: {
   threads: readonly SidebarThreadSummary[];
   folders: readonly Folder[];
   pinnedThreadIds: readonly ThreadId[];
   activeThreadId: ThreadId | undefined;
+  resolveThreadStatus?: (
+    thread: SidebarThreadSummary,
+  ) => ReturnType<typeof resolveThreadStatusPill>;
 }): {
   pinnedFolderGroups: SidebarProjectFolderGroup[];
   unpinnedFolderGroups: SidebarProjectFolderGroup[];
@@ -290,23 +330,33 @@ export function partitionProjectThreadsByFolders(input: {
     memberThreadIds.add(thread.id);
   }
 
-  const folderGroups = sortProjectFolders(input.folders).map((folder) => ({
-    folder,
-    entries: buildProjectThreadTree({
-      threads: memberThreadsByFolderId.get(folder.id) ?? [],
-      forceVisibleThreadId: input.activeThreadId,
-    }).map(({ thread, depth, rootThreadId }) => ({
-      kind: "thread" as const,
-      rowId: thread.id,
-      rootRowId: rootThreadId,
-      thread,
-      depth,
-    })),
-  }));
+  const folderGroups = input.folders.map((folder): SidebarProjectFolderGroup => {
+    const memberThreads = memberThreadsByFolderId.get(folder.id) ?? [];
+    return {
+      folder,
+      entries: buildProjectThreadTree({
+        threads: memberThreads,
+        forceVisibleThreadId: input.activeThreadId,
+      }).map(({ thread, depth, rootThreadId }) => ({
+        kind: "thread" as const,
+        rowId: thread.id,
+        rootRowId: rootThreadId,
+        thread,
+        depth,
+      })),
+      status: resolveProjectStatusIndicator(
+        memberThreads.map((thread) =>
+          resolveSidebarThreadStatus(thread, input.resolveThreadStatus),
+        ),
+      ),
+      memberThreadCount: memberThreads.length,
+    };
+  });
+  const sortedFolderGroups = sortProjectFolderGroups(folderGroups);
 
   return {
-    pinnedFolderGroups: folderGroups.filter(({ folder }) => folder.isPinned),
-    unpinnedFolderGroups: folderGroups.filter(({ folder }) => !folder.isPinned),
+    pinnedFolderGroups: sortedFolderGroups.filter(({ folder }) => folder.isPinned),
+    unpinnedFolderGroups: sortedFolderGroups.filter(({ folder }) => !folder.isPinned),
     unfiledThreads: getUnpinnedThreadsForSidebar(
       input.threads.filter((thread) => !memberThreadIds.has(thread.id)),
       input.pinnedThreadIds,
@@ -1577,28 +1627,25 @@ export function deriveSidebarProjectData(input: {
 
   for (const project of input.projects) {
     const allProjectThreads = input.sortedSidebarThreadsByProjectId.get(project.id) ?? [];
+    const statusByThreadId = new Map<ThreadId, ThreadStatusPill | null>(
+      allProjectThreads.map((thread) => [
+        thread.id,
+        resolveSidebarThreadStatus(thread, input.resolveThreadStatus),
+      ]),
+    );
     const { pinnedFolderGroups, unpinnedFolderGroups, unfiledThreads } =
       partitionProjectThreadsByFolders({
         threads: allProjectThreads,
         folders: input.foldersByProjectId?.get(project.id) ?? [],
         pinnedThreadIds: input.pinnedThreadIds,
         activeThreadId: input.activeSidebarThreadId,
+        resolveThreadStatus: (thread) => statusByThreadId.get(thread.id) ?? null,
       });
     const folderEntries = [...pinnedFolderGroups, ...unpinnedFolderGroups].flatMap(
       (group) => group.entries,
     );
     const projectThreads = [...folderEntries.map((entry) => entry.thread), ...unfiledThreads];
-    const projectStatus = resolveProjectStatusIndicator(
-      allProjectThreads.map((thread) =>
-        input.resolveThreadStatus
-          ? input.resolveThreadStatus(thread)
-          : resolveThreadStatusPill({
-              thread,
-              hasPendingApprovals: thread.hasPendingApprovals,
-              hasPendingUserInput: thread.hasPendingUserInput,
-            }),
-      ),
-    );
+    const projectStatus = resolveProjectStatusIndicator([...statusByThreadId.values()]);
     const requestedExtraPages =
       input.threadListExtraPagesByProjectCwd.get(input.normalizeProjectCwd(project.cwd)) ?? 0;
     const orderedProjectThreadIds = projectThreads.map((thread) => thread.id);

@@ -1977,6 +1977,74 @@ describe("deriveSidebarProjectData", () => {
     });
     expect(derive(7)?.visibleEntries).toHaveLength(12);
   });
+
+  it("rolls member Thread attention up to the Folder and sorts pinned Folders attention-first", () => {
+    const project = makeProject();
+    const makeFolder = (id: string, sortOrder: number, isPinned: boolean) => ({
+      id: FolderId.makeUnsafe(id),
+      projectId: project.id,
+      name: id,
+      sortOrder,
+      isPinned,
+      createdAt: "2026-08-10T10:00:00.000Z",
+      updatedAt: "2026-08-10T10:00:00.000Z",
+    });
+    const quietFolder = makeFolder("folder-pinned-quiet", 0, true);
+    const urgentFolder = makeFolder("folder-pinned-urgent", 1, true);
+    const emptyFolder = makeFolder("folder-pinned-empty", 2, true);
+    const unpinnedFolder = makeFolder("folder-unpinned", 3, false);
+    const threadStatusByThreadId = new Map<string, ThreadStatusPill>([
+      ["thread-quiet", statusPill("Completed")],
+      ["thread-urgent-working", statusPill("Working")],
+      ["thread-urgent-approval", statusPill("Pending Approval")],
+      ["thread-unpinned", statusPill("Pending Approval")],
+    ]);
+    const threads = [
+      makeSidebarThreadSummary({
+        id: ThreadId.makeUnsafe("thread-quiet"),
+        folderId: quietFolder.id,
+      }),
+      makeSidebarThreadSummary({
+        id: ThreadId.makeUnsafe("thread-urgent-working"),
+        folderId: urgentFolder.id,
+      }),
+      makeSidebarThreadSummary({
+        id: ThreadId.makeUnsafe("thread-urgent-approval"),
+        folderId: urgentFolder.id,
+      }),
+      makeSidebarThreadSummary({
+        id: ThreadId.makeUnsafe("thread-unpinned"),
+        folderId: unpinnedFolder.id,
+      }),
+    ];
+
+    const data = deriveSidebarProjectData({
+      projects: [project],
+      sortedSidebarThreadsByProjectId: groupSidebarThreadsByProjectId(threads),
+      foldersByProjectId: new Map([
+        [project.id, [quietFolder, urgentFolder, emptyFolder, unpinnedFolder]],
+      ]),
+      pinnedThreadIds: [],
+      threadListExtraPagesByProjectCwd: new Map(),
+      normalizeProjectCwd: (cwd) => cwd,
+      activeSidebarThreadId: undefined,
+      previewLimit: 5,
+      previewPageSize: 5,
+      resolveThreadStatus: (thread) => threadStatusByThreadId.get(thread.id) ?? null,
+    }).get(project.id);
+
+    expect(
+      data?.pinnedFolderGroups.map((group) => [group.folder.id, group.status?.label ?? null]),
+    ).toEqual([
+      [urgentFolder.id, "Pending Approval"],
+      [quietFolder.id, "Completed"],
+      [emptyFolder.id, null],
+    ]);
+    expect(
+      data?.unpinnedFolderGroups.map((group) => [group.folder.id, group.status?.label ?? null]),
+    ).toEqual([[unpinnedFolder.id, "Pending Approval"]]);
+    expect(data?.pinnedFolderGroups.map((group) => group.memberThreadCount)).toEqual([2, 1, 0]);
+  });
 });
 
 describe("sortThreadsForSidebar", () => {

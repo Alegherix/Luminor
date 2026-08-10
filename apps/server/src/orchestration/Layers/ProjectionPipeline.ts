@@ -146,6 +146,7 @@ const PROJECT_EVENT_TYPES = new Set<OrchestrationEvent["type"]>([
   "folder.created",
   "folder.renamed",
   "folder.deleted",
+  "folder.pinned",
   "space.created",
   "space.meta-updated",
   "space.order-updated",
@@ -487,6 +488,7 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
       case "folder.created":
       case "folder.renamed":
       case "folder.deleted":
+      case "folder.pinned":
         return applyFolderMetadataProjection({ event, projectionFolderRepository }).pipe(
           Effect.asVoid,
         );
@@ -2169,6 +2171,7 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
       case "folder.created":
       case "folder.renamed":
       case "folder.deleted":
+      case "folder.pinned":
         return applyFolderMetadataProjection({ event, projectionFolderRepository });
       case "space.created":
       case "space.meta-updated":

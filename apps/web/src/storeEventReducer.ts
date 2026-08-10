@@ -780,6 +780,17 @@ function applyOrchestrationEvent(
         : state;
     }
 
+    case "folder.pinned": {
+      const existing = state.folders.find((folder) => folder.id === event.payload.folderId);
+      return existing
+        ? upsertFolder(state, {
+            ...existing,
+            isPinned: event.payload.isPinned,
+            updatedAt: event.payload.updatedAt,
+          })
+        : state;
+    }
+
     case "folder.deleted":
       return removeFolder(state, event.payload.folderId);
 

@@ -290,6 +290,7 @@ function isShellRelevantEvent(event: OrchestrationEvent): boolean {
     event.type === "folder.created" ||
     event.type === "folder.renamed" ||
     event.type === "folder.deleted" ||
+    event.type === "folder.pinned" ||
     event.type === "project.created" ||
     event.type === "project.meta-updated" ||
     event.type === "project.deleted" ||
@@ -720,6 +721,7 @@ const makeWsRpcHandlersLayer = () =>
         switch (event.type) {
           case "folder.created":
           case "folder.renamed":
+          case "folder.pinned":
             return projectionReadModelQuery.getFolderShellById(event.payload.folderId).pipe(
               Effect.map((folder) =>
                 Option.map(folder, (nextFolder) => ({

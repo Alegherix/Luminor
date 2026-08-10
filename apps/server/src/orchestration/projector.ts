@@ -29,6 +29,7 @@ import {
   FolderCreatedPayload,
   FolderRenamedPayload,
   FolderDeletedPayload,
+  FolderPinnedPayload,
   ProjectCreatedPayload,
   ProjectDeletedPayload,
   ProjectMetaUpdatedPayload,
@@ -349,6 +350,18 @@ export function projectEvent(
           folders: nextBase.folders.map((folder) =>
             folder.id === payload.folderId
               ? { ...folder, name: payload.name, updatedAt: payload.updatedAt }
+              : folder,
+          ),
+        })),
+      );
+
+    case "folder.pinned":
+      return decodeForEvent(FolderPinnedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          folders: nextBase.folders.map((folder) =>
+            folder.id === payload.folderId
+              ? { ...folder, isPinned: payload.isPinned, updatedAt: payload.updatedAt }
               : folder,
           ),
         })),

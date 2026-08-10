@@ -164,7 +164,7 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { useLatestProjectStore } from "../latestProjectStore";
 import { resolveThreadEnvironmentPresentation } from "../lib/threadEnvironment";
 import { dispatchThreadRename } from "../lib/threadRename";
-import { createFolder, deleteFolder, renameFolder } from "../lib/folders";
+import { createFolder, deleteFolder, renameFolder, setFolderPinned } from "../lib/folders";
 import {
   buildFolderMoveMenuItems,
   describeFolderMoveOutcome,
@@ -340,7 +340,7 @@ import {
   resolveThreadStatusTrailingIndicator,
   type ThreadStatusPill,
   type SidebarDerivedProjectData,
-  type SidebarProjectEntry,
+  type SidebarProjectFolderGroup,
   type SidebarActionBadge,
   type SidebarView,
   shouldShowDebugFeatureFlagsMenu,
@@ -3839,11 +3839,24 @@ export default function Sidebar() {
       if (!api) return;
       const clicked = await api.contextMenu.show(
         [
+          { id: "toggle-pin", label: pinActionLabel("folder", folder.isPinned) },
           { id: "rename", label: "Rename folder" },
           { id: "delete", label: "Delete folder", destructive: true, separatorBefore: true },
         ],
         position,
       );
+      if (clicked === "toggle-pin") {
+        await setFolderPinned({ api, folderId: folder.id, isPinned: !folder.isPinned }).catch(
+          (error) => {
+            toastManager.add({
+              type: "error",
+              title: folder.isPinned ? "Unable to unpin folder" : "Unable to pin folder",
+              description: error instanceof Error ? error.message : undefined,
+            });
+          },
+        );
+        return;
+      }
       if (clicked === "rename") {
         setFolderEditorState({ mode: "rename", folderId: folder.id });
         return;
@@ -5086,13 +5099,14 @@ export default function Sidebar() {
   }
 
   function renderFolderRow(
-    folder: Folder,
-    entries: SidebarProjectEntry[],
+    group: SidebarProjectFolderGroup,
     orderedProjectThreadIds: readonly ThreadId[],
   ) {
+    const { folder, entries, memberThreadCount } = group;
     const expanded = expandedFolderIds.has(folder.id);
     const isDropTarget = folderDropTargetId === folder.id;
     const acceptsActiveThreadDrag = () => threadDragProjectIdRef.current === folder.projectId;
+    const rollupStatus = expanded ? null : group.status;
     return (
       <SidebarMenuSubItem key={folder.id} className="w-full">
         <SidebarMenuSubButton
@@ -5101,7 +5115,7 @@ export default function Sidebar() {
           aria-expanded={expanded}
           data-folder-drop-target={isDropTarget ? "active" : undefined}
           className={cn(
-            "h-7 w-full translate-x-0 justify-start rounded-lg pr-2 pl-5 text-left text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/88 hover:text-foreground",
+            "h-7 w-full translate-x-0 justify-start rounded-lg pr-2 pl-2 text-left text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/88 hover:text-foreground",
             isDropTarget && "bg-info/12 text-foreground ring-1 ring-info/65 ring-inset",
           )}
           onDragOver={(event) => {
@@ -5143,10 +5157,24 @@ export default function Sidebar() {
             void handleFolderContextMenu(folder, { x: event.clientX, y: event.clientY });
           }}
         >
+          <DisclosureChevron open={expanded} className="size-3 text-muted-foreground/60" />
           <SidebarLeadingIcon size="sm" tone="text-inherit">
             <SidebarGlyph icon={expanded ? FolderOpenIcon : FolderIcon} variant="leading" />
           </SidebarLeadingIcon>
           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+          {folder.isPinned || rollupStatus ? (
+            <span className="ml-auto flex shrink-0 items-center gap-1.5 self-center">
+              {folder.isPinned ? (
+                <PinStatusIcon
+                  pinned
+                  role="img"
+                  aria-label="Pinned folder"
+                  className="size-3 text-muted-foreground/70"
+                />
+              ) : null}
+              {rollupStatus ? <SidebarStatusTrailingGlyph status={rollupStatus} /> : null}
+            </span>
+          ) : null}
         </SidebarMenuSubButton>
         <div className={disclosureShellClassName(expanded)}>
           <div className={DISCLOSURE_INNER_CLASS}>
@@ -5157,7 +5185,7 @@ export default function Sidebar() {
                 disclosureContentClassName(expanded),
               )}
             >
-              {entries.length === 0 ? (
+              {memberThreadCount === 0 ? (
                 <div className="py-1 pl-9 text-[length:var(--app-font-size-ui-xs,10px)] text-muted-foreground/55">
                   Empty folder
                 </div>
@@ -5413,12 +5441,8 @@ export default function Sidebar() {
                 disclosureContentClassName(project.expanded),
               )}
             >
-              {pinnedFolderGroups.map(({ folder, entries }) =>
-                renderFolderRow(folder, entries, orderedProjectThreadIds),
-              )}
-              {unpinnedFolderGroups.map(({ folder, entries }) =>
-                renderFolderRow(folder, entries, orderedProjectThreadIds),
-              )}
+              {pinnedFolderGroups.map((group) => renderFolderRow(group, orderedProjectThreadIds))}
+              {unpinnedFolderGroups.map((group) => renderFolderRow(group, orderedProjectThreadIds))}
 
               {visibleEntries.map((entry) =>
                 renderThreadRow(entry.thread, orderedProjectThreadIds, entry.depth),

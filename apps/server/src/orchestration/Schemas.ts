@@ -6,6 +6,7 @@ import {
   FolderCreatedPayload as ContractsFolderCreatedPayloadSchema,
   FolderRenamedPayload as ContractsFolderRenamedPayloadSchema,
   FolderDeletedPayload as ContractsFolderDeletedPayloadSchema,
+  FolderPinnedPayload as ContractsFolderPinnedPayloadSchema,
   ProjectCreatedPayload as ContractsProjectCreatedPayloadSchema,
   ProjectMetaUpdatedPayload as ContractsProjectMetaUpdatedPayloadSchema,
   ProjectDeletedPayload as ContractsProjectDeletedPayloadSchema,
@@ -48,6 +49,7 @@ export const SpaceDeletedPayload = ContractsSpaceDeletedPayloadSchema;
 export const FolderCreatedPayload = ContractsFolderCreatedPayloadSchema;
 export const FolderRenamedPayload = ContractsFolderRenamedPayloadSchema;
 export const FolderDeletedPayload = ContractsFolderDeletedPayloadSchema;
+export const FolderPinnedPayload = ContractsFolderPinnedPayloadSchema;
 export const ProjectCreatedPayload = ContractsProjectCreatedPayloadSchema;
 export const ProjectMetaUpdatedPayload = ContractsProjectMetaUpdatedPayloadSchema;
 export const ProjectDeletedPayload = ContractsProjectDeletedPayloadSchema;

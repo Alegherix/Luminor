@@ -32,6 +32,19 @@ export async function renameFolder(input: {
   });
 }
 
+export async function setFolderPinned(input: {
+  api: NativeApi;
+  folderId: FolderId;
+  isPinned: boolean;
+}): Promise<void> {
+  await input.api.orchestration.dispatchCommand({
+    type: "folder.pin",
+    commandId: newCommandId(),
+    folderId: input.folderId,
+    isPinned: input.isPinned,
+  });
+}
+
 export async function deleteFolder(input: { api: NativeApi; folderId: FolderId }): Promise<void> {
   await input.api.orchestration.dispatchCommand({
     type: "folder.delete",

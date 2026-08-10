@@ -111,6 +111,7 @@ function commandToAggregateRef(command: OrchestrationCommand): {
     case "folder.create":
     case "folder.rename":
     case "folder.delete":
+    case "folder.pin":
       return {
         aggregateKind: "folder",
         aggregateId: command.folderId,
@@ -150,6 +151,7 @@ function isShellMetadataEvent(event: OrchestrationEvent): event is ShellMetadata
     event.type === "folder.created" ||
     event.type === "folder.renamed" ||
     event.type === "folder.deleted" ||
+    event.type === "folder.pinned" ||
     event.type === "project.created" ||
     event.type === "project.meta-updated" ||
     event.type === "project.deleted"
