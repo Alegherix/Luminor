@@ -717,7 +717,7 @@ function SettingsRouteView() {
 
         <SettingsRow
           title="Base font size"
-          description="Adjust the app text base in pixels. Chat and UI typography scale proportionally from this value."
+          description="Adjust the app text base in pixels. Chat and UI typography scale proportionally from this value. Hold Ctrl and scroll to change it quickly."
           resetAction={
             settings.chatFontSizePx !== defaults.chatFontSizePx ? (
               <SettingResetButton

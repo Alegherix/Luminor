@@ -46,10 +46,10 @@ interface MessageTrailProps {
   onSelect: (messageId: MessageId) => void;
 }
 
-// Rail only renders once the centered transcript column (max 46rem) leaves a left
-// gutter wide enough for the rail to sit clear of message text. Measured off the
-// pane so a docked side panel / the sidebar is accounted for.
-const MIN_PANE_WIDTH_PX = 864;
+// Rail only renders once the centered transcript column (max 75rem / 1200px) leaves
+// a left gutter wide enough for the rail to sit clear of message text. Measured
+// off the pane so a docked side panel / the sidebar is accounted for.
+const MIN_PANE_WIDTH_PX = 1_328;
 // Fixed rail box. Ticks grow rightward inside it (left-aligned, like the Dock).
 const RAIL_WIDTH_PX = 56;
 // Cap the scrollable tick viewport a bit below the full pane height so the rail
