@@ -8,6 +8,7 @@ import {
   type ProviderRequestKind,
   type RuntimeMode,
   type ServerProviderAuthStatus,
+  type ThreadEnvironmentMode,
   type ThreadId as ThreadIdType,
 } from "@luminor/contracts";
 import { normalizeModelSlug } from "@luminor/shared/model";
@@ -1622,4 +1623,24 @@ export function enrichSubagentWorkEntries(
       subagents,
     };
   });
+}
+
+/**
+ * Draft context for moving an unsent draft between projects. Branch, worktree and PR
+ * metadata belong to the project left behind, so they reset; the environment mode is the
+ * user's own choice and survives, leaving "New worktree" waiting for a base branch in the
+ * project it lands in.
+ */
+export function resolveDraftProjectMoveContext(input: { envMode: ThreadEnvironmentMode }): {
+  envMode: ThreadEnvironmentMode;
+  worktreePath: null;
+  branch: null;
+  lastKnownPr: null;
+} {
+  return {
+    envMode: input.envMode,
+    worktreePath: null,
+    branch: null,
+    lastKnownPr: null,
+  };
 }
