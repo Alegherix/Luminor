@@ -65,6 +65,23 @@ interface PreviewRun {
   readonly urlDetectionTimeout: ReturnType<typeof setTimeout> | null;
 }
 
+type PreviewUrlDetectionTimeout = ReturnType<typeof setTimeout> | null;
+
+interface PreviewRunTransition {
+  readonly applied: boolean;
+  readonly timeout: PreviewUrlDetectionTimeout;
+}
+
+interface PreviewRunRemoval {
+  readonly tracked: boolean;
+  readonly timeout: PreviewUrlDetectionTimeout;
+}
+
+interface PreviewRunFailure {
+  readonly failed: ThreadPreviewState | null;
+  readonly timeout: PreviewUrlDetectionTimeout;
+}
+
 export interface ThreadPreviewManagerShape {
   /** Start the thread's preview. Starting an active preview is a no-op. */
   readonly start: (input: ThreadPreviewStartInput) => Effect.Effect<ThreadPreviewStartResult>;
@@ -112,14 +129,14 @@ export const ThreadPreviewManagerLive = Layer.effect(
       state: ThreadPreviewState,
       expectedStatus?: ThreadPreviewState["status"],
     ) =>
-      Ref.modify(runs, (current) => {
+      Ref.modify(runs, (current): readonly [PreviewRunTransition, Record<string, PreviewRun>] => {
         const run = current[threadId];
         if (
           !run ||
           run.runId !== runId ||
           (expectedStatus && run.state.status !== expectedStatus)
         ) {
-          return [{ applied: false, timeout: null }, current] as const;
+          return [{ applied: false, timeout: null }, current];
         }
         const timeout = state.status === "starting" ? null : run.urlDetectionTimeout;
         return [
@@ -132,7 +149,7 @@ export const ThreadPreviewManagerLive = Layer.effect(
               urlDetectionTimeout: state.status === "starting" ? run.urlDetectionTimeout : null,
             },
           },
-        ] as const;
+        ];
       }).pipe(
         Effect.flatMap(({ applied, timeout }) => {
           if (!applied) {
@@ -351,15 +368,18 @@ export const ThreadPreviewManagerLive = Layer.effect(
       Effect.gen(function* () {
         // Drop the run before tearing the PTY down so its exit is never reported
         // as a crash.
-        const removed = yield* Ref.modify(runs, (current) => {
-          const run = current[threadId];
-          if (!run) {
-            return [{ tracked: false, timeout: null }, current] as const;
-          }
-          const next = { ...current };
-          delete next[threadId];
-          return [{ tracked: true, timeout: run.urlDetectionTimeout }, next] as const;
-        });
+        const removed = yield* Ref.modify(
+          runs,
+          (current): readonly [PreviewRunRemoval, Record<string, PreviewRun>] => {
+            const run = current[threadId];
+            if (!run) {
+              return [{ tracked: false, timeout: null }, current];
+            }
+            const next = { ...current };
+            delete next[threadId];
+            return [{ tracked: true, timeout: run.urlDetectionTimeout }, next];
+          },
+        );
         if (!removed.tracked) {
           return { stopped: false };
         }
@@ -432,10 +452,10 @@ export const ThreadPreviewManagerLive = Layer.effect(
     // A PTY exit or error for a tracked run means the preview process died on its
     // own: surface it as `failed` with the last thing it printed.
     const failFromTerminal = (threadId: string, fallbackMessage: string) =>
-      Ref.modify(runs, (current) => {
+      Ref.modify(runs, (current): readonly [PreviewRunFailure, Record<string, PreviewRun>] => {
         const run = current[threadId];
         if (!run || run.state.status === "failed") {
-          return [{ failed: null, timeout: null }, current] as const;
+          return [{ failed: null, timeout: null }, current];
         }
         const failed = failedState(run.state, run.lastOutputLine ?? fallbackMessage);
         return [
@@ -444,7 +464,7 @@ export const ThreadPreviewManagerLive = Layer.effect(
             ...current,
             [threadId]: { ...run, state: failed, urlDetectionTimeout: null },
           },
-        ] as const;
+        ];
       }).pipe(
         Effect.flatMap(({ failed, timeout }) => {
           if (timeout) {
