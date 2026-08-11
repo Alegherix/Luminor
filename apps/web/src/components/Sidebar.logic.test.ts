@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildProjectThreadTree,
+  collectSpaceFolderIds,
   createSidebarThreadHoverAnchorId,
   derivePinnedProjectIdsForSidebar,
   derivePinnedThreadIdsForSidebar,
@@ -120,6 +121,38 @@ describe("getActiveSpaceFolders", () => {
     ]);
     expect(getActiveSpaceFolders({ activeSpaceId: personalSpaceId, foldersByOwner })).toEqual([]);
     expect(getActiveSpaceFolders({ activeSpaceId: null, foldersByOwner })).toEqual([]);
+  });
+});
+
+describe("collectSpaceFolderIds", () => {
+  it("collects space-owned folder ids and ignores project-owned ones", () => {
+    const spaceId = SpaceId.makeUnsafe("space-work");
+    const projectId = ProjectId.makeUnsafe("project-1");
+    const makeFolder = (
+      id: string,
+      owner: ReturnType<typeof spaceFolderOwner> | ReturnType<typeof projectFolderOwner>,
+    ) => ({
+      id: FolderId.makeUnsafe(id),
+      owner,
+      name: id,
+      sortOrder: 0,
+      isPinned: false,
+      createdAt: "2026-08-11T10:00:00.000Z",
+      updatedAt: "2026-08-11T10:00:00.000Z",
+    });
+
+    expect([
+      ...collectSpaceFolderIds(
+        new Map([
+          [spaceFolderOwnerKey(spaceId), [makeFolder("folder-space", spaceFolderOwner(spaceId))]],
+          [
+            projectFolderOwnerKey(projectId),
+            [makeFolder("folder-project", projectFolderOwner(projectId))],
+          ],
+        ]),
+      ),
+    ]).toEqual([FolderId.makeUnsafe("folder-space")]);
+    expect([...collectSpaceFolderIds(undefined)]).toEqual([]);
   });
 });
 
@@ -1822,6 +1855,48 @@ describe("deriveSidebarProjectData", () => {
       expect.objectContaining({ rowId: unfiled.id, rootRowId: unfiled.id, depth: 0 }),
     ]);
     expect(data?.orderedProjectThreadIds).not.toContain(pinnedUnfiled.id);
+  });
+
+  it("keeps a thread filed into a space folder out of its project subtree", () => {
+    const project = makeProject();
+    const spaceId = SpaceId.makeUnsafe("space-feature-work");
+    const spaceFolder = {
+      id: FolderId.makeUnsafe("folder-space"),
+      owner: spaceFolderOwner(spaceId),
+      name: "Feature work",
+      sortOrder: 0,
+      isPinned: false,
+      createdAt: "2026-08-11T10:00:00.000Z",
+      updatedAt: "2026-08-11T10:00:00.000Z",
+    };
+    const filed = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-filed-in-space"),
+      folderId: spaceFolder.id,
+      title: "Filed in space folder",
+    });
+    const unfiled = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-unfiled"),
+      title: "Unfiled",
+    });
+
+    const data = deriveSidebarProjectData({
+      projects: [project],
+      sortedSidebarThreadsByProjectId: groupSidebarThreadsByProjectId([filed, unfiled]),
+      foldersByOwner: new Map([[spaceFolderOwnerKey(spaceId), [spaceFolder]]]),
+      pinnedThreadIds: [],
+      threadListExtraPagesByProjectCwd: new Map(),
+      normalizeProjectCwd: (cwd) => cwd,
+      activeSidebarThreadId: undefined,
+      previewLimit: 5,
+      previewPageSize: 5,
+    }).get(project.id);
+
+    expect(data?.pinnedFolderGroups).toEqual([]);
+    expect(data?.unpinnedFolderGroups).toEqual([]);
+    expect(data?.visibleEntries).toEqual([
+      expect.objectContaining({ rowId: unfiled.id, rootRowId: unfiled.id, depth: 0 }),
+    ]);
+    expect(data?.orderedProjectThreadIds).not.toContain(filed.id);
   });
 
   it("keeps subagents nested under their parent even when they carry the inherited folder", () => {

@@ -1,10 +1,21 @@
 // FILE: threadFolderMoves.ts
 // Purpose: Single source for thread→folder membership moves (eligibility, batching, partial-failure reporting).
 // Layer: Web client shared helper (sidebar context menus, folder drag-and-drop, group-into-new-folder)
-// Exports: resolveFolderMoveScope, planFolderMove, buildFolderMoveMenuItems, parseFolderMoveMenuId,
+// Exports: resolveFolderMoveScope, resolveFolderDropTarget, planFolderMove, buildFolderMoveMenuItems, parseFolderMoveMenuId,
 //          moveThreadsToFolder, groupThreadsIntoNewFolder, describeFolderMoveOutcome
 
-import type { FolderId, FolderOwner, NativeApi, ProjectId, ThreadId } from "@luminor/contracts";
+import type {
+  FolderId,
+  FolderOwner,
+  NativeApi,
+  ProjectId,
+  SpaceId,
+  ThreadId,
+} from "@luminor/contracts";
+import {
+  resolveFolderPlacementRejection,
+  type FolderPlacementRejection,
+} from "@luminor/shared/folderOwnership";
 import { pluralize } from "@luminor/shared/text";
 
 import { createFolder, moveThreadToFolder } from "./folders";
@@ -66,6 +77,30 @@ export function resolveFolderMoveScope(
     folderIds: new Set(rootThreads.map((thread) => thread.folderId ?? null)),
     skippedThreadIds,
   };
+}
+
+export type FolderDropResolution =
+  | { readonly accepted: true }
+  | { readonly accepted: false; readonly rejection: FolderPlacementRejection | null };
+
+/**
+ * Mirrors the decider's placement invariant so a drop target can refuse before dispatch and
+ * name the cause. `rejection: null` means there is nothing to move, which needs no message.
+ */
+export function resolveFolderDropTarget(input: {
+  /** Project shared by the dragged threads; `null` when the selection has no single project. */
+  projectId: ProjectId | null;
+  owner: FolderOwner;
+  /** Space of the dragged threads' project; `null` when the project belongs to no space. */
+  projectSpaceId: SpaceId | null;
+}): FolderDropResolution {
+  if (input.projectId === null) return { accepted: false, rejection: null };
+  const rejection = resolveFolderPlacementRejection({
+    owner: input.owner,
+    projectId: input.projectId,
+    projectSpaceId: input.projectSpaceId,
+  });
+  return rejection === null ? { accepted: true } : { accepted: false, rejection };
 }
 
 export const FOLDER_MOVE_MENU_ID_PREFIX = "move-folder:";

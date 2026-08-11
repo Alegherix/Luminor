@@ -4,6 +4,7 @@
 
 import {
   MAX_PINNED_PROJECTS,
+  type FolderId,
   type KeybindingCommand,
   type ProjectId,
   type PullRequestReviewRequestCountResult,
@@ -81,6 +82,19 @@ export function getActiveSpaceFolders(input: {
   return input.activeSpaceId === null
     ? []
     : (input.foldersByOwner.get(spaceFolderOwnerKey(input.activeSpaceId)) ?? []);
+}
+
+/** Space folders render in their own section, so project subtrees must skip their members. */
+export function collectSpaceFolderIds(
+  foldersByOwner: ReadonlyMap<FolderOwnerKey, Folder[]> | undefined,
+): ReadonlySet<FolderId> {
+  const folderIds = new Set<FolderId>();
+  for (const ownerFolders of foldersByOwner?.values() ?? []) {
+    for (const folder of ownerFolders) {
+      if (folder.owner.kind === "space") folderIds.add(folder.id);
+    }
+  }
+  return folderIds;
 }
 
 export function isProjectsSidebarSurface(input: {
@@ -313,6 +327,12 @@ export function sortProjectFolderGroups(
 export function partitionProjectThreadsByFolders(input: {
   threads: readonly SidebarThreadSummary[];
   folders: readonly Folder[];
+  /**
+   * Live folders rendered by another section (e.g. space folders while partitioning a
+   * project). Threads filed there are neither grouped here nor listed as unfiled, so a
+   * thread never renders twice.
+   */
+  foldersRenderedElsewhere?: ReadonlySet<FolderId>;
   pinnedThreadIds: readonly ThreadId[];
   activeThreadId: ThreadId | undefined;
   resolveThreadStatus?: (
@@ -326,7 +346,7 @@ export function partitionProjectThreadsByFolders(input: {
   const threadById = new Map(input.threads.map((thread) => [thread.id, thread] as const));
   const folderById = new Map(input.folders.map((folder) => [folder.id, folder] as const));
   const memberThreadsByFolderId = new Map<Folder["id"], SidebarThreadSummary[]>();
-  const memberThreadIds = new Set<ThreadId>();
+  const filedThreadIds = new Set<ThreadId>();
 
   for (const thread of input.threads) {
     let root = thread;
@@ -338,11 +358,15 @@ export function partitionProjectThreadsByFolders(input: {
       root = parent;
     }
     const folderId = root.folderId ?? null;
-    if (folderId === null || !folderById.has(folderId)) continue;
+    if (folderId === null) continue;
+    if (!folderById.has(folderId)) {
+      if (input.foldersRenderedElsewhere?.has(folderId)) filedThreadIds.add(thread.id);
+      continue;
+    }
     const members = memberThreadsByFolderId.get(folderId);
     if (members) members.push(thread);
     else memberThreadsByFolderId.set(folderId, [thread]);
-    memberThreadIds.add(thread.id);
+    filedThreadIds.add(thread.id);
   }
 
   const folderGroups = input.folders.map((folder): SidebarProjectFolderGroup => {
@@ -373,7 +397,7 @@ export function partitionProjectThreadsByFolders(input: {
     pinnedFolderGroups: sortedFolderGroups.filter(({ folder }) => folder.isPinned),
     unpinnedFolderGroups: sortedFolderGroups.filter(({ folder }) => !folder.isPinned),
     unfiledThreads: getUnpinnedThreadsForSidebar(
-      input.threads.filter((thread) => !memberThreadIds.has(thread.id)),
+      input.threads.filter((thread) => !filedThreadIds.has(thread.id)),
       input.pinnedThreadIds,
     ),
   };
@@ -1639,6 +1663,7 @@ export function deriveSidebarProjectData(input: {
   ) => ReturnType<typeof resolveThreadStatusPill>;
 }): ReadonlyMap<ProjectId, SidebarDerivedProjectData> {
   const byProjectId = new Map<ProjectId, SidebarDerivedProjectData>();
+  const spaceFolderIds = collectSpaceFolderIds(input.foldersByOwner);
 
   for (const project of input.projects) {
     const allProjectThreads = input.sortedSidebarThreadsByProjectId.get(project.id) ?? [];
@@ -1652,6 +1677,7 @@ export function deriveSidebarProjectData(input: {
       partitionProjectThreadsByFolders({
         threads: allProjectThreads,
         folders: input.foldersByOwner?.get(projectFolderOwnerKey(project.id)) ?? [],
+        foldersRenderedElsewhere: spaceFolderIds,
         pinnedThreadIds: input.pinnedThreadIds,
         activeThreadId: input.activeSidebarThreadId,
         resolveThreadStatus: (thread) => statusByThreadId.get(thread.id) ?? null,

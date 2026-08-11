@@ -50,6 +50,7 @@ import {
   requireProject,
   requireFolder,
   requireFolderAbsent,
+  requireFolderAcceptsProject,
   requireFolderOwnedBy,
   requireFolderNameAvailable,
   requireProjectAbsent,
@@ -1437,11 +1438,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
       const project = readModel.projects.find((candidate) => candidate.id === thread.projectId);
       if (command.folderId !== undefined && command.folderId !== null) {
-        yield* requireFolderOwnedBy({
+        yield* requireFolderAcceptsProject({
           readModel,
           command,
           folderId: command.folderId,
-          owner: projectFolderOwner(thread.projectId),
+          projectId: thread.projectId,
         });
       }
       // Provider-native threads: see thread.create — the selection mirrors the

@@ -837,4 +837,100 @@ describe("Folders", () => {
       folderId,
     );
   });
+
+  it("files threads from several projects of a space into one space folder", async () => {
+    const createdAt = "2026-08-10T10:00:00.000Z";
+    const spaceId = SpaceId.makeUnsafe("space-feature-work");
+    const backendProjectId = ProjectId.makeUnsafe("project-backend");
+    const frontendProjectId = ProjectId.makeUnsafe("project-frontend");
+    const outsideProjectId = ProjectId.makeUnsafe("project-outside-space");
+    const folderId = FolderId.makeUnsafe("folder-space-feature");
+    const backendThreadId = ThreadId.makeUnsafe("thread-backend");
+    const frontendThreadId = ThreadId.makeUnsafe("thread-frontend");
+    const outsideThreadId = ThreadId.makeUnsafe("thread-outside-space");
+    let readModel = createEmptyReadModel(createdAt);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "space.create",
+      commandId: CommandId.makeUnsafe("cmd-space-create"),
+      spaceId,
+      name: "Feature work",
+      icon: "bag",
+      createdAt,
+    }));
+    for (const [projectId, threadId, title] of [
+      [backendProjectId, backendThreadId, "Backend"],
+      [frontendProjectId, frontendThreadId, "Frontend"],
+      [outsideProjectId, outsideThreadId, "Outside"],
+    ] as const) {
+      ({ readModel } = await dispatch(readModel, {
+        type: "project.create",
+        commandId: CommandId.makeUnsafe(`cmd-create-${projectId}`),
+        projectId,
+        title,
+        workspaceRoot: `/tmp/${projectId}`,
+        createdAt,
+      }));
+      ({ readModel } = await dispatch(
+        readModel,
+        threadCreateCommand({
+          commandId: `cmd-thread-${threadId}`,
+          threadId,
+          projectId,
+          title,
+          createdAt,
+        }),
+      ));
+    }
+    for (const projectId of [backendProjectId, frontendProjectId] as const) {
+      ({ readModel } = await dispatch(readModel, {
+        type: "project.meta.update",
+        commandId: CommandId.makeUnsafe(`cmd-assign-${projectId}`),
+        projectId,
+        spaceId,
+      }));
+    }
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-space-folder-create"),
+      folderId,
+      owner: spaceFolderOwner(spaceId),
+      name: "Cross-repo feature",
+      createdAt,
+    }));
+
+    for (const threadId of [backendThreadId, frontendThreadId] as const) {
+      ({ readModel } = await dispatch(readModel, {
+        type: "thread.meta.update",
+        commandId: CommandId.makeUnsafe(`cmd-file-${threadId}`),
+        threadId,
+        folderId,
+      }));
+    }
+    expect(
+      readModel.threads
+        .filter((thread) => thread.folderId === folderId)
+        .map((thread) => [thread.id, thread.projectId]),
+    ).toEqual([
+      [backendThreadId, backendProjectId],
+      [frontendThreadId, frontendProjectId],
+    ]);
+
+    await expect(
+      Effect.runPromise(
+        decideOrchestrationCommand({
+          command: {
+            type: "thread.meta.update",
+            commandId: CommandId.makeUnsafe("cmd-file-outside-space"),
+            threadId: outsideThreadId,
+            folderId,
+          },
+          readModel,
+        }),
+      ),
+    ).rejects.toThrow(/is not in this space/i);
+    expect(
+      readModel.threads.find((thread) => thread.id === outsideThreadId)?.folderId ?? null,
+    ).toBeNull();
+  });
 });
