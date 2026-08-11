@@ -160,13 +160,13 @@ const makeProjectionStub = (input: {
       ),
   } as unknown as ProjectionSnapshotQueryShape);
 
-const runPreview = <A>(
+const runPreview = <A, E>(
   stubs: {
     terminal: TerminalStub;
     projection: Layer.Layer<ProjectionSnapshotQuery>;
     net?: NetStub;
   },
-  body: (manager: ThreadPreviewManagerShape) => Effect.Effect<A>,
+  body: (manager: ThreadPreviewManagerShape) => Effect.Effect<A, E>,
 ) =>
   Effect.runPromise(
     Effect.gen(function* () {
