@@ -3,7 +3,6 @@ import { readFileSync, watch } from "node:fs";
 import { join } from "node:path";
 import waitOn from "wait-on";
 
-import { buildAppSnapHelper } from "./build-appsnap-helper.mjs";
 import { desktopDir, resolveElectronPath } from "./electron-launcher.mjs";
 
 const port = Number(process.env.ELECTRON_RENDERER_PORT ?? 5733);
@@ -54,10 +53,6 @@ const serviceMode =
   systemdUnit.length > 0 ||
   process.env.LUMINOR_DEV_SERVICE === "1" ||
   process.env.LUMINOR_DEV_SERVICE === "true";
-
-if (process.platform === "darwin") {
-  buildAppSnapHelper({ arch: process.arch });
-}
 
 await waitOn({
   resources: [`tcp:${port}`, ...requiredFiles.map((filePath) => `file:${filePath}`)],

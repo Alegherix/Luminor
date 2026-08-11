@@ -48,7 +48,7 @@ export const COMPOSER_DRAFT_STORAGE_VERSION = 6;
 export type DraftThreadEnvMode = "local" | "worktree";
 const TERMINAL_DRAFT_THREAD_MAPPING_SUFFIX = "::terminal";
 
-const PersistedComposerAppSnapSource = Schema.Struct({
+const PersistedComposerCaptureSource = Schema.Struct({
   kind: Schema.Literal("appsnap"),
   captureId: Schema.String,
   capturedAt: Schema.String,
@@ -58,7 +58,7 @@ const PersistedComposerAppSnapSource = Schema.Struct({
   windowTitle: Schema.NullOr(Schema.String),
 });
 
-const LegacyPersistedComposerAppSnapSource = Schema.Struct({
+const LegacyPersistedComposerCaptureSource = Schema.Struct({
   kind: Schema.Literal("appshot"),
   captureId: Schema.String,
   capturedAt: Schema.String,
@@ -76,7 +76,7 @@ export const PersistedComposerImageAttachment = Schema.Struct({
   dataUrl: Schema.optionalKey(Schema.String),
   blobKey: Schema.optionalKey(Schema.String),
   source: Schema.optionalKey(
-    Schema.Union([PersistedComposerAppSnapSource, LegacyPersistedComposerAppSnapSource]),
+    Schema.Union([PersistedComposerCaptureSource, LegacyPersistedComposerCaptureSource]),
   ),
 });
 
@@ -325,7 +325,6 @@ export interface ComposerDraftStoreState {
   addImage: (threadId: ThreadId, image: ComposerImageAttachment) => boolean;
   addImages: (threadId: ThreadId, images: ComposerImageAttachment[]) => number;
   removeImage: (threadId: ThreadId, imageId: string) => void;
-  removeAppSnapCapture: (captureId: string) => void;
   addFiles: (threadId: ThreadId, files: ComposerFileAttachment[]) => number;
   removeFile: (threadId: ThreadId, fileId: string) => void;
   addAssistantSelection: (

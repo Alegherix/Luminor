@@ -2,7 +2,7 @@
 // Purpose: Describes provenance shown on composer image attachments.
 // Layer: Web composer domain
 
-export interface ComposerAppSnapSource {
+export interface ComposerLegacyCaptureSource {
   kind: "appsnap";
   captureId: string;
   capturedAt: string;
@@ -12,18 +12,12 @@ export interface ComposerAppSnapSource {
   windowTitle: string | null;
 }
 
-export type ComposerImageSource = ComposerAppSnapSource;
+export type ComposerImageSource = ComposerLegacyCaptureSource;
 
-export type PersistedComposerAppSnapSource = Omit<ComposerAppSnapSource, "appIconDataUrl">;
-
-export function isComposerAppSnapCaptureSource(value: unknown, captureId: string): boolean {
-  if (!value || typeof value !== "object" || captureId.length === 0) return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    (candidate.kind === "appsnap" || candidate.kind === "appshot") &&
-    candidate.captureId === captureId
-  );
-}
+export type PersistedComposerLegacyCaptureSource = Omit<
+  ComposerLegacyCaptureSource,
+  "appIconDataUrl"
+>;
 
 function normalizeAppIconDataUrl(value: unknown): string | null {
   if (typeof value !== "string" || value.length > 256_000) return null;
@@ -53,12 +47,9 @@ export function normalizeComposerImageSource(value: unknown): ComposerImageSourc
   };
 }
 
-// App icons are cached in IndexedDB by bundle identifier. Keeping the inline
-// PNG out of the persisted composer state prevents repeated captures of the
-// same app from consuming the much smaller localStorage quota.
 export function toPersistedComposerImageSource(
   value: unknown,
-): PersistedComposerAppSnapSource | undefined {
+): PersistedComposerLegacyCaptureSource | undefined {
   const source = normalizeComposerImageSource(value);
   if (!source) return undefined;
   const { appIconDataUrl: _appIconDataUrl, ...persistedSource } = source;

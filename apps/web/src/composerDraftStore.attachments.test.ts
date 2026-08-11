@@ -469,9 +469,9 @@ describe("composerDraftStore prompt history saved draft", () => {
     expect(savedDraft?.nonPersistedImageIds).toEqual([]);
   });
 
-  it("preserves saved-draft AppSnap metadata when persisted storage is unreadable", async () => {
+  it("preserves saved-draft legacy capture metadata when persisted storage is unreadable", async () => {
     const store = useComposerDraftStore.getState();
-    const image = makeImage({ id: "appsnap-history-unverified", previewUrl: "blob:history" });
+    const image = makeImage({ id: "capture-history-unverified", previewUrl: "blob:history" });
     const attachment = {
       id: image.id,
       name: image.name,
@@ -505,11 +505,11 @@ describe("composerDraftStore prompt history saved draft", () => {
     expect(savedDraft?.nonPersistedImageIds).toEqual([image.id]);
   });
 
-  it("adds a hydrated AppSnap image back to a prompt-history snapshot", () => {
+  it("adds a hydrated image back to a prompt-history snapshot", () => {
     const store = useComposerDraftStore.getState();
     const originalImage = makeImage({
-      id: "appsnap-history-hydrated",
-      previewUrl: "blob:appsnap-history-original",
+      id: "capture-history-hydrated",
+      previewUrl: "blob:capture-history-original",
     });
     store.setPrompt(threadId, "saved before history navigation");
     store.addImage(threadId, originalImage);
@@ -533,7 +533,7 @@ describe("composerDraftStore prompt history saved draft", () => {
 
     const hydratedImage = makeImage({
       id: originalImage.id,
-      previewUrl: "blob:appsnap-history-restored",
+      previewUrl: "blob:capture-history-restored",
     });
     store.addPromptHistorySavedDraftImage(threadId, hydratedImage);
 
@@ -542,88 +542,6 @@ describe("composerDraftStore prompt history saved draft", () => {
     ).toEqual([hydratedImage]);
   });
 
-  it("removes stale AppSnap rows before retrying a capture with missing blob bytes", async () => {
-    const liveThreadId = ThreadId.makeUnsafe("thread-appsnap-retry-live");
-    const savedThreadId = ThreadId.makeUnsafe("thread-appsnap-retry-saved");
-    const captureId = "capture-missing-blob";
-    const source = {
-      kind: "appsnap" as const,
-      captureId,
-      capturedAt: "2026-07-14T08:00:00.000Z",
-      appName: "Safari",
-      windowTitle: "Luminor",
-    };
-    const staleLiveImage = {
-      ...makeImage({ id: "appsnap-stale-live", previewUrl: "blob:appsnap-stale-live" }),
-      source,
-    };
-    const staleSavedImage = {
-      ...makeImage({ id: "appsnap-stale-saved", previewUrl: "blob:appsnap-stale-saved" }),
-      source,
-    };
-    const unrelatedLiveImage = makeImage({
-      id: "unrelated-live",
-      previewUrl: "blob:unrelated-live",
-      name: "unrelated-live.png",
-    });
-    const unrelatedSavedImage = makeImage({
-      id: "unrelated-saved",
-      previewUrl: "blob:unrelated-saved",
-      name: "unrelated-saved.png",
-    });
-    const persistedAttachment = (image: ComposerImageAttachment) => ({
-      id: image.id,
-      name: image.name,
-      mimeType: image.mimeType,
-      sizeBytes: image.sizeBytes,
-      dataUrl: "data:image/png;base64,aGk=",
-      ...(image.source ? { source: image.source } : {}),
-    });
-    const store = useComposerDraftStore.getState();
-
-    store.setPrompt(liveThreadId, "live draft");
-    store.addImages(liveThreadId, [staleLiveImage, unrelatedLiveImage]);
-    await store.syncPersistedAttachments(liveThreadId, [
-      persistedAttachment(staleLiveImage),
-      persistedAttachment(unrelatedLiveImage),
-    ]);
-
-    store.setPrompt(savedThreadId, "saved draft");
-    store.addImages(savedThreadId, [staleSavedImage, unrelatedSavedImage]);
-    await store.syncPersistedAttachments(savedThreadId, [
-      persistedAttachment(staleSavedImage),
-      persistedAttachment(unrelatedSavedImage),
-    ]);
-    const savedDraft = useComposerDraftStore.getState().draftsByThreadId[savedThreadId]!;
-    store.setPromptHistorySavedDraft(
-      savedThreadId,
-      captureComposerPromptHistorySavedDraft({
-        threadId: savedThreadId,
-        draft: savedDraft,
-        prompt: savedDraft.prompt,
-      }),
-    );
-
-    expect(
-      useComposerDraftStore
-        .getState()
-        .draftsByThreadId[liveThreadId]?.images.map((image) => image.id),
-    ).toEqual([staleLiveImage.id, unrelatedLiveImage.id]);
-
-    store.removeAppSnapCapture(captureId);
-
-    const liveDraft = useComposerDraftStore.getState().draftsByThreadId[liveThreadId]!;
-    expect(liveDraft.images.map((image) => image.id)).toEqual([unrelatedLiveImage.id]);
-    expect(liveDraft.persistedAttachments.map((attachment) => attachment.id)).toEqual([
-      unrelatedLiveImage.id,
-    ]);
-    const promptHistoryDraft =
-      useComposerDraftStore.getState().draftsByThreadId[savedThreadId]?.promptHistorySavedDraft;
-    expect(promptHistoryDraft?.images.map((image) => image.id)).toEqual([unrelatedSavedImage.id]);
-    expect(promptHistoryDraft?.persistedAttachments.map((attachment) => attachment.id)).toEqual([
-      unrelatedSavedImage.id,
-    ]);
-  });
 });
 
 describe("composerDraftStore copyTransferableComposerState", () => {
@@ -711,18 +629,9 @@ describe("composerDraftStore copyTransferableComposerState", () => {
     }
   });
 
-  it("keeps a shared AppSnap blob referenced until every copied draft removes it", async () => {
-    const blobKey = `${sourceThreadId}:appsnap-shared`;
-    const sourceImage = {
-      ...makeImage({ id: "appsnap-shared", previewUrl: "blob:source-appsnap" }),
-      source: {
-        kind: "appsnap" as const,
-        captureId: "capture-shared",
-        capturedAt: "2026-07-12T20:00:00.000Z",
-        appName: "Safari",
-        windowTitle: "Luminor",
-      },
-    };
+  it("keeps a shared image blob referenced until every copied draft removes it", async () => {
+    const blobKey = `${sourceThreadId}:image-shared`;
+    const sourceImage = makeImage({ id: "image-shared", previewUrl: "blob:source-image" });
     const store = useComposerDraftStore.getState();
     store.addImage(sourceThreadId, sourceImage);
     useComposerDraftStore.setState((state) => ({
@@ -737,7 +646,6 @@ describe("composerDraftStore copyTransferableComposerState", () => {
               mimeType: sourceImage.mimeType,
               sizeBytes: sourceImage.sizeBytes,
               blobKey,
-              source: sourceImage.source,
             },
           ],
         },
@@ -761,15 +669,15 @@ describe("composerDraftStore copyTransferableComposerState", () => {
 
   it("identifies a replaced thread-scoped blob key for cleanup", () => {
     const previousAttachment = {
-      id: "appsnap-rekeyed",
-      name: "AppSnap.png",
+      id: "image-rekeyed",
+      name: "capture.png",
       mimeType: "image/png",
       sizeBytes: 4,
-      blobKey: `${sourceThreadId}:appsnap-rekeyed`,
+      blobKey: `${sourceThreadId}:image-rekeyed`,
     };
     const nextAttachment = {
       ...previousAttachment,
-      blobKey: `${targetThreadId}:appsnap-rekeyed`,
+      blobKey: `${targetThreadId}:image-rekeyed`,
     };
 
     expect(
@@ -845,14 +753,14 @@ describe("composerDraftStore syncPersistedAttachments", () => {
 
   it("stages overlapping attachment syncs immediately and serializes verification", async () => {
     const firstImage = makeImage({
-      id: "appsnap-sync-first",
-      previewUrl: "blob:appsnap-sync-first",
-      name: "appsnap-sync-first.png",
+      id: "image-sync-first",
+      previewUrl: "blob:image-sync-first",
+      name: "image-sync-first.png",
     });
     const secondImage = makeImage({
-      id: "appsnap-sync-second",
-      previewUrl: "blob:appsnap-sync-second",
-      name: "appsnap-sync-second.png",
+      id: "image-sync-second",
+      previewUrl: "blob:image-sync-second",
+      name: "image-sync-second.png",
     });
     const attachmentFor = (image: ComposerImageAttachment) => ({
       id: image.id,
@@ -890,9 +798,9 @@ describe("composerDraftStore syncPersistedAttachments", () => {
 
   it("retires the sync generation entry once the newest sync for a slot settles", async () => {
     const image = makeImage({
-      id: "appsnap-sync-generation",
-      previewUrl: "blob:appsnap-sync-generation",
-      name: "appsnap-sync-generation.png",
+      id: "image-sync-generation",
+      previewUrl: "blob:image-sync-generation",
+      name: "image-sync-generation.png",
     });
     const attachment = {
       id: image.id,
@@ -962,10 +870,10 @@ describe("composerDraftStore syncPersistedAttachments", () => {
     ).toEqual([image.id]);
   });
 
-  it("warns when AppSnap bytes exist but their draft metadata cannot be verified", async () => {
+  it("warns when legacy capture bytes exist but their draft metadata cannot be verified", async () => {
     const image = makeImage({
-      id: "appsnap-persisted",
-      previewUrl: "blob:appsnap-persisted",
+      id: "capture-persisted",
+      previewUrl: "blob:capture-persisted",
     });
     useComposerDraftStore.getState().addImage(threadId, image);
     setLocalStorageItem(
@@ -1009,10 +917,10 @@ describe("composerDraftStore syncPersistedAttachments", () => {
     ).toEqual([image.id]);
   });
 
-  it("clears the warning after AppSnap blob metadata is readable from storage", async () => {
+  it("clears the warning after legacy capture blob metadata is readable from storage", async () => {
     const image = makeImage({
-      id: "appsnap-verified",
-      previewUrl: "blob:appsnap-verified",
+      id: "capture-verified",
+      previewUrl: "blob:capture-verified",
     });
     useComposerDraftStore.getState().addImage(threadId, image);
 
@@ -1075,10 +983,10 @@ describe("composerDraftStore syncPersistedAttachments", () => {
     ).toEqual([]);
   });
 
-  it("verifies AppSnap metadata without rejecting unrelated malformed drafts", async () => {
+  it("verifies legacy capture metadata without rejecting unrelated malformed drafts", async () => {
     const image = makeImage({
-      id: "appsnap-valid-among-malformed",
-      previewUrl: "blob:appsnap-valid-among-malformed",
+      id: "capture-valid-among-malformed",
+      previewUrl: "blob:capture-valid-among-malformed",
     });
     const attachment = {
       id: image.id,
@@ -1123,7 +1031,7 @@ describe("composerDraftStore syncPersistedAttachments", () => {
     ).toEqual([]);
   });
 
-  it("keeps AppSnap blob metadata and migrates former provenance", () => {
+  it("keeps legacy capture blob metadata and migrates the former discriminator", () => {
     const persistApi = useComposerDraftStore.persist as unknown as {
       getOptions: () => {
         merge: (
@@ -1148,11 +1056,11 @@ describe("composerDraftStore syncPersistedAttachments", () => {
             prompt: "",
             attachments: [
               {
-                id: "appsnap-1",
-                name: "appsnap.png",
+                id: "capture-1",
+                name: "capture.png",
                 mimeType: "image/png",
                 sizeBytes: 2048,
-                blobKey: `${threadId}:appsnap-1`,
+                blobKey: `${threadId}:capture-1`,
                 source: { ...source, kind: "appshot" },
               },
             ],
@@ -1165,15 +1073,15 @@ describe("composerDraftStore syncPersistedAttachments", () => {
     expect(mergedState.draftsByThreadId[threadId]?.images).toEqual([]);
     expect(mergedState.draftsByThreadId[threadId]?.persistedAttachments).toEqual([
       expect.objectContaining({
-        id: "appsnap-1",
-        blobKey: `${threadId}:appsnap-1`,
+        id: "capture-1",
+        blobKey: `${threadId}:capture-1`,
         source,
       }),
     ]);
   });
 
-  it("omits inline AppSnap icons from localStorage metadata", () => {
-    const image = makeImage({ id: "appsnap-icon", previewUrl: "blob:appsnap-icon" });
+  it("omits inline legacy capture icons from localStorage metadata", () => {
+    const image = makeImage({ id: "capture-icon", previewUrl: "blob:capture-icon" });
     useComposerDraftStore.getState().addImage(threadId, image);
     useComposerDraftStore.setState((state) => ({
       draftsByThreadId: {

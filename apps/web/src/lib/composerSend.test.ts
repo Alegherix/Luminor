@@ -436,11 +436,11 @@ function persistedImageAttachment(
   overrides: Partial<PersistedComposerImageAttachment> = {},
 ): PersistedComposerImageAttachment {
   return {
-    id: "appsnap-1",
+    id: "blob-image-1",
     name: "capture.png",
     mimeType: "image/png",
     sizeBytes: 4,
-    blobKey: "thread-1:appsnap-1",
+    blobKey: "thread-1:blob-image-1",
     ...overrides,
   };
 }
@@ -451,7 +451,7 @@ function composerImageAttachment(
   const file = new File(["png"], "capture.png", { type: "image/png" });
   return {
     type: "image",
-    id: "appsnap-1",
+    id: "blob-image-1",
     name: "capture.png",
     mimeType: "image/png",
     sizeBytes: 4,
@@ -523,7 +523,7 @@ describe("hydratePendingBlobComposerAttachments", () => {
     expect(result).toEqual([
       expect.objectContaining({
         type: "image",
-        id: "appsnap-1",
+        id: "blob-image-1",
         previewUrl: "blob:capture.png",
         file: blobFile,
         source: expect.objectContaining({ kind: "appsnap", captureId: "capture-1" }),

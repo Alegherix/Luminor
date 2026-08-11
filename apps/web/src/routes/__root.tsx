@@ -24,8 +24,6 @@ import { Throttler } from "@tanstack/react-pacer";
 
 import { APP_DISPLAY_NAME, APP_VERSION } from "../branding";
 import { DesktopWindowControls } from "../components/DesktopWindowControls";
-import { AppSnapCoordinator } from "../components/AppSnapCoordinator";
-import { AppSnapWelcomeDialog } from "../components/AppSnapWelcomeDialog";
 import { FeedbackDialog } from "../components/FeedbackDialog";
 import { SETTINGS_TARGETS } from "../settingsNavigation";
 import ShortcutsDialog from "../components/ShortcutsDialog";
@@ -261,8 +259,6 @@ function RootRouteView() {
           <GlobalFeedbackDialog />
           <GlobalWhatsNewSurface />
           <TaskCompletionNotifications />
-          <AppSnapWelcomeDialog />
-          <AppSnapCoordinator />
           <DesktopProjectBootstrap />
           <Outlet />
         </AnchoredToastProvider>

@@ -520,7 +520,7 @@ export const WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
         description:
           "Sharper Markdown hierarchy, steadier pickers, better composer spacing, smarter sidebar priority, clearer Studio Git controls, and new shortcuts make daily work easier to scan.",
         details:
-          "This release also adds Commit and Push from the active task, configurable AppSnap shortcuts, a folder opener in Studio, a slimmer running indicator, reliable Cmd+K search on macOS, fixed PR review counts, safer file-icon lookup, cleaner stacked composer panels, and a global new-task flow that uses the latest project state.",
+          "This release also adds Commit and Push from the active task, a folder opener in Studio, a slimmer running indicator, reliable Cmd+K search on macOS, fixed PR review counts, safer file-icon lookup, cleaner stacked composer panels, and a global new-task flow that uses the latest project state.",
       },
     ],
   },
@@ -628,22 +628,6 @@ export const WHATS_NEW_ENTRIES: readonly WhatsNewEntry[] = [
     version: "0.5.3",
     date: "Jul 14",
     features: [
-      {
-        id: "appsnap-capture",
-        title: "Capture any Mac app straight into your task",
-        description:
-          "Press both Option keys to capture the window you are using and attach it to the current Luminor task.",
-        details:
-          "AppSnap is an opt-in macOS workflow with a dedicated setup panel, permission guidance, capture feedback, app icons, and a first-run introduction. Captures stay tied to the active task without stealing focus, and the desktop helper is included in packaged Mac builds.",
-      },
-      {
-        id: "durable-appsnap-drafts",
-        title: "AppSnaps wait safely until you send",
-        description:
-          "Captured windows remain available through navigation, restarts, retries, and manual attachment flows.",
-        details:
-          "Pending image blobs are persisted outside the lightweight draft record, restored into the composer on startup, counted against attachment limits, deduplicated across retry paths, and hydrated immediately before send. Failed or overlapping captures recover without duplicating attachments or replaying feedback sounds.",
-      },
       {
         id: "clearer-long-messages",
         title: "Long messages are easier to scan",

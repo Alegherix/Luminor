@@ -368,12 +368,7 @@ export async function buildUploadComposerAttachments(input: {
   return (await stageUploadComposerAttachments(input)).attachments;
 }
 
-/**
- * Persisted image attachments that still back a blob (AppSnap captures) but
- * have not yet hydrated into the live `images` array. Right after a reload,
- * `AppSnapCoordinator` hydrates these asynchronously from IndexedDB; sending
- * before that finishes must not silently drop them.
- */
+/** Persisted blob-backed images that have not hydrated into the live `images` array yet. */
 export function findPendingBlobComposerAttachments(input: {
   persistedAttachments: ReadonlyArray<PersistedComposerImageAttachment>;
   images: ReadonlyArray<ComposerImageAttachment>;
@@ -385,8 +380,7 @@ export function findPendingBlobComposerAttachments(input: {
 }
 
 /**
- * Reads pending blob-backed persisted attachments (see
- * `findPendingBlobComposerAttachments`) from IndexedDB and reconstructs them
+ * Reads pending blob-backed persisted attachments from IndexedDB and reconstructs them
  * as live `ComposerImageAttachment`s so a send in flight can include them.
  * An attachment whose blob is missing or fails to read is skipped rather than
  * failing the whole send — the caller keeps sending whatever did hydrate.

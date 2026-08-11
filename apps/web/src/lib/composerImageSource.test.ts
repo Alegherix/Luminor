@@ -6,7 +6,7 @@ import {
 } from "./composerImageSource";
 
 describe("normalizeComposerImageSource", () => {
-  it("preserves valid AppSnap provenance", () => {
+  it("preserves valid legacy capture provenance", () => {
     expect(
       normalizeComposerImageSource({
         kind: "appsnap",
@@ -44,7 +44,7 @@ describe("normalizeComposerImageSource", () => {
     expect(normalizeComposerImageSource({ kind: "appsnap", captureId: "" })).toBeUndefined();
   });
 
-  it("migrates the former provenance discriminator", () => {
+  it("migrates the former capture discriminator", () => {
     expect(
       normalizeComposerImageSource({
         kind: "appshot",

@@ -880,9 +880,6 @@ describe("AppSettingsSchema", () => {
       defaultThreadEnvMode: "local",
       confirmThreadDelete: false,
       confirmTerminalTabClose: true,
-      enableAppSnap: false,
-      appSnapShortcut: { kind: "both-option-keys" },
-      appSnapPlaySound: true,
       enableAssistantStreaming: true,
       followUpBehavior: DEFAULT_FOLLOW_UP_BEHAVIOR,
       sidebarProjectSortOrder: DEFAULT_SIDEBAR_PROJECT_SORT_ORDER,
@@ -900,16 +897,4 @@ describe("AppSettingsSchema", () => {
     });
   });
 
-  it("migrates the former AppSnap feature flag", () => {
-    const decode = Schema.decodeSync(Schema.fromJsonString(AppSettingsSchema));
-
-    expect(
-      normalizeStoredAppSettings(decode(JSON.stringify({ enableAppshots: true }))),
-    ).toMatchObject({
-      enableAppSnap: true,
-    });
-    expect(
-      normalizeStoredAppSettings(decode(JSON.stringify({ enableAppshots: true }))),
-    ).not.toHaveProperty("enableAppshots");
-  });
 });

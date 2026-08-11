@@ -9,7 +9,6 @@ export const SETTINGS_SECTION_IDS = [
   "appearance",
   "notifications",
   "behavior",
-  "appsnap",
   "shortcuts",
   "worktrees",
   "archived",
@@ -111,14 +110,6 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     description: "See remaining quota and credits for every signed-in provider.",
     icon: "gauge",
     eyebrow: "Provider limits",
-  },
-  {
-    id: "appsnap",
-    group: "integrations",
-    label: "AppSnap",
-    description: "Capture another app's frontmost window directly into a task.",
-    icon: "screen-capture",
-    eyebrow: "Screen capture",
   },
   {
     id: "integrations",
