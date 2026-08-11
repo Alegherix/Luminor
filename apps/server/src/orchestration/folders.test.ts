@@ -242,6 +242,158 @@ describe("Folders", () => {
     ).rejects.toThrow(/does not exist/i);
   });
 
+  it("renames, pins, reorders, and deletes space-owned folders with owner-scoped rules", async () => {
+    const createdAt = "2026-08-11T12:00:00.000Z";
+    const spaceId = SpaceId.makeUnsafe("space-lifecycle");
+    const projectId = ProjectId.makeUnsafe("project-lifecycle");
+    const firstFolderId = FolderId.makeUnsafe("folder-space-first");
+    const secondFolderId = FolderId.makeUnsafe("folder-space-second");
+    const projectFolderId = FolderId.makeUnsafe("folder-project-same-name");
+    let readModel = createEmptyReadModel(createdAt);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "space.create",
+      commandId: CommandId.makeUnsafe("cmd-space-create"),
+      spaceId,
+      name: "Work",
+      icon: "bag",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-project-create"),
+      projectId,
+      title: "Backend",
+      workspaceRoot: "/tmp/backend-lifecycle",
+      createdAt,
+    }));
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-create-first-space-folder"),
+      folderId: firstFolderId,
+      owner: spaceFolderOwner(spaceId),
+      name: "Auth",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-create-second-space-folder"),
+      folderId: secondFolderId,
+      owner: spaceFolderOwner(spaceId),
+      name: "Billing",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-create-project-folder"),
+      folderId: projectFolderId,
+      owner: projectFolderOwner(projectId),
+      name: "Auth",
+      createdAt,
+    }));
+
+    const spaceFolders = readModel.folders
+      .filter((folder) => folderOwnersEqual(folder.owner, spaceFolderOwner(spaceId)))
+      .toSorted((left, right) => left.sortOrder - right.sortOrder);
+    expect(spaceFolders.map((folder) => [folder.id, folder.sortOrder, folder.name])).toEqual([
+      [firstFolderId, 0, "Auth"],
+      [secondFolderId, 1, "Billing"],
+    ]);
+    expect(readModel.folders.find((folder) => folder.id === projectFolderId)).toMatchObject({
+      name: "Auth",
+      owner: projectFolderOwner(projectId),
+    });
+
+    const rename = await dispatch(readModel, {
+      type: "folder.rename",
+      commandId: CommandId.makeUnsafe("cmd-rename-space-folder"),
+      folderId: firstFolderId,
+      name: "Authentication",
+    });
+    readModel = rename.readModel;
+    expect(rename.events.map((event) => event.type)).toEqual(["folder.renamed"]);
+    expect(readModel.folders.find((folder) => folder.id === firstFolderId)?.name).toBe(
+      "Authentication",
+    );
+
+    await expect(
+      dispatch(readModel, {
+        type: "folder.rename",
+        commandId: CommandId.makeUnsafe("cmd-rename-space-folder-conflict"),
+        folderId: firstFolderId,
+        name: "billing",
+      }),
+    ).rejects.toThrow(/already exists/i);
+
+    await expect(
+      dispatch(readModel, {
+        type: "folder.create",
+        commandId: CommandId.makeUnsafe("cmd-create-space-folder-conflict"),
+        folderId: FolderId.makeUnsafe("folder-space-duplicate"),
+        owner: spaceFolderOwner(spaceId),
+        name: "authentication",
+        createdAt,
+      }),
+    ).rejects.toThrow(/already exists/i);
+
+    const pinSecond = await dispatch(readModel, {
+      type: "folder.pin",
+      commandId: CommandId.makeUnsafe("cmd-pin-second"),
+      folderId: secondFolderId,
+      isPinned: true,
+    });
+    readModel = pinSecond.readModel;
+    const pinFirst = await dispatch(readModel, {
+      type: "folder.pin",
+      commandId: CommandId.makeUnsafe("cmd-pin-first"),
+      folderId: firstFolderId,
+      isPinned: true,
+    });
+    readModel = pinFirst.readModel;
+
+    const orderedSpaceFolders = readModel.folders
+      .filter(
+        (folder) =>
+          folderOwnersEqual(folder.owner, spaceFolderOwner(spaceId)) && folder.deletedAt === null,
+      )
+      .toSorted(
+        (left, right) =>
+          Number(right.isPinned) - Number(left.isPinned) ||
+          left.sortOrder - right.sortOrder ||
+          left.id.localeCompare(right.id),
+      );
+    expect(
+      orderedSpaceFolders.map((folder) => [folder.id, folder.isPinned, folder.sortOrder]),
+    ).toEqual([
+      [firstFolderId, true, 0],
+      [secondFolderId, true, 1],
+    ]);
+
+    const unpinSecond = await dispatch(readModel, {
+      type: "folder.pin",
+      commandId: CommandId.makeUnsafe("cmd-unpin-second"),
+      folderId: secondFolderId,
+      isPinned: false,
+    });
+    readModel = unpinSecond.readModel;
+    expect(readModel.folders.find((folder) => folder.id === secondFolderId)?.isPinned).toBe(false);
+    expect(readModel.folders.find((folder) => folder.id === firstFolderId)?.isPinned).toBe(true);
+
+    const deletion = await dispatch(readModel, {
+      type: "folder.delete",
+      commandId: CommandId.makeUnsafe("cmd-delete-space-folder"),
+      folderId: firstFolderId,
+    });
+    readModel = deletion.readModel;
+    expect(deletion.events.map((event) => event.type)).toEqual(["folder.deleted"]);
+    expect(
+      readModel.folders.find((folder) => folder.id === firstFolderId)?.deletedAt,
+    ).not.toBeNull();
+    expect(readModel.folders.find((folder) => folder.id === secondFolderId)?.deletedAt).toBeNull();
+    expect(readModel.folders.find((folder) => folder.id === projectFolderId)?.deletedAt).toBeNull();
+  });
+
   it("moves an existing Thread into, between, and out of same-project Folders", async () => {
     const createdAt = "2026-08-10T10:00:00.000Z";
     const projectId = ProjectId.makeUnsafe("project-membership");
