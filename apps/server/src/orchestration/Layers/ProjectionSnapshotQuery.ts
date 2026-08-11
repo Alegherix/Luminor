@@ -49,7 +49,7 @@ import {
 } from "../../persistence/Errors.ts";
 import { normalizePersistedModelSelection } from "../../persistence/modelSelectionCompatibility.ts";
 import { deriveThreadSummaryMetadata } from "@luminor/shared/threadSummary";
-import { projectFolderOwner } from "@luminor/shared/folderOwnership";
+import { folderOwnerFromReferences } from "@luminor/shared/folderOwnership";
 import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheckpoints.ts";
 import { ProjectionProject } from "../../persistence/Services/ProjectionProjects.ts";
 import { ProjectionFolder } from "../../persistence/Services/ProjectionFolders.ts";
@@ -101,7 +101,8 @@ const ProjectionProjectDbRowSchema = ProjectionProject.mapFields(
 const { owner: _projectionFolderOwnerField, ...ProjectionFolderDbFields } = ProjectionFolder.fields;
 const ProjectionFolderDbRowSchema = Schema.Struct({
   ...ProjectionFolderDbFields,
-  projectId: ProjectId,
+  projectId: Schema.NullOr(ProjectId),
+  spaceId: Schema.NullOr(SpaceId),
 });
 const ProjectionThreadProposedPlanDbRowSchema = ProjectionThreadProposedPlan;
 const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
@@ -485,7 +486,7 @@ function toProjectedSpaceShell(row: ProjectionSpaceDbRow): OrchestrationSpaceShe
 function toProjectedFolder(row: ProjectionFolderDbRow) {
   return {
     id: row.folderId,
-    owner: projectFolderOwner(row.projectId),
+    owner: folderOwnerFromReferences({ projectId: row.projectId, spaceId: row.spaceId }),
     name: row.name,
     sortOrder: row.sortOrder,
     isPinned: row.isPinned > 0,
@@ -815,6 +816,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       SELECT
         folder_id AS "folderId",
         project_id AS "projectId",
+        space_id AS "spaceId",
         name,
         sort_order AS "sortOrder",
         is_pinned AS "isPinned",
@@ -822,7 +824,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         updated_at AS "updatedAt",
         deleted_at AS "deletedAt"
       FROM projection_folders
-      ORDER BY project_id ASC, sort_order ASC, folder_id ASC
+      ORDER BY project_id ASC, space_id ASC, sort_order ASC, folder_id ASC
     `,
   });
 
@@ -1367,6 +1369,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       SELECT
         folder_id AS "folderId",
         project_id AS "projectId",
+        space_id AS "spaceId",
         name,
         sort_order AS "sortOrder",
         is_pinned AS "isPinned",

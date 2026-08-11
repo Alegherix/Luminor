@@ -33,7 +33,7 @@ import {
   type VoidSpacePresentation,
 } from "~/lib/spaceGrouping";
 import { cn } from "~/lib/utils";
-import { PencilIcon, PlusIcon, RotateCcwIcon, Trash2 } from "~/lib/icons";
+import { FolderIcon, PencilIcon, PlusIcon, RotateCcwIcon, Trash2 } from "~/lib/icons";
 import { SIDEBAR_SECTION_LABEL_CLASS_NAME } from "~/sidebarRowStyles";
 import { SpaceIcon, type SpaceIconValue } from "./SpaceIcon";
 import { ComposerPickerMenuPopup } from "./chat/ComposerPickerMenuPopup";
@@ -393,6 +393,7 @@ interface SpaceSwitcherProps {
   voidSpace: VoidSpacePresentation;
   onSelect: (spaceId: SpaceId | null) => void;
   onCreate: () => void;
+  onCreateFolder: (space: Space) => void;
   onEdit: (space: Space) => void;
   onDelete: (space: Space) => void;
   onReorder: (orderedSpaceIds: ReadonlyArray<SpaceId>, movedSpaceId: SpaceId) => void;
@@ -646,6 +647,19 @@ function SpaceSwitcherStrip(props: SpaceSwitcherProps) {
             className={SIDEBAR_CONTEXT_MENU_PANEL_CLASS_NAME}
           >
             <MenuGroup>
+              {contextState.space?.id === activeSpaceId ? (
+                <MenuItem
+                  className={SIDEBAR_CONTEXT_MENU_ITEM_CLASS_NAME}
+                  onClick={() => {
+                    const target = contextState.space;
+                    setContextState(null);
+                    if (target) props.onCreateFolder(target);
+                  }}
+                >
+                  <SidebarContextMenuIcon icon={FolderIcon} />
+                  <span>New folder…</span>
+                </MenuItem>
+              ) : null}
               <MenuItem
                 className={SIDEBAR_CONTEXT_MENU_ITEM_CLASS_NAME}
                 onClick={() => {

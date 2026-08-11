@@ -15,7 +15,7 @@ import {
   type ThreadMarker,
 } from "@luminor/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
-import { projectFolderOwner } from "@luminor/shared/folderOwnership";
+import { projectFolderOwner, spaceFolderOwner } from "@luminor/shared/folderOwnership";
 
 import {
   applyShellEvent,
@@ -61,7 +61,7 @@ describe("store projection", () => {
     const folderId = FolderId.makeUnsafe("folder-shell");
     const folder = {
       id: folderId,
-      owner: projectFolderOwner(ProjectId.makeUnsafe("project-1")),
+      owner: spaceFolderOwner(SpaceId.makeUnsafe("space-folder-shell")),
       name: "Planning",
       sortOrder: 0,
       isPinned: false,

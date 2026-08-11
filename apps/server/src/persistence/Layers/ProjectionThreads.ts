@@ -2,6 +2,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { Effect, Layer, Schema, Struct } from "effect";
 import * as SchemaGetter from "effect/SchemaGetter";
+import { folderOwnerReferences } from "@luminor/shared/folderOwnership";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
@@ -300,15 +301,17 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
 
   const clearFolderMembershipsByOwnerRow = SqlSchema.void({
     Request: ClearProjectionThreadFolderMembershipsByOwnerInput,
-    execute: ({ owner, updatedAt }) =>
-      sql`
+    execute: ({ owner, updatedAt }) => {
+      const projectId = folderOwnerReferences(owner).projectId;
+      return sql`
         UPDATE projection_threads
         SET
           folder_id = NULL,
           updated_at = CASE WHEN updated_at > ${updatedAt} THEN updated_at ELSE ${updatedAt} END
-        WHERE project_id = ${owner.projectId}
+        WHERE project_id = ${projectId}
           AND folder_id IS NOT NULL
-      `,
+      `;
+    },
   });
 
   const upsert: ProjectionThreadRepositoryShape["upsert"] = (row) =>

@@ -454,7 +454,13 @@ export const ProjectFolderOwner = Schema.Struct({
 });
 export type ProjectFolderOwner = typeof ProjectFolderOwner.Type;
 
-export const FolderOwner = Schema.Union([ProjectFolderOwner]);
+export const SpaceFolderOwner = Schema.Struct({
+  kind: Schema.Literal("space"),
+  spaceId: SpaceId,
+});
+export type SpaceFolderOwner = typeof SpaceFolderOwner.Type;
+
+export const FolderOwner = Schema.Union([ProjectFolderOwner, SpaceFolderOwner]);
 export type FolderOwner = typeof FolderOwner.Type;
 
 export const OrchestrationFolder = Schema.Struct({

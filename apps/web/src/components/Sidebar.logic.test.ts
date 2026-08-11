@@ -11,6 +11,7 @@ import {
   findDeepestWorkspaceRootMatch,
   findWorkspaceRootMatch,
   getFallbackThreadIdAfterDelete,
+  getActiveSpaceFolders,
   getVisibleSidebarEntriesForPreview,
   orderPinnedProjectsForSidebar,
   pullRequestRepositoryConfigFingerprint,
@@ -54,8 +55,13 @@ import {
   sortProjectFolders,
   sortThreadsForSidebar,
 } from "./Sidebar.logic";
-import { FolderId, ProjectId, ThreadId } from "@luminor/contracts";
-import { projectFolderOwner, projectFolderOwnerKey } from "@luminor/shared/folderOwnership";
+import { FolderId, ProjectId, SpaceId, ThreadId } from "@luminor/contracts";
+import {
+  projectFolderOwner,
+  projectFolderOwnerKey,
+  spaceFolderOwner,
+  spaceFolderOwnerKey,
+} from "@luminor/shared/folderOwnership";
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -88,6 +94,32 @@ describe("sortProjectFolders", () => {
       FolderId.makeUnsafe("folder-a"),
       FolderId.makeUnsafe("folder-b"),
     ]);
+  });
+});
+
+describe("getActiveSpaceFolders", () => {
+  it("returns only folders owned by the active space and hides empty sections", () => {
+    const workSpaceId = SpaceId.makeUnsafe("space-work");
+    const personalSpaceId = SpaceId.makeUnsafe("space-personal");
+    const workFolder = {
+      id: FolderId.makeUnsafe("folder-work"),
+      owner: spaceFolderOwner(workSpaceId),
+      name: "Work feature",
+      sortOrder: 0,
+      isPinned: false,
+      createdAt: "2026-08-11T10:00:00.000Z",
+      updatedAt: "2026-08-11T10:00:00.000Z",
+    };
+    const foldersByOwner = new Map([
+      [spaceFolderOwnerKey(workSpaceId), [workFolder]],
+      [spaceFolderOwnerKey(personalSpaceId), []],
+    ]);
+
+    expect(getActiveSpaceFolders({ activeSpaceId: workSpaceId, foldersByOwner })).toEqual([
+      workFolder,
+    ]);
+    expect(getActiveSpaceFolders({ activeSpaceId: personalSpaceId, foldersByOwner })).toEqual([]);
+    expect(getActiveSpaceFolders({ activeSpaceId: null, foldersByOwner })).toEqual([]);
   });
 });
 

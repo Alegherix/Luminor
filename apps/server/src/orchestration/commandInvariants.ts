@@ -162,7 +162,7 @@ export function requireFolderOwnedBy(input: {
         : Effect.fail(
             invariantError(
               input.command.type,
-              `Folder '${input.folderId}' does not belong to thread project '${input.owner.projectId}'.`,
+              `Folder '${input.folderId}' does not belong to the requested owner.`,
             ),
           ),
     ),
@@ -204,7 +204,7 @@ export function requireFolderNameAvailable(input: {
     ? Effect.fail(
         invariantError(
           input.command.type,
-          `A folder named '${input.name}' already exists in this project.`,
+          `A folder named '${input.name}' already exists for this owner.`,
         ),
       )
     : Effect.void;

@@ -16,7 +16,7 @@ import {
   TurnId,
 } from "@luminor/contracts";
 import { describe, expect, it } from "vitest";
-import { projectFolderOwner } from "@luminor/shared/folderOwnership";
+import { spaceFolderOwner } from "@luminor/shared/folderOwnership";
 
 import { applyOrchestrationEvents, applyOrchestrationEventsHotPath } from "./storeEventReducer";
 import {
@@ -44,7 +44,7 @@ describe("store event reducer", () => {
     let state = applyOrchestrationEvents(makeState(makeThread()), [
       makeDomainEvent("folder.created", {
         folderId,
-        owner: projectFolderOwner(ProjectId.makeUnsafe("project-1")),
+        owner: spaceFolderOwner(SpaceId.makeUnsafe("space-folder-live")),
         name: "Planning",
         sortOrder: 0,
         isPinned: false,
@@ -52,7 +52,12 @@ describe("store event reducer", () => {
         updatedAt: "2026-08-10T10:00:00.000Z",
       }),
     ]);
-    expect(state.folders[0]?.name).toBe("Planning");
+    expect(state.folders[0]).toEqual(
+      expect.objectContaining({
+        name: "Planning",
+        owner: spaceFolderOwner(SpaceId.makeUnsafe("space-folder-live")),
+      }),
+    );
 
     state = applyOrchestrationEvents(state, [
       makeDomainEvent("folder.renamed", {

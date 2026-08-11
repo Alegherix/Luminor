@@ -13,6 +13,7 @@ import {
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { projectFolderOwner, spaceFolderOwner } from "@luminor/shared/folderOwnership";
 
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { ORCHESTRATION_PROJECTOR_NAMES } from "./ProjectionPipeline.ts";
@@ -60,9 +61,13 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       `;
       yield* sql`
         INSERT INTO projection_folders (
-          folder_id, project_id, name, sort_order, is_pinned, created_at, updated_at, deleted_at
+          folder_id, project_id, space_id, name, sort_order, is_pinned,
+          created_at, updated_at, deleted_at
         ) VALUES (
-          'folder-snapshot', 'project-space-snapshot', 'Empty folder', 0, 0,
+          'folder-snapshot', 'project-space-snapshot', NULL, 'Empty folder', 0, 0,
+          '2026-07-20T00:00:00.000Z', '2026-07-20T00:00:01.000Z', NULL
+        ), (
+          'space-folder-snapshot', NULL, 'space-snapshot', 'Space folder', 0, 0,
           '2026-07-20T00:00:00.000Z', '2026-07-20T00:00:01.000Z', NULL
         )
       `;
@@ -77,10 +82,34 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       const full = yield* snapshotQuery.getSnapshot();
       assert.equal(shell.spaces[0]?.id, SpaceId.makeUnsafe("space-snapshot"));
       assert.equal(shell.projects[0]?.spaceId, SpaceId.makeUnsafe("space-snapshot"));
-      assert.equal(shell.folders[0]?.id, FolderId.makeUnsafe("folder-snapshot"));
+      assert.strictEqual(
+        shell.folders.some((folder) => folder.id === FolderId.makeUnsafe("folder-snapshot")),
+        true,
+      );
+      assert.deepStrictEqual(
+        new Set(shell.folders.map((folder) => JSON.stringify(folder.owner))),
+        new Set(
+          [
+            projectFolderOwner(ProjectId.makeUnsafe("project-space-snapshot")),
+            spaceFolderOwner(SpaceId.makeUnsafe("space-snapshot")),
+          ].map((owner) => JSON.stringify(owner)),
+        ),
+      );
       assert.equal(full.spaces[0]?.id, SpaceId.makeUnsafe("space-snapshot"));
       assert.equal(full.projects[0]?.spaceId, SpaceId.makeUnsafe("space-snapshot"));
-      assert.equal(full.folders[0]?.id, FolderId.makeUnsafe("folder-snapshot"));
+      assert.strictEqual(
+        full.folders.some((folder) => folder.id === FolderId.makeUnsafe("folder-snapshot")),
+        true,
+      );
+      assert.deepStrictEqual(
+        new Set(full.folders.map((folder) => JSON.stringify(folder.owner))),
+        new Set(
+          [
+            projectFolderOwner(ProjectId.makeUnsafe("project-space-snapshot")),
+            spaceFolderOwner(SpaceId.makeUnsafe("space-snapshot")),
+          ].map((owner) => JSON.stringify(owner)),
+        ),
+      );
 
       yield* sql`DELETE FROM projection_projects`;
       yield* sql`DELETE FROM projection_folders`;
