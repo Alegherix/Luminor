@@ -11,7 +11,7 @@ import { useCallback, useState } from "react";
 
 import { useProjectPreviewScript } from "~/hooks/useProjectPreviewScript";
 import { useThreadPreview } from "~/hooks/useThreadPreview";
-import { LoaderIcon, PlayIcon, RefreshCwIcon, StopIcon, TerminalIcon, XIcon } from "~/lib/icons";
+import { LoaderIcon, PlayIcon, RefreshCwIcon, StopIcon, TerminalIcon } from "~/lib/icons";
 import { cn } from "~/lib/utils";
 import type { PreviewProjectScriptDraft } from "~/projectScripts";
 import { useRightDockStore } from "~/rightDockStore";
@@ -52,7 +52,7 @@ const PREVIEW_WEBVIEW_SANDBOX =
 
 const CONTROL_ICONS: Record<PreviewPaneControlKind, typeof PlayIcon> = {
   start: PlayIcon,
-  cancel: XIcon,
+  cancel: StopIcon,
   reload: RefreshCwIcon,
   logs: TerminalIcon,
   restart: RefreshCwIcon,
