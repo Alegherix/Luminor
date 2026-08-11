@@ -49,6 +49,7 @@ import {
 } from "../../persistence/Errors.ts";
 import { normalizePersistedModelSelection } from "../../persistence/modelSelectionCompatibility.ts";
 import { deriveThreadSummaryMetadata } from "@luminor/shared/threadSummary";
+import { projectFolderOwner } from "@luminor/shared/folderOwnership";
 import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheckpoints.ts";
 import { ProjectionProject } from "../../persistence/Services/ProjectionProjects.ts";
 import { ProjectionFolder } from "../../persistence/Services/ProjectionFolders.ts";
@@ -97,6 +98,11 @@ const ProjectionProjectDbRowSchema = ProjectionProject.mapFields(
     isPinned: Schema.Number,
   }),
 );
+const { owner: _projectionFolderOwnerField, ...ProjectionFolderDbFields } = ProjectionFolder.fields;
+const ProjectionFolderDbRowSchema = Schema.Struct({
+  ...ProjectionFolderDbFields,
+  projectId: ProjectId,
+});
 const ProjectionThreadProposedPlanDbRowSchema = ProjectionThreadProposedPlan;
 const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
   Struct.assign({
@@ -236,7 +242,7 @@ type ProjectionThreadDbRowRaw = Schema.Schema.Type<typeof ProjectionThreadDbRowS
 type ProjectionThreadShellDbRowRaw = Schema.Schema.Type<typeof ProjectionThreadShellDbRowSchema>;
 type ProjectionProjectDbRowRaw = Schema.Schema.Type<typeof ProjectionProjectDbRowSchema>;
 type ProjectionSpaceDbRow = Schema.Schema.Type<typeof ProjectionSpace>;
-type ProjectionFolderDbRow = Schema.Schema.Type<typeof ProjectionFolder>;
+type ProjectionFolderDbRow = Schema.Schema.Type<typeof ProjectionFolderDbRowSchema>;
 type ProjectionThreadDbRow = Omit<ProjectionThreadDbRowRaw, "modelSelection"> & {
   readonly modelSelection: typeof ModelSelection.Type;
 };
@@ -479,7 +485,7 @@ function toProjectedSpaceShell(row: ProjectionSpaceDbRow): OrchestrationSpaceShe
 function toProjectedFolder(row: ProjectionFolderDbRow) {
   return {
     id: row.folderId,
-    projectId: row.projectId,
+    owner: projectFolderOwner(row.projectId),
     name: row.name,
     sortOrder: row.sortOrder,
     isPinned: row.isPinned > 0,
@@ -804,7 +810,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
 
   const listFolderRows = SqlSchema.findAll({
     Request: Schema.Void,
-    Result: ProjectionFolder,
+    Result: ProjectionFolderDbRowSchema,
     execute: () => sql`
       SELECT
         folder_id AS "folderId",
@@ -1356,7 +1362,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
 
   const getFolderRowById = SqlSchema.findOneOption({
     Request: FolderIdLookupInput,
-    Result: ProjectionFolder,
+    Result: ProjectionFolderDbRowSchema,
     execute: ({ folderId }) => sql`
       SELECT
         folder_id AS "folderId",

@@ -20,6 +20,7 @@ import {
   deriveAssociatedWorktreeMetadataPatch,
   workspaceRootsEqual,
 } from "@luminor/shared/threadWorkspace";
+import { projectFolderOwner } from "@luminor/shared/folderOwnership";
 import { doThreadMarkerRangesOverlap } from "@luminor/shared/threadMarkers";
 import { collectSubagentDescendants } from "@luminor/shared/threadHierarchy";
 import { autoRuntimeModeSelectionIssue } from "@luminor/shared/runtimeMode";
@@ -36,7 +37,7 @@ import { resolveStableMessageTurnId } from "./messageTurnId.ts";
 import {
   findFolderById,
   findSpaceById,
-  listActiveFoldersByProjectId,
+  listActiveFoldersByOwner,
   isLegacyHomeChatContainerRow,
   CHECKPOINT_REVERT_STARTED_ACTIVITY_KIND,
   CHECKPOINT_REVERT_SUCCEEDED_ACTIVITY_KIND,
@@ -49,7 +50,7 @@ import {
   requireProject,
   requireFolder,
   requireFolderAbsent,
-  requireFolderInProject,
+  requireFolderOwnedBy,
   requireFolderNameAvailable,
   requireProjectAbsent,
   requireProjectHasNoThreads,
@@ -368,11 +369,11 @@ function resolveCreatedThreadFolderId(input: {
 }): Effect.Effect<OrchestrationThread["folderId"], OrchestrationCommandInvariantError> {
   const { command, readModel } = input;
   if (command.folderId !== undefined && command.folderId !== null) {
-    return requireFolderInProject({
+    return requireFolderOwnedBy({
       readModel,
       command,
       folderId: command.folderId,
-      projectId: command.projectId,
+      owner: projectFolderOwner(command.projectId),
     }).pipe(Effect.map((folder) => folder.id));
   }
   if (command.parentThreadId === null || command.parentThreadId === undefined) {
@@ -469,7 +470,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
   switch (command.type) {
     case "folder.create": {
       yield* requireFolderAbsent({ readModel, command, folderId: command.folderId });
-      const project = yield* requireProject({ readModel, command, projectId: command.projectId });
+      const project = yield* requireProject({
+        readModel,
+        command,
+        projectId: command.owner.projectId,
+      });
       if (project.deletedAt !== null || project.kind !== "project") {
         return yield* new OrchestrationCommandInvariantError({
           commandType: command.type,
@@ -479,10 +484,10 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       yield* requireFolderNameAvailable({
         readModel,
         command,
-        projectId: command.projectId,
+        owner: command.owner,
         name: command.name,
       });
-      const sortOrder = listActiveFoldersByProjectId(readModel, command.projectId).reduce(
+      const sortOrder = listActiveFoldersByOwner(readModel, command.owner).reduce(
         (maximum, folder) => Math.max(maximum, folder.sortOrder + 1),
         0,
       );
@@ -496,7 +501,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         type: "folder.created",
         payload: {
           folderId: command.folderId,
-          projectId: command.projectId,
+          owner: command.owner,
           name: command.name,
           sortOrder,
           isPinned: command.isPinned ?? false,
@@ -517,7 +522,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       yield* requireFolderNameAvailable({
         readModel,
         command,
-        projectId: folder.projectId,
+        owner: folder.owner,
         name: command.name,
         excludeFolderId: command.folderId,
       });
@@ -1418,11 +1423,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
       const project = readModel.projects.find((candidate) => candidate.id === thread.projectId);
       if (command.folderId !== undefined && command.folderId !== null) {
-        yield* requireFolderInProject({
+        yield* requireFolderOwnedBy({
           readModel,
           command,
           folderId: command.folderId,
-          projectId: thread.projectId,
+          owner: projectFolderOwner(thread.projectId),
         });
       }
       // Provider-native threads: see thread.create — the selection mirrors the

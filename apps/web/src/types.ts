@@ -20,6 +20,7 @@ import type {
   ThreadId,
   ProjectId,
   FolderId,
+  FolderOwner,
   SpaceId,
   SpaceIconName,
   TurnId,
@@ -196,7 +197,7 @@ export interface Space {
 
 export interface Folder {
   id: FolderId;
-  projectId: ProjectId;
+  owner: FolderOwner;
   name: string;
   sortOrder: number;
   isPinned: boolean;

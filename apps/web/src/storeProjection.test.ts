@@ -15,6 +15,7 @@ import {
   type ThreadMarker,
 } from "@luminor/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
+import { projectFolderOwner } from "@luminor/shared/folderOwnership";
 
 import {
   applyShellEvent,
@@ -60,7 +61,7 @@ describe("store projection", () => {
     const folderId = FolderId.makeUnsafe("folder-shell");
     const folder = {
       id: folderId,
-      projectId: ProjectId.makeUnsafe("project-1"),
+      owner: projectFolderOwner(ProjectId.makeUnsafe("project-1")),
       name: "Planning",
       sortOrder: 0,
       isPinned: false,
@@ -373,7 +374,7 @@ describe("store projection", () => {
         folders: [
           {
             id: FolderId.makeUnsafe("folder-shell"),
-            projectId: ProjectId.makeUnsafe("project-shell"),
+            owner: projectFolderOwner(ProjectId.makeUnsafe("project-shell")),
             name: "Shell folder",
             sortOrder: 0,
             isPinned: false,
@@ -383,7 +384,7 @@ describe("store projection", () => {
           },
           {
             id: FolderId.makeUnsafe("folder-other"),
-            projectId: ProjectId.makeUnsafe("project-other"),
+            owner: projectFolderOwner(ProjectId.makeUnsafe("project-other")),
             name: "Other folder",
             sortOrder: 0,
             isPinned: false,
@@ -424,9 +425,7 @@ describe("store projection", () => {
     expect(next.projects.map((project) => project.id)).toEqual([
       ProjectId.makeUnsafe("project-other"),
     ]);
-    expect(next.folders.map((folder) => folder.id)).toEqual([
-      FolderId.makeUnsafe("folder-other"),
-    ]);
+    expect(next.folders.map((folder) => folder.id)).toEqual([FolderId.makeUnsafe("folder-other")]);
     expect(threadsOf(next).map((thread) => thread.id)).toEqual([
       ThreadId.makeUnsafe("thread-project-2"),
     ]);

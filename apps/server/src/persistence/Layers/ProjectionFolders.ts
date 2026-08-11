@@ -1,15 +1,29 @@
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
+import { ProjectId } from "@luminor/contracts";
+import { projectFolderOwner } from "@luminor/shared/folderOwnership";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
   GetProjectionFolderInput,
-  MarkProjectionFoldersDeletedByProjectInput,
+  MarkProjectionFoldersDeletedByOwnerInput,
   ProjectionFolder,
   ProjectionFolderRepository,
   type ProjectionFolderRepositoryShape,
 } from "../Services/ProjectionFolders.ts";
+
+const { owner: _projectionFolderOwnerField, ...ProjectionFolderDbFields } = ProjectionFolder.fields;
+const ProjectionFolderDbRow = Schema.Struct({
+  ...ProjectionFolderDbFields,
+  projectId: ProjectId,
+});
+type ProjectionFolderDbRow = typeof ProjectionFolderDbRow.Type;
+
+function toProjectionFolder(row: ProjectionFolderDbRow): ProjectionFolder {
+  const { projectId, ...folder } = row;
+  return { ...folder, owner: projectFolderOwner(projectId) };
+}
 
 const makeProjectionFolderRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -20,7 +34,7 @@ const makeProjectionFolderRepository = Effect.gen(function* () {
       INSERT INTO projection_folders (
         folder_id, project_id, name, sort_order, is_pinned, created_at, updated_at, deleted_at
       ) VALUES (
-        ${row.folderId}, ${row.projectId}, ${row.name}, ${row.sortOrder}, ${row.isPinned},
+        ${row.folderId}, ${row.owner.projectId}, ${row.name}, ${row.sortOrder}, ${row.isPinned},
         ${row.createdAt}, ${row.updatedAt}, ${row.deletedAt}
       )
       ON CONFLICT (folder_id) DO UPDATE SET
@@ -36,7 +50,7 @@ const makeProjectionFolderRepository = Effect.gen(function* () {
 
   const getRow = SqlSchema.findOneOption({
     Request: GetProjectionFolderInput,
-    Result: ProjectionFolder,
+    Result: ProjectionFolderDbRow,
     execute: ({ folderId }) => sql`
       SELECT
         folder_id AS "folderId",
@@ -54,7 +68,7 @@ const makeProjectionFolderRepository = Effect.gen(function* () {
 
   const listRows = SqlSchema.findAll({
     Request: Schema.Void,
-    Result: ProjectionFolder,
+    Result: ProjectionFolderDbRow,
     execute: () => sql`
       SELECT
         folder_id AS "folderId",
@@ -70,14 +84,14 @@ const makeProjectionFolderRepository = Effect.gen(function* () {
     `,
   });
 
-  const markDeletedByProjectIdRow = SqlSchema.void({
-    Request: MarkProjectionFoldersDeletedByProjectInput,
-    execute: ({ projectId, deletedAt }) => sql`
+  const markDeletedByOwnerRow = SqlSchema.void({
+    Request: MarkProjectionFoldersDeletedByOwnerInput,
+    execute: ({ owner, deletedAt }) => sql`
       UPDATE projection_folders
       SET
         deleted_at = ${deletedAt},
         updated_at = ${deletedAt}
-      WHERE project_id = ${projectId}
+      WHERE project_id = ${owner.projectId}
         AND deleted_at IS NULL
     `,
   });
@@ -89,16 +103,18 @@ const makeProjectionFolderRepository = Effect.gen(function* () {
       ),
     getById: (input) =>
       getRow(input).pipe(
+        Effect.map(Option.map(toProjectionFolder)),
         Effect.mapError(toPersistenceSqlError("ProjectionFolderRepository.getById:query")),
       ),
     listAll: () =>
       listRows().pipe(
+        Effect.map((rows) => rows.map(toProjectionFolder)),
         Effect.mapError(toPersistenceSqlError("ProjectionFolderRepository.listAll:query")),
       ),
-    markDeletedByProjectId: (input) =>
-      markDeletedByProjectIdRow(input).pipe(
+    markDeletedByOwner: (input) =>
+      markDeletedByOwnerRow(input).pipe(
         Effect.mapError(
-          toPersistenceSqlError("ProjectionFolderRepository.markDeletedByProjectId:query"),
+          toPersistenceSqlError("ProjectionFolderRepository.markDeletedByOwner:query"),
         ),
       ),
   } satisfies ProjectionFolderRepositoryShape;

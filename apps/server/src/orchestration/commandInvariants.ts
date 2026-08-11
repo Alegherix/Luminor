@@ -1,6 +1,7 @@
 import type {
   OrchestrationCommand,
   OrchestrationFolder,
+  FolderOwner,
   OrchestrationLatestTurn,
   OrchestrationProject,
   OrchestrationReadModel,
@@ -15,6 +16,7 @@ import type {
   ThreadId,
 } from "@luminor/contracts";
 import { THREAD_NOT_ARCHIVED_INVARIANT_MARKER } from "@luminor/shared/errorMessages";
+import { folderOwnersEqual } from "@luminor/shared/folderOwnership";
 import {
   isLegacyHomeChatContainerRow as isSharedLegacyHomeChatContainerRow,
   isOrdinaryProjectRow as isSharedOrdinaryProjectRow,
@@ -119,12 +121,12 @@ export function findFolderById(
   return readModel.folders.find((folder) => folder.id === folderId);
 }
 
-export function listActiveFoldersByProjectId(
+export function listActiveFoldersByOwner(
   readModel: OrchestrationReadModel,
-  projectId: ProjectId,
+  owner: FolderOwner,
 ): ReadonlyArray<OrchestrationFolder> {
   return readModel.folders
-    .filter((folder) => folder.projectId === projectId && folder.deletedAt === null)
+    .filter((folder) => folderOwnersEqual(folder.owner, owner) && folder.deletedAt === null)
     .toSorted((left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id));
 }
 
@@ -147,20 +149,20 @@ export function requireFolder(input: {
   );
 }
 
-export function requireFolderInProject(input: {
+export function requireFolderOwnedBy(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
   readonly folderId: FolderId;
-  readonly projectId: ProjectId;
+  readonly owner: FolderOwner;
 }): Effect.Effect<OrchestrationFolder, OrchestrationCommandInvariantError> {
   return requireFolder(input).pipe(
     Effect.flatMap((folder) =>
-      folder.projectId === input.projectId
+      folderOwnersEqual(folder.owner, input.owner)
         ? Effect.succeed(folder)
         : Effect.fail(
             invariantError(
               input.command.type,
-              `Folder '${input.folderId}' does not belong to thread project '${input.projectId}'.`,
+              `Folder '${input.folderId}' does not belong to thread project '${input.owner.projectId}'.`,
             ),
           ),
     ),
@@ -186,14 +188,14 @@ export function requireFolderAbsent(input: {
 export function requireFolderNameAvailable(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
-  readonly projectId: ProjectId;
+  readonly owner: FolderOwner;
   readonly name: string;
   readonly excludeFolderId?: FolderId;
 }): Effect.Effect<void, OrchestrationCommandInvariantError> {
   const normalizedName = input.name.trim().toLowerCase();
   const conflict = input.readModel.folders.find(
     (folder) =>
-      folder.projectId === input.projectId &&
+      folderOwnersEqual(folder.owner, input.owner) &&
       folder.deletedAt === null &&
       folder.id !== input.excludeFolderId &&
       folder.name.trim().toLowerCase() === normalizedName,

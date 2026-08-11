@@ -12,6 +12,7 @@ import {
   NonNegativeInt,
   OrchestrationThreadPullRequest,
   FolderId,
+  FolderOwner,
   ThreadNotes,
   ThreadPinnedMessages,
   ThreadMarkers,
@@ -103,12 +104,12 @@ export const ListProjectionThreadsByProjectInput = Schema.Struct({
 });
 export type ListProjectionThreadsByProjectInput = typeof ListProjectionThreadsByProjectInput.Type;
 
-export const ClearProjectionThreadFolderMembershipsByProjectInput = Schema.Struct({
-  projectId: ProjectId,
+export const ClearProjectionThreadFolderMembershipsByOwnerInput = Schema.Struct({
+  owner: FolderOwner,
   updatedAt: IsoDateTime,
 });
-export type ClearProjectionThreadFolderMembershipsByProjectInput =
-  typeof ClearProjectionThreadFolderMembershipsByProjectInput.Type;
+export type ClearProjectionThreadFolderMembershipsByOwnerInput =
+  typeof ClearProjectionThreadFolderMembershipsByOwnerInput.Type;
 
 /**
  * ProjectionThreadRepositoryShape - Service API for projected thread records.
@@ -145,8 +146,8 @@ export interface ProjectionThreadRepositoryShape {
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 
   /** Clear folder membership for every thread that belonged to a deleted project. */
-  readonly clearFolderMembershipsByProjectId: (
-    input: ClearProjectionThreadFolderMembershipsByProjectInput,
+  readonly clearFolderMembershipsByOwner: (
+    input: ClearProjectionThreadFolderMembershipsByOwnerInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 }
 

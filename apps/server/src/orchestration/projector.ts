@@ -17,6 +17,7 @@ import {
   setThreadMarkerDone,
   setThreadMarkerLabel,
 } from "@luminor/shared/threadMarkers";
+import { folderOwnersEqual, projectFolderOwner } from "@luminor/shared/folderOwnership";
 import { Effect, Schema } from "effect";
 
 import { toProjectorDecodeError, type OrchestrationProjectorDecodeError } from "./Errors.ts";
@@ -324,7 +325,7 @@ export function projectEvent(
           const existing = nextBase.folders.find((entry) => entry.id === payload.folderId);
           const nextFolder = {
             id: payload.folderId,
-            projectId: payload.projectId,
+            owner: payload.owner,
             name: payload.name,
             sortOrder: payload.sortOrder,
             isPinned: payload.isPinned,
@@ -529,7 +530,8 @@ export function projectEvent(
               : project,
           ),
           folders: nextBase.folders.map((folder) =>
-            folder.projectId === payload.projectId && folder.deletedAt === null
+            folderOwnersEqual(folder.owner, projectFolderOwner(payload.projectId)) &&
+            folder.deletedAt === null
               ? {
                   ...folder,
                   deletedAt: payload.deletedAt,

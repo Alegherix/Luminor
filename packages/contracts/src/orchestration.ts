@@ -448,9 +448,18 @@ export const FOLDER_NAME_MAX_LENGTH = 80;
 export const FolderName = TrimmedNonEmptyString.check(Schema.isMaxLength(FOLDER_NAME_MAX_LENGTH));
 export type FolderName = typeof FolderName.Type;
 
+export const ProjectFolderOwner = Schema.Struct({
+  kind: Schema.Literal("project"),
+  projectId: ProjectId,
+});
+export type ProjectFolderOwner = typeof ProjectFolderOwner.Type;
+
+export const FolderOwner = Schema.Union([ProjectFolderOwner]);
+export type FolderOwner = typeof FolderOwner.Type;
+
 export const OrchestrationFolder = Schema.Struct({
   id: FolderId,
-  projectId: ProjectId,
+  owner: FolderOwner,
   name: FolderName,
   sortOrder: NonNegativeInt,
   isPinned: Schema.Boolean,
@@ -462,7 +471,7 @@ export type OrchestrationFolder = typeof OrchestrationFolder.Type;
 
 export const OrchestrationFolderShell = Schema.Struct({
   id: FolderId,
-  projectId: ProjectId,
+  owner: FolderOwner,
   name: FolderName,
   sortOrder: NonNegativeInt,
   isPinned: Schema.Boolean,
@@ -1029,7 +1038,7 @@ export const FolderCreateCommand = Schema.Struct({
   type: Schema.Literal("folder.create"),
   commandId: CommandId,
   folderId: FolderId,
-  projectId: ProjectId,
+  owner: FolderOwner,
   name: FolderName,
   isPinned: Schema.optional(Schema.Boolean).pipe(Schema.withDecodingDefault(() => false)),
   createdAt: IsoDateTime,
@@ -1775,7 +1784,7 @@ export const SpaceDeletedPayload = Schema.Struct({
 
 export const FolderCreatedPayload = Schema.Struct({
   folderId: FolderId,
-  projectId: ProjectId,
+  owner: FolderOwner,
   name: FolderName,
   sortOrder: NonNegativeInt,
   isPinned: Schema.Boolean,

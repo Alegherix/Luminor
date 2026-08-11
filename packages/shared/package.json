@@ -24,6 +24,10 @@
       "types": "./src/githubRepository.ts",
       "import": "./src/githubRepository.ts"
     },
+    "./folderOwnership": {
+      "types": "./src/folderOwnership.ts",
+      "import": "./src/folderOwnership.ts"
+    },
     "./logging": {
       "types": "./src/logging.ts",
       "import": "./src/logging.ts"

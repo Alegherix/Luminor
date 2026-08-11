@@ -15,6 +15,7 @@ import {
   type TurnId,
 } from "@luminor/contracts";
 import { resolveThreadBranchRegressionGuard } from "@luminor/shared/git";
+import { folderOwnerKey, folderOwnersEqual } from "@luminor/shared/folderOwnership";
 import { normalizeModelSlug } from "@luminor/shared/model";
 import { deriveThreadSummaryMetadata } from "@luminor/shared/threadSummary";
 
@@ -416,7 +417,7 @@ export function normalizeFolder(
   if (
     previous &&
     previous.id === incoming.id &&
-    previous.projectId === incoming.projectId &&
+    folderOwnersEqual(previous.owner, incoming.owner) &&
     previous.name === incoming.name &&
     previous.sortOrder === incoming.sortOrder &&
     previous.isPinned === incoming.isPinned &&
@@ -427,7 +428,7 @@ export function normalizeFolder(
   }
   return {
     id: incoming.id,
-    projectId: incoming.projectId,
+    owner: incoming.owner,
     name: incoming.name,
     sortOrder: incoming.sortOrder,
     isPinned: incoming.isPinned,
@@ -445,7 +446,7 @@ export function mapFolders(
     .map((folder) => normalizeFolder(folder, previousById.get(folder.id)))
     .toSorted(
       (left, right) =>
-        left.projectId.localeCompare(right.projectId) ||
+        folderOwnerKey(left.owner).localeCompare(folderOwnerKey(right.owner)) ||
         left.sortOrder - right.sortOrder ||
         left.id.localeCompare(right.id),
     );

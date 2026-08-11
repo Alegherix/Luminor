@@ -8,6 +8,7 @@ import {
 } from "@luminor/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer, Option } from "effect";
+import { projectFolderOwner } from "@luminor/shared/folderOwnership";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
@@ -102,7 +103,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
 
       yield* folders.upsert({
         folderId: deletedFolderId,
-        projectId: deletedProjectId,
+        owner: projectFolderOwner(deletedProjectId),
         name: "Deleted project folder",
         sortOrder: 0,
         isPinned: 0,
@@ -112,7 +113,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       });
       yield* folders.upsert({
         folderId: keptFolderId,
-        projectId: keptProjectId,
+        owner: projectFolderOwner(keptProjectId),
         name: "Kept project folder",
         sortOrder: 0,
         isPinned: 0,
@@ -154,12 +155,12 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       yield* threads.upsert(makeThread(deletedThreadId, deletedProjectId, deletedFolderId));
       yield* threads.upsert(makeThread(keptThreadId, keptProjectId, keptFolderId));
 
-      yield* folders.markDeletedByProjectId({
-        projectId: deletedProjectId,
+      yield* folders.markDeletedByOwner({
+        owner: projectFolderOwner(deletedProjectId),
         deletedAt,
       });
-      yield* threads.clearFolderMembershipsByProjectId({
-        projectId: deletedProjectId,
+      yield* threads.clearFolderMembershipsByOwner({
+        owner: projectFolderOwner(deletedProjectId),
         updatedAt: deletedAt,
       });
 

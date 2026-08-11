@@ -13,6 +13,11 @@ import {
   type TurnId,
 } from "@luminor/contracts";
 import { deriveThreadSummaryMetadata } from "@luminor/shared/threadSummary";
+import {
+  folderOwnerKey,
+  folderOwnersEqual,
+  projectFolderOwner,
+} from "@luminor/shared/folderOwnership";
 
 import {
   clearThreadDetailResumeCursor,
@@ -285,7 +290,7 @@ export function upsertFolder(
     ...state,
     folders: folders.toSorted(
       (left, right) =>
-        left.projectId.localeCompare(right.projectId) ||
+        folderOwnerKey(left.owner).localeCompare(folderOwnerKey(right.owner)) ||
         left.sortOrder - right.sortOrder ||
         left.id.localeCompare(right.id),
     ),
@@ -1102,8 +1107,13 @@ function removeProjectState(state: AppState, projectId: Project["id"]): AppState
   const nextProjects = state.projects.some((project) => project.id === projectId)
     ? state.projects.filter((project) => project.id !== projectId)
     : state.projects;
-  const nextFolders = (state.folders ?? []).some((folder) => folder.projectId === projectId)
-    ? (state.folders ?? []).filter((folder) => folder.projectId !== projectId)
+  const deletedProjectOwner = projectFolderOwner(projectId);
+  const nextFolders = (state.folders ?? []).some((folder) =>
+    folderOwnersEqual(folder.owner, deletedProjectOwner),
+  )
+    ? (state.folders ?? []).filter(
+        (folder) => !folderOwnersEqual(folder.owner, deletedProjectOwner),
+      )
     : (state.folders ?? []);
   const nextState = [...threadIds].reduce((currentState, threadId) => {
     return removeThreadState(currentState, threadId);

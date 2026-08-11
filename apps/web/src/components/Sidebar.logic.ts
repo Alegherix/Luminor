@@ -9,6 +9,7 @@ import {
   type PullRequestReviewRequestCountResult,
   type ThreadId,
 } from "@luminor/contracts";
+import { projectFolderOwnerKey, type FolderOwnerKey } from "@luminor/shared/folderOwnership";
 import { pluralize } from "@luminor/shared/text";
 import { resolveThreadEnvironmentMode } from "@luminor/shared/threadEnvironment";
 import { isWorkspaceRootWithin, workspaceRootsEqual } from "@luminor/shared/threadWorkspace";
@@ -1612,7 +1613,7 @@ export function partitionSidebarThreadsByProjectIds<
 export function deriveSidebarProjectData(input: {
   projects: readonly Pick<Project, "id" | "cwd" | "expanded">[];
   sortedSidebarThreadsByProjectId: ReadonlyMap<ProjectId, SidebarThreadSummary[]>;
-  foldersByProjectId?: ReadonlyMap<ProjectId, Folder[]>;
+  foldersByOwner?: ReadonlyMap<FolderOwnerKey, Folder[]>;
   pinnedThreadIds: readonly ThreadId[];
   threadListExtraPagesByProjectCwd: ReadonlyMap<string, number>;
   normalizeProjectCwd: (cwd: string) => string;
@@ -1636,7 +1637,7 @@ export function deriveSidebarProjectData(input: {
     const { pinnedFolderGroups, unpinnedFolderGroups, unfiledThreads } =
       partitionProjectThreadsByFolders({
         threads: allProjectThreads,
-        folders: input.foldersByProjectId?.get(project.id) ?? [],
+        folders: input.foldersByOwner?.get(projectFolderOwnerKey(project.id)) ?? [],
         pinnedThreadIds: input.pinnedThreadIds,
         activeThreadId: input.activeSidebarThreadId,
         resolveThreadStatus: (thread) => statusByThreadId.get(thread.id) ?? null,

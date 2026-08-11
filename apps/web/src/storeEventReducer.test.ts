@@ -16,6 +16,7 @@ import {
   TurnId,
 } from "@luminor/contracts";
 import { describe, expect, it } from "vitest";
+import { projectFolderOwner } from "@luminor/shared/folderOwnership";
 
 import { applyOrchestrationEvents, applyOrchestrationEventsHotPath } from "./storeEventReducer";
 import {
@@ -43,7 +44,7 @@ describe("store event reducer", () => {
     let state = applyOrchestrationEvents(makeState(makeThread()), [
       makeDomainEvent("folder.created", {
         folderId,
-        projectId: ProjectId.makeUnsafe("project-1"),
+        owner: projectFolderOwner(ProjectId.makeUnsafe("project-1")),
         name: "Planning",
         sortOrder: 0,
         isPinned: false,

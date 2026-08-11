@@ -55,6 +55,7 @@ import {
   sortThreadsForSidebar,
 } from "./Sidebar.logic";
 import { FolderId, ProjectId, ThreadId } from "@luminor/contracts";
+import { projectFolderOwner, projectFolderOwnerKey } from "@luminor/shared/folderOwnership";
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -68,7 +69,7 @@ describe("sortProjectFolders", () => {
     const projectId = ProjectId.makeUnsafe("project-1");
     const makeFolder = (id: string, name: string, sortOrder: number, isPinned = false) => ({
       id: FolderId.makeUnsafe(id),
-      projectId,
+      owner: projectFolderOwner(projectId),
       name,
       sortOrder,
       isPinned,
@@ -1721,7 +1722,7 @@ describe("deriveSidebarProjectData", () => {
     const project = makeProject();
     const pinnedFolder = {
       id: FolderId.makeUnsafe("folder-pinned"),
-      projectId: project.id,
+      owner: projectFolderOwner(project.id),
       name: "Pinned folder",
       sortOrder: 2,
       isPinned: true,
@@ -1767,7 +1768,7 @@ describe("deriveSidebarProjectData", () => {
         unfiled,
         pinnedUnfiled,
       ]),
-      foldersByProjectId: new Map([[project.id, [folder, pinnedFolder]]]),
+      foldersByOwner: new Map([[projectFolderOwnerKey(project.id), [folder, pinnedFolder]]]),
       pinnedThreadIds: [pinnedMember.id, pinnedUnfiled.id],
       threadListExtraPagesByProjectCwd: new Map(),
       normalizeProjectCwd: (cwd) => cwd,
@@ -1795,7 +1796,7 @@ describe("deriveSidebarProjectData", () => {
     const project = makeProject();
     const folder = {
       id: FolderId.makeUnsafe("folder"),
-      projectId: project.id,
+      owner: projectFolderOwner(project.id),
       name: "Folder",
       sortOrder: 0,
       isPinned: false,
@@ -1817,7 +1818,7 @@ describe("deriveSidebarProjectData", () => {
     const data = deriveSidebarProjectData({
       projects: [project],
       sortedSidebarThreadsByProjectId: groupSidebarThreadsByProjectId([parent, subagent]),
-      foldersByProjectId: new Map([[project.id, [folder]]]),
+      foldersByOwner: new Map([[projectFolderOwnerKey(project.id), [folder]]]),
       pinnedThreadIds: [],
       threadListExtraPagesByProjectCwd: new Map(),
       normalizeProjectCwd: (cwd) => cwd,
@@ -2024,7 +2025,7 @@ describe("deriveSidebarProjectData", () => {
     const project = makeProject();
     const makeFolder = (id: string, sortOrder: number, isPinned: boolean) => ({
       id: FolderId.makeUnsafe(id),
-      projectId: project.id,
+      owner: projectFolderOwner(project.id),
       name: id,
       sortOrder,
       isPinned,
@@ -2063,8 +2064,11 @@ describe("deriveSidebarProjectData", () => {
     const data = deriveSidebarProjectData({
       projects: [project],
       sortedSidebarThreadsByProjectId: groupSidebarThreadsByProjectId(threads),
-      foldersByProjectId: new Map([
-        [project.id, [quietFolder, urgentFolder, emptyFolder, unpinnedFolder]],
+      foldersByOwner: new Map([
+        [
+          projectFolderOwnerKey(project.id),
+          [quietFolder, urgentFolder, emptyFolder, unpinnedFolder],
+        ],
       ]),
       pinnedThreadIds: [],
       threadListExtraPagesByProjectCwd: new Map(),

@@ -761,7 +761,7 @@ function applyOrchestrationEvent(
     case "folder.created":
       return upsertFolder(state, {
         id: event.payload.folderId,
-        projectId: event.payload.projectId,
+        owner: event.payload.owner,
         name: event.payload.name,
         sortOrder: event.payload.sortOrder,
         isPinned: event.payload.isPinned,

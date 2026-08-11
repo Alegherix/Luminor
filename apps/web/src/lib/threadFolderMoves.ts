@@ -4,7 +4,7 @@
 // Exports: resolveFolderMoveScope, planFolderMove, buildFolderMoveMenuItems, parseFolderMoveMenuId,
 //          moveThreadsToFolder, groupThreadsIntoNewFolder, describeFolderMoveOutcome
 
-import type { FolderId, NativeApi, ProjectId, ThreadId } from "@luminor/contracts";
+import type { FolderId, FolderOwner, NativeApi, ProjectId, ThreadId } from "@luminor/contracts";
 import { pluralize } from "@luminor/shared/text";
 
 import { createFolder, moveThreadToFolder } from "./folders";
@@ -167,13 +167,13 @@ export async function moveThreadsToFolder(input: {
 
 export async function groupThreadsIntoNewFolder(input: {
   api: NativeApi;
-  projectId: ProjectId;
+  owner: FolderOwner;
   name: string;
   threadIds: readonly ThreadId[];
 }): Promise<FolderMoveOutcome & { folderId: FolderId }> {
   const folderId = await createFolder({
     api: input.api,
-    projectId: input.projectId,
+    owner: input.owner,
     name: input.name,
   });
   const outcome = await moveThreadsToFolder({
