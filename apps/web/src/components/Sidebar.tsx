@@ -94,12 +94,14 @@ import {
 } from "@luminor/contracts";
 import { isGenericChatThreadTitle } from "@luminor/shared/chatThreads";
 import {
+  describeFolderPlacementRejection,
   folderOwnerKey,
   projectFolderOwner,
   projectFolderOwnerKey,
   projectIdFromFolderOwner,
   spaceFolderOwner,
   type FolderOwnerKey,
+  type FolderPlacementRejection,
 } from "@luminor/shared/folderOwnership";
 import { getDefaultModel } from "@luminor/shared/model";
 import { pluralize } from "@luminor/shared/text";
@@ -181,7 +183,9 @@ import {
   moveThreadsToFolder,
   parseFolderMoveMenuId,
   planFolderMove,
+  resolveFolderDropTarget,
   resolveFolderMoveScope,
+  type FolderDropResolution,
   type FolderMoveMenuAction,
   type FolderMoveOutcome,
   type FolderMoveThread,
@@ -1873,14 +1877,16 @@ export default function Sidebar() {
     return grouped;
   }, [folders]);
   const activeSpaceFolderGroups = useMemo(() => {
+    const spaceFolders = getActiveSpaceFolders({ activeSpaceId, foldersByOwner });
+    if (spaceFolders.length === 0) return [];
     const { pinnedFolderGroups, unpinnedFolderGroups } = partitionProjectThreadsByFolders({
-      threads: [],
-      folders: getActiveSpaceFolders({ activeSpaceId, foldersByOwner }),
+      threads: sidebarThreads,
+      folders: spaceFolders,
       pinnedThreadIds: [],
-      activeThreadId: undefined,
+      activeThreadId: visualActiveSidebarThreadId ?? undefined,
     });
     return [...pinnedFolderGroups, ...unpinnedFolderGroups];
-  }, [activeSpaceId, foldersByOwner]);
+  }, [activeSpaceId, foldersByOwner, sidebarThreads, visualActiveSidebarThreadId]);
   const editedFolder =
     folderEditorState?.mode === "rename"
       ? (folders.find((folder) => folder.id === folderEditorState.folderId) ?? null)
@@ -3032,6 +3038,30 @@ export default function Sidebar() {
   );
 
   /**
+   * A refusing drop target reads as a broken feature unless the cause is named, so every
+   * refused placement explains it — most usefully that the project is not in this space.
+   */
+  const reportFolderDropRejection = useCallback(
+    (input: {
+      folder: Folder;
+      projectId: ProjectId | null;
+      rejection: FolderPlacementRejection | null;
+    }) => {
+      if (input.rejection === null) return;
+      const project = input.projectId === null ? null : projectById.get(input.projectId);
+      toastManager.add({
+        type: "error",
+        title: `Cannot file into “${input.folder.name}”`,
+        description: describeFolderPlacementRejection({
+          rejection: input.rejection,
+          projectName: project ? resolveThreadProjectLabel(project) : null,
+        }),
+      });
+    },
+    [projectById],
+  );
+
+  /**
    * Every membership path (single row, multi-selection, drop) funnels through here so
    * cross-project rejection, no-op filtering, and partial-failure reporting stay identical.
    */
@@ -3048,12 +3078,20 @@ export default function Sidebar() {
         input.folderId === null
           ? null
           : (folders.find((folder) => folder.id === input.folderId) ?? null);
-      if (
-        input.folderId !== null &&
-        targetFolder &&
-        projectIdFromFolderOwner(targetFolder.owner) !== plan.projectId
-      ) {
-        return;
+      if (targetFolder) {
+        const resolution = resolveFolderDropTarget({
+          projectId: plan.projectId,
+          owner: targetFolder.owner,
+          projectSpaceId: projectById.get(plan.projectId)?.spaceId ?? null,
+        });
+        if (!resolution.accepted) {
+          reportFolderDropRejection({
+            folder: targetFolder,
+            projectId: plan.projectId,
+            rejection: resolution.rejection,
+          });
+          return;
+        }
       }
       if (plan.pendingThreadIds.length === 0) return;
       const outcome = await moveThreadsToFolder({
@@ -3067,7 +3105,7 @@ export default function Sidebar() {
         folderName: targetFolder?.name ?? null,
       });
     },
-    [folders, resolveFolderMoveThreads, settleFolderMove],
+    [folders, projectById, reportFolderDropRejection, resolveFolderMoveThreads, settleFolderMove],
   );
 
   const handleFolderMoveMenuAction = useCallback(
@@ -5195,6 +5233,22 @@ export default function Sidebar() {
     return readThreadDragPayload(event.dataTransfer) ?? threadDragPayloadRef.current;
   }
 
+  function readFolderDropPayload(event: ReactDragEvent): ThreadDragPayload | null {
+    const hasLocalDrag = threadDragProjectIdRef.current !== null;
+    if (!canAcceptThreadDrag(event.dataTransfer.types, hasLocalDrag)) return null;
+    return readThreadDragPayload(event.dataTransfer) ?? threadDragPayloadRef.current;
+  }
+
+  function resolveFolderDropForActiveDrag(folder: Folder): FolderDropResolution {
+    const dragProjectId = threadDragProjectIdRef.current;
+    return resolveFolderDropTarget({
+      projectId: dragProjectId,
+      owner: folder.owner,
+      projectSpaceId:
+        dragProjectId === null ? null : (projectById.get(dragProjectId)?.spaceId ?? null),
+    });
+  }
+
   function renderFolderRow(
     group: SidebarProjectFolderGroup,
     orderedProjectThreadIds: readonly ThreadId[],
@@ -5213,21 +5267,17 @@ export default function Sidebar() {
             isDropTarget && "bg-info/12 ring-1 ring-info/65 ring-inset",
           )}
           onDragOver={(event) => {
-            if (projectId === null) return;
-            if (threadDragProjectIdRef.current !== projectId) return;
-            if (
-              !canAcceptThreadDrag(
-                event.dataTransfer.types,
-                threadDragProjectIdRef.current === projectId,
-              )
-            ) {
-              return;
-            }
+            if (threadDragProjectIdRef.current === null) return;
+            if (!canAcceptThreadDrag(event.dataTransfer.types, true)) return;
+            const resolution = resolveFolderDropForActiveDrag(folder);
+            // A space folder captures a refused drop so its cause can be named; a project
+            // folder keeps refusing silently, as it always has.
+            if (!resolution.accepted && folder.owner.kind !== "space") return;
             event.preventDefault();
             event.stopPropagation();
-            event.dataTransfer.dropEffect = "move";
+            event.dataTransfer.dropEffect = resolution.accepted ? "move" : "none";
             setUnfiledDropProjectId(null);
-            setFolderDropTargetId(folder.id);
+            setFolderDropTargetId(resolution.accepted ? folder.id : null);
           }}
           onDragLeave={(event) => {
             const nextTarget = event.relatedTarget;
@@ -5235,12 +5285,21 @@ export default function Sidebar() {
             setFolderDropTargetId((current) => (current === folder.id ? null : current));
           }}
           onDrop={(event) => {
-            if (projectId === null) return;
-            const payload = acceptThreadFolderDrag(event, projectId);
+            const payload = readFolderDropPayload(event);
             if (!payload) return;
+            const resolution = resolveFolderDropForActiveDrag(folder);
+            const dragProjectId = threadDragProjectIdRef.current;
             event.preventDefault();
             event.stopPropagation();
             clearThreadFolderDragUi();
+            if (!resolution.accepted) {
+              reportFolderDropRejection({
+                folder,
+                projectId: dragProjectId,
+                rejection: resolution.rejection,
+              });
+              return;
+            }
             void applyThreadFolderMove({
               threadIds: threadDragPayloadThreadIds(payload),
               folderId: folder.id,

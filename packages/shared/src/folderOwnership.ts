@@ -45,6 +45,30 @@ export function folderOwnerReferences(
     : { projectId: null, spaceId: owner.spaceId };
 }
 
+export type FolderPlacementRejection = "other-project" | "project-outside-space";
+
+export function resolveFolderPlacementRejection(input: {
+  readonly owner: FolderOwner;
+  readonly projectId: ProjectId;
+  readonly projectSpaceId: SpaceId | null;
+}): FolderPlacementRejection | null {
+  if (input.owner.kind === "project") {
+    return input.owner.projectId === input.projectId ? null : "other-project";
+  }
+  return input.projectSpaceId === input.owner.spaceId ? null : "project-outside-space";
+}
+
+export function describeFolderPlacementRejection(input: {
+  readonly rejection: FolderPlacementRejection;
+  readonly projectName: string | null;
+}): string {
+  if (input.rejection === "other-project") {
+    return "That thread does not belong to this folder's project.";
+  }
+  const subject = input.projectName === null ? "That thread's project" : `“${input.projectName}”`;
+  return `${subject} is not in this space. Assign the project to this space to file its threads in this folder.`;
+}
+
 export function folderOwnerFromReferences(input: {
   readonly projectId: ProjectId | null;
   readonly spaceId: SpaceId | null;

@@ -16,7 +16,11 @@ import type {
   ThreadId,
 } from "@luminor/contracts";
 import { THREAD_NOT_ARCHIVED_INVARIANT_MARKER } from "@luminor/shared/errorMessages";
-import { folderOwnersEqual } from "@luminor/shared/folderOwnership";
+import {
+  describeFolderPlacementRejection,
+  folderOwnersEqual,
+  resolveFolderPlacementRejection,
+} from "@luminor/shared/folderOwnership";
 import {
   isLegacyHomeChatContainerRow as isSharedLegacyHomeChatContainerRow,
   isOrdinaryProjectRow as isSharedOrdinaryProjectRow,
@@ -166,6 +170,39 @@ export function requireFolderOwnedBy(input: {
             ),
           ),
     ),
+  );
+}
+
+/**
+ * A folder may hold a thread when it is owned by the thread's project, or owned by a
+ * space the thread's project belongs to. Folder placement never moves the project.
+ */
+export function requireFolderAcceptsProject(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly folderId: FolderId;
+  readonly projectId: ProjectId;
+}): Effect.Effect<OrchestrationFolder, OrchestrationCommandInvariantError> {
+  return requireFolder(input).pipe(
+    Effect.flatMap((folder) => {
+      const project = findProjectById(input.readModel, input.projectId);
+      const rejection = resolveFolderPlacementRejection({
+        owner: folder.owner,
+        projectId: input.projectId,
+        projectSpaceId: project?.spaceId ?? null,
+      });
+      return rejection === null
+        ? Effect.succeed(folder)
+        : Effect.fail(
+            invariantError(
+              input.command.type,
+              describeFolderPlacementRejection({
+                rejection,
+                projectName: project?.title ?? null,
+              }),
+            ),
+          );
+    }),
   );
 }
 

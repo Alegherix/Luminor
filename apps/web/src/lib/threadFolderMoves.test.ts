@@ -3,8 +3,8 @@
 // Layer: Web client helper test
 // Targets: resolveFolderMoveScope, planFolderMove, buildFolderMoveMenuItems, parseFolderMoveMenuId, moveThreadsToFolder, groupThreadsIntoNewFolder, describeFolderMoveOutcome.
 
-import { FolderId, ProjectId, ThreadId, type NativeApi } from "@luminor/contracts";
-import { projectFolderOwner } from "@luminor/shared/folderOwnership";
+import { FolderId, ProjectId, SpaceId, ThreadId, type NativeApi } from "@luminor/contracts";
+import { projectFolderOwner, spaceFolderOwner } from "@luminor/shared/folderOwnership";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -14,6 +14,7 @@ import {
   moveThreadsToFolder,
   parseFolderMoveMenuId,
   planFolderMove,
+  resolveFolderDropTarget,
   resolveFolderMoveScope,
   type FolderMoveThread,
 } from "./threadFolderMoves";
@@ -60,6 +61,68 @@ describe("resolveFolderMoveScope", () => {
 
   it("rejects a selection of only subagent rows", () => {
     expect(resolveFolderMoveScope([thread({ id: THREAD_3, parentThreadId: THREAD_1 })])).toBeNull();
+  });
+
+  describe("resolveFolderDropTarget", () => {
+    const SPACE = SpaceId.makeUnsafe("space-feature-work");
+    const OTHER_SPACE = SpaceId.makeUnsafe("space-other");
+
+    it("accepts a folder owned by the dragged threads' project", () => {
+      expect(
+        resolveFolderDropTarget({
+          projectId: PROJECT_A,
+          owner: projectFolderOwner(PROJECT_A),
+          projectSpaceId: null,
+        }),
+      ).toEqual({ accepted: true });
+    });
+
+    it("refuses a folder owned by another project", () => {
+      expect(
+        resolveFolderDropTarget({
+          projectId: PROJECT_A,
+          owner: projectFolderOwner(PROJECT_B),
+          projectSpaceId: SPACE,
+        }),
+      ).toEqual({ accepted: false, rejection: "other-project" });
+    });
+
+    it("accepts a space folder when the project is in that space", () => {
+      expect(
+        resolveFolderDropTarget({
+          projectId: PROJECT_A,
+          owner: spaceFolderOwner(SPACE),
+          projectSpaceId: SPACE,
+        }),
+      ).toEqual({ accepted: true });
+    });
+
+    it("refuses a space folder when the project is outside the space", () => {
+      expect(
+        resolveFolderDropTarget({
+          projectId: PROJECT_A,
+          owner: spaceFolderOwner(SPACE),
+          projectSpaceId: OTHER_SPACE,
+        }),
+      ).toEqual({ accepted: false, rejection: "project-outside-space" });
+      expect(
+        resolveFolderDropTarget({
+          projectId: PROJECT_A,
+          owner: spaceFolderOwner(SPACE),
+          projectSpaceId: null,
+        }),
+      ).toEqual({ accepted: false, rejection: "project-outside-space" });
+    });
+
+    it("refuses without a cause when the drag has no single project", () => {
+      expect(
+        resolveFolderDropTarget({
+          projectId: null,
+          owner: spaceFolderOwner(SPACE),
+          projectSpaceId: null,
+        }),
+      ).toEqual({ accepted: false, rejection: null });
+    });
   });
 });
 
