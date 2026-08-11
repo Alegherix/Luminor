@@ -40,7 +40,10 @@ import {
   LUMINOR_HARNESS_POLICY_VERSION,
   takeLuminorHarnessPolicyForProviderSession,
 } from "../../agentGateway/harnessPolicy.ts";
-import { buildOpenCodeMcpServer, LUMINOR_MCP_SERVER_NAME } from "../../agentGateway/mcpInjection.ts";
+import {
+  buildOpenCodeMcpServer,
+  LUMINOR_MCP_SERVER_NAME,
+} from "../../agentGateway/mcpInjection.ts";
 import { AgentGatewayCredentials } from "../../agentGateway/Services/AgentGatewayCredentials.ts";
 import {
   acquireAgentGatewaySessionLease,
@@ -3963,7 +3966,9 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
           });
         }
         const harnessPolicy = takeLuminorHarnessPolicyForProviderSession(
-          { harnessPolicyDelivered: context.harnessPolicyDelivered },
+          context.harnessPolicyDelivered === undefined
+            ? {}
+            : { harnessPolicyDelivered: context.harnessPolicyDelivered },
           {
             provider,
             scopedGatewayConnectionAvailable: context.gatewayControlAvailable,
@@ -4012,7 +4017,9 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
             resumeCursor: buildOpenCodeResumeCursor({
               openCodeSessionId: context.openCodeSessionId,
               cwd: context.directory,
-              harnessPolicyDelivered: context.harnessPolicyDelivered,
+              ...(context.harnessPolicyDelivered === undefined
+                ? {}
+                : { harnessPolicyDelivered: context.harnessPolicyDelivered }),
               gatewayControlAvailable: context.gatewayControlAvailable,
             }),
           },
@@ -4090,7 +4097,9 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
           resumeCursor: buildOpenCodeResumeCursor({
             openCodeSessionId: context.openCodeSessionId,
             cwd: context.directory,
-            harnessPolicyDelivered: context.harnessPolicyDelivered,
+            ...(context.harnessPolicyDelivered === undefined
+              ? {}
+              : { harnessPolicyDelivered: context.harnessPolicyDelivered }),
             gatewayControlAvailable: context.gatewayControlAvailable,
           }),
         };

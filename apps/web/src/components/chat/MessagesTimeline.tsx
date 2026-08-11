@@ -450,7 +450,7 @@ interface MessagesTimelineProps {
 export const MessagesTimeline = memo(function MessagesTimeline({
   hasMessages,
   isWorking,
-  workingLabel = "Thinking",
+  workingLabel: workingLabelProp,
   activeTurnInProgress,
   activeTurnStartedAt,
   worktreeSetup: worktreeSetupProp,
@@ -508,6 +508,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   // entire component (silently, since `panicThreshold` is unset), which would drop
   // memoization for the whole transcript. See MessagesTimeline.compiler.test.ts.
   const worktreeSetup = worktreeSetupProp ?? null;
+  const workingLabel = workingLabelProp ?? "Thinking";
   const followLiveOutput = followLiveOutputProp ?? false;
   const threadMarkers = threadMarkersProp ?? EMPTY_MESSAGE_MARKERS;
   const enteringUserMessageIds = enteringUserMessageIdsProp ?? EMPTY_MESSAGE_ID_SET;
@@ -1552,7 +1553,12 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             ...new Map(
               allTurnWorkEntries.flatMap((entry) =>
                 entry.luminorThreadCreation
-                  ? [[entry.luminorThreadCreation.operationId, entry.luminorThreadCreation] as const]
+                  ? [
+                      [
+                        entry.luminorThreadCreation.operationId,
+                        entry.luminorThreadCreation,
+                      ] as const,
+                    ]
                   : [],
               ),
             ).values(),
