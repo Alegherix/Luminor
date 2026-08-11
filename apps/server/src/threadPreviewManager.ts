@@ -22,16 +22,20 @@ import {
   type ThreadPreviewState,
   type ThreadPreviewStopResult,
 } from "@luminor/contracts";
+import { NetService } from "@luminor/shared/Net";
+import { makePreviewPortAllocator } from "@luminor/shared/preview/portAllocation";
 import { idleThreadPreview, isActiveThreadPreview } from "@luminor/shared/preview/previewState";
 import { lastTerminalOutputLine } from "@luminor/shared/preview/previewOutput";
+import { previewUrlTemplateRequiresPort } from "@luminor/shared/preview/previewUrl";
+import { previewProjectScript } from "@luminor/shared/projectScripts";
 import { Effect, Layer, Option, PubSub, Ref, ServiceMap, Stream } from "effect";
 
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery";
 import { TerminalManager } from "./terminal/Services/Manager";
 import {
   buildPreviewLaunchPlan,
+  type PreviewLaunchContext,
   type PreviewLaunchPlan,
-  type PreviewLaunchResolution,
 } from "./preview/previewLaunchPlan";
 
 const PREVIEW_TERMINAL_COLS = 120;
@@ -77,6 +81,8 @@ export const ThreadPreviewManagerLive = Layer.effect(
   Effect.gen(function* () {
     const projection = yield* ProjectionSnapshotQuery;
     const terminalManager = yield* TerminalManager;
+    const net = yield* NetService;
+    const portAllocator = yield* makePreviewPortAllocator(net.isPortAvailableOnLoopback);
     const pubsub = yield* Effect.acquireRelease(
       PubSub.unbounded<ThreadPreviewEvent>(),
       PubSub.shutdown,
@@ -97,9 +103,14 @@ export const ThreadPreviewManagerLive = Layer.effect(
         return [true, { ...current, [threadId]: { ...run, state } }] as const;
       }).pipe(Effect.flatMap((applied) => (applied ? publish(state) : Effect.void)));
 
-    const resolveLaunch = (
+    const resolveLaunchContext = (
       threadId: string,
-    ): Effect.Effect<PreviewLaunchResolution, never, never> =>
+    ): Effect.Effect<
+      | { readonly ok: true; readonly context: PreviewLaunchContext }
+      | { readonly ok: false; readonly message: string },
+      never,
+      never
+    > =>
       Effect.gen(function* () {
         const thread = yield* projection
           .getThreadShellById(ThreadId.makeUnsafe(threadId))
@@ -113,12 +124,15 @@ export const ThreadPreviewManagerLive = Layer.effect(
         if (Option.isNone(project)) {
           return { ok: false, message: PROJECT_MISSING_MESSAGE } as const;
         }
-        return buildPreviewLaunchPlan({
-          threadId,
-          workspaceRoot: project.value.workspaceRoot,
-          worktreePath: thread.value.worktreePath,
-          scripts: project.value.scripts,
-        });
+        return {
+          ok: true,
+          context: {
+            threadId,
+            workspaceRoot: project.value.workspaceRoot,
+            worktreePath: thread.value.worktreePath,
+            scripts: project.value.scripts,
+          },
+        } as const;
       });
 
     const closePreviewTerminal = (threadId: string) =>
@@ -195,29 +209,58 @@ export const ThreadPreviewManagerLive = Layer.effect(
           return { preview: existing.state };
         }
 
-        const resolution = yield* resolveLaunch(threadId);
-        if (!resolution.ok) {
-          const failed = failedState(idleThreadPreview(threadId), resolution.message);
+        const contextResolution = yield* resolveLaunchContext(threadId);
+        if (!contextResolution.ok) {
+          const failed = failedState(idleThreadPreview(threadId), contextResolution.message);
           yield* registerRun(failed);
           return { preview: failed };
         }
 
-        const plan = resolution.plan;
-        const starting: ThreadPreviewState = {
-          threadId,
-          status: "starting",
-          terminalId: plan.terminalId,
-          url: null,
-          port: plan.port,
-          message: null,
-          scriptId: plan.scriptId,
-          command: plan.command,
-          cwd: plan.cwd,
-          startedAt: new Date().toISOString(),
-        };
-        const runId = yield* registerRun(starting);
-        const preview = yield* startPlan(plan, starting, runId);
-        return { preview };
+        const startResolvedLaunch = (port: number | null) =>
+          Effect.gen(function* () {
+            const resolution = buildPreviewLaunchPlan({ ...contextResolution.context, port });
+            if (!resolution.ok) {
+              const failed = failedState(idleThreadPreview(threadId), resolution.message);
+              yield* registerRun(failed);
+              return { preview: failed };
+            }
+
+            const plan = resolution.plan;
+            const starting: ThreadPreviewState = {
+              threadId,
+              status: "starting",
+              terminalId: plan.terminalId,
+              url: null,
+              port: plan.port,
+              message: null,
+              scriptId: plan.scriptId,
+              command: plan.command,
+              cwd: plan.cwd,
+              startedAt: new Date().toISOString(),
+            };
+            const runId = yield* registerRun(starting);
+            const preview = yield* startPlan(plan, starting, runId);
+            return { preview };
+          });
+
+        const script = previewProjectScript(contextResolution.context.scripts);
+        if (!previewUrlTemplateRequiresPort(script?.urlTemplate)) {
+          return yield* startResolvedLaunch(null);
+        }
+
+        return yield* Effect.acquireUseRelease(
+          portAllocator.allocate,
+          (reservation) => startResolvedLaunch(reservation.port),
+          (reservation) => reservation.release,
+        ).pipe(
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              const failed = failedState(idleThreadPreview(threadId), error.message);
+              yield* registerRun(failed);
+              return { preview: failed };
+            }),
+          ),
+        );
       });
 
     const stopPreview: ThreadPreviewManagerShape["stopPreview"] = (threadId) =>

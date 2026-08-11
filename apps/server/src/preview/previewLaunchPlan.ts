@@ -60,6 +60,14 @@ export function buildPreviewLaunchPlan(context: PreviewLaunchContext): PreviewLa
       env: projectScriptRuntimeEnv({
         project: { cwd: context.workspaceRoot },
         worktreePath: context.worktreePath,
+        ...(port === null
+          ? {}
+          : {
+              extraEnv: {
+                PORT: String(port),
+                LUMINOR_PREVIEW_PORT: String(port),
+              },
+            }),
       }),
       url: resolvePreviewUrl({
         urlTemplate: script.urlTemplate,

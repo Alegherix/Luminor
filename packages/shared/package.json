@@ -152,6 +152,10 @@
       "types": "./src/preview/previewState.ts",
       "import": "./src/preview/previewState.ts"
     },
+    "./preview/portAllocation": {
+      "types": "./src/preview/portAllocation.ts",
+      "import": "./src/preview/portAllocation.ts"
+    },
     "./pinnedMessages": {
       "types": "./src/pinnedMessages.ts",
       "import": "./src/pinnedMessages.ts"

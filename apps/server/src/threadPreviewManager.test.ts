@@ -11,13 +11,14 @@ import {
   type TerminalSessionSnapshot,
   type TerminalWriteInput,
 } from "@luminor/contracts";
+import { NetService, type NetServiceShape } from "@luminor/shared/Net";
 import { Effect, Fiber, Layer, Option, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 
 import type { ProjectionSnapshotQueryShape } from "./orchestration/Services/ProjectionSnapshotQuery";
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery";
 import type { TerminalManagerShape } from "./terminal/Services/Manager";
-import { TerminalManager } from "./terminal/Services/Manager";
+import { TerminalError, TerminalManager } from "./terminal/Services/Manager";
 import {
   PREVIEW_REQUIRES_SCRIPT_MESSAGE,
   PREVIEW_REQUIRES_WORKTREE_MESSAGE,
@@ -48,7 +49,12 @@ interface TerminalStub {
   readonly emit: (event: TerminalEvent) => void;
 }
 
-const makeTerminalStub = (): TerminalStub => {
+const makeTerminalStub = (
+  options: {
+    readonly beforeOpen?: (input: TerminalOpenInput, openCount: number) => Promise<void> | void;
+    readonly failOpenCount?: number;
+  } = {},
+): TerminalStub => {
   const opens: TerminalOpenInput[] = [];
   const writes: TerminalWriteInput[] = [];
   const closes: TerminalCloseInput[] = [];
@@ -66,10 +72,20 @@ const makeTerminalStub = (): TerminalStub => {
     updatedAt: "2026-08-10T00:00:00.000Z",
   });
 
+  let remainingOpenFailures = options.failOpenCount ?? 0;
   const shape = {
     open: (input: TerminalOpenInput) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         opens.push(input);
+        if (options.beforeOpen) {
+          yield* Effect.promise(() => Promise.resolve(options.beforeOpen?.(input, opens.length)));
+        }
+        if (remainingOpenFailures > 0) {
+          remainingOpenFailures -= 1;
+          return yield* Effect.fail(
+            new TerminalError({ message: "Preview terminal failed to open." }),
+          );
+        }
         return snapshot(input);
       }),
     write: (input: TerminalWriteInput) =>
@@ -98,15 +114,38 @@ const makeTerminalStub = (): TerminalStub => {
   };
 };
 
+interface NetStub {
+  readonly layer: Layer.Layer<NetService>;
+  readonly checkedPorts: number[];
+}
+
+const makeNetStub = (): NetStub => {
+  const checkedPorts: number[] = [];
+  const shape = {
+    canListenOnHost: () => Effect.succeed(true),
+    isPortAvailableOnLoopback: (port: number) =>
+      Effect.sync(() => {
+        checkedPorts.push(port);
+        return true;
+      }),
+    reserveLoopbackPort: () => Effect.succeed(49_152),
+    findAvailablePort: (preferred: number) => Effect.succeed(preferred),
+  } satisfies NetServiceShape;
+  return {
+    layer: Layer.succeed(NetService, shape),
+    checkedPorts,
+  };
+};
+
 const makeProjectionStub = (input: {
   worktreePath?: string | null;
   scripts?: ReadonlyArray<ProjectScript>;
 }): Layer.Layer<ProjectionSnapshotQuery> =>
   Layer.succeed(ProjectionSnapshotQuery, {
-    getThreadShellById: () =>
+    getThreadShellById: (threadId: ThreadId) =>
       Effect.succeed(
         Option.some({
-          id: ThreadId.makeUnsafe(THREAD_ID),
+          id: threadId,
           projectId: ProjectId.makeUnsafe("project-1"),
           worktreePath: input.worktreePath === undefined ? WORKTREE_PATH : input.worktreePath,
         } as unknown as OrchestrationThreadShell),
@@ -122,7 +161,11 @@ const makeProjectionStub = (input: {
   } as unknown as ProjectionSnapshotQueryShape);
 
 const runPreview = <A>(
-  stubs: { terminal: TerminalStub; projection: Layer.Layer<ProjectionSnapshotQuery> },
+  stubs: {
+    terminal: TerminalStub;
+    projection: Layer.Layer<ProjectionSnapshotQuery>;
+    net?: NetStub;
+  },
   body: (manager: ThreadPreviewManagerShape) => Effect.Effect<A>,
 ) =>
   Effect.runPromise(
@@ -132,7 +175,13 @@ const runPreview = <A>(
     }).pipe(
       Effect.provide(
         ThreadPreviewManagerLive.pipe(
-          Layer.provide(Layer.mergeAll(stubs.terminal.layer, stubs.projection)),
+          Layer.provide(
+            Layer.mergeAll(
+              stubs.terminal.layer,
+              stubs.projection,
+              (stubs.net ?? makeNetStub()).layer,
+            ),
+          ),
         ),
       ),
     ),
@@ -318,5 +367,78 @@ describe("ThreadPreviewManager", () => {
 
     expect(started.preview.status).toBe("running");
     expect(started.preview.url).toBeNull();
+  });
+
+  it("allocates distinct reserved ports for previews started concurrently", async () => {
+    let releaseOpenGate!: () => void;
+    const openGate = new Promise<void>((resolve) => {
+      releaseOpenGate = resolve;
+    });
+    const terminal = makeTerminalStub({
+      beforeOpen: async (_input, openCount) => {
+        if (openCount === 2) releaseOpenGate();
+        await openGate;
+      },
+    });
+    const net = makeNetStub();
+    const projection = makeProjectionStub({
+      scripts: [previewScript({ urlTemplate: "http://localhost:{port}" })],
+    });
+
+    const started = await runPreview({ terminal, projection, net }, (manager) =>
+      Effect.all(
+        [manager.start({ threadId: "thread-a" }), manager.start({ threadId: "thread-b" })],
+        { concurrency: "unbounded" },
+      ),
+    );
+
+    const ports = terminal.opens.map((open) => open.env?.PORT);
+    expect(new Set(ports).size).toBe(2);
+    expect(terminal.opens[0]?.env).toMatchObject({
+      PORT: ports[0],
+      LUMINOR_PREVIEW_PORT: ports[0],
+    });
+    expect(terminal.opens[1]?.env).toMatchObject({
+      PORT: ports[1],
+      LUMINOR_PREVIEW_PORT: ports[1],
+    });
+    expect(started.map(({ preview }) => preview.url).toSorted()).toEqual(
+      ports.map((port) => `http://localhost:${port}`).toSorted(),
+    );
+  });
+
+  it("releases a failed spawn reservation and allocates a fresh port on retry", async () => {
+    const terminal = makeTerminalStub({ failOpenCount: 1 });
+    const net = makeNetStub();
+    const projection = makeProjectionStub({
+      scripts: [previewScript({ urlTemplate: "http://localhost:{port}" })],
+    });
+
+    const { first, second } = await runPreview({ terminal, projection, net }, (manager) =>
+      Effect.gen(function* () {
+        const first = yield* manager.start({ threadId: THREAD_ID });
+        const second = yield* manager.start({ threadId: THREAD_ID });
+        return { first, second };
+      }),
+    );
+
+    expect(first.preview.status).toBe("failed");
+    expect(second.preview.status).toBe("running");
+    expect(second.preview.port).not.toBe(first.preview.port);
+    expect(net.checkedPorts).toHaveLength(2);
+  });
+
+  it("does not check port availability for a fixed URL template", async () => {
+    const terminal = makeTerminalStub();
+    const net = makeNetStub();
+    const projection = makeProjectionStub({});
+
+    await runPreview({ terminal, projection, net }, (manager) =>
+      manager.start({ threadId: THREAD_ID }),
+    );
+
+    expect(net.checkedPorts).toHaveLength(0);
+    expect(terminal.opens[0]?.env?.PORT).toBeUndefined();
+    expect(terminal.opens[0]?.env?.LUMINOR_PREVIEW_PORT).toBeUndefined();
   });
 });
