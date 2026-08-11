@@ -4,6 +4,7 @@
 // Exports: useSidebarThreadActions
 
 import { type ProjectId, ThreadId } from "@luminor/contracts";
+import { describeUserFacingError } from "@luminor/shared/errorMessages";
 import { pluralize } from "@luminor/shared/text";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -572,7 +573,20 @@ export function useSidebarThreadActions(input: {
 
       pendingThreadIds.add(threadId);
       const runArchive = async (): Promise<boolean> => {
-        await archiveThreadFromClient(api.orchestration, threadId);
+        try {
+          await archiveThreadFromClient(api.orchestration, threadId);
+        } catch (error) {
+          console.error("Failed to archive thread", { threadId, error });
+          toastManager.add({
+            type: "error",
+            title: "Failed to archive thread",
+            description: describeUserFacingError(error, "Could not archive the thread."),
+            data: {
+              copyText: describeUserFacingError(error, "Could not archive the thread."),
+            },
+          });
+          return false;
+        }
         if (routeThreadId === threadId) {
           const fallbackThreadId = getFallbackThreadIdAfterDelete({
             threads: sidebarThreads,

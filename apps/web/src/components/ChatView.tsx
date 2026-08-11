@@ -46,6 +46,7 @@ import {
   resolveLatestTailUserMessageEditTarget,
   resolveTailUserMessageEditTarget,
 } from "@luminor/shared/conversationEdit";
+import { describeUserFacingError } from "@luminor/shared/errorMessages";
 import { threadExportBlockedReason } from "@luminor/shared/threadExport";
 import { pendingRequestInstanceKey } from "@luminor/shared/threadSummary";
 import {
@@ -6655,7 +6656,7 @@ export default function ChatView({
       } catch (err) {
         setThreadError(
           activeThread.id,
-          err instanceof Error ? err.message : "Failed to revert thread state.",
+          describeUserFacingError(err, "Failed to revert thread state."),
         );
       }
       setIsRevertingCheckpoint(false);
@@ -6713,7 +6714,7 @@ export default function ChatView({
         setIsRevertingCheckpoint(false);
         setThreadError(
           activeThread.id,
-          err instanceof Error ? err.message : "Failed to undo file changes.",
+          describeUserFacingError(err, "Failed to undo file changes."),
         );
       });
     },
@@ -8367,7 +8368,7 @@ export default function ChatView({
       }
       setThreadError(
         threadIdForSend,
-        err instanceof Error ? err.message : "Failed to send message.",
+        describeUserFacingError(err, "Failed to send message."),
       );
     });
     sendInFlightRef.current = false;
@@ -8419,7 +8420,7 @@ export default function ChatView({
         .catch((err: unknown) => {
           setStoreThreadError(
             activeThreadId,
-            err instanceof Error ? err.message : "Failed to submit approval decision.",
+            describeUserFacingError(err, "Failed to submit approval decision."),
           );
         });
       setRespondingRequestKeys((existing) => existing.filter((key) => key !== requestKey));
@@ -8456,7 +8457,7 @@ export default function ChatView({
         .catch((err: unknown) => {
           setStoreThreadError(
             activeThreadId,
-            err instanceof Error ? err.message : "Failed to submit user input.",
+            describeUserFacingError(err, "Failed to submit user input."),
           );
         });
       setRespondingUserInputRequestKeys((existing) => existing.filter((key) => key !== requestKey));
@@ -8774,7 +8775,7 @@ export default function ChatView({
       );
       setThreadError(
         threadIdForSend,
-        err instanceof Error ? err.message : "Failed to send plan follow-up.",
+        describeUserFacingError(err, "Failed to send plan follow-up."),
       );
       sendInFlightRef.current = false;
       // The turn RPC failed, so no server turn exists for the watchdog to
@@ -8853,7 +8854,7 @@ export default function ChatView({
         .catch((err: unknown) => {
           setThreadError(
             activeThread.id,
-            err instanceof Error ? err.message : "Failed to edit message.",
+            describeUserFacingError(err, "Failed to edit message."),
           );
           return false;
         })

@@ -18,6 +18,8 @@ import {
   type WsBootstrapNegotiateResult,
 } from "@luminor/contracts";
 
+import { CONNECTION_INTERRUPTED_USER_MESSAGE } from "@luminor/shared/errorMessages";
+
 import {
   shouldKeepServerLifecycleStream,
   getUnexpectedStreamCompletionRetryDelayMs,
@@ -38,6 +40,7 @@ import {
   shouldReconnectAfterStreamFailure,
   threadStreamInputsEqual,
   WsTransport,
+  WsTransportRequestInterruptedError,
   type WsThreadStreamFailure,
 } from "./wsTransport";
 import {
@@ -754,6 +757,55 @@ describe("WsTransport", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("retries one-shot RPCs interrupted by Effect fiber cancellation after reconnect", async () => {
+    const transport = Object.create(WsTransport.prototype) as WsTransport;
+    let attempts = 0;
+    const reconnect = vi.fn(async () => undefined);
+    const executeRequestOnce = vi.fn(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error("All fibers interrupted without error");
+      }
+      return { ok: true };
+    });
+    Object.assign(transport, {
+      disposed: false,
+      reconnectPromise: null,
+      reconnect,
+      executeRequestOnce,
+    });
+
+    await expect(transport.request("orchestration.dispatchCommand", {})).resolves.toEqual({
+      ok: true,
+    });
+    expect(attempts).toBe(2);
+    expect(reconnect).toHaveBeenCalledOnce();
+    expect(executeRequestOnce).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces a human connection error after fiber-interrupt retries are exhausted", async () => {
+    const transport = Object.create(WsTransport.prototype) as WsTransport;
+    const executeRequestOnce = vi.fn(async () => {
+      throw new Error("All fibers interrupted without error");
+    });
+    Object.assign(transport, {
+      disposed: false,
+      reconnectPromise: null,
+      reconnect: vi.fn(async () => undefined),
+      executeRequestOnce,
+    });
+
+    const rejection = transport.request("orchestration.dispatchCommand", {});
+    await expect(rejection).rejects.toBeInstanceOf(WsTransportRequestInterruptedError);
+    await expect(rejection).rejects.toMatchObject({
+      code: "WS_CONNECTION_INTERRUPTED",
+      message: CONNECTION_INTERRUPTED_USER_MESSAGE,
+      method: "orchestration.dispatchCommand",
+    });
+    // 1 initial attempt + MAX_RPC_INTERRUPT_RETRIES (2).
+    expect(executeRequestOnce).toHaveBeenCalledTimes(3);
   });
 
   it("keeps the shared lifecycle stream while either lifecycle channel is active", () => {
