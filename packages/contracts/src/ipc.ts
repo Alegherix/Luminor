@@ -128,6 +128,8 @@ import type {
 import type {
   ThreadPreviewEvent,
   ThreadPreviewListResult,
+  ThreadPreviewSetUrlInput,
+  ThreadPreviewSetUrlResult,
   ThreadPreviewStartInput,
   ThreadPreviewStartResult,
   ThreadPreviewStopInput,
@@ -613,6 +615,7 @@ export interface NativeApi {
   preview: {
     start: (input: ThreadPreviewStartInput) => Promise<ThreadPreviewStartResult>;
     stop: (input: ThreadPreviewStopInput) => Promise<ThreadPreviewStopResult>;
+    setUrl: (input: ThreadPreviewSetUrlInput) => Promise<ThreadPreviewSetUrlResult>;
     list: () => Promise<ThreadPreviewListResult>;
     onStatusEvent: (callback: (event: ThreadPreviewEvent) => void) => () => void;
   };

@@ -17,6 +17,8 @@ import {
   ThreadId,
   type ThreadPreviewEvent,
   type ThreadPreviewListResult,
+  type ThreadPreviewSetUrlInput,
+  type ThreadPreviewSetUrlResult,
   type ThreadPreviewStartInput,
   type ThreadPreviewStartResult,
   type ThreadPreviewState,
@@ -24,6 +26,8 @@ import {
 } from "@luminor/contracts";
 import { idleThreadPreview, isActiveThreadPreview } from "@luminor/shared/preview/previewState";
 import { lastTerminalOutputLine } from "@luminor/shared/preview/previewOutput";
+import { detectPreviewUrl } from "@luminor/shared/preview/urlDetection";
+import { resolvePreviewUrl } from "@luminor/shared/preview/previewUrl";
 import { Effect, Layer, Option, PubSub, Ref, ServiceMap, Stream } from "effect";
 
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery";
@@ -36,6 +40,7 @@ import {
 
 const PREVIEW_TERMINAL_COLS = 120;
 const PREVIEW_TERMINAL_ROWS = 30;
+const PREVIEW_URL_DETECTION_TIMEOUT_MS = 90_000;
 
 const THREAD_MISSING_MESSAGE = "Thread is no longer available.";
 const PROJECT_MISSING_MESSAGE = "Project is no longer available.";
@@ -50,6 +55,8 @@ interface PreviewRun {
   readonly runId: number;
   readonly state: ThreadPreviewState;
   readonly lastOutputLine: string | null;
+  readonly outputTail: string;
+  readonly urlDetectionTimeout: ReturnType<typeof setTimeout> | null;
 }
 
 export interface ThreadPreviewManagerShape {
@@ -61,6 +68,9 @@ export interface ThreadPreviewManagerShape {
    * Stopping a thread without a tracked preview is a no-op.
    */
   readonly stopPreview: (threadId: string) => Effect.Effect<ThreadPreviewStopResult>;
+  readonly setUrl: (
+    input: ThreadPreviewSetUrlInput,
+  ) => Effect.Effect<ThreadPreviewSetUrlResult, Error>;
   /** Snapshot of every tracked preview. */
   readonly list: Effect.Effect<ThreadPreviewListResult>;
   /** Live stream of preview transitions (excludes the initial snapshot). */
@@ -88,14 +98,44 @@ export const ThreadPreviewManagerLive = Layer.effect(
       PubSub.publish(pubsub, { type: "status", preview });
 
     // Applies a transition only while `runId` still owns the thread's preview.
-    const transition = (threadId: string, runId: number, state: ThreadPreviewState) =>
+    const transition = (
+      threadId: string,
+      runId: number,
+      state: ThreadPreviewState,
+      expectedStatus?: ThreadPreviewState["status"],
+    ) =>
       Ref.modify(runs, (current) => {
         const run = current[threadId];
-        if (!run || run.runId !== runId) {
-          return [false, current] as const;
+        if (
+          !run ||
+          run.runId !== runId ||
+          (expectedStatus && run.state.status !== expectedStatus)
+        ) {
+          return [{ applied: false, timeout: null }, current] as const;
         }
-        return [true, { ...current, [threadId]: { ...run, state } }] as const;
-      }).pipe(Effect.flatMap((applied) => (applied ? publish(state) : Effect.void)));
+        const timeout = state.status === "starting" ? null : run.urlDetectionTimeout;
+        return [
+          { applied: true, timeout },
+          {
+            ...current,
+            [threadId]: {
+              ...run,
+              state,
+              urlDetectionTimeout: state.status === "starting" ? run.urlDetectionTimeout : null,
+            },
+          },
+        ] as const;
+      }).pipe(
+        Effect.flatMap(({ applied, timeout }) => {
+          if (!applied) {
+            return Effect.void;
+          }
+          if (timeout) {
+            clearTimeout(timeout);
+          }
+          return publish(state);
+        }),
+      );
 
     const resolveLaunch = (
       threadId: string,
@@ -134,10 +174,47 @@ export const ThreadPreviewManagerLive = Layer.effect(
         );
         yield* Ref.update(runs, (current) => ({
           ...current,
-          [state.threadId]: { runId, state, lastOutputLine: null },
+          [state.threadId]: {
+            runId,
+            state,
+            lastOutputLine: null,
+            outputTail: "",
+            urlDetectionTimeout: null,
+          },
         }));
         yield* publish(state);
         return runId;
+      });
+
+    const finishUrlDetection = (threadId: string, runId: number, url: string | null) =>
+      Effect.gen(function* () {
+        const run = (yield* Ref.get(runs))[threadId];
+        if (!run || run.runId !== runId || run.state.status !== "starting") {
+          return;
+        }
+        const running: ThreadPreviewState = { ...run.state, status: "running", url };
+        yield* transition(threadId, runId, running, "starting");
+      });
+
+    const armUrlDetectionTimeout = (threadId: string, runId: number) =>
+      Effect.gen(function* () {
+        const timeout = setTimeout(() => {
+          Effect.runFork(finishUrlDetection(threadId, runId, null));
+        }, PREVIEW_URL_DETECTION_TIMEOUT_MS);
+        timeout.unref?.();
+        const attached = yield* Ref.modify(runs, (current) => {
+          const run = current[threadId];
+          if (!run || run.runId !== runId || run.state.status !== "starting") {
+            return [false, current] as const;
+          }
+          return [
+            true,
+            { ...current, [threadId]: { ...run, urlDetectionTimeout: timeout } },
+          ] as const;
+        });
+        if (!attached) {
+          clearTimeout(timeout);
+        }
       });
 
     const startPlan = (plan: PreviewLaunchPlan, starting: ThreadPreviewState, runId: number) =>
@@ -182,9 +259,14 @@ export const ThreadPreviewManagerLive = Layer.effect(
           return failed;
         }
 
-        const running: ThreadPreviewState = { ...starting, status: "running", url: plan.url };
-        yield* transition(plan.threadId, runId, running);
-        return running;
+        if (plan.url) {
+          const running: ThreadPreviewState = { ...starting, status: "running", url: plan.url };
+          yield* transition(plan.threadId, runId, running);
+          return running;
+        }
+
+        yield* armUrlDetectionTimeout(plan.threadId, runId);
+        return (yield* Ref.get(runs))[plan.threadId]?.state ?? starting;
       });
 
     const start: ThreadPreviewManagerShape["start"] = (input) =>
@@ -225,15 +307,19 @@ export const ThreadPreviewManagerLive = Layer.effect(
         // Drop the run before tearing the PTY down so its exit is never reported
         // as a crash.
         const removed = yield* Ref.modify(runs, (current) => {
-          if (!current[threadId]) {
-            return [false, current] as const;
+          const run = current[threadId];
+          if (!run) {
+            return [{ tracked: false, timeout: null }, current] as const;
           }
           const next = { ...current };
           delete next[threadId];
-          return [true, next] as const;
+          return [{ tracked: true, timeout: run.urlDetectionTimeout }, next] as const;
         });
-        if (!removed) {
+        if (!removed.tracked) {
           return { stopped: false };
+        }
+        if (removed.timeout) {
+          clearTimeout(removed.timeout);
         }
         yield* publish(idleThreadPreview(threadId));
         yield* closePreviewTerminal(threadId);
@@ -241,16 +327,61 @@ export const ThreadPreviewManagerLive = Layer.effect(
       });
 
     const recordOutput = (threadId: string, chunk: string) =>
-      Ref.update(runs, (current) => {
+      Ref.modify(runs, (current) => {
         const run = current[threadId];
         if (!run) {
-          return current;
+          return [null, current] as const;
         }
         const line = lastTerminalOutputLine(chunk);
-        if (!line) {
-          return current;
+        const detection =
+          run.state.status === "starting"
+            ? detectPreviewUrl(run.outputTail, chunk)
+            : { tail: run.outputTail, url: null };
+        const nextRun = {
+          ...run,
+          lastOutputLine: line ?? run.lastOutputLine,
+          outputTail: detection.tail,
+        };
+        return [
+          detection.url ? { runId: run.runId, state: run.state, url: detection.url } : null,
+          { ...current, [threadId]: nextRun },
+        ] as const;
+      }).pipe(
+        Effect.flatMap((detected) => {
+          if (!detected) {
+            return Effect.void;
+          }
+          const url = resolvePreviewUrl({ detectedUrl: detected.url });
+          const running: ThreadPreviewState = { ...detected.state, status: "running", url };
+          return transition(threadId, detected.runId, running, "starting");
+        }),
+      );
+
+    const setUrl: ThreadPreviewManagerShape["setUrl"] = (input) =>
+      Effect.gen(function* () {
+        const trimmed = input.url.trim();
+        const candidate = /^https?:\/\//iu.test(trimmed) ? trimmed : `http://${trimmed}`;
+        const parsed = yield* Effect.try({
+          try: () => new URL(candidate),
+          catch: () => new Error("Enter a valid HTTP(S) preview URL."),
+        });
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          return yield* Effect.fail(new Error("Enter a valid HTTP(S) preview URL."));
         }
-        return { ...current, [threadId]: { ...run, lastOutputLine: line } };
+        if (parsed.hostname === "0.0.0.0") {
+          parsed.hostname = "localhost";
+        }
+        const run = (yield* Ref.get(runs))[input.threadId];
+        if (!run || !isActiveThreadPreview(run.state)) {
+          return yield* Effect.fail(new Error("Preview is not running."));
+        }
+        const preview: ThreadPreviewState = {
+          ...run.state,
+          status: "running",
+          url: parsed.toString(),
+        };
+        yield* transition(input.threadId, run.runId, preview);
+        return { preview };
       });
 
     // A PTY exit or error for a tracked run means the preview process died on its
@@ -259,11 +390,24 @@ export const ThreadPreviewManagerLive = Layer.effect(
       Ref.modify(runs, (current) => {
         const run = current[threadId];
         if (!run || run.state.status === "failed") {
-          return [null, current] as const;
+          return [{ failed: null, timeout: null }, current] as const;
         }
         const failed = failedState(run.state, run.lastOutputLine ?? fallbackMessage);
-        return [failed, { ...current, [threadId]: { ...run, state: failed } }] as const;
-      }).pipe(Effect.flatMap((failed) => (failed ? publish(failed) : Effect.void)));
+        return [
+          { failed, timeout: run.urlDetectionTimeout },
+          {
+            ...current,
+            [threadId]: { ...run, state: failed, urlDetectionTimeout: null },
+          },
+        ] as const;
+      }).pipe(
+        Effect.flatMap(({ failed, timeout }) => {
+          if (timeout) {
+            clearTimeout(timeout);
+          }
+          return failed ? publish(failed) : Effect.void;
+        }),
+      );
 
     const unsubscribe = yield* terminalManager.subscribe((event) => {
       if (event.terminalId !== PREVIEW_TERMINAL_ID) {
@@ -294,6 +438,7 @@ export const ThreadPreviewManagerLive = Layer.effect(
     return {
       start,
       stopPreview,
+      setUrl,
       list,
       get stream() {
         return Stream.fromPubSub(pubsub);

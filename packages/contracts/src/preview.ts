@@ -43,6 +43,17 @@ export const ThreadPreviewStopResult = Schema.Struct({
 });
 export type ThreadPreviewStopResult = typeof ThreadPreviewStopResult.Type;
 
+export const ThreadPreviewSetUrlInput = Schema.Struct({
+  threadId: TrimmedNonEmptyString,
+  url: TrimmedNonEmptyString,
+});
+export type ThreadPreviewSetUrlInput = typeof ThreadPreviewSetUrlInput.Type;
+
+export const ThreadPreviewSetUrlResult = Schema.Struct({
+  preview: ThreadPreviewState,
+});
+export type ThreadPreviewSetUrlResult = typeof ThreadPreviewSetUrlResult.Type;
+
 export const ThreadPreviewListResult = Schema.Struct({
   previews: Schema.Array(ThreadPreviewState),
 });

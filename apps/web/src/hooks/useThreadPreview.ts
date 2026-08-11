@@ -17,6 +17,7 @@ export interface ThreadPreviewController {
   readonly isActive: boolean;
   readonly start: () => Promise<void>;
   readonly stop: () => Promise<void>;
+  readonly setUrl: (url: string) => Promise<void>;
   readonly restart: () => Promise<void>;
 }
 
@@ -100,12 +101,33 @@ export function useThreadPreview(threadId: ThreadId): ThreadPreviewController {
     await start();
   }, [start, stop]);
 
+  const setUrl = useCallback(
+    async (url: string) => {
+      const api = readNativeApi();
+      if (!api) {
+        return;
+      }
+      try {
+        const { preview: updated } = await api.preview.setUrl({ threadId, url });
+        applyStatus(updated);
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to set preview URL",
+          description: error instanceof Error ? error.message : "Enter a valid preview URL.",
+        });
+      }
+    },
+    [applyStatus, threadId],
+  );
+
   return {
     preview,
     status: preview?.status ?? "idle",
     isActive: isActiveThreadPreview(preview),
     start,
     stop,
+    setUrl,
     restart,
   };
 }

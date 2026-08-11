@@ -34,6 +34,7 @@ function installPreviewNativeApi(handlers: {
   previews?: readonly ThreadPreviewState[];
   start?: (input: { threadId: ThreadId }) => Promise<{ preview: ThreadPreviewState }>;
   stop?: (input: { threadId: ThreadId }) => Promise<{ preview: ThreadPreviewState }>;
+  setUrl?: (input: { threadId: ThreadId; url: string }) => Promise<{ preview: ThreadPreviewState }>;
 }): () => void {
   const previousNativeApi = window.nativeApi;
   Object.defineProperty(window, "nativeApi", {
@@ -42,6 +43,9 @@ function installPreviewNativeApi(handlers: {
       preview: {
         start: handlers.start ?? (async () => ({ preview: previewState() })),
         stop: handlers.stop ?? (async () => ({ preview: previewState({ status: "idle" }) })),
+        setUrl:
+          handlers.setUrl ??
+          (async ({ url }) => ({ preview: previewState({ status: "running", url }) })),
         list: async () => ({ previews: handlers.previews ?? [] }),
         onStatusEvent: () => () => undefined,
       },
@@ -104,6 +108,28 @@ describe("DockPreviewPane", () => {
 
     await page.getByRole("button", { name: "Stop preview" }).click();
     expect(stop).toHaveBeenCalledWith({ threadId: THREAD_ID });
+
+    await screen.unmount();
+    restoreNativeApi();
+  });
+
+  it("loads and keeps a manually entered URL for a running preview", async () => {
+    const enteredUrl = "http://localhost:4321";
+    const setUrl = vi.fn(async () => ({ preview: previewState({ url: `${enteredUrl}/` }) }));
+    const restoreNativeApi = installPreviewNativeApi({
+      previews: [previewState({ url: null, port: null })],
+      setUrl,
+    });
+    const screen = await render(<DockPreviewPane hostThreadId={THREAD_ID} hasWorktree />);
+
+    await expect.element(page.getByText("Preview is running")).toBeInTheDocument();
+    await page.getByRole("textbox", { name: "Preview URL" }).fill(enteredUrl);
+    await page.getByRole("button", { name: "Open preview" }).click();
+
+    expect(setUrl).toHaveBeenCalledWith({ threadId: THREAD_ID, url: enteredUrl });
+    expect(document.querySelector('[data-testid="preview-webview"]')?.getAttribute("src")).toBe(
+      `${enteredUrl}/`,
+    );
 
     await screen.unmount();
     restoreNativeApi();

@@ -84,7 +84,12 @@ import {
   ProjectStopDevServerInput,
   ProjectWriteFileInput,
 } from "./project";
-import { ThreadPreviewEvent, ThreadPreviewStartInput, ThreadPreviewStopInput } from "./preview";
+import {
+  ThreadPreviewEvent,
+  ThreadPreviewSetUrlInput,
+  ThreadPreviewStartInput,
+  ThreadPreviewStopInput,
+} from "./preview";
 import { StudioListThreadOutputsInput } from "./studio";
 import { FilesystemBrowseInput } from "./filesystem";
 import { OpenInEditorInput } from "./editor";
@@ -154,6 +159,7 @@ export const WS_METHODS = {
   // Thread preview methods
   previewStart: "preview.start",
   previewStop: "preview.stop",
+  previewSetUrl: "preview.setUrl",
   previewList: "preview.list",
   subscribePreviewEvents: "preview.subscribe",
 
@@ -342,6 +348,7 @@ const WebSocketRequestBody = Schema.Union([
   // Thread preview
   tagRequestBody(WS_METHODS.previewStart, ThreadPreviewStartInput),
   tagRequestBody(WS_METHODS.previewStop, ThreadPreviewStopInput),
+  tagRequestBody(WS_METHODS.previewSetUrl, ThreadPreviewSetUrlInput),
   tagRequestBody(WS_METHODS.previewList, Schema.Struct({})),
   tagRequestBody(WS_METHODS.subscribePreviewEvents, Schema.Struct({})),
 

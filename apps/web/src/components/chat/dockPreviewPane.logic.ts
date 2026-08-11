@@ -16,6 +16,11 @@ export type PreviewPaneStatusTone = "idle" | "pending" | "running" | "failed";
 export type PreviewPaneBody =
   | { readonly kind: "webview"; readonly url: string }
   | {
+      readonly kind: "url-entry";
+      readonly heading: string;
+      readonly description: string;
+    }
+  | {
       readonly kind: "message";
       readonly heading: string;
       readonly description: string;
@@ -97,10 +102,9 @@ export function resolvePreviewPaneView(input: {
       portLabel,
       controls: ["stop"],
       body: {
-        kind: "message",
+        kind: "url-entry",
         heading: PREVIEW_NO_URL_HEADING,
-        description: "The preview script has no URL, so there is nothing to embed yet.",
-        action: null,
+        description: "Enter the URL announced by the preview process.",
       },
     };
   }

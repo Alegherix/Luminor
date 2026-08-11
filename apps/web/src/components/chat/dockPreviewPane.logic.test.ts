@@ -78,7 +78,7 @@ describe("resolvePreviewPaneView", () => {
     });
 
     expect(view.controls).toEqual(["stop"]);
-    expect(view.body).toMatchObject({ kind: "message", heading: PREVIEW_NO_URL_HEADING });
+    expect(view.body).toMatchObject({ kind: "url-entry", heading: PREVIEW_NO_URL_HEADING });
   });
 
   it("surfaces the failure message with retry", () => {
