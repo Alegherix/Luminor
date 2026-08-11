@@ -4736,6 +4736,7 @@ export default function ChatView({
         command: input.command,
         icon: input.icon,
         kind: input.kind,
+        urlTemplate: input.urlTemplate,
       };
       const nextScripts = normalizeProjectScriptRoles(
         [...activeProject.scripts, nextScript],
@@ -4767,6 +4768,7 @@ export default function ChatView({
         command: input.command,
         icon: input.icon,
         kind: input.kind,
+        urlTemplate: input.urlTemplate,
       };
       const nextScripts = normalizeProjectScriptRoles(
         activeProject.scripts.map((script) => (script.id === scriptId ? updatedScript : script)),

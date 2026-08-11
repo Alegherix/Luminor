@@ -88,6 +88,46 @@ describe("ProjectScriptsControl", () => {
     await expect.poll(() => document.body.textContent).toContain("Add action");
   });
 
+  it("edits the preview command and url template from the action dialog", async () => {
+    const previewScript: ProjectScript = {
+      id: "preview",
+      name: "Preview",
+      command: "bun run dev",
+      icon: "play",
+      kind: "preview",
+      urlTemplate: "http://localhost:3000",
+    };
+    await using control = await mountProjectScriptsControl({
+      scripts: [previewScript],
+      preferredScriptId: "preview",
+    });
+
+    await page.getByLabelText("Script actions").click();
+    await expect
+      .poll(() => document.querySelector<HTMLButtonElement>('button[aria-label="Edit Preview"]'))
+      .not.toBeNull();
+    document.querySelector<HTMLButtonElement>('button[aria-label="Edit Preview"]')?.click();
+
+    await expect.poll(() => document.body.textContent).toContain("Edit Action");
+    await expect
+      .poll(() => document.querySelector<HTMLInputElement>("#script-url-template")?.value)
+      .toBe("http://localhost:3000");
+
+    await page.getByLabelText("Command").fill("bun run dev --host");
+    await page.getByLabelText("URL template").fill("http://localhost:{port}");
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    await expect.poll(() => control.onUpdateScript.mock.calls.length).toBe(1);
+    expect(control.onUpdateScript).toHaveBeenCalledWith(
+      "preview",
+      expect.objectContaining({
+        kind: "preview",
+        command: "bun run dev --host",
+        urlTemplate: "http://localhost:{port}",
+      }),
+    );
+  });
+
   it("keeps the edit dialog delete action legible", async () => {
     const setupScript: ProjectScript = {
       id: "setup",

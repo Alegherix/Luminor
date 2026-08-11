@@ -6,17 +6,20 @@
 //             (state->render mapping), DockPaneHeader.
 // Exports: DockPreviewPane
 
-import type { ThreadId } from "@luminor/contracts";
+import type { ProjectId, ThreadId } from "@luminor/contracts";
 import { useCallback, useState } from "react";
 
+import { useProjectPreviewScript } from "~/hooks/useProjectPreviewScript";
 import { useThreadPreview } from "~/hooks/useThreadPreview";
 import { LoaderIcon, PlayIcon, RefreshCwIcon, StopIcon, XIcon } from "~/lib/icons";
 import { cn } from "~/lib/utils";
+import type { PreviewProjectScriptDraft } from "~/projectScripts";
 import { Button } from "../ui/button";
 import { IconButton } from "../ui/icon-button";
 import { DOCK_HEADER_ICON_BUTTON_CLASS } from "./chatHeaderControls";
 import { DockPaneHeader } from "./DockPaneHeader";
 import { PanelStateMessage } from "./PanelStateMessage";
+import { PreviewSetupForm } from "./PreviewSetupForm";
 import {
   resolvePreviewPaneView,
   type PreviewPaneBody,
@@ -54,12 +57,26 @@ const CONTROL_ICONS: Record<PreviewPaneControlKind, typeof PlayIcon> = {
 
 export function DockPreviewPane(props: {
   hostThreadId: ThreadId;
+  projectId: ProjectId | null;
   hasWorktree: boolean;
   onClose?: (() => void) | undefined;
 }) {
   const { preview, start, stop } = useThreadPreview(props.hostThreadId);
+  const previewScript = useProjectPreviewScript(props.projectId);
   const [reloadKey, setReloadKey] = useState(0);
-  const view = resolvePreviewPaneView({ preview, hasWorktree: props.hasWorktree });
+  const view = resolvePreviewPaneView({
+    preview,
+    hasWorktree: props.hasWorktree,
+    hasPreviewScript: previewScript.script !== null,
+  });
+
+  const saveScriptAndStart = useCallback(
+    async (draft: PreviewProjectScriptDraft) => {
+      await previewScript.save(draft);
+      await start();
+    },
+    [previewScript, start],
+  );
 
   const runControl = useCallback(
     (kind: PreviewPaneControlKind) => {
@@ -130,6 +147,12 @@ export function DockPreviewPane(props: {
           sandbox={PREVIEW_WEBVIEW_SANDBOX}
           className="min-h-0 w-full flex-1 border-0 bg-white"
           data-testid="preview-webview"
+        />
+      ) : view.body.kind === "configure" ? (
+        <PreviewSetupForm
+          heading={view.body.heading}
+          description={view.body.description}
+          onSubmit={saveScriptAndStart}
         />
       ) : (
         <PreviewPaneMessageBody body={view.body} onRunControl={runControl} />
