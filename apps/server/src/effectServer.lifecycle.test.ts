@@ -1,7 +1,8 @@
+import { idleThreadPreview } from "@luminor/shared/preview/previewState";
 import { Effect, Scope } from "effect";
 import { describe, expect, it } from "vitest";
 
-import { closeServerRuntimePipeline } from "./effectServer.ts";
+import { closeServerRuntimePipeline, stopAllThreadPreviews } from "./effectServer.ts";
 
 describe("server runtime pipeline shutdown", () => {
   it("persists accepted provider terminal work before the engine stops", async () => {
@@ -45,6 +46,10 @@ describe("server runtime pipeline shutdown", () => {
             order.push("managed-attachments-drained");
           }),
         },
+        threadPreviewManager: {
+          list: Effect.succeed({ previews: [] }),
+          stopPreview: () => Effect.succeed({ stopped: false }),
+        },
         subscriptionsScope,
       }),
     );
@@ -57,5 +62,26 @@ describe("server runtime pipeline shutdown", () => {
       "managed-attachments-drained",
       "engine-stopped",
     ]);
+  });
+
+  it("sweeps every preview when one stop defects", async () => {
+    const stopped: string[] = [];
+    const previews = ["thread-1", "thread-2", "thread-3"].map(idleThreadPreview);
+
+    await Effect.runPromise(
+      stopAllThreadPreviews({
+        list: Effect.succeed({ previews }),
+        stopPreview: (threadId) =>
+          Effect.sync(() => stopped.push(threadId)).pipe(
+            Effect.andThen(
+              threadId === "thread-2"
+                ? Effect.die("stop defect")
+                : Effect.succeed({ stopped: true }),
+            ),
+          ),
+      }),
+    );
+
+    expect(stopped).toEqual(["thread-1", "thread-2", "thread-3"]);
   });
 });

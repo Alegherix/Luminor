@@ -72,7 +72,11 @@ import {
 import { Keybindings } from "./keybindings";
 import { createLocalPreviewGrant } from "./localImageFiles";
 import { listLocalServers, stopLocalServer } from "./localServerMonitor";
-import { listManagedWorktrees, pruneProjectedArchivedManagedWorktrees } from "./managedWorktrees";
+import {
+  listManagedWorktrees,
+  pruneProjectedArchivedManagedWorktrees,
+  removeThreadWorktreeAndStopPreviews,
+} from "./managedWorktrees";
 import {
   attachmentPrincipalForSession,
   CurrentManagedAttachmentPrincipal,
@@ -1424,7 +1428,15 @@ const makeWsRpcHandlersLayer = () =>
           rpcEffect(
             refreshGitStatusAfter(
               input.cwd,
-              git.withMutation(input.cwd, git.removeWorktree(input)),
+              Effect.gen(function* () {
+                const threads = yield* projectionReadModelQuery.listManagedWorktreeThreads();
+                yield* removeThreadWorktreeAndStopPreviews({
+                  worktreePath: input.path,
+                  threads,
+                  removeWorktree: git.withMutation(input.cwd, git.removeWorktree(input)),
+                  threadPreviewManager,
+                });
+              }),
             ),
             "Failed to remove worktree",
           ),
