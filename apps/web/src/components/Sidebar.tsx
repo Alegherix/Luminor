@@ -3902,21 +3902,22 @@ export default function Sidebar() {
     async (folder: Folder, position: { x: number; y: number }) => {
       const api = readNativeApi();
       if (!api) return;
-      const clicked = await api.contextMenu.show(
-        [
-          { id: "new-thread", label: "New thread in folder" },
-          {
-            id: "toggle-pin",
-            label: pinActionLabel("folder", folder.isPinned),
-            separatorBefore: true,
-          },
-          { id: "rename", label: "Rename folder" },
-          { id: "delete", label: "Delete folder", destructive: true, separatorBefore: true },
-        ],
-        position,
-      );
+      const isProjectFolder = folder.owner.kind === "project";
+      const menuItems = [
+        ...(isProjectFolder ? [{ id: "new-thread", label: "New thread in folder" }] : []),
+        {
+          id: "toggle-pin",
+          label: pinActionLabel("folder", folder.isPinned),
+          separatorBefore: isProjectFolder,
+        },
+        { id: "rename", label: "Rename folder" },
+        { id: "delete", label: "Delete folder", destructive: true, separatorBefore: true },
+      ];
+      const clicked = await api.contextMenu.show(menuItems, position);
       if (clicked === "new-thread") {
-        handleNewThreadInFolder(folder);
+        if (isProjectFolder) {
+          handleNewThreadInFolder(folder);
+        }
         return;
       }
       if (clicked === "toggle-pin") {
@@ -3942,7 +3943,9 @@ export default function Sidebar() {
       const confirmed = await api.dialogs.confirm(
         memberCount === 0
           ? `Delete empty folder “${folder.name}”?`
-          : `Delete folder “${folder.name}”? Its ${memberCount} ${pluralize(memberCount, "thread")} will move back to the project.`,
+          : isProjectFolder
+            ? `Delete folder “${folder.name}”? Its ${memberCount} ${pluralize(memberCount, "thread")} will move back to the project.`
+            : `Delete folder “${folder.name}”? Its ${memberCount} ${pluralize(memberCount, "thread")} will leave the folder.`,
       );
       if (!confirmed) return;
       try {
@@ -5267,12 +5270,9 @@ export default function Sidebar() {
               });
             }}
             onDoubleClick={() => {
-              if (projectId !== null) {
-                setFolderEditorState({ mode: "rename", folderId: folder.id });
-              }
+              setFolderEditorState({ mode: "rename", folderId: folder.id });
             }}
             onContextMenu={(event) => {
-              if (projectId === null) return;
               event.preventDefault();
               void handleFolderContextMenu(folder, { x: event.clientX, y: event.clientY });
             }}
@@ -7369,7 +7369,9 @@ export default function Sidebar() {
             ? `The ${groupedFolderThreadCount} selected ${pluralize(groupedFolderThreadCount, "thread")} move into this folder.`
             : folderEditorState?.mode === "create" && folderEditorState.owner.kind === "space"
               ? "Folders organize threads within this space."
-              : "Folders organize threads within this project."
+              : folderEditorState?.mode === "rename" && editedFolder?.owner.kind === "space"
+                ? "Folders organize threads within this space."
+                : "Folders organize threads within this project."
         }
         initialValue={editedFolder?.name ?? ""}
         placeholder="Folder name"
