@@ -7,6 +7,7 @@
 // Exports: DockPreviewPane
 
 import { PREVIEW_TERMINAL_ID, type ProjectId, type ThreadId } from "@luminor/contracts";
+import type { ResolvedThreadWorkspaceState } from "@luminor/shared/threadEnvironment";
 import { useCallback, useState } from "react";
 
 import { usePreviewCommandSuggestions } from "~/hooks/usePreviewCommandSuggestions";
@@ -73,7 +74,7 @@ const CONTROL_ICONS: Record<PreviewPaneControlKind, typeof PlayIcon> = {
 export function DockPreviewPane(props: {
   hostThreadId: ThreadId;
   projectId: ProjectId | null;
-  hasWorktree: boolean;
+  workspaceState: ResolvedThreadWorkspaceState | null;
   onClose?: (() => void) | undefined;
 }) {
   const { preview, start, stop, restart, setUrl } = useThreadPreview(props.hostThreadId);
@@ -85,7 +86,7 @@ export function DockPreviewPane(props: {
   const savedScript = previewScript.script;
   const view = resolvePreviewPaneView({
     preview,
-    hasWorktree: props.hasWorktree,
+    workspaceState: props.workspaceState,
     hasPreviewScript: savedScript !== null,
     previewCommand: savedScript?.command ?? null,
   });

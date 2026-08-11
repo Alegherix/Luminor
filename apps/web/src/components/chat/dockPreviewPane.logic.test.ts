@@ -6,8 +6,9 @@ import {
   PREVIEW_IDLE_HEADING,
   PREVIEW_NEEDS_SCRIPT_HEADING,
   PREVIEW_NO_URL_HEADING,
-  PREVIEW_REQUIRES_WORKTREE_HEADING,
+  PREVIEW_REQUIRES_WORKSPACE_HEADING,
   PREVIEW_STARTING_HEADING,
+  PREVIEW_WORKTREE_PENDING_HEADING,
   resolvePreviewPaneView,
 } from "./dockPreviewPane.logic";
 
@@ -26,17 +27,45 @@ const preview = (overrides: Partial<ThreadPreviewState>): ThreadPreviewState => 
 });
 
 describe("resolvePreviewPaneView", () => {
-  it("explains the worktree requirement and offers no controls without one", () => {
+  it("explains the missing workspace and offers no controls", () => {
     const view = resolvePreviewPaneView({
       preview: null,
-      hasWorktree: false,
+      workspaceState: null,
       hasPreviewScript: true,
     });
 
     expect(view.controls).toEqual([]);
     expect(view.body).toMatchObject({
       kind: "message",
-      heading: PREVIEW_REQUIRES_WORKTREE_HEADING,
+      heading: PREVIEW_REQUIRES_WORKSPACE_HEADING,
+      action: null,
+    });
+  });
+
+  it("offers start for a local thread, which runs in the project directory", () => {
+    const view = resolvePreviewPaneView({
+      preview: null,
+      workspaceState: "local",
+      hasPreviewScript: true,
+      previewCommand: "bun run dev",
+    });
+
+    expect(view.controls).toEqual(["configure", "start"]);
+    expect(view.body).toMatchObject({ heading: PREVIEW_IDLE_HEADING, action: "start" });
+  });
+
+  it("waits for a worktree-mode thread whose worktree has not materialized", () => {
+    const view = resolvePreviewPaneView({
+      preview: null,
+      workspaceState: "worktree-pending",
+      hasPreviewScript: true,
+      previewCommand: "bun run dev",
+    });
+
+    expect(view.controls).toEqual([]);
+    expect(view.body).toMatchObject({
+      kind: "message",
+      heading: PREVIEW_WORKTREE_PENDING_HEADING,
       action: null,
     });
   });
@@ -44,7 +73,7 @@ describe("resolvePreviewPaneView", () => {
   it("offers start while idle", () => {
     const view = resolvePreviewPaneView({
       preview: null,
-      hasWorktree: true,
+      workspaceState: "worktree-ready",
       hasPreviewScript: true,
     });
 
@@ -57,7 +86,7 @@ describe("resolvePreviewPaneView", () => {
   it("shows the saved command as the idle description so it can be edited before starting", () => {
     const view = resolvePreviewPaneView({
       preview: null,
-      hasWorktree: true,
+      workspaceState: "worktree-ready",
       hasPreviewScript: true,
       previewCommand: "bun run dev --home-dir ./.luminor/preview-instance",
     });
@@ -71,20 +100,20 @@ describe("resolvePreviewPaneView", () => {
   it("keeps the generic idle description when the saved command is blank", () => {
     const view = resolvePreviewPaneView({
       preview: null,
-      hasWorktree: true,
+      workspaceState: "worktree-ready",
       hasPreviewScript: true,
       previewCommand: "   ",
     });
 
     expect(view.body).toMatchObject({
-      description: "Run the project's preview command in this thread's worktree.",
+      description: "Run the project's preview command in this thread's directory.",
     });
   });
 
   it("asks for a preview command instead of a start control when none is configured", () => {
     const view = resolvePreviewPaneView({
       preview: null,
-      hasWorktree: true,
+      workspaceState: "worktree-ready",
       hasPreviewScript: false,
     });
 
@@ -99,7 +128,7 @@ describe("resolvePreviewPaneView", () => {
   it("shows the launching command and only a cancel control while starting", () => {
     const view = resolvePreviewPaneView({
       preview: preview({ status: "starting", command: "bun run dev" }),
-      hasWorktree: true,
+      workspaceState: "worktree-ready",
       hasPreviewScript: true,
     });
 
@@ -114,7 +143,7 @@ describe("resolvePreviewPaneView", () => {
   it("embeds the url and offers reload, logs, restart, and stop while running", () => {
     const view = resolvePreviewPaneView({
       preview: preview({ status: "running", url: "http://localhost:5173", port: 5173 }),
-      hasWorktree: true,
+      workspaceState: "worktree-ready",
       hasPreviewScript: true,
     });
 
@@ -127,7 +156,7 @@ describe("resolvePreviewPaneView", () => {
   it("keeps a running preview without a url stoppable but shows no webview", () => {
     const view = resolvePreviewPaneView({
       preview: preview({ status: "running", url: null }),
-      hasWorktree: true,
+      workspaceState: "worktree-ready",
       hasPreviewScript: true,
     });
 
@@ -138,7 +167,7 @@ describe("resolvePreviewPaneView", () => {
   it("surfaces the failure message with retry", () => {
     const view = resolvePreviewPaneView({
       preview: preview({ status: "failed", message: "Error: port already in use" }),
-      hasWorktree: true,
+      workspaceState: "worktree-ready",
       hasPreviewScript: true,
     });
 

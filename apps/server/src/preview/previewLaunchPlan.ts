@@ -7,17 +7,25 @@
  *
  * @module previewLaunchPlan
  */
-import { PREVIEW_TERMINAL_ID, type ProjectScript } from "@luminor/contracts";
+import {
+  PREVIEW_TERMINAL_ID,
+  type ProjectScript,
+  type ThreadEnvironmentMode,
+} from "@luminor/contracts";
 import { resolvePreviewUrl } from "@luminor/shared/preview/previewUrl";
 import { previewProjectScript, projectScriptRuntimeEnv } from "@luminor/shared/projectScripts";
+import { resolveThreadWorkspaceCwd } from "@luminor/shared/threadEnvironment";
 
-export const PREVIEW_REQUIRES_WORKTREE_MESSAGE = "Preview requires a worktree.";
+export const PREVIEW_WORKTREE_PENDING_MESSAGE =
+  "This thread's worktree is not ready yet, so there is nowhere to run the preview.";
 export const PREVIEW_REQUIRES_SCRIPT_MESSAGE = "No preview script configured for this project.";
 
 export interface PreviewLaunchContext {
   readonly threadId: string;
   readonly workspaceRoot: string;
   readonly worktreePath: string | null;
+  readonly envMode?: ThreadEnvironmentMode | null | undefined;
+  readonly workingDirectory?: string | null | undefined;
   readonly scripts: ReadonlyArray<ProjectScript>;
   /** Port reserved for this run, once port allocation applies. */
   readonly port?: number | null;
@@ -41,8 +49,14 @@ export type PreviewLaunchResolution =
   | { readonly ok: false; readonly message: string };
 
 export function buildPreviewLaunchPlan(context: PreviewLaunchContext): PreviewLaunchResolution {
-  if (!context.worktreePath) {
-    return { ok: false, message: PREVIEW_REQUIRES_WORKTREE_MESSAGE };
+  const cwd = resolveThreadWorkspaceCwd({
+    projectCwd: context.workspaceRoot,
+    envMode: context.envMode,
+    worktreePath: context.worktreePath,
+    workingDirectory: context.workingDirectory,
+  });
+  if (!cwd) {
+    return { ok: false, message: PREVIEW_WORKTREE_PENDING_MESSAGE };
   }
   const script = previewProjectScript(context.scripts);
   if (!script) {
@@ -56,7 +70,7 @@ export function buildPreviewLaunchPlan(context: PreviewLaunchContext): PreviewLa
       terminalId: PREVIEW_TERMINAL_ID,
       scriptId: script.id,
       command: script.command,
-      cwd: context.worktreePath,
+      cwd,
       env: projectScriptRuntimeEnv({
         project: { cwd: context.workspaceRoot },
         worktreePath: context.worktreePath,

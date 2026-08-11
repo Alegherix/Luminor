@@ -88,7 +88,7 @@ const RIGHT_DOCK_LAUNCHER_ORDER: readonly RightDockPaneKind[] = [
   "git",
 ];
 
-export const PREVIEW_REQUIRES_WORKTREE_TOOLTIP = "Preview requires a worktree";
+export const PREVIEW_WORKTREE_PENDING_TOOLTIP = "Preview waits for this thread's worktree";
 
 const RIGHT_DOCK_LAUNCHER_LABELS: Partial<Record<RightDockPaneKind, string>> = {
   diff: "Review",
@@ -101,7 +101,7 @@ export function resolveRightDockLauncherItems(input: {
   hasWorkspace: boolean;
   hasGitRepository: boolean;
   hasReview: boolean;
-  hasWorktree: boolean;
+  isWorktreePending: boolean;
 }): readonly RightDockLauncherItem[] {
   return RIGHT_DOCK_LAUNCHER_ORDER.flatMap((kind) => {
     if (kind === "diff" && !input.hasReview) {
@@ -115,8 +115,8 @@ export function resolveRightDockLauncherItems(input: {
     }
     const meta = getRightDockPaneMeta(kind);
     const gate =
-      kind === "preview" && !input.hasWorktree
-        ? { disabled: true, disabledReason: PREVIEW_REQUIRES_WORKTREE_TOOLTIP }
+      kind === "preview" && input.isWorktreePending
+        ? { disabled: true, disabledReason: PREVIEW_WORKTREE_PENDING_TOOLTIP }
         : {};
     return [
       {

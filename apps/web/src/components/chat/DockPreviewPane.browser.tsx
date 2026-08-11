@@ -15,6 +15,7 @@ import {
   type ThreadId,
   type ThreadPreviewState,
 } from "@luminor/contracts";
+import type { ResolvedThreadWorkspaceState } from "@luminor/shared/threadEnvironment";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -56,13 +57,13 @@ const previewState = (overrides: Partial<ThreadPreviewState> = {}): ThreadPrevie
   ...overrides,
 });
 
-function renderPane(input: { hasWorktree: boolean }) {
+function renderPane(input: { workspaceState: ResolvedThreadWorkspaceState | null }) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <DockPreviewPane
         hostThreadId={THREAD_ID}
         projectId={PROJECT_ID}
-        hasWorktree={input.hasWorktree}
+        workspaceState={input.workspaceState}
       />
     </QueryClientProvider>,
   );
@@ -128,12 +129,12 @@ describe("DockPreviewPane", () => {
     document.body.innerHTML = "";
   });
 
-  it("explains the worktree requirement and offers no controls without one", async () => {
+  it("explains the missing workspace and offers no controls", async () => {
     seedProject([PREVIEW_SCRIPT]);
     const restoreNativeApi = installPreviewNativeApi({});
-    const screen = await renderPane({ hasWorktree: false });
+    const screen = await renderPane({ workspaceState: null });
 
-    await expect.element(page.getByText("Preview needs a worktree")).toBeInTheDocument();
+    await expect.element(page.getByText("Preview needs a project directory")).toBeInTheDocument();
     expect(previewStatusTone()).toBe("idle");
     expect(document.querySelector('button[aria-label="Start preview"]')).toBeNull();
     expect(document.querySelector('[data-testid="preview-webview"]')).toBeNull();
@@ -146,7 +147,7 @@ describe("DockPreviewPane", () => {
     seedProject([PREVIEW_SCRIPT]);
     const start = vi.fn(async () => ({ preview: previewState() }));
     const restoreNativeApi = installPreviewNativeApi({ start });
-    const screen = await renderPane({ hasWorktree: true });
+    const screen = await renderPane({ workspaceState: "worktree-ready" });
 
     await expect.element(page.getByText("Preview is not running")).toBeInTheDocument();
     await page.getByRole("button", { name: "Start preview" }).first().click();
@@ -166,7 +167,7 @@ describe("DockPreviewPane", () => {
     seedProject([PREVIEW_SCRIPT]);
     const stop = vi.fn(async () => ({ preview: previewState({ status: "idle", url: null }) }));
     const restoreNativeApi = installPreviewNativeApi({ previews: [previewState()], stop });
-    const screen = await renderPane({ hasWorktree: true });
+    const screen = await renderPane({ workspaceState: "worktree-ready" });
 
     await page.getByRole("button", { name: "Stop preview" }).click();
     expect(stop).toHaveBeenCalledWith({ threadId: THREAD_ID });
@@ -182,7 +183,7 @@ describe("DockPreviewPane", () => {
       previews: [previewState({ url: null, port: null })],
       setUrl,
     });
-    const screen = await renderPane({ hasWorktree: true });
+    const screen = await renderPane({ workspaceState: "worktree-ready" });
 
     await expect.element(page.getByText("Preview is running")).toBeInTheDocument();
     await page.getByRole("textbox", { name: "Preview URL" }).fill(enteredUrl);
@@ -199,7 +200,7 @@ describe("DockPreviewPane", () => {
 
   it("opens the preview terminal in the terminal dock", async () => {
     const restoreNativeApi = installPreviewNativeApi({ previews: [previewState()] });
-    const screen = await renderPane({ hasWorktree: true });
+    const screen = await renderPane({ workspaceState: "worktree-ready" });
 
     await page.getByRole("button", { name: "Open preview logs" }).click();
 
@@ -227,7 +228,7 @@ describe("DockPreviewPane", () => {
       return { preview: previewState() };
     });
     const restoreNativeApi = installPreviewNativeApi({ previews: [previewState()], start, stop });
-    const screen = await renderPane({ hasWorktree: true });
+    const screen = await renderPane({ workspaceState: "worktree-ready" });
 
     await page.getByRole("button", { name: "Restart preview" }).click();
     await vi.waitFor(() => expect(start).toHaveBeenCalledWith({ threadId: THREAD_ID }));
@@ -243,7 +244,7 @@ describe("DockPreviewPane", () => {
     const start = vi.fn(async () => ({ preview: previewState() }));
     const dispatchCommand = vi.fn(async (_command: Record<string, unknown>) => undefined);
     const restoreNativeApi = installPreviewNativeApi({ start, dispatchCommand });
-    const screen = await renderPane({ hasWorktree: true });
+    const screen = await renderPane({ workspaceState: "worktree-ready" });
 
     expect(document.querySelector('button[aria-label="Start preview"]')).toBeNull();
     await page.getByLabelText("Command").fill("bun run dev");
@@ -278,7 +279,7 @@ describe("DockPreviewPane", () => {
         { name: "dev", command: "bun run dev" },
       ],
     });
-    const screen = await renderPane({ hasWorktree: true });
+    const screen = await renderPane({ workspaceState: "worktree-ready" });
 
     await page.getByRole("button", { name: "dev", exact: true }).click();
     await expect.element(page.getByLabelText("Command")).toHaveValue("bun run dev");
@@ -300,7 +301,7 @@ describe("DockPreviewPane", () => {
     const dispatchCommand = vi.fn(async (_command: Record<string, unknown>) => undefined);
     const start = vi.fn(async () => ({ preview: previewState() }));
     const restoreNativeApi = installPreviewNativeApi({ dispatchCommand, start });
-    const screen = await renderPane({ hasWorktree: true });
+    const screen = await renderPane({ workspaceState: "worktree-ready" });
 
     await page.getByRole("button", { name: "bun run dev", exact: true }).click();
     const commandField = page.getByRole("textbox", { name: "Command", exact: true });
@@ -334,7 +335,7 @@ describe("DockPreviewPane", () => {
       previews: [previewState({ status: "failed", url: null, message: "Error: port in use" })],
       start,
     });
-    const screen = await renderPane({ hasWorktree: true });
+    const screen = await renderPane({ workspaceState: "worktree-ready" });
 
     await expect.element(page.getByText("Error: port in use")).toBeInTheDocument();
     expect(previewStatusTone()).toBe("failed");
@@ -355,7 +356,7 @@ describe("DockPreviewPane", () => {
       start,
       stop,
     });
-    const screen = await renderPane({ hasWorktree: true });
+    const screen = await renderPane({ workspaceState: "worktree-ready" });
 
     await page.getByRole("button", { name: "Restart preview" }).click();
     await vi.waitFor(() => expect(start).toHaveBeenCalledWith({ threadId: THREAD_ID }));

@@ -189,6 +189,8 @@ export const ThreadPreviewManagerLive = Layer.effect(
             threadId,
             workspaceRoot: project.value.workspaceRoot,
             worktreePath: thread.value.worktreePath,
+            envMode: thread.value.envMode,
+            workingDirectory: thread.value.workingDirectory,
             scripts: project.value.scripts,
           },
         } as const;

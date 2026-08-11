@@ -8,6 +8,7 @@
 // the pane's control/body renderers rather than by branching inside JSX.
 
 import type { ThreadPreviewState, ThreadPreviewStatus } from "@luminor/contracts";
+import type { ResolvedThreadWorkspaceState } from "@luminor/shared/threadEnvironment";
 
 export type PreviewPaneControlKind =
   | "start"
@@ -51,7 +52,8 @@ const STATUS_TONES: Record<ThreadPreviewStatus, PreviewPaneStatusTone> = {
   failed: "failed",
 };
 
-export const PREVIEW_REQUIRES_WORKTREE_HEADING = "Preview needs a worktree";
+export const PREVIEW_WORKTREE_PENDING_HEADING = "Worktree is not ready";
+export const PREVIEW_REQUIRES_WORKSPACE_HEADING = "Preview needs a project directory";
 export const PREVIEW_IDLE_HEADING = "Preview is not running";
 export const PREVIEW_STARTING_HEADING = "Starting preview";
 export const PREVIEW_NO_URL_HEADING = "Preview is running";
@@ -60,7 +62,7 @@ export const PREVIEW_NEEDS_SCRIPT_HEADING = "Set up the preview";
 
 export function resolvePreviewPaneView(input: {
   readonly preview: ThreadPreviewState | null;
-  readonly hasWorktree: boolean;
+  readonly workspaceState: ResolvedThreadWorkspaceState | null;
   readonly hasPreviewScript: boolean;
   readonly previewCommand?: string | null;
 }): PreviewPaneView {
@@ -68,7 +70,7 @@ export function resolvePreviewPaneView(input: {
   const status = preview?.status ?? "idle";
   const portLabel = preview?.port ? `:${preview.port}` : null;
 
-  if (!input.hasWorktree) {
+  if (input.workspaceState === null) {
     return {
       status: "idle",
       tone: "idle",
@@ -76,8 +78,25 @@ export function resolvePreviewPaneView(input: {
       controls: [],
       body: {
         kind: "message",
-        heading: PREVIEW_REQUIRES_WORKTREE_HEADING,
-        description: "This thread runs in the project directory, so there is nothing to preview.",
+        heading: PREVIEW_REQUIRES_WORKSPACE_HEADING,
+        description: "This thread has no directory on disk to run a preview command in.",
+        action: null,
+      },
+    };
+  }
+
+  // A worktree-mode thread whose worktree has not materialized yet must not fall
+  // back to the project directory: the preview would serve the wrong checkout.
+  if (input.workspaceState === "worktree-pending") {
+    return {
+      status: "idle",
+      tone: "idle",
+      portLabel: null,
+      controls: [],
+      body: {
+        kind: "message",
+        heading: PREVIEW_WORKTREE_PENDING_HEADING,
+        description: "Preview starts once this thread's worktree exists on disk.",
         action: null,
       },
     };
@@ -146,7 +165,7 @@ export function resolvePreviewPaneView(input: {
         kind: "configure",
         heading: PREVIEW_NEEDS_SCRIPT_HEADING,
         description:
-          "Save the command that serves this project and it starts in this thread's worktree.",
+          "Save the command that serves this project and it starts in this thread's directory.",
       },
     };
   }
@@ -163,7 +182,7 @@ export function resolvePreviewPaneView(input: {
       description:
         savedCommand.length > 0
           ? savedCommand
-          : "Run the project's preview command in this thread's worktree.",
+          : "Run the project's preview command in this thread's directory.",
       action: "start",
     },
   };

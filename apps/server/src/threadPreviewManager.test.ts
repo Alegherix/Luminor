@@ -21,7 +21,7 @@ import type { TerminalManagerShape } from "./terminal/Services/Manager";
 import { TerminalError, TerminalManager } from "./terminal/Services/Manager";
 import {
   PREVIEW_REQUIRES_SCRIPT_MESSAGE,
-  PREVIEW_REQUIRES_WORKTREE_MESSAGE,
+  PREVIEW_WORKTREE_PENDING_MESSAGE,
 } from "./preview/previewLaunchPlan";
 import type { ThreadPreviewManagerShape } from "./threadPreviewManager";
 import { ThreadPreviewManager, ThreadPreviewManagerLive } from "./threadPreviewManager";
@@ -139,6 +139,7 @@ const makeNetStub = (): NetStub => {
 
 const makeProjectionStub = (input: {
   worktreePath?: string | null;
+  envMode?: "local" | "worktree";
   scripts?: ReadonlyArray<ProjectScript>;
 }): Layer.Layer<ProjectionSnapshotQuery> =>
   Layer.succeed(ProjectionSnapshotQuery, {
@@ -148,6 +149,7 @@ const makeProjectionStub = (input: {
           id: threadId,
           projectId: ProjectId.makeUnsafe("project-1"),
           worktreePath: input.worktreePath === undefined ? WORKTREE_PATH : input.worktreePath,
+          envMode: input.envMode ?? "worktree",
         } as unknown as OrchestrationThreadShell),
       ),
     getProjectShellById: () =>
@@ -329,16 +331,29 @@ describe("ThreadPreviewManager", () => {
     expect(terminal.closes).toHaveLength(0);
   });
 
-  it("fails without a worktree instead of spawning a process", async () => {
+  it("runs a local thread's preview in the project directory", async () => {
     const terminal = makeTerminalStub();
-    const projection = makeProjectionStub({ worktreePath: null });
+    const projection = makeProjectionStub({ worktreePath: null, envMode: "local" });
+
+    const started = await runPreview({ terminal, projection }, (manager) =>
+      manager.start({ threadId: THREAD_ID }),
+    );
+
+    expect(started.preview.status).not.toBe("failed");
+    expect(started.preview.cwd).toBe(WORKSPACE_ROOT);
+    expect(terminal.opens).toHaveLength(1);
+  });
+
+  it("fails while a worktree-mode thread has no worktree yet", async () => {
+    const terminal = makeTerminalStub();
+    const projection = makeProjectionStub({ worktreePath: null, envMode: "worktree" });
 
     const started = await runPreview({ terminal, projection }, (manager) =>
       manager.start({ threadId: THREAD_ID }),
     );
 
     expect(started.preview.status).toBe("failed");
-    expect(started.preview.message).toBe(PREVIEW_REQUIRES_WORKTREE_MESSAGE);
+    expect(started.preview.message).toBe(PREVIEW_WORKTREE_PENDING_MESSAGE);
     expect(terminal.opens).toHaveLength(0);
   });
 

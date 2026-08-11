@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { RIGHT_DOCK_PANE_KINDS } from "~/rightDockStore.logic";
 import {
-  PREVIEW_REQUIRES_WORKTREE_TOOLTIP,
+  PREVIEW_WORKTREE_PENDING_TOOLTIP,
   RIGHT_DOCK_ADD_MENU_KINDS,
   getRightDockPaneMeta,
   resolveRightDockLauncherItems,
@@ -34,7 +34,7 @@ describe("resolveRightDockLauncherItems", () => {
         hasWorkspace: true,
         hasGitRepository: false,
         hasReview: false,
-        hasWorktree: true,
+        isWorktreePending: false,
       }).map(({ kind, label }) => [kind, label]),
     ).toEqual([
       ["terminal", "Terminal"],
@@ -51,7 +51,7 @@ describe("resolveRightDockLauncherItems", () => {
         hasWorkspace: true,
         hasGitRepository: true,
         hasReview: true,
-        hasWorktree: true,
+        isWorktreePending: false,
       }).map(({ kind }) => kind),
     ).toEqual(["diff", "terminal", "browser", "preview", "explorer", "sidechat", "git"]);
   });
@@ -62,7 +62,7 @@ describe("resolveRightDockLauncherItems", () => {
         hasWorkspace: false,
         hasGitRepository: false,
         hasReview: false,
-        hasWorktree: false,
+        isWorktreePending: true,
       }).map(({ kind }) => kind),
     ).toEqual(["terminal", "browser", "preview", "sidechat"]);
   });
@@ -73,29 +73,29 @@ describe("resolveRightDockLauncherItems", () => {
         hasWorkspace: true,
         hasGitRepository: true,
         hasReview: false,
-        hasWorktree: true,
+        isWorktreePending: false,
       }).map(({ kind }) => kind),
     ).toEqual(["terminal", "browser", "preview", "explorer", "sidechat", "git"]);
   });
 
-  it("keeps preview visible but disabled while the thread has no worktree", () => {
+  it("keeps preview visible but disabled while the thread waits for its worktree", () => {
     const preview = resolveRightDockLauncherItems({
       hasWorkspace: true,
       hasGitRepository: true,
       hasReview: false,
-      hasWorktree: false,
+      isWorktreePending: true,
     }).find((item) => item.kind === "preview");
 
     expect(preview?.disabled).toBe(true);
-    expect(preview?.disabledReason).toBe(PREVIEW_REQUIRES_WORKTREE_TOOLTIP);
+    expect(preview?.disabledReason).toBe(PREVIEW_WORKTREE_PENDING_TOOLTIP);
   });
 
-  it("enables preview once the thread has a worktree", () => {
+  it("enables preview for a local thread, which previews the project directory", () => {
     const preview = resolveRightDockLauncherItems({
       hasWorkspace: true,
       hasGitRepository: true,
       hasReview: false,
-      hasWorktree: true,
+      isWorktreePending: false,
     }).find((item) => item.kind === "preview");
 
     expect(preview?.disabled).toBeUndefined();

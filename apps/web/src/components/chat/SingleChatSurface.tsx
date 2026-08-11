@@ -1,5 +1,6 @@
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 import { isWorkspaceRelativePathSafe } from "@luminor/shared/path";
+import { resolveThreadWorkspaceState } from "@luminor/shared/threadEnvironment";
 import type { ProjectId, ThreadId, TurnId } from "@luminor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -224,11 +225,15 @@ export function SingleChatSurface(props: {
   });
   const threadWorktreePath =
     threadWorkspaceMetadata.worktreePath ?? draftThread?.worktreePath ?? null;
+  const threadWorkspaceState = resolveThreadWorkspaceState({
+    envMode: threadWorkspaceMetadata.envMode ?? draftThread?.envMode ?? null,
+    worktreePath: threadWorktreePath,
+  });
   const dockLauncherItems = resolveRightDockLauncherItems({
     hasWorkspace: workspaceRoot !== null,
     hasGitRepository,
     hasReview: dockDiffTotals.fileCount > 0,
-    hasWorktree: threadWorktreePath !== null,
+    isWorktreePending: threadWorkspaceState === "worktree-pending",
   });
   // Gated tools stay visible in the launcher but must not be openable from the
   // "+" menu until their prerequisite exists.
@@ -813,7 +818,7 @@ export function SingleChatSurface(props: {
             <DockPreviewPane
               hostThreadId={props.threadId}
               projectId={props.projectId}
-              hasWorktree={threadWorktreePath !== null}
+              workspaceState={workspaceRoot === null ? null : threadWorkspaceState}
               onClose={() => closePane(props.threadId, pane.id)}
             />
           </Suspense>
