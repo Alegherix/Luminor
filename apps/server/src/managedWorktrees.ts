@@ -8,6 +8,7 @@ import { Effect } from "effect";
 
 import type { GitCoreShape } from "./git/Services/GitCore.ts";
 import type { ProjectionSnapshotQueryShape } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
+import type { ThreadPreviewManagerShape } from "./threadPreviewManager.ts";
 
 const MANAGED_WORKTREE_SCAN_DEPTH = 6;
 export const MANAGED_WORKTREE_RETENTION_COUNT = 15;
@@ -129,6 +130,37 @@ function canonicalizeThreadWorktreePaths(
       return canonicalByRecordedPath;
     },
     catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+  });
+}
+
+export function removeThreadWorktreeAndStopPreviews<R, E>(input: {
+  readonly worktreePath: string;
+  readonly threads: ReadonlyArray<ManagedWorktreeThreadRef>;
+  readonly removeWorktree: Effect.Effect<void, E, R>;
+  readonly threadPreviewManager: Pick<ThreadPreviewManagerShape, "stopPreview">;
+}): Effect.Effect<void, Error | E, R> {
+  return Effect.gen(function* () {
+    const canonicalByRecordedPath = yield* canonicalizeThreadWorktreePaths(input.threads);
+    const canonicalWorktreePath = yield* Effect.tryPromise({
+      try: () => fs.realpath(input.worktreePath).catch(() => path.resolve(input.worktreePath)),
+      catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+    });
+    const threadIds = input.threads
+      .filter((thread) => {
+        const recordedPath = threadManagedWorktreePath(thread);
+        return (
+          recordedPath !== null &&
+          canonicalByRecordedPath.get(recordedPath) === canonicalWorktreePath
+        );
+      })
+      .map((thread) => thread.id);
+
+    yield* input.removeWorktree;
+    yield* Effect.forEach(
+      threadIds,
+      (threadId) => input.threadPreviewManager.stopPreview(threadId),
+      { discard: true },
+    );
   });
 }
 

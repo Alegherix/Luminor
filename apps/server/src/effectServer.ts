@@ -1,7 +1,7 @@
 import http from "node:http";
 
 import type { ServerSettingsError } from "@luminor/contracts";
-import { Effect, Exit, FileSystem, Layer, Path, Schema, Scope, ServiceMap } from "effect";
+import { Cause, Effect, Exit, FileSystem, Layer, Path, Schema, Scope, ServiceMap } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
@@ -37,6 +37,7 @@ import { ProviderRuntimeReconciler } from "./provider/Services/ProviderRuntimeRe
 import { ProviderService, type ProviderServiceShape } from "./provider/Services/ProviderService";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents";
 import { ServerRuntimeStartup } from "./serverRuntimeStartup";
+import { ThreadPreviewManager, type ThreadPreviewManagerShape } from "./threadPreviewManager";
 import { ServerSettingsService } from "./serverSettings";
 import { makeServerReadiness } from "./server/readiness";
 import { makeServerShutdownController, type ServerShutdownController } from "./serverShutdown";
@@ -73,6 +74,7 @@ export interface ServerShape {
     | ServerRuntimeStartup
     | ServerSettingsService
     | ThreadDeletionReactor
+    | ThreadPreviewManager
     | SqlClient.SqlClient
   >;
   readonly stopSignal: Effect.Effect<void, never>;
@@ -90,10 +92,34 @@ export class ServerLifecycleError extends Schema.TaggedErrorClass<ServerLifecycl
   },
 ) {}
 
+export function stopAllThreadPreviews(
+  threadPreviewManager: Pick<ThreadPreviewManagerShape, "list" | "stopPreview">,
+): Effect.Effect<void> {
+  return threadPreviewManager.list.pipe(
+    Effect.flatMap(({ previews }) =>
+      Effect.forEach(
+        previews,
+        (preview) =>
+          threadPreviewManager.stopPreview(preview.threadId).pipe(
+            Effect.asVoid,
+            Effect.catchCause((cause) =>
+              Effect.logWarning("server shutdown failed to stop thread preview", {
+                threadId: preview.threadId,
+                cause: Cause.pretty(cause),
+              }),
+            ),
+          ),
+        { discard: true },
+      ),
+    ),
+  );
+}
+
 export function closeServerRuntimePipeline(input: {
   readonly orchestrationEngine: Pick<OrchestrationEngineShape, "quiesce" | "drain" | "stop">;
   readonly providerService: Pick<ProviderServiceShape, "closeRuntimeEvents">;
   readonly managedAttachmentCleanup: Pick<ManagedAttachmentCleanupShape, "drain">;
+  readonly threadPreviewManager: Pick<ThreadPreviewManagerShape, "list" | "stopPreview">;
   readonly subscriptionsScope: Scope.Closeable;
 }): Effect.Effect<void> {
   return input.orchestrationEngine.quiesce.pipe(
@@ -101,6 +127,7 @@ export function closeServerRuntimePipeline(input: {
     // close then fences terminal runtime events into subscriber workers; scope
     // close drains those workers before the engine accepts its final stop.
     Effect.andThen(input.orchestrationEngine.drain),
+    Effect.andThen(stopAllThreadPreviews(input.threadPreviewManager)),
     Effect.andThen(input.providerService.closeRuntimeEvents),
     Effect.andThen(Scope.close(input.subscriptionsScope, Exit.void)),
     Effect.andThen(input.managedAttachmentCleanup.drain),
@@ -133,6 +160,7 @@ export const createEffectServer = Effect.fn(function* (
   const runtimeStartup = yield* ServerRuntimeStartup;
   const serverSettings = yield* ServerSettingsService;
   const threadDeletionReactor = yield* ThreadDeletionReactor;
+  const threadPreviewManager = yield* ThreadPreviewManager;
   const readiness = yield* makeServerReadiness;
 
   yield* keybindings.syncDefaultKeybindingsOnStartup.pipe(
@@ -198,6 +226,7 @@ export const createEffectServer = Effect.fn(function* (
       orchestrationEngine,
       providerService,
       managedAttachmentCleanup,
+      threadPreviewManager,
       subscriptionsScope,
     }),
   );

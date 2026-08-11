@@ -108,17 +108,18 @@ export function makeServerRuntimeServicesLayer(
     Layer.provideMerge(checkpointReactorLayer),
     Layer.provideMerge(studioOutputReactorLayer),
   );
-  const threadDeletionReactorLayer = ThreadDeletionReactorLive.pipe(
-    Layer.provideMerge(profileStatsArchiveLayer),
-    Layer.provideMerge(OrchestrationLayerLive),
-    Layer.provideMerge(TerminalLayerLive),
-  );
-  // Shares the single memoized TerminalManager with the top-level TerminalLayerLive.
-  const devServerManagerLayer = DevServerManagerLive.pipe(Layer.provide(TerminalLayerLive));
   const threadPreviewManagerLayer = ThreadPreviewManagerLive.pipe(
     Layer.provide(TerminalLayerLive),
     Layer.provide(OrchestrationLayerLive),
   );
+  const threadDeletionReactorLayer = ThreadDeletionReactorLive.pipe(
+    Layer.provideMerge(profileStatsArchiveLayer),
+    Layer.provideMerge(OrchestrationLayerLive),
+    Layer.provideMerge(TerminalLayerLive),
+    Layer.provideMerge(threadPreviewManagerLayer),
+  );
+  // Shares the single memoized TerminalManager with the top-level TerminalLayerLive.
+  const devServerManagerLayer = DevServerManagerLive.pipe(Layer.provide(TerminalLayerLive));
   const sessionCredentialLayer = SessionCredentialServiceLive.pipe(
     Layer.provide(ServerSecretStoreLive),
   );
