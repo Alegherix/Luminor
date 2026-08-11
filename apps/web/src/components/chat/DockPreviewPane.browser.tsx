@@ -6,12 +6,18 @@
 
 import "../../index.css";
 
-import type { NativeApi, ThreadId, ThreadPreviewState } from "@luminor/contracts";
+import {
+  PREVIEW_TERMINAL_ID,
+  type NativeApi,
+  type ThreadId,
+  type ThreadPreviewState,
+} from "@luminor/contracts";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { useThreadPreviewStore } from "~/threadPreviewStore";
+import { useRightDockStore } from "~/rightDockStore";
 import { DockPreviewPane } from "./DockPreviewPane";
 
 const THREAD_ID = "thread-preview-1" as ThreadId;
@@ -66,6 +72,7 @@ function previewStatusTone(): string | null | undefined {
 describe("DockPreviewPane", () => {
   afterEach(() => {
     useThreadPreviewStore.setState({ previewsByThreadId: {} });
+    useRightDockStore.setState({ dockStateByThreadId: {} });
     document.body.innerHTML = "";
   });
 
@@ -124,12 +131,53 @@ describe("DockPreviewPane", () => {
 
     await expect.element(page.getByText("Preview is running")).toBeInTheDocument();
     await page.getByRole("textbox", { name: "Preview URL" }).fill(enteredUrl);
-    await page.getByRole("button", { name: "Open preview" }).click();
+    await page.getByRole("button", { name: "Open preview", exact: true }).click();
 
     expect(setUrl).toHaveBeenCalledWith({ threadId: THREAD_ID, url: enteredUrl });
     expect(document.querySelector('[data-testid="preview-webview"]')?.getAttribute("src")).toBe(
       `${enteredUrl}/`,
     );
+
+    await screen.unmount();
+    restoreNativeApi();
+  });
+
+  it("opens the preview terminal in the terminal dock", async () => {
+    const restoreNativeApi = installPreviewNativeApi({ previews: [previewState()] });
+    const screen = await render(<DockPreviewPane hostThreadId={THREAD_ID} hasWorktree />);
+
+    await page.getByRole("button", { name: "Open preview logs" }).click();
+
+    const dockState = useRightDockStore.getState().dockStateByThreadId[THREAD_ID];
+    expect(dockState?.panes).toHaveLength(1);
+    expect(dockState?.panes[0]).toMatchObject({
+      kind: "terminal",
+      terminalThreadId: THREAD_ID,
+      terminalId: PREVIEW_TERMINAL_ID,
+    });
+    expect(dockState?.activePaneId).toBe(dockState?.panes[0]?.id);
+
+    await screen.unmount();
+    restoreNativeApi();
+  });
+
+  it("restarts a running preview by stopping it before starting again", async () => {
+    const calls: string[] = [];
+    const stop = vi.fn(async () => {
+      calls.push("stop");
+      return { preview: previewState({ status: "idle", url: null }) };
+    });
+    const start = vi.fn(async () => {
+      calls.push("start");
+      return { preview: previewState() };
+    });
+    const restoreNativeApi = installPreviewNativeApi({ previews: [previewState()], start, stop });
+    const screen = await render(<DockPreviewPane hostThreadId={THREAD_ID} hasWorktree />);
+
+    await page.getByRole("button", { name: "Restart preview" }).click();
+    await vi.waitFor(() => expect(start).toHaveBeenCalledWith({ threadId: THREAD_ID }));
+    expect(stop).toHaveBeenCalledWith({ threadId: THREAD_ID });
+    expect(calls).toEqual(["stop", "start"]);
 
     await screen.unmount();
     restoreNativeApi();
@@ -149,6 +197,24 @@ describe("DockPreviewPane", () => {
     await page.getByRole("button", { name: "Retry preview" }).first().click();
     expect(start).toHaveBeenCalledWith({ threadId: THREAD_ID });
     await expect.element(page.getByText("Starting preview")).toBeInTheDocument();
+
+    await screen.unmount();
+    restoreNativeApi();
+  });
+
+  it("offers restart from a failed preview", async () => {
+    const stop = vi.fn(async () => ({ preview: previewState({ status: "idle", url: null }) }));
+    const start = vi.fn(async () => ({ preview: previewState() }));
+    const restoreNativeApi = installPreviewNativeApi({
+      previews: [previewState({ status: "failed", url: null, message: "Exited" })],
+      start,
+      stop,
+    });
+    const screen = await render(<DockPreviewPane hostThreadId={THREAD_ID} hasWorktree />);
+
+    await page.getByRole("button", { name: "Restart preview" }).click();
+    await vi.waitFor(() => expect(start).toHaveBeenCalledWith({ threadId: THREAD_ID }));
+    expect(stop).toHaveBeenCalledWith({ threadId: THREAD_ID });
 
     await screen.unmount();
     restoreNativeApi();

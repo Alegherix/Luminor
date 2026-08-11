@@ -13,3 +13,7 @@ export const DOCK_TERMINAL_SCOPE_PREFIX = "dock-terminal:";
 export function dockTerminalThreadId(hostThreadId: ThreadId): ThreadId {
   return `${DOCK_TERMINAL_SCOPE_PREFIX}${hostThreadId}` as ThreadId;
 }
+
+export function dockBoundTerminalThreadId(hostThreadId: ThreadId, terminalId: string): ThreadId {
+  return `${DOCK_TERMINAL_SCOPE_PREFIX}${hostThreadId}:${terminalId}` as ThreadId;
+}

@@ -801,6 +801,8 @@ export function SingleChatSurface(props: {
             <DockTerminalPane
               hostThreadId={props.threadId}
               projectId={props.projectId}
+              terminalThreadId={pane.terminalThreadId}
+              terminalId={pane.terminalId}
               isActive={context.isActive && dockState.open}
             />
           </Suspense>

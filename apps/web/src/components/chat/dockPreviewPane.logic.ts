@@ -9,7 +9,14 @@
 
 import type { ThreadPreviewState, ThreadPreviewStatus } from "@luminor/contracts";
 
-export type PreviewPaneControlKind = "start" | "cancel" | "reload" | "stop" | "retry";
+export type PreviewPaneControlKind =
+  | "start"
+  | "cancel"
+  | "reload"
+  | "logs"
+  | "restart"
+  | "stop"
+  | "retry";
 
 export type PreviewPaneStatusTone = "idle" | "pending" | "running" | "failed";
 
@@ -92,7 +99,7 @@ export function resolvePreviewPaneView(input: {
         status,
         tone: STATUS_TONES[status],
         portLabel,
-        controls: ["reload", "stop"],
+        controls: ["reload", "logs", "restart", "stop"],
         body: { kind: "webview", url: preview.url },
       };
     }
@@ -100,7 +107,7 @@ export function resolvePreviewPaneView(input: {
       status,
       tone: STATUS_TONES[status],
       portLabel,
-      controls: ["stop"],
+      controls: ["logs", "restart", "stop"],
       body: {
         kind: "url-entry",
         heading: PREVIEW_NO_URL_HEADING,
@@ -114,7 +121,7 @@ export function resolvePreviewPaneView(input: {
       status,
       tone: STATUS_TONES[status],
       portLabel,
-      controls: ["retry"],
+      controls: ["logs", "restart"],
       body: {
         kind: "message",
         heading: PREVIEW_FAILED_HEADING,

@@ -8,13 +8,13 @@
 // shared with other terminal surfaces through useTerminalSurfaceController; only the
 // "ensure a terminal is open" policy is surface-specific (here: a single terminal-only page).
 
-import { type ProjectId, type ThreadId } from "@luminor/contracts";
+import { PREVIEW_TERMINAL_ID, type ProjectId, type ThreadId } from "@luminor/contracts";
 import { resolveThreadWorkspaceCwd } from "@luminor/shared/threadEnvironment";
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { useTerminalSurfaceController } from "~/hooks/useTerminalSurfaceController";
 import { SINGLE_CHAT_PANE_SCOPE_ID } from "~/lib/chatPaneScope";
-import { dockTerminalThreadId } from "~/lib/dockTerminalScope";
+import { dockBoundTerminalThreadId, dockTerminalThreadId } from "~/lib/dockTerminalScope";
 import {
   getTerminalContextComposerTarget,
   subscribeTerminalContextComposerTarget,
@@ -27,11 +27,16 @@ import ThreadTerminalDrawer from "../ThreadTerminalDrawer";
 export function DockTerminalPane(props: {
   hostThreadId: ThreadId;
   projectId: ProjectId | null;
+  terminalThreadId?: ThreadId | null;
+  terminalId?: string | null;
   // When false the pane stays mounted but hidden (another dock tab is active),
   // so the xterm runtime sleeps its visual work without detaching its DOM.
   isActive?: boolean;
 }) {
-  const scopeId = dockTerminalThreadId(props.hostThreadId);
+  const scopeId = props.terminalId
+    ? dockBoundTerminalThreadId(props.hostThreadId, props.terminalId)
+    : dockTerminalThreadId(props.hostThreadId);
+  const sessionThreadId = props.terminalThreadId ?? scopeId;
   const threadWorkspace = useStore(
     useMemo(() => createThreadWorkspaceMetadataSelector(props.hostThreadId), [props.hostThreadId]),
   );
@@ -73,11 +78,19 @@ export function DockTerminalPane(props: {
   // A dock terminal pane always shows a live terminal: ensure one is open on mount
   // and re-open if the user closes the last tab (normalize guarantees a default id).
   useEffect(() => {
+    if (props.terminalId) {
+      openTerminalThreadPage(scopeId, {
+        terminalOnly: true,
+        terminalId: props.terminalId,
+        terminalLabel: props.terminalId === PREVIEW_TERMINAL_ID ? "Preview" : props.terminalId,
+      });
+      return;
+    }
     if (terminalState.terminalOpen) {
       return;
     }
     openTerminalThreadPage(scopeId, { terminalOnly: true });
-  }, [openTerminalThreadPage, scopeId, terminalState.terminalOpen]);
+  }, [openTerminalThreadPage, props.terminalId, scopeId, terminalState.terminalOpen]);
 
   const createTerminal = () => {
     if (!terminalState.terminalOpen) {
@@ -90,8 +103,8 @@ export function DockTerminalPane(props: {
 
   return (
     <ThreadTerminalDrawer
-      key={scopeId}
-      threadId={scopeId}
+      key={`${scopeId}:${sessionThreadId}`}
+      threadId={sessionThreadId}
       cwd={cwd}
       runtimeEnv={runtimeEnv}
       height={terminalState.terminalHeight}
