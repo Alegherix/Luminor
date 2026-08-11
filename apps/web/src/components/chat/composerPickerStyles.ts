@@ -91,14 +91,22 @@ export const CHAT_CONTENT_CARD_CLASS_NAME = "chat-content-card relative z-[15] o
  *  `CHAT_CONTENT_CARD_CLASS_NAME` with their own background token instead. */
 export const CHAT_MAIN_CONTENT_SURFACE_CLASS_NAME = `${CHAT_BACKGROUND_CLASS_NAME} ${CHAT_CONTENT_CARD_CLASS_NAME}`;
 
+/**
+ * Full-viewport height minus the global status/footer bar.
+ * Chat shells used `h-dvh` before the status bar existed; without this offset the
+ * bottom of the composer sits under the footer (`--app-status-bar-height`).
+ */
+export const APP_VIEWPORT_HEIGHT_CLASS_NAME =
+  "h-[calc(100dvh-var(--app-status-bar-height,0px))]";
+
 /** Clipped full-height inset shell for routes that already own an outer card wrapper.
  *  Default RouteInsetSurface card routes use an unclipped inset so seam shadows can bleed. */
 export const CHAT_ROUTE_INSET_SHELL_CLASS_NAME =
-  "h-dvh min-h-0 overflow-hidden overscroll-y-none text-foreground";
+  `${APP_VIEWPORT_HEIGHT_CLASS_NAME} min-h-0 overflow-hidden overscroll-y-none text-foreground`;
 
 /** Outer viewport shell for the split/single thread content wrapper that carries the card. */
 export const CHAT_MAIN_VIEWPORT_SHELL_CLASS_NAME =
-  "flex h-dvh min-h-0 min-w-0 flex-1 overflow-hidden";
+  `flex ${APP_VIEWPORT_HEIGHT_CLASS_NAME} min-h-0 min-w-0 flex-1 overflow-hidden`;
 
 /** Horizontal padding shared by the transcript and composer columns. */
 export const CHAT_COLUMN_GUTTER_CLASS_NAME =

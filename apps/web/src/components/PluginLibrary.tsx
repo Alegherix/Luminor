@@ -57,6 +57,7 @@ import {
 } from "~/lib/icons";
 import { cn } from "~/lib/utils";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "./ui/input-group";
+import { APP_VIEWPORT_HEIGHT_CLASS_NAME } from "./chat/composerPickerStyles";
 import { SidebarInset } from "./ui/sidebar";
 import { SidebarHeaderNavigationControls } from "./SidebarHeaderNavigationControls";
 import {
@@ -532,7 +533,7 @@ export function PluginLibrary() {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden isolate">
+    <SidebarInset className={cn(APP_VIEWPORT_HEIGHT_CLASS_NAME, "min-h-0 overflow-hidden isolate")}>
       <div className="flex h-full flex-col">
         {/* ── Top nav ───────────────────────────────────────────────────── */}
         <div
