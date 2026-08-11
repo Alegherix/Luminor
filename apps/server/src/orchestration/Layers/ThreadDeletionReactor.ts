@@ -1,11 +1,15 @@
 import { ThreadId, type OrchestrationEvent } from "@luminor/contracts";
-import { makeDrainableWorker, startDrainableWorkerProducers } from "@luminor/shared/DrainableWorker";
+import {
+  makeDrainableWorker,
+  startDrainableWorkerProducers,
+} from "@luminor/shared/DrainableWorker";
 import { Cause, Effect, Layer, Option, Stream } from "effect";
 
 import { ProfileStatsArchive } from "../../profileStatsArchive";
 import { ProviderService } from "../../provider/Services/ProviderService";
 import { TerminalManager } from "../../terminal/Services/Manager";
 import { THREAD_RETENTION_COMMAND_ID_PREFIX } from "../../threadRetention";
+import { ThreadPreviewManager, type ThreadPreviewManagerShape } from "../../threadPreviewManager";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery";
 import {
@@ -83,11 +87,22 @@ export const cleanupSucceededUnlessInterrupted = <R, E>({
     }),
   );
 
+export const stopPreviewForThreadLifecycleEvent = (
+  threadPreviewManager: Pick<ThreadPreviewManagerShape, "stopPreview">,
+  event: ThreadLifecycleCleanupEvent,
+): Effect.Effect<void> =>
+  logCleanupCauseUnlessInterrupted({
+    effect: threadPreviewManager.stopPreview(event.payload.threadId).pipe(Effect.asVoid),
+    message: "thread lifecycle cleanup skipped preview stop",
+    threadId: event.payload.threadId,
+  });
+
 const make = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const profileStatsArchive = yield* ProfileStatsArchive;
   const providerService = yield* ProviderService;
   const terminalManager = yield* TerminalManager;
+  const threadPreviewManager = yield* ThreadPreviewManager;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
 
   const refreshCommandReadModelAfterPurge = (threadId: string) =>
@@ -218,6 +233,7 @@ const make = Effect.gen(function* () {
         });
         return;
       }
+      yield* stopPreviewForThreadLifecycleEvent(threadPreviewManager, event);
       const terminalCleanupSucceeded = yield* closeThreadTerminals(
         threadId,
         false,
@@ -236,6 +252,7 @@ const make = Effect.gen(function* () {
 
   const processThreadDeleted = Effect.fn(function* (event: ThreadDeletedEvent) {
     const { threadId } = event.payload;
+    yield* stopPreviewForThreadLifecycleEvent(threadPreviewManager, event);
     const cleanupSucceeded = yield* cleanupThreadBeforePurge(threadId);
     if (!cleanupSucceeded) {
       yield* Effect.logWarning("thread deletion cleanup deferred stats archive purge", {

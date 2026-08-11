@@ -17,6 +17,7 @@ import {
   createRuntimeModePersistenceQueue,
   persistModelSelectionBeforeRuntimeMode,
   createLocalDispatchSnapshot,
+  resolveDraftProjectMoveContext,
   createWorktreeSetupSnapshot,
   derivePromptHistoryFromMessages,
   failWorktreeSetupSnapshot,
@@ -2627,5 +2628,20 @@ describe("thread detail hydration", () => {
         detailSyncState: "failed",
       }),
     ).toBe("failed");
+  });
+});
+
+describe("resolveDraftProjectMoveContext", () => {
+  it("keeps the chosen worktree mode while dropping the previous project's git metadata", () => {
+    expect(resolveDraftProjectMoveContext({ envMode: "worktree" })).toEqual({
+      envMode: "worktree",
+      worktreePath: null,
+      branch: null,
+      lastKnownPr: null,
+    });
+  });
+
+  it("leaves a local draft local", () => {
+    expect(resolveDraftProjectMoveContext({ envMode: "local" }).envMode).toBe("local");
   });
 });

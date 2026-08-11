@@ -4,7 +4,21 @@ import {
   type KeybindingCommand,
   type ProjectScript,
 } from "@luminor/contracts";
+import {
+  normalizeProjectScriptRoles,
+  previewProjectScript,
+  projectScriptCwd,
+  projectScriptRuntimeEnv,
+  type ProjectScriptRuntimeEnvInput,
+} from "@luminor/shared/projectScripts";
 import { Schema } from "effect";
+
+export {
+  previewProjectScript,
+  projectScriptCwd,
+  projectScriptRuntimeEnv,
+  type ProjectScriptRuntimeEnvInput,
+};
 
 function normalizeScriptId(value: string): string {
   const cleaned = value
@@ -55,14 +69,6 @@ export function nextProjectScriptId(name: string, existingIds: Iterable<string>)
   return `${baseId}-${Date.now()}`.slice(0, MAX_SCRIPT_ID_LENGTH);
 }
 
-interface ProjectScriptRuntimeEnvInput {
-  project: {
-    cwd: string;
-  };
-  worktreePath?: string | null;
-  extraEnv?: Record<string, string>;
-}
-
 export interface ProjectScriptRunOptions {
   cwd?: string;
   env?: Record<string, string>;
@@ -76,35 +82,52 @@ export interface ProjectScriptRunResult {
   terminalId: string;
 }
 
-export function projectScriptCwd(input: {
-  project: {
-    cwd: string;
-  };
-  worktreePath?: string | null;
-}): string {
-  return input.worktreePath ?? input.project.cwd;
-}
-
-export function projectScriptRuntimeEnv(
-  input: ProjectScriptRuntimeEnvInput,
-): Record<string, string> {
-  const env: Record<string, string> = {
-    LUMINOR_PROJECT_ROOT: input.project.cwd,
-  };
-  if (input.worktreePath) {
-    env.LUMINOR_WORKTREE_PATH = input.worktreePath;
-  }
-  if (input.extraEnv) {
-    return { ...env, ...input.extraEnv };
-  }
-  return env;
-}
-
 export function primaryProjectScript(scripts: ProjectScript[]): ProjectScript | null {
-  const regular = scripts.find((script) => !script.runOnWorktreeCreate);
-  return regular ?? scripts[0] ?? null;
+  return scripts.find((script) => script.kind === "manual") ?? null;
 }
 
 export function setupProjectScript(scripts: ProjectScript[]): ProjectScript | null {
-  return scripts.find((script) => script.runOnWorktreeCreate) ?? null;
+  return scripts.find((script) => script.kind === "setup") ?? null;
+}
+
+export const PREVIEW_PROJECT_SCRIPT_NAME = "Preview";
+
+export interface PreviewProjectScriptDraft {
+  readonly command: string;
+  readonly urlTemplate: string | null;
+}
+
+export interface PreviewProjectScriptUpsert {
+  readonly scripts: ProjectScript[];
+  readonly scriptId: string;
+}
+
+export function projectScriptUrlTemplateOrNull(rawValue: string): string | null {
+  const trimmed = rawValue.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function upsertPreviewProjectScript(
+  scripts: ReadonlyArray<ProjectScript>,
+  draft: PreviewProjectScriptDraft,
+): PreviewProjectScriptUpsert {
+  const existing = previewProjectScript(scripts);
+  const scriptId =
+    existing?.id ??
+    nextProjectScriptId(
+      PREVIEW_PROJECT_SCRIPT_NAME,
+      scripts.map((script) => script.id),
+    );
+  const nextScript: ProjectScript = {
+    id: scriptId,
+    name: existing?.name ?? PREVIEW_PROJECT_SCRIPT_NAME,
+    icon: existing?.icon ?? "play",
+    kind: "preview",
+    command: draft.command,
+    urlTemplate: draft.urlTemplate,
+  };
+  const merged = existing
+    ? scripts.map((script) => (script.id === scriptId ? nextScript : script))
+    : [...scripts, nextScript];
+  return { scripts: normalizeProjectScriptRoles(merged, scriptId), scriptId };
 }

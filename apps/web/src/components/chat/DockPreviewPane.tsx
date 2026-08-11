@@ -1,0 +1,296 @@
+// FILE: DockPreviewPane.tsx
+// Purpose: Right-dock pane that runs a thread's preview command in its worktree and
+//          embeds the resulting URL.
+// Layer: Chat right-dock UI
+// Depends on: useThreadPreview (server-owned state machine), dockPreviewPane.logic
+//             (state->render mapping), DockPaneHeader.
+// Exports: DockPreviewPane
+
+import { PREVIEW_TERMINAL_ID, type ProjectId, type ThreadId } from "@luminor/contracts";
+import type { ResolvedThreadWorkspaceState } from "@luminor/shared/threadEnvironment";
+import { useCallback, useState } from "react";
+
+import { usePreviewCommandSuggestions } from "~/hooks/usePreviewCommandSuggestions";
+import { useProjectPreviewScript } from "~/hooks/useProjectPreviewScript";
+import { useThreadPreview } from "~/hooks/useThreadPreview";
+import {
+  LoaderIcon,
+  PencilIcon,
+  PlayIcon,
+  RefreshCwIcon,
+  StopIcon,
+  TerminalIcon,
+} from "~/lib/icons";
+import { cn } from "~/lib/utils";
+import type { PreviewProjectScriptDraft } from "~/projectScripts";
+import { useRightDockStore } from "~/rightDockStore";
+import { Button } from "../ui/button";
+import { IconButton } from "../ui/icon-button";
+import { DOCK_HEADER_ICON_BUTTON_CLASS } from "./chatHeaderControls";
+import { DockPaneHeader } from "./DockPaneHeader";
+import { PanelStateMessage } from "./PanelStateMessage";
+import { PreviewSetupForm } from "./PreviewSetupForm";
+import {
+  resolvePreviewPaneView,
+  type PreviewPaneBody,
+  type PreviewPaneControlKind,
+  type PreviewPaneStatusTone,
+} from "./dockPreviewPane.logic";
+
+const STATUS_DOT_CLASS: Record<PreviewPaneStatusTone, string> = {
+  idle: "bg-muted-foreground/30",
+  pending: "bg-amber-500/80",
+  running: "bg-success",
+  failed: "bg-destructive",
+};
+
+const CONTROL_LABELS: Record<PreviewPaneControlKind, string> = {
+  start: "Start preview",
+  cancel: "Cancel preview",
+  reload: "Reload preview",
+  logs: "Open preview logs",
+  restart: "Restart preview",
+  stop: "Stop preview",
+  retry: "Retry preview",
+  configure: "Edit preview command",
+};
+
+// The embedded app gets everything a dev server needs while staying unable to
+// navigate or unload the Luminor window that hosts it.
+const PREVIEW_WEBVIEW_SANDBOX =
+  "allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads";
+
+const CONTROL_ICONS: Record<PreviewPaneControlKind, typeof PlayIcon> = {
+  start: PlayIcon,
+  cancel: StopIcon,
+  reload: RefreshCwIcon,
+  logs: TerminalIcon,
+  restart: RefreshCwIcon,
+  stop: StopIcon,
+  retry: RefreshCwIcon,
+  configure: PencilIcon,
+};
+
+export function DockPreviewPane(props: {
+  hostThreadId: ThreadId;
+  projectId: ProjectId | null;
+  workspaceState: ResolvedThreadWorkspaceState | null;
+  onClose?: (() => void) | undefined;
+}) {
+  const { preview, start, stop, restart, setUrl } = useThreadPreview(props.hostThreadId);
+  const previewScript = useProjectPreviewScript(props.projectId);
+  const commandSuggestions = usePreviewCommandSuggestions(props.projectId);
+  const openPane = useRightDockStore((state) => state.openPane);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [editingCommand, setEditingCommand] = useState(false);
+  const savedScript = previewScript.script;
+  const view = resolvePreviewPaneView({
+    preview,
+    workspaceState: props.workspaceState,
+    hasPreviewScript: savedScript !== null,
+    previewCommand: savedScript?.command ?? null,
+  });
+
+  const saveScriptAndStart = useCallback(
+    async (draft: PreviewProjectScriptDraft) => {
+      await previewScript.save(draft);
+      setEditingCommand(false);
+      await start();
+    },
+    [previewScript, start],
+  );
+
+  const runControl = useCallback(
+    (kind: PreviewPaneControlKind) => {
+      if (kind === "reload") {
+        setReloadKey((current) => current + 1);
+        return;
+      }
+      if (kind === "logs") {
+        openPane(props.hostThreadId, {
+          kind: "terminal",
+          terminalThreadId: props.hostThreadId,
+          terminalId: PREVIEW_TERMINAL_ID,
+        });
+        return;
+      }
+      if (kind === "configure") {
+        setEditingCommand(true);
+        return;
+      }
+      if (kind === "restart") {
+        void restart();
+        return;
+      }
+      if (kind === "start" || kind === "retry") {
+        void start();
+        return;
+      }
+      void stop();
+    },
+    [openPane, props.hostThreadId, restart, start, stop],
+  );
+
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col">
+      <DockPaneHeader
+        title={
+          <span className="flex items-center gap-2">
+            <span
+              className={cn("size-1.5 rounded-full", STATUS_DOT_CLASS[view.tone])}
+              aria-hidden
+              data-testid="preview-status-dot"
+              data-tone={view.tone}
+            />
+            Preview
+            {view.portLabel ? (
+              <span className="rounded-sm bg-secondary px-1 py-px font-mono text-[11px] text-muted-foreground">
+                {view.portLabel}
+              </span>
+            ) : null}
+          </span>
+        }
+        onClose={props.onClose}
+        closeLabel="Close preview"
+        actions={
+          <>
+            {view.status === "starting" ? (
+              <LoaderIcon className="size-3.5 animate-spin text-muted-foreground" aria-hidden />
+            ) : null}
+            {view.controls.map((kind) => {
+              const Icon = CONTROL_ICONS[kind];
+              return (
+                <IconButton
+                  key={kind}
+                  size="icon-xs"
+                  variant="ghost"
+                  label={CONTROL_LABELS[kind]}
+                  tooltip={CONTROL_LABELS[kind]}
+                  className={DOCK_HEADER_ICON_BUTTON_CLASS}
+                  onClick={() => runControl(kind)}
+                >
+                  <Icon className="size-3.5" />
+                </IconButton>
+              );
+            })}
+          </>
+        }
+      />
+
+      {editingCommand ? (
+        <PreviewSetupForm
+          heading="Edit the preview command"
+          description="Saving replaces the project's preview command and starts it in this worktree."
+          commandSuggestions={commandSuggestions}
+          initialCommand={savedScript?.command ?? null}
+          initialUrlTemplate={savedScript?.urlTemplate ?? null}
+          onCancel={() => setEditingCommand(false)}
+          onSubmit={saveScriptAndStart}
+        />
+      ) : view.body.kind === "webview" ? (
+        <iframe
+          key={`${view.body.url}:${reloadKey}`}
+          title="Thread preview"
+          src={view.body.url}
+          sandbox={PREVIEW_WEBVIEW_SANDBOX}
+          className="min-h-0 w-full flex-1 border-0 bg-white"
+          data-testid="preview-webview"
+        />
+      ) : view.body.kind === "url-entry" ? (
+        <PreviewUrlEntryBody body={view.body} onSubmit={setUrl} />
+      ) : view.body.kind === "configure" ? (
+        <PreviewSetupForm
+          heading={view.body.heading}
+          description={view.body.description}
+          commandSuggestions={commandSuggestions}
+          onSubmit={saveScriptAndStart}
+        />
+      ) : (
+        <PreviewPaneMessageBody
+          body={view.body}
+          onRunControl={runControl}
+          onEditCommand={
+            view.status === "idle" && view.controls.includes("configure")
+              ? () => setEditingCommand(true)
+              : undefined
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function PreviewUrlEntryBody(props: {
+  body: Extract<PreviewPaneBody, { kind: "url-entry" }>;
+  onSubmit: (url: string) => Promise<void>;
+}) {
+  const [url, setUrl] = useState("");
+
+  return (
+    <PanelStateMessage fill="flex">
+      <form
+        className="flex w-full max-w-80 flex-col items-center gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void props.onSubmit(url);
+        }}
+      >
+        <div className="flex flex-col items-center gap-1">
+          <p className="text-sm font-medium text-foreground">{props.body.heading}</p>
+          <p className="text-xs text-muted-foreground">{props.body.description}</p>
+        </div>
+        <label className="sr-only" htmlFor="preview-manual-url">
+          Preview URL
+        </label>
+        <input
+          id="preview-manual-url"
+          type="text"
+          inputMode="url"
+          autoComplete="url"
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          placeholder="http://localhost:5173"
+          className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+        />
+        <Button type="submit" size="sm" variant="secondary-outline" disabled={!url.trim()}>
+          Open preview
+        </Button>
+      </form>
+    </PanelStateMessage>
+  );
+}
+
+function PreviewPaneMessageBody(props: {
+  body: Extract<PreviewPaneBody, { kind: "message" }>;
+  onRunControl: (kind: PreviewPaneControlKind) => void;
+  onEditCommand?: (() => void) | undefined;
+}) {
+  const action = props.body.action;
+  const editCommand = props.onEditCommand;
+  return (
+    <PanelStateMessage fill="flex">
+      <div className="flex flex-col items-center gap-2">
+        <p className="text-sm font-medium text-foreground">{props.body.heading}</p>
+        {editCommand ? (
+          <button
+            type="button"
+            onClick={editCommand}
+            title={CONTROL_LABELS.configure}
+            className="max-w-80 rounded-sm px-1 font-mono text-xs text-muted-foreground underline decoration-dotted underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
+          >
+            {props.body.description}
+          </button>
+        ) : (
+          <p className="max-w-80 text-xs text-muted-foreground">{props.body.description}</p>
+        )}
+        {action ? (
+          <Button size="sm" variant="secondary-outline" onClick={() => props.onRunControl(action)}>
+            {CONTROL_LABELS[action]}
+          </Button>
+        ) : null}
+      </div>
+    </PanelStateMessage>
+  );
+}
+
+export default DockPreviewPane;

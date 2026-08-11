@@ -390,10 +390,11 @@ export function buildShortcutSheetSections(
       if (!shortcutLabel) return null;
       return {
         id: script.id,
-        label: script.runOnWorktreeCreate ? `${script.name} setup script` : script.name,
-        description: script.runOnWorktreeCreate
-          ? "Run the project setup script directly from the keyboard."
-          : "Run this project script without opening the scripts menu.",
+        label: script.kind === "setup" ? `${script.name} setup script` : script.name,
+        description:
+          script.kind === "setup"
+            ? "Run the project setup script directly from the keyboard."
+            : "Run this project script without opening the scripts menu.",
         shortcutLabel,
       } satisfies ShortcutSheetEntry;
     })

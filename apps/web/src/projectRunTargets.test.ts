@@ -16,7 +16,7 @@ describe("selectPrimaryProjectRunCommand", () => {
             name: "Serve",
             command: "pnpm serve",
             icon: "play",
-            runOnWorktreeCreate: false,
+            kind: "manual" as const,
           },
         ],
       },
@@ -97,6 +97,33 @@ describe("selectPrimaryProjectRunCommand", () => {
 
     expect(selected).toBeNull();
   });
+
+  it("does not use setup or preview scripts as the saved run command", () => {
+    const selected = selectPrimaryProjectRunCommand({
+      project: {
+        cwd: "/repo",
+        scripts: [
+          {
+            id: "setup",
+            name: "Setup",
+            command: "bun install",
+            icon: "configure",
+            kind: "setup" as const,
+          },
+          {
+            id: "preview",
+            name: "Preview",
+            command: "bun dev",
+            icon: "play",
+            kind: "preview" as const,
+          },
+        ],
+      },
+      discoveredTargets: [],
+    });
+
+    expect(selected).toBeNull();
+  });
 });
 
 describe("upsertProjectRunCommandScripts", () => {
@@ -107,7 +134,7 @@ describe("upsertProjectRunCommandScripts", () => {
         name: "Dev",
         command: "bun dev",
         icon: "play" as const,
-        runOnWorktreeCreate: false,
+        kind: "manual" as const,
       },
     ];
 
@@ -121,7 +148,7 @@ describe("upsertProjectRunCommandScripts", () => {
       name: "Setup",
       command: "bun install",
       icon: "play" as const,
-      runOnWorktreeCreate: true,
+      kind: "setup" as const,
     };
     const scripts = [
       setup,
@@ -130,7 +157,7 @@ describe("upsertProjectRunCommandScripts", () => {
         name: "Dev",
         command: "bun dev",
         icon: "play" as const,
-        runOnWorktreeCreate: false,
+        kind: "manual" as const,
       },
     ];
 
@@ -147,7 +174,7 @@ describe("upsertProjectRunCommandScripts", () => {
         name: "Setup",
         command: "bun install",
         icon: "play" as const,
-        runOnWorktreeCreate: true,
+        kind: "setup" as const,
       },
     ];
 
@@ -158,7 +185,7 @@ describe("upsertProjectRunCommandScripts", () => {
         name: "dev",
         command: "bun dev",
         icon: "play",
-        runOnWorktreeCreate: false,
+        kind: "manual" as const,
       },
     ]);
   });

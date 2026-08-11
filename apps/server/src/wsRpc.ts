@@ -20,6 +20,7 @@ import {
   type OrchestrationCommand,
   type OrchestrationEvent,
   type ProjectDevServerEvent,
+  type ThreadPreviewEvent,
   type OrchestrationShellStreamEvent,
   type OrchestrationShellStreamItem,
   type OrchestrationThreadDetailSnapshot,
@@ -54,6 +55,7 @@ import {
   STUDIO_WORKSPACE_SUBDIRECTORIES,
 } from "./studioWorkspaceScaffold";
 import { DevServerManager, findProjectDevServerForLocalServer } from "./devServerManager";
+import { ThreadPreviewManager } from "./threadPreviewManager";
 import { GitCore } from "./git/Services/GitCore";
 import { GitHubCli } from "./git/Services/GitHubCli";
 import { GitManager } from "./git/Services/GitManager";
@@ -70,7 +72,11 @@ import {
 import { Keybindings } from "./keybindings";
 import { createLocalPreviewGrant } from "./localImageFiles";
 import { listLocalServers, stopLocalServer } from "./localServerMonitor";
-import { listManagedWorktrees, pruneProjectedArchivedManagedWorktrees } from "./managedWorktrees";
+import {
+  listManagedWorktrees,
+  pruneProjectedArchivedManagedWorktrees,
+  removeThreadWorktreeAndStopPreviews,
+} from "./managedWorktrees";
 import {
   attachmentPrincipalForSession,
   CurrentManagedAttachmentPrincipal,
@@ -331,6 +337,7 @@ const makeWsRpcHandlersLayer = () =>
       const automationService = yield* AutomationService;
       const config = yield* ServerConfig;
       const devServerManager = yield* DevServerManager;
+      const threadPreviewManager = yield* ThreadPreviewManager;
       const fileSystem = yield* FileSystem.FileSystem;
       const externalMcp = yield* ExternalMcpService;
       const git = yield* GitCore;
@@ -1173,6 +1180,35 @@ const makeWsRpcHandlersLayer = () =>
               }),
             ),
           ),
+        [WS_METHODS.previewStart]: (input) =>
+          rpcEffect(threadPreviewManager.start(input), "Failed to start preview"),
+        [WS_METHODS.previewStop]: (input) =>
+          rpcEffect(threadPreviewManager.stopPreview(input.threadId), "Failed to stop preview"),
+        [WS_METHODS.previewSetUrl]: (input) =>
+          rpcEffect(threadPreviewManager.setUrl(input), "Failed to set preview URL"),
+        [WS_METHODS.previewList]: () =>
+          rpcEffect(threadPreviewManager.list, "Failed to list previews"),
+        [WS_METHODS.subscribePreviewEvents]: (_, { clientId }) =>
+          streamAdmission.guard(
+            clientId,
+            { key: "threads.previews" },
+            Stream.concat(
+              Stream.fromEffect(
+                threadPreviewManager.list.pipe(
+                  Effect.map(
+                    (result): ThreadPreviewEvent => ({
+                      type: "snapshot",
+                      previews: result.previews,
+                    }),
+                  ),
+                ),
+              ),
+              bufferLiveUiStream(threadPreviewManager.stream, {
+                label: "threads.previews",
+                onDroppedEvents: failLiveUiStreamForSnapshotResync,
+              }),
+            ),
+          ),
         [WS_METHODS.projectsProvisionFromGitHub]: (input) =>
           bufferLiveUiStream(
             Stream.callback<GitHubProjectProvisionProgressEvent, WsRpcError>((queue) =>
@@ -1419,7 +1455,15 @@ const makeWsRpcHandlersLayer = () =>
           rpcEffect(
             refreshGitStatusAfter(
               input.cwd,
-              git.withMutation(input.cwd, git.removeWorktree(input)),
+              Effect.gen(function* () {
+                const threads = yield* projectionReadModelQuery.listManagedWorktreeThreads();
+                yield* removeThreadWorktreeAndStopPreviews({
+                  worktreePath: input.path,
+                  threads,
+                  removeWorktree: git.withMutation(input.cwd, git.removeWorktree(input)),
+                  threadPreviewManager,
+                });
+              }),
             ),
             "Failed to remove worktree",
           ),

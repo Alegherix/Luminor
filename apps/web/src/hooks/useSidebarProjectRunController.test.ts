@@ -165,7 +165,7 @@ const PROJECT: Project = {
       name: "Dev",
       command: "bun dev",
       icon: "play",
-      runOnWorktreeCreate: false,
+      kind: "manual",
     },
   ],
 };

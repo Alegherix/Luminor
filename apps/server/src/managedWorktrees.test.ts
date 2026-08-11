@@ -13,6 +13,7 @@ import {
   MANAGED_WORKTREE_RETENTION_COUNT,
   pruneArchivedManagedWorktrees,
   pruneProjectedArchivedManagedWorktrees,
+  removeThreadWorktreeAndStopPreviews,
 } from "./managedWorktrees.ts";
 
 const temporaryRoots: string[] = [];
@@ -35,6 +36,38 @@ afterEach(async () => {
 });
 
 describe("managed worktrees", () => {
+  it("stops every owning thread preview after removing a worktree", async () => {
+    const { paths } = await makeManagedRoot(1);
+    const worktreePath = paths[0];
+    if (!worktreePath) throw new Error("Expected a managed worktree path.");
+    const order: string[] = [];
+    const threads = ["thread-1", "thread-2"].map((id) => ({
+      id,
+      worktreePath,
+    }));
+
+    await Effect.runPromise(
+      removeThreadWorktreeAndStopPreviews({
+        worktreePath,
+        threads,
+        removeWorktree: Effect.sync(() => order.push("worktree-removed")),
+        threadPreviewManager: {
+          stopPreview: (threadId) =>
+            Effect.sync(() => {
+              order.push(`preview-stopped:${threadId}`);
+              return { stopped: true };
+            }),
+        },
+      }),
+    );
+
+    expect(order).toEqual([
+      "worktree-removed",
+      "preview-stopped:thread-1",
+      "preview-stopped:thread-2",
+    ]);
+  });
+
   it("discovers linked worktrees and reports their primary checkout", async () => {
     const { root, paths } = await makeManagedRoot(2);
     const git = {

@@ -1170,6 +1170,9 @@ function resolveWsRpc(body: WsRequestEnvelope["body"]): unknown {
   if (tag === WS_METHODS.projectsListDevServers) {
     return { servers: [] };
   }
+  if (tag === WS_METHODS.previewList) {
+    return { previews: [] };
+  }
   if (tag === WS_METHODS.automationList) {
     return { definitions: [], runs: [] };
   }
@@ -1391,6 +1394,7 @@ const worker = setupWorker(
         method === WS_METHODS.subscribeTerminalEvents ||
         method === WS_METHODS.subscribeOrchestrationDomainEvents ||
         method === WS_METHODS.subscribeProjectDevServerEvents ||
+        method === WS_METHODS.subscribePreviewEvents ||
         method === WS_METHODS.subscribeAutomationEvents
       ) {
         return;
@@ -2400,7 +2404,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             name: "Dev",
             command: "bun run dev",
             icon: "play",
-            runOnWorktreeCreate: false,
+            kind: "manual",
           },
         ],
       );
@@ -4068,7 +4072,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           name: "Lint",
           command: "bun run lint",
           icon: "lint",
-          runOnWorktreeCreate: false,
+          kind: "manual",
         },
       ]),
     });
@@ -4146,7 +4150,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           name: "Test",
           command: "bun run test",
           icon: "test",
-          runOnWorktreeCreate: false,
+          kind: "manual",
         },
       ]),
     });
@@ -6314,7 +6318,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             name: "Setup",
             command: "printf setup",
             icon: "configure",
-            runOnWorktreeCreate: true,
+            kind: "setup",
           },
         ],
       ),

@@ -381,12 +381,16 @@ export const ProjectScriptIcon = Schema.Literals([
 ]);
 export type ProjectScriptIcon = typeof ProjectScriptIcon.Type;
 
+export const ProjectScriptKind = Schema.Literals(["manual", "setup", "preview"]);
+export type ProjectScriptKind = typeof ProjectScriptKind.Type;
+
 export const ProjectScript = Schema.Struct({
   id: TrimmedNonEmptyString,
   name: TrimmedNonEmptyString,
   command: TrimmedNonEmptyString,
   icon: ProjectScriptIcon,
-  runOnWorktreeCreate: Schema.Boolean,
+  kind: ProjectScriptKind,
+  urlTemplate: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
 });
 export type ProjectScript = typeof ProjectScript.Type;
 

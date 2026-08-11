@@ -24,6 +24,7 @@ import { doThreadMarkerRangesOverlap } from "@luminor/shared/threadMarkers";
 import { collectSubagentDescendants } from "@luminor/shared/threadHierarchy";
 import { autoRuntimeModeSelectionIssue } from "@luminor/shared/runtimeMode";
 import { providerSupportsNativeTurnSteering } from "@luminor/shared/providerMetadata";
+import { normalizeProjectScriptRoles } from "@luminor/shared/projectScripts";
 import {
   collectTailTurnIds,
   resolveTailUserMessageEditTarget,
@@ -1006,6 +1007,8 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         wasPinned: existingProject.isPinned === true,
       });
       const occurredAt = nowIso();
+      const nextScripts =
+        command.scripts !== undefined ? normalizeProjectScriptRoles(command.scripts) : undefined;
       return {
         ...withEventBase({
           aggregateKind: "project",
@@ -1022,7 +1025,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           ...(command.defaultModelSelection !== undefined
             ? { defaultModelSelection: command.defaultModelSelection }
             : {}),
-          ...(command.scripts !== undefined ? { scripts: command.scripts } : {}),
+          ...(nextScripts !== undefined ? { scripts: nextScripts } : {}),
           ...(command.isPinned !== undefined ? { isPinned: command.isPinned } : {}),
           ...(changedSpaceId !== undefined ? { spaceId: changedSpaceId } : {}),
           updatedAt: occurredAt,

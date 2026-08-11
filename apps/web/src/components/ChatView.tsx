@@ -322,6 +322,7 @@ import { randomTerminalId } from "./terminal/terminalIds";
 import { cn, isMacPlatform, randomUUID } from "~/lib/utils";
 import { toastManager } from "./ui/toast";
 import { decodeProjectScriptKeybindingRule } from "~/lib/projectScriptKeybindings";
+import { normalizeProjectScriptRoles } from "@luminor/shared/projectScripts";
 import { type NewProjectScriptInput } from "./ProjectScriptsControl";
 import {
   commandForProjectScript,
@@ -571,6 +572,7 @@ import {
   type WorktreeSetupDispatchOptions,
   PullRequestDialogState,
   type QueuedSteerGate,
+  resolveDraftProjectMoveContext,
   resolveQueuedSteerGateTransition,
   shouldRenderProviderHealthBanner,
   resolveRuntimeModeAfterApprovalDecision,
@@ -612,6 +614,8 @@ const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const EMPTY_PROJECT_ENTRIES: ProjectEntry[] = [];
 const EMPTY_PROVIDER_NATIVE_COMMANDS: ProviderNativeCommandDescriptor[] = [];
 const EMPTY_PROVIDER_SKILLS: ProviderSkillDescriptor[] = [];
+export const WORKTREE_INTENT_DROPPED_ON_LANDING_MESSAGE =
+  "This chat started outside the project, so it runs locally. Choose New worktree again now that it belongs to a project.";
 const LOCAL_PROJECT_DRAFT_CONTEXT = {
   envMode: "local",
   worktreePath: null,
@@ -4731,16 +4735,13 @@ export default function ChatView({
         name: input.name,
         command: input.command,
         icon: input.icon,
-        runOnWorktreeCreate: input.runOnWorktreeCreate,
+        kind: input.kind,
+        urlTemplate: input.urlTemplate,
       };
-      const nextScripts = input.runOnWorktreeCreate
-        ? [
-            ...activeProject.scripts.map((script) =>
-              script.runOnWorktreeCreate ? { ...script, runOnWorktreeCreate: false } : script,
-            ),
-            nextScript,
-          ]
-        : [...activeProject.scripts, nextScript];
+      const nextScripts = normalizeProjectScriptRoles(
+        [...activeProject.scripts, nextScript],
+        nextId,
+      );
 
       await persistProjectScripts({
         projectId: activeProject.id,
@@ -4766,14 +4767,12 @@ export default function ChatView({
         name: input.name,
         command: input.command,
         icon: input.icon,
-        runOnWorktreeCreate: input.runOnWorktreeCreate,
+        kind: input.kind,
+        urlTemplate: input.urlTemplate,
       };
-      const nextScripts = activeProject.scripts.map((script) =>
-        script.id === scriptId
-          ? updatedScript
-          : input.runOnWorktreeCreate
-            ? { ...script, runOnWorktreeCreate: false }
-            : script,
+      const nextScripts = normalizeProjectScriptRoles(
+        activeProject.scripts.map((script) => (script.id === scriptId ? updatedScript : script)),
+        scriptId,
       );
 
       await persistProjectScripts({
@@ -7825,6 +7824,12 @@ export default function ChatView({
       }
 
       clearProjectDraftThreadId(targetProjectIdForSend);
+      // Landing sends resolve their branch against the container, not the project they
+      // land in, so worktree mode cannot be honored here. Say so instead of downgrading
+      // to local behind the user's back.
+      if (nextThreadEnvMode === "worktree") {
+        setStoreThreadError(threadIdForSend, WORKTREE_INTENT_DROPPED_ON_LANDING_MESSAGE);
+      }
       setDraftThreadContext(threadIdForSend, {
         projectId: targetProjectIdForSend,
         envMode: "local",
@@ -9456,12 +9461,20 @@ export default function ChatView({
       },
     ) => {
       // Project moves reset branch; the previous project's current branch may not exist here.
-      moveDraftThreadToProject(threadId, projectId, LOCAL_PROJECT_DRAFT_CONTEXT);
+      // The environment choice is the user's intent, not project state, so it survives the move:
+      // "New worktree" keeps waiting for a base branch in the target project.
+      moveDraftThreadToProject(
+        threadId,
+        projectId,
+        resolveDraftProjectMoveContext({
+          envMode: draftThread?.envMode ?? LOCAL_PROJECT_DRAFT_CONTEXT.envMode,
+        }),
+      );
       if (options?.restoreComposerFocus ?? true) {
         scheduleComposerFocus();
       }
     },
-    [moveDraftThreadToProject, scheduleComposerFocus, threadId],
+    [draftThread?.envMode, moveDraftThreadToProject, scheduleComposerFocus, threadId],
   );
 
   const handleResetWorkspaceToHome = useCallback(() => {
