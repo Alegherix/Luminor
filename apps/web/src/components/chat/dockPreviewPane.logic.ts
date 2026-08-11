@@ -16,7 +16,8 @@ export type PreviewPaneControlKind =
   | "logs"
   | "restart"
   | "stop"
-  | "retry";
+  | "retry"
+  | "configure";
 
 export type PreviewPaneStatusTone = "idle" | "pending" | "running" | "failed";
 
@@ -61,6 +62,7 @@ export function resolvePreviewPaneView(input: {
   readonly preview: ThreadPreviewState | null;
   readonly hasWorktree: boolean;
   readonly hasPreviewScript: boolean;
+  readonly previewCommand?: string | null;
 }): PreviewPaneView {
   const preview = input.preview;
   const status = preview?.status ?? "idle";
@@ -124,7 +126,7 @@ export function resolvePreviewPaneView(input: {
       status,
       tone: STATUS_TONES[status],
       portLabel,
-      controls: ["logs", "restart"],
+      controls: ["logs", "configure", "restart"],
       body: {
         kind: "message",
         heading: PREVIEW_FAILED_HEADING,
@@ -149,15 +151,19 @@ export function resolvePreviewPaneView(input: {
     };
   }
 
+  const savedCommand = input.previewCommand?.trim() ?? "";
   return {
     status: "idle",
     tone: "idle",
     portLabel,
-    controls: ["start"],
+    controls: ["configure", "start"],
     body: {
       kind: "message",
       heading: PREVIEW_IDLE_HEADING,
-      description: "Run the project's preview command in this thread's worktree.",
+      description:
+        savedCommand.length > 0
+          ? savedCommand
+          : "Run the project's preview command in this thread's worktree.",
       action: "start",
     },
   };

@@ -12,7 +12,14 @@ import { useCallback, useState } from "react";
 import { usePreviewCommandSuggestions } from "~/hooks/usePreviewCommandSuggestions";
 import { useProjectPreviewScript } from "~/hooks/useProjectPreviewScript";
 import { useThreadPreview } from "~/hooks/useThreadPreview";
-import { LoaderIcon, PlayIcon, RefreshCwIcon, StopIcon, TerminalIcon } from "~/lib/icons";
+import {
+  LoaderIcon,
+  PencilIcon,
+  PlayIcon,
+  RefreshCwIcon,
+  StopIcon,
+  TerminalIcon,
+} from "~/lib/icons";
 import { cn } from "~/lib/utils";
 import type { PreviewProjectScriptDraft } from "~/projectScripts";
 import { useRightDockStore } from "~/rightDockStore";
@@ -44,6 +51,7 @@ const CONTROL_LABELS: Record<PreviewPaneControlKind, string> = {
   restart: "Restart preview",
   stop: "Stop preview",
   retry: "Retry preview",
+  configure: "Edit preview command",
 };
 
 // The embedded app gets everything a dev server needs while staying unable to
@@ -59,6 +67,7 @@ const CONTROL_ICONS: Record<PreviewPaneControlKind, typeof PlayIcon> = {
   restart: RefreshCwIcon,
   stop: StopIcon,
   retry: RefreshCwIcon,
+  configure: PencilIcon,
 };
 
 export function DockPreviewPane(props: {
@@ -72,15 +81,19 @@ export function DockPreviewPane(props: {
   const commandSuggestions = usePreviewCommandSuggestions(props.projectId);
   const openPane = useRightDockStore((state) => state.openPane);
   const [reloadKey, setReloadKey] = useState(0);
+  const [editingCommand, setEditingCommand] = useState(false);
+  const savedScript = previewScript.script;
   const view = resolvePreviewPaneView({
     preview,
     hasWorktree: props.hasWorktree,
-    hasPreviewScript: previewScript.script !== null,
+    hasPreviewScript: savedScript !== null,
+    previewCommand: savedScript?.command ?? null,
   });
 
   const saveScriptAndStart = useCallback(
     async (draft: PreviewProjectScriptDraft) => {
       await previewScript.save(draft);
+      setEditingCommand(false);
       await start();
     },
     [previewScript, start],
@@ -98,6 +111,10 @@ export function DockPreviewPane(props: {
           terminalThreadId: props.hostThreadId,
           terminalId: PREVIEW_TERMINAL_ID,
         });
+        return;
+      }
+      if (kind === "configure") {
+        setEditingCommand(true);
         return;
       }
       if (kind === "restart") {
@@ -159,7 +176,17 @@ export function DockPreviewPane(props: {
         }
       />
 
-      {view.body.kind === "webview" ? (
+      {editingCommand ? (
+        <PreviewSetupForm
+          heading="Edit the preview command"
+          description="Saving replaces the project's preview command and starts it in this worktree."
+          commandSuggestions={commandSuggestions}
+          initialCommand={savedScript?.command ?? null}
+          initialUrlTemplate={savedScript?.urlTemplate ?? null}
+          onCancel={() => setEditingCommand(false)}
+          onSubmit={saveScriptAndStart}
+        />
+      ) : view.body.kind === "webview" ? (
         <iframe
           key={`${view.body.url}:${reloadKey}`}
           title="Thread preview"
@@ -178,7 +205,15 @@ export function DockPreviewPane(props: {
           onSubmit={saveScriptAndStart}
         />
       ) : (
-        <PreviewPaneMessageBody body={view.body} onRunControl={runControl} />
+        <PreviewPaneMessageBody
+          body={view.body}
+          onRunControl={runControl}
+          onEditCommand={
+            view.status === "idle" && view.controls.includes("configure")
+              ? () => setEditingCommand(true)
+              : undefined
+          }
+        />
       )}
     </div>
   );
@@ -227,13 +262,26 @@ function PreviewUrlEntryBody(props: {
 function PreviewPaneMessageBody(props: {
   body: Extract<PreviewPaneBody, { kind: "message" }>;
   onRunControl: (kind: PreviewPaneControlKind) => void;
+  onEditCommand?: (() => void) | undefined;
 }) {
   const action = props.body.action;
+  const editCommand = props.onEditCommand;
   return (
     <PanelStateMessage fill="flex">
       <div className="flex flex-col items-center gap-2">
         <p className="text-sm font-medium text-foreground">{props.body.heading}</p>
-        <p className="max-w-80 text-xs text-muted-foreground">{props.body.description}</p>
+        {editCommand ? (
+          <button
+            type="button"
+            onClick={editCommand}
+            title={CONTROL_LABELS.configure}
+            className="max-w-80 rounded-sm px-1 font-mono text-xs text-muted-foreground underline decoration-dotted underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
+          >
+            {props.body.description}
+          </button>
+        ) : (
+          <p className="max-w-80 text-xs text-muted-foreground">{props.body.description}</p>
+        )}
         {action ? (
           <Button size="sm" variant="secondary-outline" onClick={() => props.onRunControl(action)}>
             {CONTROL_LABELS[action]}

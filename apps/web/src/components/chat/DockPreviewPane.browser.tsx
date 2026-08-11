@@ -295,6 +295,38 @@ describe("DockPreviewPane", () => {
     restoreNativeApi();
   });
 
+  it("reopens the setup form prefilled with the saved command and can back out", async () => {
+    seedProject([PREVIEW_SCRIPT]);
+    const dispatchCommand = vi.fn(async (_command: Record<string, unknown>) => undefined);
+    const start = vi.fn(async () => ({ preview: previewState() }));
+    const restoreNativeApi = installPreviewNativeApi({ dispatchCommand, start });
+    const screen = await renderPane({ hasWorktree: true });
+
+    await page.getByRole("button", { name: "bun run dev", exact: true }).click();
+    const commandField = page.getByRole("textbox", { name: "Command", exact: true });
+    await expect.element(commandField).toHaveValue("bun run dev");
+    await expect
+      .element(page.getByRole("textbox", { name: "URL template", exact: true }))
+      .toHaveValue("http://localhost:{port}");
+
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect.element(page.getByText("Preview is not running")).toBeInTheDocument();
+    expect(dispatchCommand).not.toHaveBeenCalled();
+
+    await page.getByRole("button", { name: "Edit preview command" }).click();
+    await commandField.fill("bun run dev:web");
+    await page.getByRole("button", { name: "Save and start preview" }).click();
+
+    await expect.poll(() => dispatchCommand.mock.calls.length).toBe(1);
+    expect(dispatchCommand.mock.calls[0]?.[0]).toMatchObject({
+      scripts: [{ kind: "preview", command: "bun run dev:web" }],
+    });
+    expect(start).toHaveBeenCalledWith({ threadId: THREAD_ID });
+
+    await screen.unmount();
+    restoreNativeApi();
+  });
+
   it("surfaces a failure message with a retry action", async () => {
     seedProject([PREVIEW_SCRIPT]);
     const start = vi.fn(async () => ({ preview: previewState({ status: "starting", url: null }) }));

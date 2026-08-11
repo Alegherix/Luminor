@@ -50,8 +50,35 @@ describe("resolvePreviewPaneView", () => {
 
     expect(view.status).toBe("idle");
     expect(view.tone).toBe("idle");
-    expect(view.controls).toEqual(["start"]);
+    expect(view.controls).toEqual(["configure", "start"]);
     expect(view.body).toMatchObject({ heading: PREVIEW_IDLE_HEADING, action: "start" });
+  });
+
+  it("shows the saved command as the idle description so it can be edited before starting", () => {
+    const view = resolvePreviewPaneView({
+      preview: null,
+      hasWorktree: true,
+      hasPreviewScript: true,
+      previewCommand: "bun run dev --home-dir ./.luminor/preview-instance",
+    });
+
+    expect(view.body).toMatchObject({
+      heading: PREVIEW_IDLE_HEADING,
+      description: "bun run dev --home-dir ./.luminor/preview-instance",
+    });
+  });
+
+  it("keeps the generic idle description when the saved command is blank", () => {
+    const view = resolvePreviewPaneView({
+      preview: null,
+      hasWorktree: true,
+      hasPreviewScript: true,
+      previewCommand: "   ",
+    });
+
+    expect(view.body).toMatchObject({
+      description: "Run the project's preview command in this thread's worktree.",
+    });
   });
 
   it("asks for a preview command instead of a start control when none is configured", () => {
@@ -116,7 +143,7 @@ describe("resolvePreviewPaneView", () => {
     });
 
     expect(view.tone).toBe("failed");
-    expect(view.controls).toEqual(["logs", "restart"]);
+    expect(view.controls).toEqual(["logs", "configure", "restart"]);
     expect(view.body).toMatchObject({
       heading: PREVIEW_FAILED_HEADING,
       description: "Error: port already in use",

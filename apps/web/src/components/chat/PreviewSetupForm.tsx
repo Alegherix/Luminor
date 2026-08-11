@@ -15,6 +15,7 @@ import { Label } from "../ui/label";
 export const PREVIEW_COMMAND_REQUIRED_MESSAGE = "A preview command is required.";
 export const PREVIEW_COMMAND_SUGGESTIONS_HINT = "From package.json";
 export const PREVIEW_SETUP_SUBMIT_LABEL = "Save and start preview";
+export const PREVIEW_SETUP_CANCEL_LABEL = "Cancel";
 export const PREVIEW_URL_TEMPLATE_PLACEHOLDER = "http://localhost:{port}";
 export const PREVIEW_URL_TEMPLATE_HINT =
   "Optional. {port} is replaced with the preview's port. Leave it empty to use the URL the command prints.";
@@ -23,12 +24,15 @@ export function PreviewSetupForm(props: {
   heading: string;
   description: string;
   commandSuggestions?: readonly PreviewCommandSuggestion[];
+  initialCommand?: string | null;
+  initialUrlTemplate?: string | null;
+  onCancel?: (() => void) | undefined;
   onSubmit: (draft: PreviewProjectScriptDraft) => Promise<void>;
 }) {
   const commandFieldId = useId();
   const urlTemplateFieldId = useId();
-  const [command, setCommand] = useState("");
-  const [urlTemplate, setUrlTemplate] = useState("");
+  const [command, setCommand] = useState(props.initialCommand ?? "");
+  const [urlTemplate, setUrlTemplate] = useState(props.initialUrlTemplate ?? "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const suggestions = props.commandSuggestions ?? [];
@@ -109,9 +113,22 @@ export function PreviewSetupForm(props: {
           <p className="text-xs text-muted-foreground">{PREVIEW_URL_TEMPLATE_HINT}</p>
         </div>
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
-        <Button type="submit" size="sm" className="w-full" disabled={submitting}>
-          {PREVIEW_SETUP_SUBMIT_LABEL}
-        </Button>
+        <div className="flex gap-2">
+          {props.onCancel ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary-outline"
+              className="flex-1"
+              onClick={props.onCancel}
+            >
+              {PREVIEW_SETUP_CANCEL_LABEL}
+            </Button>
+          ) : null}
+          <Button type="submit" size="sm" className="flex-1" disabled={submitting}>
+            {PREVIEW_SETUP_SUBMIT_LABEL}
+          </Button>
+        </div>
       </form>
     </div>
   );
