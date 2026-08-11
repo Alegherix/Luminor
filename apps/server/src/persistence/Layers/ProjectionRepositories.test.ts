@@ -1,13 +1,22 @@
-import { ProjectId, SpaceId, ThreadId, TurnId } from "@luminor/contracts";
+import {
+  DEFAULT_PROVIDER_INTERACTION_MODE,
+  FolderId,
+  ProjectId,
+  SpaceId,
+  ThreadId,
+  TurnId,
+} from "@luminor/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
+import { ProjectionFolderRepositoryLive } from "./ProjectionFolders.ts";
 import { ProjectionProjectRepositoryLive } from "./ProjectionProjects.ts";
 import { ProjectionThreadRepositoryLive } from "./ProjectionThreads.ts";
 import { ProjectionStateRepositoryLive } from "./ProjectionState.ts";
 import { ProjectionTurnRepositoryLive } from "./ProjectionTurns.ts";
+import { ProjectionFolderRepository } from "../Services/ProjectionFolders.ts";
 import { ProjectionProjectRepository } from "../Services/ProjectionProjects.ts";
 import { ProjectionThreadRepository } from "../Services/ProjectionThreads.ts";
 import { ProjectionStateRepository } from "../Services/ProjectionState.ts";
@@ -16,6 +25,7 @@ import { ProjectionTurnRepository } from "../Services/ProjectionTurns.ts";
 const projectionRepositoriesLayer = it.layer(
   Layer.mergeAll(
     ProjectionProjectRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
+    ProjectionFolderRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
     ProjectionThreadRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
     ProjectionStateRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
     ProjectionTurnRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
@@ -75,6 +85,108 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
           },
         ],
       );
+    }),
+  );
+
+  it.effect("soft-deletes folders and clears memberships for a deleted project", () =>
+    Effect.gen(function* () {
+      const folders = yield* ProjectionFolderRepository;
+      const threads = yield* ProjectionThreadRepository;
+      const deletedProjectId = ProjectId.makeUnsafe("project-folder-delete");
+      const keptProjectId = ProjectId.makeUnsafe("project-folder-keep");
+      const deletedFolderId = FolderId.makeUnsafe("folder-delete");
+      const keptFolderId = FolderId.makeUnsafe("folder-keep");
+      const deletedThreadId = ThreadId.makeUnsafe("thread-folder-delete");
+      const keptThreadId = ThreadId.makeUnsafe("thread-folder-keep");
+      const deletedAt = "2026-08-10T12:00:00.000Z";
+
+      yield* folders.upsert({
+        folderId: deletedFolderId,
+        projectId: deletedProjectId,
+        name: "Deleted project folder",
+        sortOrder: 0,
+        isPinned: 0,
+        createdAt: "2026-08-10T11:00:00.000Z",
+        updatedAt: "2026-08-10T11:00:00.000Z",
+        deletedAt: null,
+      });
+      yield* folders.upsert({
+        folderId: keptFolderId,
+        projectId: keptProjectId,
+        name: "Kept project folder",
+        sortOrder: 0,
+        isPinned: 0,
+        createdAt: "2026-08-10T11:00:00.000Z",
+        updatedAt: "2026-08-10T11:00:00.000Z",
+        deletedAt: null,
+      });
+
+      const makeThread = (threadId: ThreadId, projectId: ProjectId, folderId: FolderId) => ({
+        threadId,
+        projectId,
+        folderId,
+        title: String(threadId),
+        modelSelection: { provider: "codex" as const, model: "gpt-5.6-sol" },
+        runtimeMode: "approval-required" as const,
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        envMode: "local" as const,
+        branch: null,
+        worktreePath: null,
+        associatedWorktreePath: null,
+        associatedWorktreeBranch: null,
+        associatedWorktreeRef: null,
+        createBranchFlowCompleted: false,
+        lastKnownPr: null,
+        latestTurnId: null,
+        handoff: null,
+        pinnedMessages: null,
+        threadMarkers: null,
+        notes: null,
+        latestUserMessageAt: null,
+        pendingApprovalCount: 0,
+        pendingUserInputCount: 0,
+        hasActionableProposedPlan: 0,
+        createdAt: "2026-08-10T11:00:00.000Z",
+        updatedAt: "2026-08-10T11:00:00.000Z",
+        deletedAt: null,
+      });
+
+      yield* threads.upsert(makeThread(deletedThreadId, deletedProjectId, deletedFolderId));
+      yield* threads.upsert(makeThread(keptThreadId, keptProjectId, keptFolderId));
+
+      yield* folders.markDeletedByProjectId({
+        projectId: deletedProjectId,
+        deletedAt,
+      });
+      yield* threads.clearFolderMembershipsByProjectId({
+        projectId: deletedProjectId,
+        updatedAt: deletedAt,
+      });
+
+      const folderRows = yield* folders.listAll();
+      assert.deepStrictEqual(
+        folderRows.map(({ folderId, deletedAt: folderDeletedAt }) => ({
+          folderId,
+          folderDeletedAt,
+        })),
+        [
+          { folderId: deletedFolderId, folderDeletedAt: deletedAt },
+          { folderId: keptFolderId, folderDeletedAt: null },
+        ],
+      );
+
+      const deletedThread = yield* threads.getById({ threadId: deletedThreadId });
+      const keptThread = yield* threads.getById({ threadId: keptThreadId });
+      assert.strictEqual(Option.isSome(deletedThread), true);
+      assert.strictEqual(Option.isSome(keptThread), true);
+      if (Option.isSome(deletedThread)) {
+        assert.strictEqual(deletedThread.value.folderId, null);
+        assert.strictEqual(deletedThread.value.updatedAt, deletedAt);
+      }
+      if (Option.isSome(keptThread)) {
+        assert.strictEqual(keptThread.value.folderId, keptFolderId);
+        assert.strictEqual(keptThread.value.updatedAt, "2026-08-10T11:00:00.000Z");
+      }
     }),
   );
 
@@ -138,6 +250,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       yield* threads.upsert({
         threadId: ThreadId.makeUnsafe("thread-null-options"),
         projectId: ProjectId.makeUnsafe("project-null-options"),
+        folderId: null,
         title: "Null options thread",
         modelSelection: {
           provider: "claudeAgent",
@@ -229,6 +342,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       const makeThread = (threadId: string, deletedAt: string | null) => ({
         threadId: ThreadId.makeUnsafe(threadId),
         projectId: ProjectId.makeUnsafe("project-wait-snapshot"),
+        folderId: null,
         title: threadId,
         modelSelection: { provider: "codex" as const, model: "gpt-5.5" },
         runtimeMode: "approval-required" as const,

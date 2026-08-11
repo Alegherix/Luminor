@@ -1,5 +1,6 @@
 import type {
   OrchestrationCommand,
+  OrchestrationFolder,
   OrchestrationLatestTurn,
   OrchestrationProject,
   OrchestrationReadModel,
@@ -9,6 +10,7 @@ import type {
   OrchestrationThreadActivity,
   ProjectKind,
   ProjectId,
+  FolderId,
   SpaceId,
   ThreadId,
 } from "@luminor/contracts";
@@ -108,6 +110,102 @@ export function findSpaceById(
   spaceId: SpaceId,
 ): OrchestrationSpace | undefined {
   return readModel.spaces.find((space) => space.id === spaceId);
+}
+
+export function findFolderById(
+  readModel: OrchestrationReadModel,
+  folderId: FolderId,
+): OrchestrationFolder | undefined {
+  return readModel.folders.find((folder) => folder.id === folderId);
+}
+
+export function listActiveFoldersByProjectId(
+  readModel: OrchestrationReadModel,
+  projectId: ProjectId,
+): ReadonlyArray<OrchestrationFolder> {
+  return readModel.folders
+    .filter((folder) => folder.projectId === projectId && folder.deletedAt === null)
+    .toSorted((left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id));
+}
+
+export function requireFolder(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly folderId: FolderId;
+}): Effect.Effect<OrchestrationFolder, OrchestrationCommandInvariantError> {
+  const folder = findFolderById(input.readModel, input.folderId);
+  if (folder && folder.deletedAt === null) {
+    return Effect.succeed(folder);
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      folder
+        ? `Folder '${input.folderId}' was deleted and cannot handle command '${input.command.type}'.`
+        : `Folder '${input.folderId}' does not exist for command '${input.command.type}'.`,
+    ),
+  );
+}
+
+export function requireFolderInProject(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly folderId: FolderId;
+  readonly projectId: ProjectId;
+}): Effect.Effect<OrchestrationFolder, OrchestrationCommandInvariantError> {
+  return requireFolder(input).pipe(
+    Effect.flatMap((folder) =>
+      folder.projectId === input.projectId
+        ? Effect.succeed(folder)
+        : Effect.fail(
+            invariantError(
+              input.command.type,
+              `Folder '${input.folderId}' does not belong to thread project '${input.projectId}'.`,
+            ),
+          ),
+    ),
+  );
+}
+
+export function requireFolderAbsent(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly folderId: FolderId;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  if (!findFolderById(input.readModel, input.folderId)) {
+    return Effect.void;
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      `Folder '${input.folderId}' already exists and cannot be created twice.`,
+    ),
+  );
+}
+
+export function requireFolderNameAvailable(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly projectId: ProjectId;
+  readonly name: string;
+  readonly excludeFolderId?: FolderId;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  const normalizedName = input.name.trim().toLowerCase();
+  const conflict = input.readModel.folders.find(
+    (folder) =>
+      folder.projectId === input.projectId &&
+      folder.deletedAt === null &&
+      folder.id !== input.excludeFolderId &&
+      folder.name.trim().toLowerCase() === normalizedName,
+  );
+  return conflict
+    ? Effect.fail(
+        invariantError(
+          input.command.type,
+          `A folder named '${input.name}' already exists in this project.`,
+        ),
+      )
+    : Effect.void;
 }
 
 export function listActiveSpaces(

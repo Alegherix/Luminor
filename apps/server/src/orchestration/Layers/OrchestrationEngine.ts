@@ -3,6 +3,7 @@ import type {
   OrchestrationEvent,
   OrchestrationReadModel,
   ProjectId,
+  FolderId,
   SpaceId,
   ThreadId,
 } from "@luminor/contracts";
@@ -103,10 +104,18 @@ type CommittedCommandResult = {
 };
 
 function commandToAggregateRef(command: OrchestrationCommand): {
-  readonly aggregateKind: "space" | "project" | "thread";
-  readonly aggregateId: SpaceId | ProjectId | ThreadId;
+  readonly aggregateKind: "space" | "folder" | "project" | "thread";
+  readonly aggregateId: SpaceId | FolderId | ProjectId | ThreadId;
 } {
   switch (command.type) {
+    case "folder.create":
+    case "folder.rename":
+    case "folder.delete":
+    case "folder.pin":
+      return {
+        aggregateKind: "folder",
+        aggregateId: command.folderId,
+      };
     case "space.create":
     case "space.meta.update":
     case "space.reorder":
@@ -139,6 +148,10 @@ function isShellMetadataEvent(event: OrchestrationEvent): event is ShellMetadata
     event.type === "space.meta-updated" ||
     event.type === "space.order-updated" ||
     event.type === "space.deleted" ||
+    event.type === "folder.created" ||
+    event.type === "folder.renamed" ||
+    event.type === "folder.deleted" ||
+    event.type === "folder.pinned" ||
     event.type === "project.created" ||
     event.type === "project.meta-updated" ||
     event.type === "project.deleted"

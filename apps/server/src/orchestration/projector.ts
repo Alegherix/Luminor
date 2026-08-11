@@ -26,6 +26,10 @@ import {
   SpaceDeletedPayload,
   SpaceMetaUpdatedPayload,
   SpaceOrderUpdatedPayload,
+  FolderCreatedPayload,
+  FolderRenamedPayload,
+  FolderDeletedPayload,
+  FolderPinnedPayload,
   ProjectCreatedPayload,
   ProjectDeletedPayload,
   ProjectMetaUpdatedPayload,
@@ -296,6 +300,7 @@ export function createEmptyReadModel(nowIso: string): OrchestrationReadModel {
   return {
     snapshotSequence: 0,
     spaces: [],
+    folders: [],
     projects: [],
     threads: [],
     updatedAt: nowIso,
@@ -313,6 +318,67 @@ export function projectEvent(
   };
 
   switch (event.type) {
+    case "folder.created":
+      return decodeForEvent(FolderCreatedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => {
+          const existing = nextBase.folders.find((entry) => entry.id === payload.folderId);
+          const nextFolder = {
+            id: payload.folderId,
+            projectId: payload.projectId,
+            name: payload.name,
+            sortOrder: payload.sortOrder,
+            isPinned: payload.isPinned,
+            createdAt: payload.createdAt,
+            updatedAt: payload.updatedAt,
+            deletedAt: null,
+          };
+          return {
+            ...nextBase,
+            folders: existing
+              ? nextBase.folders.map((entry) =>
+                  entry.id === payload.folderId ? nextFolder : entry,
+                )
+              : [...nextBase.folders, nextFolder],
+          };
+        }),
+      );
+
+    case "folder.renamed":
+      return decodeForEvent(FolderRenamedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          folders: nextBase.folders.map((folder) =>
+            folder.id === payload.folderId
+              ? { ...folder, name: payload.name, updatedAt: payload.updatedAt }
+              : folder,
+          ),
+        })),
+      );
+
+    case "folder.pinned":
+      return decodeForEvent(FolderPinnedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          folders: nextBase.folders.map((folder) =>
+            folder.id === payload.folderId
+              ? { ...folder, isPinned: payload.isPinned, updatedAt: payload.updatedAt }
+              : folder,
+          ),
+        })),
+      );
+
+    case "folder.deleted":
+      return decodeForEvent(FolderDeletedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          folders: nextBase.folders.map((folder) =>
+            folder.id === payload.folderId
+              ? { ...folder, deletedAt: payload.deletedAt, updatedAt: payload.deletedAt }
+              : folder,
+          ),
+        })),
+      );
+
     case "space.created":
       return decodeForEvent(SpaceCreatedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => {
@@ -462,6 +528,25 @@ export function projectEvent(
                 }
               : project,
           ),
+          folders: nextBase.folders.map((folder) =>
+            folder.projectId === payload.projectId && folder.deletedAt === null
+              ? {
+                  ...folder,
+                  deletedAt: payload.deletedAt,
+                  updatedAt: payload.deletedAt,
+                }
+              : folder,
+          ),
+          threads: nextBase.threads.map((thread) =>
+            thread.projectId === payload.projectId && thread.folderId !== null
+              ? {
+                  ...thread,
+                  folderId: null,
+                  updatedAt:
+                    thread.updatedAt > payload.deletedAt ? thread.updatedAt : payload.deletedAt,
+                }
+              : thread,
+          ),
         })),
       );
 
@@ -480,6 +565,7 @@ export function projectEvent(
           {
             id: payload.threadId,
             projectId: payload.projectId,
+            folderId: payload.folderId ?? null,
             title: payload.title,
             modelSelection: payload.modelSelection,
             runtimeMode: payload.runtimeMode,
@@ -589,6 +675,7 @@ export function projectEvent(
           return {
             ...nextBase,
             threads: updateThread(nextBase.threads, payload.threadId, {
+              ...(payload.folderId !== undefined ? { folderId: payload.folderId } : {}),
               ...(payload.title !== undefined ? { title: payload.title } : {}),
               ...(payload.modelSelection !== undefined
                 ? { modelSelection: payload.modelSelection }

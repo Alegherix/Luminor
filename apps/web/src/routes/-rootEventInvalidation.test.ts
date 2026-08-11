@@ -140,6 +140,7 @@ describe("root event invalidation", () => {
     });
     const state: AppState = {
       spaces: [],
+      folders: [],
       projects: [{ id: projectId, cwd: "/repo/main" }] as AppState["projects"],
       sidebarThreadSummaryById: {},
       threadsHydrated: true,

@@ -5,6 +5,7 @@ import * as SchemaGetter from "effect/SchemaGetter";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
+  ClearProjectionThreadFolderMembershipsByProjectInput,
   DeleteProjectionThreadInput,
   GetProjectionThreadInput,
   ListProjectionThreadsByProjectInput,
@@ -50,6 +51,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
         INSERT INTO projection_threads (
           thread_id,
           project_id,
+          folder_id,
           title,
           model_selection_json,
           runtime_mode,
@@ -93,6 +95,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
         VALUES (
           ${row.threadId},
           ${row.projectId},
+          ${row.folderId},
           ${row.title},
           ${JSON.stringify(row.modelSelection)},
           ${row.runtimeMode},
@@ -136,6 +139,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
         ON CONFLICT (thread_id)
         DO UPDATE SET
           project_id = excluded.project_id,
+          folder_id = excluded.folder_id,
           title = excluded.title,
           model_selection_json = excluded.model_selection_json,
           runtime_mode = excluded.runtime_mode,
@@ -186,6 +190,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
         SELECT
           thread_id AS "threadId",
           project_id AS "projectId",
+          folder_id AS "folderId",
           title,
           model_selection_json AS "modelSelection",
           runtime_mode AS "runtimeMode",
@@ -238,6 +243,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
         SELECT
           thread_id AS "threadId",
           project_id AS "projectId",
+          folder_id AS "folderId",
           title,
           model_selection_json AS "modelSelection",
           runtime_mode AS "runtimeMode",
@@ -292,6 +298,19 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
       `,
   });
 
+  const clearFolderMembershipsByProjectIdRow = SqlSchema.void({
+    Request: ClearProjectionThreadFolderMembershipsByProjectInput,
+    execute: ({ projectId, updatedAt }) =>
+      sql`
+        UPDATE projection_threads
+        SET
+          folder_id = NULL,
+          updated_at = CASE WHEN updated_at > ${updatedAt} THEN updated_at ELSE ${updatedAt} END
+        WHERE project_id = ${projectId}
+          AND folder_id IS NOT NULL
+      `,
+  });
+
   const upsert: ProjectionThreadRepositoryShape["upsert"] = (row) =>
     upsertProjectionThreadRow(row).pipe(
       Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.upsert:query")),
@@ -312,11 +331,22 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.deleteById:query")),
     );
 
+  const clearFolderMembershipsByProjectId: ProjectionThreadRepositoryShape["clearFolderMembershipsByProjectId"] =
+    (input) =>
+      clearFolderMembershipsByProjectIdRow(input).pipe(
+        Effect.mapError(
+          toPersistenceSqlError(
+            "ProjectionThreadRepository.clearFolderMembershipsByProjectId:query",
+          ),
+        ),
+      );
+
   return {
     upsert,
     getById,
     listByProjectId,
     deleteById,
+    clearFolderMembershipsByProjectId,
   } satisfies ProjectionThreadRepositoryShape;
 });
 

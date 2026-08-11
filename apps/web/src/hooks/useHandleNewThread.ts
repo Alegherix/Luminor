@@ -180,6 +180,7 @@ export function useHandleNewThread() {
           worktreePath: creationState.worktreePath,
           workingDirectory: creationState.workingDirectory,
           lastKnownPr: creationState.lastKnownPr,
+          folderId: options?.folderId ?? null,
           createdAt: new Date().toISOString(),
         },
         api,
@@ -204,7 +205,11 @@ export function useHandleNewThread() {
           resolvedStoredDraftThread = getDraftThread(bootstrapPlan.threadId);
         }
         applyProviderOverride(bootstrapPlan.threadId);
-        setProjectDraftThreadId(projectId, bootstrapPlan.threadId, { entryPoint });
+        setProjectDraftThreadId(projectId, bootstrapPlan.threadId, {
+          entryPoint,
+          folderId: options?.folderId ?? null,
+        });
+        resolvedStoredDraftThread = getDraftThread(bootstrapPlan.threadId);
         restoreComposerDraft(bootstrapPlan.threadId, preservedComposerDraft);
         activateThreadEntryPoint(bootstrapPlan.threadId);
         if (focusedThreadId === bootstrapPlan.threadId) {
@@ -254,7 +259,11 @@ export function useHandleNewThread() {
           resolvedActiveDraftThread = getDraftThread(bootstrapPlan.threadId);
         }
         applyProviderOverride(bootstrapPlan.threadId);
-        setProjectDraftThreadId(projectId, bootstrapPlan.threadId, { entryPoint });
+        setProjectDraftThreadId(projectId, bootstrapPlan.threadId, {
+          entryPoint,
+          folderId: options?.folderId ?? null,
+        });
+        resolvedActiveDraftThread = getDraftThread(bootstrapPlan.threadId);
         restoreComposerDraft(bootstrapPlan.threadId, preservedComposerDraft);
         activateThreadEntryPoint(bootstrapPlan.threadId);
         if (entryPoint === "terminal") {

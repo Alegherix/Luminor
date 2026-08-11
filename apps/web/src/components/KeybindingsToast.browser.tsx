@@ -54,6 +54,7 @@ function createMinimalSnapshot(): OrchestrationReadModel {
   return {
     snapshotSequence: 1,
     spaces: [],
+    folders: [],
     projects: [
       {
         id: PROJECT_ID,

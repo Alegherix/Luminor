@@ -3,6 +3,7 @@ import {
   CheckpointRef,
   CommandId,
   EventId,
+  FolderId,
   MessageId,
   ProjectId,
   SpaceId,
@@ -36,6 +37,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`DELETE FROM projection_threads`;
       yield* sql`DELETE FROM projection_projects`;
+      yield* sql`DELETE FROM projection_folders`;
       yield* sql`DELETE FROM projection_spaces`;
       yield* sql`DELETE FROM projection_state`;
       yield* sql`
@@ -56,6 +58,14 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           '2026-07-20T00:00:01.000Z', NULL
         )
       `;
+      yield* sql`
+        INSERT INTO projection_folders (
+          folder_id, project_id, name, sort_order, is_pinned, created_at, updated_at, deleted_at
+        ) VALUES (
+          'folder-snapshot', 'project-space-snapshot', 'Empty folder', 0, 0,
+          '2026-07-20T00:00:00.000Z', '2026-07-20T00:00:01.000Z', NULL
+        )
+      `;
       for (const projector of Object.values(ORCHESTRATION_PROJECTOR_NAMES)) {
         yield* sql`
           INSERT INTO projection_state (projector, last_applied_sequence, updated_at)
@@ -67,10 +77,13 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       const full = yield* snapshotQuery.getSnapshot();
       assert.equal(shell.spaces[0]?.id, SpaceId.makeUnsafe("space-snapshot"));
       assert.equal(shell.projects[0]?.spaceId, SpaceId.makeUnsafe("space-snapshot"));
+      assert.equal(shell.folders[0]?.id, FolderId.makeUnsafe("folder-snapshot"));
       assert.equal(full.spaces[0]?.id, SpaceId.makeUnsafe("space-snapshot"));
       assert.equal(full.projects[0]?.spaceId, SpaceId.makeUnsafe("space-snapshot"));
+      assert.equal(full.folders[0]?.id, FolderId.makeUnsafe("folder-snapshot"));
 
       yield* sql`DELETE FROM projection_projects`;
+      yield* sql`DELETE FROM projection_folders`;
       yield* sql`DELETE FROM projection_spaces`;
       yield* sql`DELETE FROM projection_state`;
     }),
@@ -364,6 +377,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         {
           id: ThreadId.makeUnsafe("thread-1"),
           projectId: asProjectId("project-1"),
+          folderId: null,
           title: "Thread 1",
           modelSelection: {
             provider: "codex",
@@ -1664,6 +1678,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         {
           id: ThreadId.makeUnsafe("thread-shell"),
           projectId: asProjectId("project-shell"),
+          folderId: null,
           title: "Shell Thread",
           modelSelection: {
             provider: "codex",

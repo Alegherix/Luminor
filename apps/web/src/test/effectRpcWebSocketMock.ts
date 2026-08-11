@@ -132,6 +132,9 @@ export function createShellSnapshotFromReadModel(
     spaces: snapshot.spaces
       .filter((space) => space.deletedAt === null)
       .map(({ deletedAt: _deletedAt, ...space }) => space),
+    folders: snapshot.folders
+      .filter((folder) => folder.deletedAt === null)
+      .map(({ deletedAt: _deletedAt, ...folder }) => folder),
     projects: snapshot.projects
       .filter((project) => project.deletedAt === null)
       .map((project) => ({

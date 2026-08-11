@@ -3,6 +3,7 @@
 // Exports: Internal domain primitives plus public facade types.
 
 import {
+  type FolderId,
   type ModelSelection,
   type OrchestrationLatestTurn,
   type OrchestrationThreadPullRequest,
@@ -188,6 +189,7 @@ export interface ComposerThreadDraftState {
 
 export interface DraftThreadState {
   projectId: ProjectId;
+  folderId?: FolderId | null;
   createdAt: string;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
@@ -202,6 +204,7 @@ export interface DraftThreadState {
 }
 
 interface DraftThreadMutationOptions {
+  folderId?: FolderId | null;
   branch?: string | null;
   worktreePath?: string | null;
   workingDirectory?: string | null;
@@ -250,6 +253,7 @@ export interface ComposerDraftStoreState {
     threadId: ThreadId,
     options: {
       projectId: ProjectId;
+      folderId?: FolderId | null;
       createdAt?: string;
       branch?: string | null;
       worktreePath?: string | null;
@@ -436,6 +440,10 @@ export function buildDraftThreadState(input: {
 
   return {
     projectId: input.projectId,
+    folderId:
+      options?.folderId === undefined
+        ? (existingThread?.folderId ?? null)
+        : (options.folderId ?? null),
     createdAt: resolveDraftThreadCreatedAt({
       createdAt: options?.createdAt,
       existingThread,
@@ -473,6 +481,7 @@ export function draftThreadStatesEqual(
 
   return (
     left.projectId === right.projectId &&
+    (left.folderId ?? null) === (right.folderId ?? null) &&
     left.createdAt === right.createdAt &&
     left.runtimeMode === right.runtimeMode &&
     left.interactionMode === right.interactionMode &&

@@ -6,6 +6,7 @@ import {
   OrchestrationPendingInteraction,
   OrchestrationCheckpointFile,
   OrchestrationProjectShell,
+  OrchestrationFolderShell,
   OrchestrationSpaceShell,
   OrchestrationProposedPlanId,
   OrchestrationReadModel,
@@ -16,6 +17,7 @@ import {
   ThreadMarkers,
   ProjectScript,
   ProjectId,
+  FolderId,
   ProjectKind,
   SpaceId,
   STUDIO_OUTPUTS_ACTIVITY_KIND,
@@ -49,6 +51,7 @@ import { normalizePersistedModelSelection } from "../../persistence/modelSelecti
 import { deriveThreadSummaryMetadata } from "@luminor/shared/threadSummary";
 import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheckpoints.ts";
 import { ProjectionProject } from "../../persistence/Services/ProjectionProjects.ts";
+import { ProjectionFolder } from "../../persistence/Services/ProjectionFolders.ts";
 import { ProjectionSpace } from "../../persistence/Services/ProjectionSpaces.ts";
 import { ProjectionState } from "../../persistence/Services/ProjectionState.ts";
 import { ProjectionThreadActivity } from "../../persistence/Services/ProjectionThreadActivities.ts";
@@ -178,6 +181,9 @@ const ProjectIdLookupInput = Schema.Struct({
 const SpaceIdLookupInput = Schema.Struct({
   spaceId: SpaceId,
 });
+const FolderIdLookupInput = Schema.Struct({
+  folderId: FolderId,
+});
 const ThreadIdLookupInput = Schema.Struct({
   threadId: ThreadId,
 });
@@ -230,6 +236,7 @@ type ProjectionThreadDbRowRaw = Schema.Schema.Type<typeof ProjectionThreadDbRowS
 type ProjectionThreadShellDbRowRaw = Schema.Schema.Type<typeof ProjectionThreadShellDbRowSchema>;
 type ProjectionProjectDbRowRaw = Schema.Schema.Type<typeof ProjectionProjectDbRowSchema>;
 type ProjectionSpaceDbRow = Schema.Schema.Type<typeof ProjectionSpace>;
+type ProjectionFolderDbRow = Schema.Schema.Type<typeof ProjectionFolder>;
 type ProjectionThreadDbRow = Omit<ProjectionThreadDbRowRaw, "modelSelection"> & {
   readonly modelSelection: typeof ModelSelection.Type;
 };
@@ -469,14 +476,36 @@ function toProjectedSpaceShell(row: ProjectionSpaceDbRow): OrchestrationSpaceShe
   };
 }
 
+function toProjectedFolder(row: ProjectionFolderDbRow) {
+  return {
+    id: row.folderId,
+    projectId: row.projectId,
+    name: row.name,
+    sortOrder: row.sortOrder,
+    isPinned: row.isPinned > 0,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    deletedAt: row.deletedAt,
+  } as const;
+}
+
+function toProjectedFolderShell(row: ProjectionFolderDbRow): OrchestrationFolderShell {
+  const { deletedAt: _deletedAt, ...folder } = toProjectedFolder(row);
+  return folder;
+}
+
 function collectBaseUpdatedAt(input: {
   readonly spaceRows: ReadonlyArray<ProjectionSpaceDbRow>;
+  readonly folderRows: ReadonlyArray<ProjectionFolderDbRow>;
   readonly projectRows: ReadonlyArray<ProjectionProjectDbRow>;
   readonly threadRows: ReadonlyArray<{ readonly updatedAt: string }>;
   readonly stateRows: ReadonlyArray<ProjectionStateDbRow>;
 }): string | null {
   let updatedAt: string | null = null;
   for (const row of input.spaceRows) {
+    updatedAt = maxIso(updatedAt, row.updatedAt);
+  }
+  for (const row of input.folderRows) {
     updatedAt = maxIso(updatedAt, row.updatedAt);
   }
   for (const row of input.projectRows) {
@@ -613,6 +642,7 @@ function toProjectedThreadShellFromStoredSummary(input: {
   return {
     id: threadRow.threadId,
     projectId: threadRow.projectId,
+    folderId: threadRow.folderId,
     title: threadRow.title,
     modelSelection: threadRow.modelSelection,
     runtimeMode: threadRow.runtimeMode,
@@ -667,6 +697,7 @@ function toProjectedThread(input: {
   return {
     id: threadRow.threadId,
     projectId: threadRow.projectId,
+    folderId: threadRow.folderId,
     title: threadRow.title,
     modelSelection: threadRow.modelSelection,
     runtimeMode: threadRow.runtimeMode,
@@ -771,6 +802,24 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       `,
   });
 
+  const listFolderRows = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ProjectionFolder,
+    execute: () => sql`
+      SELECT
+        folder_id AS "folderId",
+        project_id AS "projectId",
+        name,
+        sort_order AS "sortOrder",
+        is_pinned AS "isPinned",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt",
+        deleted_at AS "deletedAt"
+      FROM projection_folders
+      ORDER BY project_id ASC, sort_order ASC, folder_id ASC
+    `,
+  });
+
   const listProjectRows = SqlSchema.findAll({
     Request: Schema.Void,
     Result: ProjectionProjectDbRowSchema,
@@ -801,6 +850,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         SELECT
           thread_id AS "threadId",
           project_id AS "projectId",
+          folder_id AS "folderId",
           title,
           model_selection_json AS "modelSelection",
           runtime_mode AS "runtimeMode",
@@ -853,6 +903,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         SELECT
           thread_id AS "threadId",
           project_id AS "projectId",
+          folder_id AS "folderId",
           title,
           model_selection_json AS "modelSelection",
           runtime_mode AS "runtimeMode",
@@ -1303,6 +1354,26 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       `,
   });
 
+  const getFolderRowById = SqlSchema.findOneOption({
+    Request: FolderIdLookupInput,
+    Result: ProjectionFolder,
+    execute: ({ folderId }) => sql`
+      SELECT
+        folder_id AS "folderId",
+        project_id AS "projectId",
+        name,
+        sort_order AS "sortOrder",
+        is_pinned AS "isPinned",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt",
+        deleted_at AS "deletedAt"
+      FROM projection_folders
+      WHERE folder_id = ${folderId}
+        AND deleted_at IS NULL
+      LIMIT 1
+    `,
+  });
+
   const getFirstActiveThreadIdByProject = SqlSchema.findOneOption({
     Request: ProjectIdLookupInput,
     Result: ProjectionThreadIdLookupRowSchema,
@@ -1368,6 +1439,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         SELECT
           thread_id AS "threadId",
           project_id AS "projectId",
+          folder_id AS "folderId",
           title,
           model_selection_json AS "modelSelection",
           runtime_mode AS "runtimeMode",
@@ -1422,6 +1494,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         SELECT
           thread_id AS "threadId",
           project_id AS "projectId",
+          folder_id AS "folderId",
           title,
           model_selection_json AS "modelSelection",
           runtime_mode AS "runtimeMode",
@@ -1882,6 +1955,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         Effect.gen(function* () {
           const [
             spaceRows,
+            folderRows,
             projectRows,
             threadRows,
             messageRows,
@@ -1898,6 +1972,14 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 toPersistenceSqlOrDecodeError(
                   "ProjectionSnapshotQuery.getSnapshot:listSpaces:query",
                   "ProjectionSnapshotQuery.getSnapshot:listSpaces:decodeRows",
+                ),
+              ),
+            ),
+            listFolderRows(undefined).pipe(
+              Effect.mapError(
+                toPersistenceSqlOrDecodeError(
+                  "ProjectionSnapshotQuery.getSnapshot:listFolders:query",
+                  "ProjectionSnapshotQuery.getSnapshot:listFolders:decodeRows",
                 ),
               ),
             ),
@@ -2003,7 +2085,13 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           const latestTurns = collectProjectedLatestTurns(latestTurnRows);
           const sessions = collectProjectedSessions(sessionRows);
 
-          let updatedAt = collectBaseUpdatedAt({ spaceRows, projectRows, threadRows, stateRows });
+          let updatedAt = collectBaseUpdatedAt({
+            spaceRows,
+            folderRows,
+            projectRows,
+            threadRows,
+            stateRows,
+          });
           updatedAt = maxOptionalIso(updatedAt, messages.updatedAt);
           updatedAt = maxOptionalIso(updatedAt, proposedPlans.updatedAt);
           updatedAt = maxOptionalIso(updatedAt, activities.updatedAt);
@@ -2030,6 +2118,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           const snapshot = {
             snapshotSequence: computeSnapshotSequence(stateRows),
             spaces: spaceRows.map(toProjectedSpace),
+            folders: folderRows.map(toProjectedFolder),
             projects,
             threads,
             updatedAt: updatedAt ?? new Date(0).toISOString(),
@@ -2057,6 +2146,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         Effect.gen(function* () {
           const [
             spaceRows,
+            folderRows,
             projectRows,
             threadRows,
             proposedPlanRows,
@@ -2070,6 +2160,14 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 toPersistenceSqlOrDecodeError(
                   "ProjectionSnapshotQuery.getCommandReadModel:listSpaces:query",
                   "ProjectionSnapshotQuery.getCommandReadModel:listSpaces:decodeRows",
+                ),
+              ),
+            ),
+            listFolderRows(undefined).pipe(
+              Effect.mapError(
+                toPersistenceSqlOrDecodeError(
+                  "ProjectionSnapshotQuery.getCommandReadModel:listFolders:query",
+                  "ProjectionSnapshotQuery.getCommandReadModel:listFolders:decodeRows",
                 ),
               ),
             ),
@@ -2150,7 +2248,13 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           const sessions = collectProjectedSessions(sessionRows);
           const latestTurns = collectProjectedLatestTurns(latestTurnRows);
 
-          let updatedAt = collectBaseUpdatedAt({ spaceRows, projectRows, threadRows, stateRows });
+          let updatedAt = collectBaseUpdatedAt({
+            spaceRows,
+            folderRows,
+            projectRows,
+            threadRows,
+            stateRows,
+          });
           updatedAt = maxOptionalIso(updatedAt, proposedPlans.updatedAt);
           updatedAt = maxOptionalIso(updatedAt, checkpointRevertActivities.updatedAt);
           updatedAt = maxOptionalIso(updatedAt, sessions.updatedAt);
@@ -2174,6 +2278,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           return yield* decodeReadModel({
             snapshotSequence: computeSnapshotSequence(stateRows),
             spaces: spaceRows.map(toProjectedSpace),
+            folders: folderRows.map(toProjectedFolder),
             projects,
             threads,
             updatedAt: updatedAt ?? new Date(0).toISOString(),
@@ -2199,80 +2304,102 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     sql
       .withTransaction(
         Effect.gen(function* () {
-          const [spaceRows, projectRows, threadRows, sessionRows, latestTurnRows, stateRows] =
-            yield* Effect.all([
-              listSpaceRows(undefined).pipe(
-                Effect.mapError(
-                  toPersistenceSqlOrDecodeError(
-                    "ProjectionSnapshotQuery.getShellSnapshot:listSpaces:query",
-                    "ProjectionSnapshotQuery.getShellSnapshot:listSpaces:decodeRows",
-                  ),
+          const [
+            folderRows,
+            spaceRows,
+            projectRows,
+            threadRows,
+            sessionRows,
+            latestTurnRows,
+            stateRows,
+          ] = yield* Effect.all([
+            listFolderRows(undefined).pipe(
+              Effect.mapError(
+                toPersistenceSqlOrDecodeError(
+                  "ProjectionSnapshotQuery.getShellSnapshot:listFolders:query",
+                  "ProjectionSnapshotQuery.getShellSnapshot:listFolders:decodeRows",
                 ),
               ),
-              listProjectRows(undefined).pipe(
-                Effect.mapError(
-                  toPersistenceSqlOrDecodeError(
-                    "ProjectionSnapshotQuery.getShellSnapshot:listProjects:query",
-                    "ProjectionSnapshotQuery.getShellSnapshot:listProjects:decodeRows",
-                  ),
-                ),
-                Effect.flatMap((rows) =>
-                  decodeProjectionProjectRows(
-                    rows,
-                    "ProjectionSnapshotQuery.getShellSnapshot:listProjects:decodeModelSelections",
-                  ),
+            ),
+            listSpaceRows(undefined).pipe(
+              Effect.mapError(
+                toPersistenceSqlOrDecodeError(
+                  "ProjectionSnapshotQuery.getShellSnapshot:listSpaces:query",
+                  "ProjectionSnapshotQuery.getShellSnapshot:listSpaces:decodeRows",
                 ),
               ),
-              listThreadShellRows(undefined).pipe(
-                Effect.mapError(
-                  toPersistenceSqlOrDecodeError(
-                    "ProjectionSnapshotQuery.getShellSnapshot:listThreads:query",
-                    "ProjectionSnapshotQuery.getShellSnapshot:listThreads:decodeRows",
-                  ),
-                ),
-                Effect.flatMap((rows) =>
-                  decodeProjectionThreadShellRows(
-                    rows,
-                    "ProjectionSnapshotQuery.getShellSnapshot:listThreads:decodeModelSelections",
-                  ),
+            ),
+            listProjectRows(undefined).pipe(
+              Effect.mapError(
+                toPersistenceSqlOrDecodeError(
+                  "ProjectionSnapshotQuery.getShellSnapshot:listProjects:query",
+                  "ProjectionSnapshotQuery.getShellSnapshot:listProjects:decodeRows",
                 ),
               ),
-              listThreadSessionRows(undefined).pipe(
-                Effect.mapError(
-                  toPersistenceSqlOrDecodeError(
-                    "ProjectionSnapshotQuery.getShellSnapshot:listThreadSessions:query",
-                    "ProjectionSnapshotQuery.getShellSnapshot:listThreadSessions:decodeRows",
-                  ),
+              Effect.flatMap((rows) =>
+                decodeProjectionProjectRows(
+                  rows,
+                  "ProjectionSnapshotQuery.getShellSnapshot:listProjects:decodeModelSelections",
                 ),
               ),
-              listLatestTurnRows(undefined).pipe(
-                Effect.mapError(
-                  toPersistenceSqlOrDecodeError(
-                    "ProjectionSnapshotQuery.getShellSnapshot:listLatestTurns:query",
-                    "ProjectionSnapshotQuery.getShellSnapshot:listLatestTurns:decodeRows",
-                  ),
+            ),
+            listThreadShellRows(undefined).pipe(
+              Effect.mapError(
+                toPersistenceSqlOrDecodeError(
+                  "ProjectionSnapshotQuery.getShellSnapshot:listThreads:query",
+                  "ProjectionSnapshotQuery.getShellSnapshot:listThreads:decodeRows",
                 ),
               ),
-              listProjectionStateRows(undefined).pipe(
-                Effect.mapError(
-                  toPersistenceSqlOrDecodeError(
-                    "ProjectionSnapshotQuery.getShellSnapshot:listProjectionState:query",
-                    "ProjectionSnapshotQuery.getShellSnapshot:listProjectionState:decodeRows",
-                  ),
+              Effect.flatMap((rows) =>
+                decodeProjectionThreadShellRows(
+                  rows,
+                  "ProjectionSnapshotQuery.getShellSnapshot:listThreads:decodeModelSelections",
                 ),
               ),
-            ]);
+            ),
+            listThreadSessionRows(undefined).pipe(
+              Effect.mapError(
+                toPersistenceSqlOrDecodeError(
+                  "ProjectionSnapshotQuery.getShellSnapshot:listThreadSessions:query",
+                  "ProjectionSnapshotQuery.getShellSnapshot:listThreadSessions:decodeRows",
+                ),
+              ),
+            ),
+            listLatestTurnRows(undefined).pipe(
+              Effect.mapError(
+                toPersistenceSqlOrDecodeError(
+                  "ProjectionSnapshotQuery.getShellSnapshot:listLatestTurns:query",
+                  "ProjectionSnapshotQuery.getShellSnapshot:listLatestTurns:decodeRows",
+                ),
+              ),
+            ),
+            listProjectionStateRows(undefined).pipe(
+              Effect.mapError(
+                toPersistenceSqlOrDecodeError(
+                  "ProjectionSnapshotQuery.getShellSnapshot:listProjectionState:query",
+                  "ProjectionSnapshotQuery.getShellSnapshot:listProjectionState:decodeRows",
+                ),
+              ),
+            ),
+          ]);
 
           const latestTurns = collectProjectedLatestTurns(latestTurnRows);
           const sessions = collectProjectedSessions(sessionRows);
 
-          let updatedAt = collectBaseUpdatedAt({ spaceRows, projectRows, threadRows, stateRows });
+          let updatedAt = collectBaseUpdatedAt({
+            spaceRows,
+            folderRows,
+            projectRows,
+            threadRows,
+            stateRows,
+          });
           updatedAt = maxOptionalIso(updatedAt, latestTurns.updatedAt);
           updatedAt = maxOptionalIso(updatedAt, sessions.updatedAt);
 
           const snapshot = {
             snapshotSequence: computeSnapshotSequence(stateRows),
             spaces: spaceRows.filter((row) => row.deletedAt === null).map(toProjectedSpaceShell),
+            folders: folderRows.filter((row) => row.deletedAt === null).map(toProjectedFolderShell),
             projects: projectRows
               .filter((row) => row.deletedAt === null)
               .map((row) => toProjectedProjectShell(row)),
@@ -2434,6 +2561,17 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         ),
       ),
       Effect.map(Option.map(toProjectedSpaceShell)),
+    );
+
+  const getFolderShellById: ProjectionSnapshotQueryShape["getFolderShellById"] = (folderId) =>
+    getFolderRowById({ folderId }).pipe(
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "ProjectionSnapshotQuery.getFolderShellById:query",
+          "ProjectionSnapshotQuery.getFolderShellById:decodeRow",
+        ),
+      ),
+      Effect.map(Option.map(toProjectedFolderShell)),
     );
 
   const getFirstActiveThreadIdByProjectId: ProjectionSnapshotQueryShape["getFirstActiveThreadIdByProjectId"] =
@@ -2899,6 +3037,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     getActiveProjectByWorkspaceRoot,
     getProjectShellById,
     getSpaceShellById,
+    getFolderShellById,
     getFirstActiveThreadIdByProjectId,
     getThreadCheckpointContext,
     listGeneratedImageActivitiesByTurn,

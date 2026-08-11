@@ -27,6 +27,7 @@ const readModel: OrchestrationReadModel = {
   snapshotSequence: 2,
   updatedAt: now,
   spaces: [],
+  folders: [],
   projects: [
     {
       id: ProjectId.makeUnsafe("project-a"),

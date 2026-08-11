@@ -695,6 +695,7 @@ export function buildLocalDraftThread(
     id: threadId,
     codexThreadId: null,
     projectId: draftThread.projectId,
+    folderId: draftThread.folderId ?? null,
     title: draftThread.entryPoint === "terminal" ? "New terminal" : "New thread",
     modelSelection: fallbackModelSelection,
     runtimeMode: draftThread.runtimeMode,

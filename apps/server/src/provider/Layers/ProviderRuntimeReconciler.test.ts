@@ -41,6 +41,7 @@ function staleShellSnapshot(): OrchestrationShellSnapshot {
   return {
     snapshotSequence: 1,
     spaces: [],
+    folders: [],
     projects: [],
     threads: [
       {

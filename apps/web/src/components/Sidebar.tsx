@@ -12,6 +12,7 @@ import {
   CopyIcon,
   ExternalLinkIcon,
   FolderOpenIcon,
+  FolderIcon,
   GiftIcon,
   KanbanIcon,
   KeyboardIcon,
@@ -82,6 +83,7 @@ import {
   type OrchestrationShellSnapshot,
   PROVIDER_DISPLAY_NAMES,
   ProjectId,
+  FolderId,
   SpaceId,
   type ProviderKind,
   ThreadId,
@@ -162,8 +164,26 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { useLatestProjectStore } from "../latestProjectStore";
 import { resolveThreadEnvironmentPresentation } from "../lib/threadEnvironment";
 import { dispatchThreadRename } from "../lib/threadRename";
+import { createFolder, deleteFolder, renameFolder, setFolderPinned } from "../lib/folders";
+import {
+  buildFolderMoveMenuItems,
+  describeFolderMoveOutcome,
+  groupThreadsIntoNewFolder,
+  moveThreadsToFolder,
+  parseFolderMoveMenuId,
+  planFolderMove,
+  resolveFolderMoveScope,
+  type FolderMoveMenuAction,
+  type FolderMoveOutcome,
+  type FolderMoveThread,
+} from "../lib/threadFolderMoves";
 import { quotePosixShellArgument } from "../lib/shellQuote";
-import { DEFAULT_THREAD_TERMINAL_ID, type SidebarThreadSummary, type Thread } from "../types";
+import {
+  DEFAULT_THREAD_TERMINAL_ID,
+  type Folder,
+  type SidebarThreadSummary,
+  type Thread,
+} from "../types";
 import {
   applyAutomationEvent,
   automationAttentionCount,
@@ -320,12 +340,14 @@ import {
   resolveThreadStatusTrailingIndicator,
   type ThreadStatusPill,
   type SidebarDerivedProjectData,
+  type SidebarProjectFolderGroup,
   type SidebarActionBadge,
   type SidebarView,
   shouldShowDebugFeatureFlagsMenu,
   shouldPrunePinnedThreads,
   shouldClearThreadSelectionOnMouseDown,
   sortProjectsForSidebar,
+  sortProjectFolders,
   sortThreadsForSidebar,
 } from "./Sidebar.logic";
 import type { LastThreadRoute } from "../chatRouteRestore";
@@ -366,7 +388,13 @@ import {
 } from "./chat/ComposerPickerMenuPopup";
 import { selectSplitView, useSplitViewStore } from "../splitViewStore";
 import { useRightDockStore } from "../rightDockStore";
-import { THREAD_DRAG_MIME } from "./chat-drop-overlay/ChatPaneDropOverlay";
+import {
+  canAcceptThreadDrag,
+  readThreadDragPayload,
+  threadDragPayloadThreadIds,
+  writeThreadDragPayload,
+  type ThreadDragPayload,
+} from "../lib/threadDrag";
 import { useTemporaryThreadStore } from "../temporaryThreadStore";
 import { useThreadActivationController } from "../hooks/useThreadActivationController";
 import {
@@ -476,6 +504,7 @@ type ProjectContextMenuId =
   | "start-dev"
   | "stop-dev"
   | "open-dev-server"
+  | "new-folder"
   | "rename"
   | "toggle-pin"
   | "archive-threads"
@@ -1353,6 +1382,7 @@ export default function Sidebar() {
     readDebugFeatureFlagsMenuVisibility,
   );
   const projects = useStore((store) => store.projects);
+  const folders = useStore((store) => store.folders);
   const spaces = useStore((store) => store.spaces);
   // Selection state only; the handlers and sync effects live in useSpacesController.
   const storedActiveSpaceId = useSpacesUiStore((store) => store.activeSpaceId);
@@ -1590,6 +1620,23 @@ export default function Sidebar() {
   const projectAdditionLockRef = useRef(false);
   const [renameDialogThreadId, setRenameDialogThreadId] = useState<ThreadId | null>(null);
   const [renameProjectDialogId, setRenameProjectDialogId] = useState<ProjectId | null>(null);
+  const [folderEditorState, setFolderEditorState] = useState<
+    | { mode: "create"; projectId: ProjectId; threadIds?: readonly ThreadId[] }
+    | { mode: "rename"; folderId: FolderId }
+    | null
+  >(null);
+  const [expandedFolderIds, setExpandedFolderIds] = useState<ReadonlySet<FolderId>>(
+    () => new Set(),
+  );
+  const [folderDropTargetId, setFolderDropTargetId] = useState<FolderId | null>(null);
+  const [unfiledDropProjectId, setUnfiledDropProjectId] = useState<ProjectId | null>(null);
+  const [activeThreadDragProjectId, setActiveThreadDragProjectId] = useState<ProjectId | null>(
+    null,
+  );
+  // `dataTransfer.getData` / custom MIME types are unreliable while a drag is in
+  // flight (especially in Electron), so the drag source mirrors payload + project.
+  const threadDragProjectIdRef = useRef<ProjectId | null>(null);
+  const threadDragPayloadRef = useRef<ThreadDragPayload | null>(null);
   const [projectContextMenuState, setProjectContextMenuState] =
     useState<ProjectContextMenuState | null>(null);
   // "Show more" paging state: extra pages of THREAD_PREVIEW_PAGE_SIZE rows per project cwd.
@@ -1798,6 +1845,27 @@ export default function Sidebar() {
     () => new Map(projects.map((project) => [project.id, project] as const)),
     [projects],
   );
+  const foldersByProjectId = useMemo(() => {
+    const grouped = new Map<ProjectId, Folder[]>();
+    for (const folder of folders) {
+      const projectFolders = grouped.get(folder.projectId);
+      if (projectFolders) {
+        projectFolders.push(folder);
+      } else {
+        grouped.set(folder.projectId, [folder]);
+      }
+    }
+    for (const [projectId, projectFolders] of grouped) {
+      grouped.set(projectId, sortProjectFolders(projectFolders));
+    }
+    return grouped;
+  }, [folders]);
+  const editedFolder =
+    folderEditorState?.mode === "rename"
+      ? (folders.find((folder) => folder.id === folderEditorState.folderId) ?? null)
+      : null;
+  const groupedFolderThreadCount =
+    folderEditorState?.mode === "create" ? (folderEditorState.threadIds?.length ?? 0) : 0;
   const {
     pinnedThreadIds,
     pinnedThreadIdSet,
@@ -2905,6 +2973,98 @@ export default function Sidebar() {
     [createThreadHandoff],
   );
 
+  const expandFolder = useCallback((folderId: FolderId) => {
+    setExpandedFolderIds((current) => {
+      if (current.has(folderId)) return current;
+      const next = new Set(current);
+      next.add(folderId);
+      return next;
+    });
+  }, []);
+
+  const resolveFolderMoveThreads = useCallback(
+    (threadIds: readonly ThreadId[]): FolderMoveThread[] =>
+      threadIds.flatMap((threadId) => {
+        const thread = sidebarThreadSummaryById[threadId];
+        return thread ? [thread] : [];
+      }),
+    [sidebarThreadSummaryById],
+  );
+
+  const settleFolderMove = useCallback(
+    (input: {
+      outcome: FolderMoveOutcome;
+      folderId: FolderId | null;
+      folderName: string | null;
+    }) => {
+      if (input.outcome.movedThreadIds.length > 0) {
+        if (input.folderId !== null) expandFolder(input.folderId);
+        removeFromSelection(input.outcome.movedThreadIds);
+      }
+      const report = describeFolderMoveOutcome({
+        outcome: input.outcome,
+        folderName: input.folderName,
+      });
+      if (report) toastManager.add(report);
+    },
+    [expandFolder, removeFromSelection],
+  );
+
+  /**
+   * Every membership path (single row, multi-selection, drop) funnels through here so
+   * cross-project rejection, no-op filtering, and partial-failure reporting stay identical.
+   */
+  const applyThreadFolderMove = useCallback(
+    async (input: { threadIds: readonly ThreadId[]; folderId: FolderId | null }) => {
+      const api = readNativeApi();
+      if (!api) return;
+      const plan = planFolderMove({
+        threads: resolveFolderMoveThreads(input.threadIds),
+        folderId: input.folderId,
+      });
+      if (!plan) return;
+      const targetFolder =
+        input.folderId === null
+          ? null
+          : (folders.find((folder) => folder.id === input.folderId) ?? null);
+      if (input.folderId !== null && targetFolder?.projectId !== plan.projectId) return;
+      if (plan.pendingThreadIds.length === 0) return;
+      const outcome = await moveThreadsToFolder({
+        api,
+        threadIds: plan.pendingThreadIds,
+        folderId: input.folderId,
+      });
+      settleFolderMove({
+        outcome,
+        folderId: input.folderId,
+        folderName: targetFolder?.name ?? null,
+      });
+    },
+    [folders, resolveFolderMoveThreads, settleFolderMove],
+  );
+
+  const handleFolderMoveMenuAction = useCallback(
+    async (input: {
+      action: FolderMoveMenuAction;
+      threadIds: readonly ThreadId[];
+      projectId: ProjectId;
+    }) => {
+      if (input.action.kind === "new-folder") {
+        setFolderEditorState({
+          mode: "create",
+          projectId: input.projectId,
+          threadIds: input.threadIds,
+        });
+        return;
+      }
+      await applyThreadFolderMove({
+        threadIds: input.threadIds,
+        folderId: input.action.kind === "unfile" ? null : input.action.folderId,
+      });
+    },
+    [applyThreadFolderMove],
+  );
+
   const handleThreadContextMenu = useCallback(
     async (
       threadId: ThreadId,
@@ -2958,6 +3118,10 @@ export default function Sidebar() {
         envMode: thread.envMode,
         worktreePath: thread.worktreePath,
       });
+      const folderMoveItems = buildFolderMoveMenuItems({
+        scope: resolveFolderMoveScope([thread]),
+        folders: foldersByProjectId.get(thread.projectId) ?? [],
+      });
       const clicked = await api.contextMenu.show(
         [
           { id: "rename", label: "Rename thread" },
@@ -2966,6 +3130,7 @@ export default function Sidebar() {
             ? [{ id: "clear-notification", label: "Clear notification" }]
             : []),
           { id: "mark-unread", label: "Mark unread" },
+          ...folderMoveItems,
           ...handoffItems,
           { id: "copy-path", label: "Copy Path", separatorBefore: true },
           ...(threadWorkspacePath
@@ -3001,6 +3166,15 @@ export default function Sidebar() {
       if (clicked === "mark-unread") {
         clearDismissedThreadStatus(threadId);
         markThreadUnread(threadId);
+        return;
+      }
+      const folderMoveAction = typeof clicked === "string" ? parseFolderMoveMenuId(clicked) : null;
+      if (folderMoveAction) {
+        await handleFolderMoveMenuAction({
+          action: folderMoveAction,
+          threadIds: [threadId],
+          projectId: thread.projectId,
+        });
         return;
       }
       if (clicked === "clear-notification") {
@@ -3133,6 +3307,8 @@ export default function Sidebar() {
       copyThreadIdToClipboard,
       clearDismissedThreadStatus,
       clearThreadNotification,
+      foldersByProjectId,
+      handleFolderMoveMenuAction,
       handoffThread,
       markThreadUnread,
       navigate,
@@ -3153,15 +3329,32 @@ export default function Sidebar() {
       const ids = [...selectedThreadIds];
       if (ids.length === 0) return;
       const count = ids.length;
+      const folderMoveScope = resolveFolderMoveScope(resolveFolderMoveThreads(ids));
+      const folderMoveItems = buildFolderMoveMenuItems({
+        scope: folderMoveScope,
+        folders: folderMoveScope ? (foldersByProjectId.get(folderMoveScope.projectId) ?? []) : [],
+        count: folderMoveScope?.threadIds.length ?? 0,
+      });
 
       const clicked = await api.contextMenu.show(
         [
           { id: "mark-unread", label: `Mark unread (${count})` },
           { id: "archive", label: `Archive (${count})` },
           { id: "delete", label: `Delete (${count})`, destructive: true },
+          ...folderMoveItems,
         ],
         position,
       );
+
+      const folderMoveAction = typeof clicked === "string" ? parseFolderMoveMenuId(clicked) : null;
+      if (folderMoveAction && folderMoveScope) {
+        await handleFolderMoveMenuAction({
+          action: folderMoveAction,
+          threadIds: folderMoveScope.threadIds,
+          projectId: folderMoveScope.projectId,
+        });
+        return;
+      }
 
       if (clicked === "mark-unread") {
         for (const id of ids) {
@@ -3238,8 +3431,11 @@ export default function Sidebar() {
       clearSelection,
       clearDismissedThreadStatus,
       deleteThread,
+      foldersByProjectId,
+      handleFolderMoveMenuAction,
       markThreadUnread,
       removeFromSelection,
+      resolveFolderMoveThreads,
       selectedThreadIds,
     ],
   );
@@ -3493,6 +3689,10 @@ export default function Sidebar() {
         await handleOpenProjectRunServer(projectId);
         return;
       }
+      if (clicked === "new-folder") {
+        setFolderEditorState({ mode: "create", projectId });
+        return;
+      }
       if (clicked === "rename") {
         setRenameProjectDialogId(projectId);
         return;
@@ -3595,6 +3795,134 @@ export default function Sidebar() {
       setProjectContextMenuState({ projectId, position });
     },
     [projectById],
+  );
+
+  const handleFolderEditorSave = useCallback(
+    async (name: string) => {
+      const api = readNativeApi();
+      if (!api || !folderEditorState) {
+        throw new Error("The app server is unavailable.");
+      }
+      try {
+        if (folderEditorState.mode === "create") {
+          const groupedThreadIds = folderEditorState.threadIds ?? [];
+          const scope =
+            groupedThreadIds.length > 0
+              ? resolveFolderMoveScope(resolveFolderMoveThreads(groupedThreadIds))
+              : null;
+          if (scope && scope.projectId === folderEditorState.projectId) {
+            const { folderId, ...outcome } = await groupThreadsIntoNewFolder({
+              api,
+              projectId: folderEditorState.projectId,
+              name,
+              threadIds: scope.threadIds,
+            });
+            settleFolderMove({ outcome, folderId, folderName: name });
+          } else {
+            await createFolder({ api, projectId: folderEditorState.projectId, name });
+          }
+        } else {
+          await renameFolder({ api, folderId: folderEditorState.folderId, name });
+        }
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title:
+            folderEditorState.mode === "create"
+              ? "Unable to create folder"
+              : "Unable to rename folder",
+          description: error instanceof Error ? error.message : "Try again.",
+        });
+        throw error;
+      }
+    },
+    [folderEditorState, resolveFolderMoveThreads, settleFolderMove],
+  );
+
+  const handleNewThreadInFolder = useCallback(
+    (folder: Folder) => {
+      setExpandedFolderIds((current) => {
+        if (current.has(folder.id)) return current;
+        const next = new Set(current);
+        next.add(folder.id);
+        return next;
+      });
+      prefetchModelsForProjectNewThread(folder.projectId, { includeDroid: true });
+      void handleNewThread(folder.projectId, {
+        envMode: resolveSidebarNewThreadEnvMode({
+          defaultEnvMode: appSettings.defaultThreadEnvMode,
+        }),
+        folderId: folder.id,
+        fresh: true,
+      }).catch(() => undefined);
+    },
+    [appSettings.defaultThreadEnvMode, handleNewThread, prefetchModelsForProjectNewThread],
+  );
+
+  const handleFolderContextMenu = useCallback(
+    async (folder: Folder, position: { x: number; y: number }) => {
+      const api = readNativeApi();
+      if (!api) return;
+      const clicked = await api.contextMenu.show(
+        [
+          { id: "new-thread", label: "New thread in folder" },
+          {
+            id: "toggle-pin",
+            label: pinActionLabel("folder", folder.isPinned),
+            separatorBefore: true,
+          },
+          { id: "rename", label: "Rename folder" },
+          { id: "delete", label: "Delete folder", destructive: true, separatorBefore: true },
+        ],
+        position,
+      );
+      if (clicked === "new-thread") {
+        handleNewThreadInFolder(folder);
+        return;
+      }
+      if (clicked === "toggle-pin") {
+        await setFolderPinned({ api, folderId: folder.id, isPinned: !folder.isPinned }).catch(
+          (error) => {
+            toastManager.add({
+              type: "error",
+              title: folder.isPinned ? "Unable to unpin folder" : "Unable to pin folder",
+              description: error instanceof Error ? error.message : undefined,
+            });
+          },
+        );
+        return;
+      }
+      if (clicked === "rename") {
+        setFolderEditorState({ mode: "rename", folderId: folder.id });
+        return;
+      }
+      if (clicked !== "delete") return;
+      const memberCount = sidebarTreeThreads.filter(
+        (thread) => !thread.parentThreadId && thread.folderId === folder.id,
+      ).length;
+      const confirmed = await api.dialogs.confirm(
+        memberCount === 0
+          ? `Delete empty folder “${folder.name}”?`
+          : `Delete folder “${folder.name}”? Its ${memberCount} ${pluralize(memberCount, "thread")} will move back to the project.`,
+      );
+      if (!confirmed) return;
+      try {
+        await deleteFolder({ api, folderId: folder.id });
+        setExpandedFolderIds((current) => {
+          if (!current.has(folder.id)) return current;
+          const next = new Set(current);
+          next.delete(folder.id);
+          return next;
+        });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Unable to delete folder",
+          description: error instanceof Error ? error.message : "Try again.",
+        });
+      }
+    },
+    [handleNewThreadInFolder, sidebarTreeThreads],
   );
 
   const projectDnDSensors = useSensors(
@@ -3857,6 +4185,7 @@ export default function Sidebar() {
       deriveSidebarProjectData({
         projects: standardProjects,
         sortedSidebarThreadsByProjectId,
+        foldersByProjectId,
         pinnedThreadIds,
         threadListExtraPagesByProjectCwd,
         normalizeProjectCwd: normalizeSidebarProjectThreadListCwd,
@@ -3869,6 +4198,7 @@ export default function Sidebar() {
       activeSidebarThreadId,
       threadListExtraPagesByProjectCwd,
       pinnedThreadIds,
+      foldersByProjectId,
       sortedSidebarThreadsByProjectId,
       standardProjects,
       resolveThreadStatusForSidebar,
@@ -4687,11 +5017,21 @@ export default function Sidebar() {
                 draggable
                 onDragStart={(event) => {
                   const dragImage = event.currentTarget as HTMLElement | null;
-                  event.dataTransfer.effectAllowed = "move";
-                  event.dataTransfer.setData(
-                    THREAD_DRAG_MIME,
-                    JSON.stringify({ threadId: thread.id }),
-                  );
+                  const draggedThreadIds =
+                    selectedThreadIds.size > 1 && selectedThreadIds.has(thread.id)
+                      ? [...selectedThreadIds]
+                      : [thread.id];
+                  const dragProjectId =
+                    resolveFolderMoveScope(resolveFolderMoveThreads(draggedThreadIds))?.projectId ??
+                    null;
+                  const payload: ThreadDragPayload = {
+                    threadId: thread.id,
+                    ...(draggedThreadIds.length > 1 ? { threadIds: draggedThreadIds } : {}),
+                  };
+                  threadDragProjectIdRef.current = dragProjectId;
+                  threadDragPayloadRef.current = dragProjectId ? payload : null;
+                  setActiveThreadDragProjectId(dragProjectId);
+                  writeThreadDragPayload(event.dataTransfer, payload);
                   if (dragImage) {
                     const rect = dragImage.getBoundingClientRect();
                     event.dataTransfer.setDragImage(
@@ -4700,6 +5040,9 @@ export default function Sidebar() {
                       Math.max(0, event.clientY - rect.top),
                     );
                   }
+                }}
+                onDragEnd={() => {
+                  clearThreadFolderDragUi();
                 }}
                 onClick={(event) => {
                   handleThreadClick(event, thread.id, orderedProjectThreadIds);
@@ -4793,6 +5136,145 @@ export default function Sidebar() {
     );
   }
 
+  function clearThreadFolderDragUi() {
+    threadDragProjectIdRef.current = null;
+    threadDragPayloadRef.current = null;
+    setFolderDropTargetId(null);
+    setUnfiledDropProjectId(null);
+    setActiveThreadDragProjectId(null);
+  }
+
+  function acceptThreadFolderDrag(
+    event: ReactDragEvent,
+    projectId: ProjectId,
+  ): ThreadDragPayload | null {
+    const hasLocalDrag = threadDragProjectIdRef.current === projectId;
+    if (!canAcceptThreadDrag(event.dataTransfer.types, hasLocalDrag)) return null;
+    if (threadDragProjectIdRef.current && threadDragProjectIdRef.current !== projectId) {
+      return null;
+    }
+    return readThreadDragPayload(event.dataTransfer) ?? threadDragPayloadRef.current;
+  }
+
+  function renderFolderRow(
+    group: SidebarProjectFolderGroup,
+    orderedProjectThreadIds: readonly ThreadId[],
+  ) {
+    const { folder, entries, memberThreadCount } = group;
+    const expanded = expandedFolderIds.has(folder.id);
+    const isDropTarget = folderDropTargetId === folder.id;
+    const rollupStatus = expanded ? null : group.status;
+    return (
+      <SidebarMenuSubItem key={folder.id} className="w-full">
+        <div
+          data-folder-drop-target={isDropTarget ? "active" : undefined}
+          className={cn(
+            "w-full rounded-lg",
+            isDropTarget && "bg-info/12 ring-1 ring-info/65 ring-inset",
+          )}
+          onDragOver={(event) => {
+            if (threadDragProjectIdRef.current !== folder.projectId) return;
+            if (
+              !canAcceptThreadDrag(
+                event.dataTransfer.types,
+                threadDragProjectIdRef.current === folder.projectId,
+              )
+            ) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            event.dataTransfer.dropEffect = "move";
+            setUnfiledDropProjectId(null);
+            setFolderDropTargetId(folder.id);
+          }}
+          onDragLeave={(event) => {
+            const nextTarget = event.relatedTarget;
+            if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+            setFolderDropTargetId((current) => (current === folder.id ? null : current));
+          }}
+          onDrop={(event) => {
+            const payload = acceptThreadFolderDrag(event, folder.projectId);
+            if (!payload) return;
+            event.preventDefault();
+            event.stopPropagation();
+            clearThreadFolderDragUi();
+            void applyThreadFolderMove({
+              threadIds: threadDragPayloadThreadIds(payload),
+              folderId: folder.id,
+            });
+          }}
+        >
+        <SidebarMenuSubButton
+          render={<button type="button" />}
+          size="sm"
+          aria-expanded={expanded}
+          className={cn(
+            "h-7 w-full translate-x-0 justify-start rounded-lg pr-2 pl-2 text-left text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/88 hover:text-foreground",
+            isDropTarget && "text-foreground",
+          )}
+          onClick={() => {
+            setExpandedFolderIds((current) => {
+              const next = new Set(current);
+              if (next.has(folder.id)) {
+                next.delete(folder.id);
+              } else {
+                next.add(folder.id);
+              }
+              return next;
+            });
+          }}
+          onDoubleClick={() => setFolderEditorState({ mode: "rename", folderId: folder.id })}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            void handleFolderContextMenu(folder, { x: event.clientX, y: event.clientY });
+          }}
+        >
+          <DisclosureChevron open={expanded} className="size-3 text-muted-foreground/60" />
+          <SidebarLeadingIcon size="sm" tone="text-inherit">
+            <SidebarGlyph icon={expanded ? FolderOpenIcon : FolderIcon} variant="leading" />
+          </SidebarLeadingIcon>
+          <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+          {folder.isPinned || rollupStatus ? (
+            <span className="ml-auto flex shrink-0 items-center gap-1.5 self-center">
+              {folder.isPinned ? (
+                <PinStatusIcon
+                  pinned
+                  role="img"
+                  aria-label="Pinned folder"
+                  className="size-3 text-muted-foreground/70"
+                />
+              ) : null}
+              {rollupStatus ? <SidebarStatusTrailingGlyph status={rollupStatus} /> : null}
+            </span>
+          ) : null}
+        </SidebarMenuSubButton>
+        <div className={disclosureShellClassName(expanded)}>
+          <div className={DISCLOSURE_INNER_CLASS}>
+            <SidebarMenuSub
+              className={cn(
+                "mx-0 my-0 w-full translate-x-0 border-l-0 px-0 py-0",
+                SIDEBAR_NESTED_LIST_GAP_CLASS_NAME,
+                disclosureContentClassName(expanded),
+              )}
+            >
+              {memberThreadCount === 0 ? (
+                <div className="py-1 pl-9 text-[length:var(--app-font-size-ui-xs,10px)] text-muted-foreground/55">
+                  Empty folder
+                </div>
+              ) : (
+                entries.map((entry) =>
+                  renderThreadRow(entry.thread, orderedProjectThreadIds, entry.depth + 1),
+                )
+              )}
+            </SidebarMenuSub>
+          </div>
+        </div>
+        </div>
+      </SidebarMenuSubItem>
+    );
+  }
+
   function renderProjectItem(
     project: (typeof sortedProjects)[number],
     dragHandleProps: SortableProjectHandleProps | null,
@@ -4807,6 +5289,8 @@ export default function Sidebar() {
       allProjectThreadCount,
       projectStatus,
       visibleEntries,
+      pinnedFolderGroups,
+      unpinnedFolderGroups,
       threadListExtraPages,
       canShowMoreThreads,
       canShowLessThreads,
@@ -5031,9 +5515,69 @@ export default function Sidebar() {
                 disclosureContentClassName(project.expanded),
               )}
             >
-              {visibleEntries.map((entry) =>
-                renderThreadRow(entry.thread, orderedProjectThreadIds, entry.depth),
-              )}
+              {pinnedFolderGroups.map((group) => renderFolderRow(group, orderedProjectThreadIds))}
+              {unpinnedFolderGroups.map((group) => renderFolderRow(group, orderedProjectThreadIds))}
+
+              <div
+                data-unfiled-drop-target={
+                  unfiledDropProjectId === project.id ? "active" : undefined
+                }
+                className={cn(
+                  "w-full rounded-lg",
+                  unfiledDropProjectId === project.id &&
+                    "bg-info/12 ring-1 ring-info/65 ring-inset",
+                  activeThreadDragProjectId === project.id &&
+                    visibleEntries.length === 0 &&
+                    "min-h-7",
+                )}
+                onDragOver={(event) => {
+                  if (threadDragProjectIdRef.current !== project.id) return;
+                  if (
+                    !canAcceptThreadDrag(
+                      event.dataTransfer.types,
+                      threadDragProjectIdRef.current === project.id,
+                    )
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  event.stopPropagation();
+                  event.dataTransfer.dropEffect = "move";
+                  setFolderDropTargetId(null);
+                  setUnfiledDropProjectId(project.id);
+                }}
+                onDragLeave={(event) => {
+                  const nextTarget = event.relatedTarget;
+                  if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+                    return;
+                  }
+                  setUnfiledDropProjectId((current) =>
+                    current === project.id ? null : current,
+                  );
+                }}
+                onDrop={(event) => {
+                  const payload = acceptThreadFolderDrag(event, project.id);
+                  if (!payload) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  clearThreadFolderDragUi();
+                  void applyThreadFolderMove({
+                    threadIds: threadDragPayloadThreadIds(payload),
+                    folderId: null,
+                  });
+                }}
+              >
+                {visibleEntries.map((entry) =>
+                  renderThreadRow(entry.thread, orderedProjectThreadIds, entry.depth),
+                )}
+                {activeThreadDragProjectId === project.id &&
+                visibleEntries.length === 0 &&
+                (pinnedFolderGroups.length > 0 || unpinnedFolderGroups.length > 0) ? (
+                  <div className="py-1 pl-8 text-[length:var(--app-font-size-ui-xs,10px)] text-muted-foreground/45">
+                    Drop here to unfile
+                  </div>
+                ) : null}
+              </div>
 
               {(canShowMoreThreads || canShowLessThreads) && (
                 <SidebarMenuSubItem className="w-full">
@@ -6480,6 +7024,18 @@ export default function Sidebar() {
                 <ProjectContextMenuIcon icon={CopyIcon} />
                 <span>Copy Path</span>
               </MenuItem>
+              <MenuItem
+                className={PROJECT_CONTEXT_MENU_ITEM_CLASS_NAME}
+                onClick={() =>
+                  void handleProjectContextMenuAction(
+                    projectContextMenuState.projectId,
+                    "new-folder",
+                  )
+                }
+              >
+                <ProjectContextMenuIcon icon={FolderIcon} />
+                <span>New folder…</span>
+              </MenuItem>
               <MenuSeparator />
               {projectContextMenuIsRunning ? (
                 <MenuItem
@@ -6739,6 +7295,26 @@ export default function Sidebar() {
             renameProjectDialogProject.localName,
           );
         }}
+      />
+
+      <RenameDialog
+        open={
+          folderEditorState?.mode === "create" ||
+          (folderEditorState?.mode === "rename" && editedFolder !== null)
+        }
+        title={folderEditorState?.mode === "create" ? "New folder" : "Rename folder"}
+        description={
+          groupedFolderThreadCount > 0
+            ? `The ${groupedFolderThreadCount} selected ${pluralize(groupedFolderThreadCount, "thread")} move into this folder.`
+            : "Folders organize threads within this project."
+        }
+        initialValue={editedFolder?.name ?? ""}
+        placeholder="Folder name"
+        saveLabel={folderEditorState?.mode === "create" ? "Create" : "Save"}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setFolderEditorState(null);
+        }}
+        onSave={handleFolderEditorSave}
       />
 
       {searchPaletteOpen ? (

@@ -33,6 +33,7 @@ function makeReadModel(input: {
     snapshotSequence: 1,
     updatedAt: NOW,
     spaces: [],
+    folders: [],
     projects: [],
     threads: [
       {

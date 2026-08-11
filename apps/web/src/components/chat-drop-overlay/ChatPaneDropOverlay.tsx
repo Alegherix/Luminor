@@ -1,20 +1,14 @@
 // FILE: ChatPaneDropOverlay.tsx
 // Purpose: Renders the 4-quadrant drop-zone overlay used to split a chat surface by dragging a sidebar thread.
 // Layer: UI component (route surfaces wrap it around <ChatView /> or empty-state placeholders)
-// Exports: ChatPaneDropOverlay component, drag MIME constant, drop-zone helpers used by tests
+// Exports: ChatPaneDropOverlay component, drop-zone helpers used by tests
 
 import { useEffect, useRef, type DragEvent as ReactDragEvent, type ReactNode } from "react";
 import { type ThreadId } from "@luminor/contracts";
 
 import { type SplitDirection, type SplitDropSide } from "../../splitViewStore";
 import { cn } from "../../lib/utils";
-
-// Custom MIME so external file drops on the composer (which listen for `Files`) cannot trigger us.
-export const THREAD_DRAG_MIME = "application/x-luminor-thread";
-
-export interface ThreadDragPayload {
-  threadId: ThreadId;
-}
+import { hasThreadDrag, readThreadDragPayload, type ThreadDragPayload } from "../../lib/threadDrag";
 
 export type DropZone = "top" | "bottom" | "left" | "right";
 
@@ -113,27 +107,11 @@ export function dropZoneToDirectionSide(zone: DropZone): {
 }
 
 function isThreadDrag(event: ReactDragEvent): boolean {
-  const types = event.dataTransfer.types;
-  for (let index = 0; index < types.length; index += 1) {
-    if (types[index] === THREAD_DRAG_MIME) return true;
-  }
-  return false;
+  return hasThreadDrag(event.dataTransfer.types);
 }
 
 function parseThreadDragPayload(event: ReactDragEvent): ThreadDragPayload | null {
-  try {
-    const raw = event.dataTransfer.getData(THREAD_DRAG_MIME);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<ThreadDragPayload>;
-    if (typeof parsed.threadId === "string") {
-      return {
-        threadId: parsed.threadId as ThreadId,
-      };
-    }
-  } catch {
-    return null;
-  }
-  return null;
+  return readThreadDragPayload(event.dataTransfer);
 }
 
 // Applies the same thread constraints for hover feedback and the final drop.

@@ -14,7 +14,7 @@ import { resolveThreadEnvironmentMode } from "@luminor/shared/threadEnvironment"
 import { isWorkspaceRootWithin, workspaceRootsEqual } from "@luminor/shared/threadWorkspace";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "../appSettings";
 import { resolveRestorableThreadRoute, type LastThreadRoute } from "../chatRouteRestore";
-import type { ChatMessage, Project, SidebarThreadSummary, Thread } from "../types";
+import type { ChatMessage, Folder, Project, SidebarThreadSummary, Thread } from "../types";
 import { cn } from "../lib/utils";
 import {
   derivePinnedIds,
@@ -52,6 +52,21 @@ export type SidebarActionBadge = {
   readonly text: string;
   readonly accessibleLabel: string;
 };
+
+function compareFoldersByStableOrder(left: Folder, right: Folder): number {
+  return (
+    left.sortOrder - right.sortOrder ||
+    left.name.localeCompare(right.name, undefined, { sensitivity: "base" }) ||
+    left.id.localeCompare(right.id)
+  );
+}
+
+export function sortProjectFolders(folders: readonly Folder[]): Folder[] {
+  return folders.toSorted(
+    (left, right) =>
+      Number(right.isPinned) - Number(left.isPinned) || compareFoldersByStableOrder(left, right),
+  );
+}
 
 export function isProjectsSidebarSurface(input: {
   readonly isOnSettings: boolean;
@@ -232,6 +247,8 @@ export type SidebarDerivedProjectData = {
   allProjectThreadCount: number;
   projectThreads: SidebarThreadSummary[];
   orderedProjectThreadIds: ThreadId[];
+  pinnedFolderGroups: SidebarProjectFolderGroup[];
+  unpinnedFolderGroups: SidebarProjectFolderGroup[];
   visibleEntries: SidebarProjectEntry[];
   /** Extra "Show more" pages currently applied, clamped to the real row count. */
   threadListExtraPages: number;
@@ -240,6 +257,112 @@ export type SidebarDerivedProjectData = {
   activeEntryId: ThreadId | null;
   projectStatus: ReturnType<typeof resolveProjectStatusIndicator>;
 };
+
+export type SidebarProjectFolderGroup = {
+  folder: Folder;
+  entries: SidebarProjectEntry[];
+  status: ThreadStatusPill | null;
+  memberThreadCount: number;
+};
+
+function resolveSidebarThreadStatus(
+  thread: SidebarThreadSummary,
+  override?: (thread: SidebarThreadSummary) => ThreadStatusPill | null,
+): ThreadStatusPill | null {
+  return override
+    ? override(thread)
+    : resolveThreadStatusPill({
+        thread,
+        hasPendingApprovals: thread.hasPendingApprovals,
+        hasPendingUserInput: thread.hasPendingUserInput,
+      });
+}
+
+export function resolveFolderAttentionRank(status: ThreadStatusPill | null): number {
+  return status === null ? 0 : THREAD_STATUS_PRIORITY[status.label];
+}
+
+export function sortProjectFolderGroups(
+  groups: readonly SidebarProjectFolderGroup[],
+): SidebarProjectFolderGroup[] {
+  return groups.toSorted(
+    (left, right) =>
+      Number(right.folder.isPinned) - Number(left.folder.isPinned) ||
+      (left.folder.isPinned
+        ? resolveFolderAttentionRank(right.status) - resolveFolderAttentionRank(left.status)
+        : 0) ||
+      compareFoldersByStableOrder(left.folder, right.folder),
+  );
+}
+
+export function partitionProjectThreadsByFolders(input: {
+  threads: readonly SidebarThreadSummary[];
+  folders: readonly Folder[];
+  pinnedThreadIds: readonly ThreadId[];
+  activeThreadId: ThreadId | undefined;
+  resolveThreadStatus?: (
+    thread: SidebarThreadSummary,
+  ) => ReturnType<typeof resolveThreadStatusPill>;
+}): {
+  pinnedFolderGroups: SidebarProjectFolderGroup[];
+  unpinnedFolderGroups: SidebarProjectFolderGroup[];
+  unfiledThreads: SidebarThreadSummary[];
+} {
+  const threadById = new Map(input.threads.map((thread) => [thread.id, thread] as const));
+  const folderById = new Map(input.folders.map((folder) => [folder.id, folder] as const));
+  const memberThreadsByFolderId = new Map<Folder["id"], SidebarThreadSummary[]>();
+  const memberThreadIds = new Set<ThreadId>();
+
+  for (const thread of input.threads) {
+    let root = thread;
+    const visited = new Set<ThreadId>([thread.id]);
+    while (root.parentThreadId) {
+      const parent = threadById.get(root.parentThreadId);
+      if (!parent || visited.has(parent.id)) break;
+      visited.add(parent.id);
+      root = parent;
+    }
+    const folderId = root.folderId ?? null;
+    if (folderId === null || !folderById.has(folderId)) continue;
+    const members = memberThreadsByFolderId.get(folderId);
+    if (members) members.push(thread);
+    else memberThreadsByFolderId.set(folderId, [thread]);
+    memberThreadIds.add(thread.id);
+  }
+
+  const folderGroups = input.folders.map((folder): SidebarProjectFolderGroup => {
+    const memberThreads = memberThreadsByFolderId.get(folder.id) ?? [];
+    return {
+      folder,
+      entries: buildProjectThreadTree({
+        threads: memberThreads,
+        forceVisibleThreadId: input.activeThreadId,
+      }).map(({ thread, depth, rootThreadId }) => ({
+        kind: "thread" as const,
+        rowId: thread.id,
+        rootRowId: rootThreadId,
+        thread,
+        depth,
+      })),
+      status: resolveProjectStatusIndicator(
+        memberThreads.map((thread) =>
+          resolveSidebarThreadStatus(thread, input.resolveThreadStatus),
+        ),
+      ),
+      memberThreadCount: memberThreads.length,
+    };
+  });
+  const sortedFolderGroups = sortProjectFolderGroups(folderGroups);
+
+  return {
+    pinnedFolderGroups: sortedFolderGroups.filter(({ folder }) => folder.isPinned),
+    unpinnedFolderGroups: sortedFolderGroups.filter(({ folder }) => !folder.isPinned),
+    unfiledThreads: getUnpinnedThreadsForSidebar(
+      input.threads.filter((thread) => !memberThreadIds.has(thread.id)),
+      input.pinnedThreadIds,
+    ),
+  };
+}
 
 const THREAD_JUMP_COMMANDS = [
   "thread.jump.1",
@@ -1489,6 +1612,7 @@ export function partitionSidebarThreadsByProjectIds<
 export function deriveSidebarProjectData(input: {
   projects: readonly Pick<Project, "id" | "cwd" | "expanded">[];
   sortedSidebarThreadsByProjectId: ReadonlyMap<ProjectId, SidebarThreadSummary[]>;
+  foldersByProjectId?: ReadonlyMap<ProjectId, Folder[]>;
   pinnedThreadIds: readonly ThreadId[];
   threadListExtraPagesByProjectCwd: ReadonlyMap<string, number>;
   normalizeProjectCwd: (cwd: string) => string;
@@ -1503,18 +1627,25 @@ export function deriveSidebarProjectData(input: {
 
   for (const project of input.projects) {
     const allProjectThreads = input.sortedSidebarThreadsByProjectId.get(project.id) ?? [];
-    const projectThreads = getUnpinnedThreadsForSidebar(allProjectThreads, input.pinnedThreadIds);
-    const projectStatus = resolveProjectStatusIndicator(
-      allProjectThreads.map((thread) =>
-        input.resolveThreadStatus
-          ? input.resolveThreadStatus(thread)
-          : resolveThreadStatusPill({
-              thread,
-              hasPendingApprovals: thread.hasPendingApprovals,
-              hasPendingUserInput: thread.hasPendingUserInput,
-            }),
-      ),
+    const statusByThreadId = new Map<ThreadId, ThreadStatusPill | null>(
+      allProjectThreads.map((thread) => [
+        thread.id,
+        resolveSidebarThreadStatus(thread, input.resolveThreadStatus),
+      ]),
     );
+    const { pinnedFolderGroups, unpinnedFolderGroups, unfiledThreads } =
+      partitionProjectThreadsByFolders({
+        threads: allProjectThreads,
+        folders: input.foldersByProjectId?.get(project.id) ?? [],
+        pinnedThreadIds: input.pinnedThreadIds,
+        activeThreadId: input.activeSidebarThreadId,
+        resolveThreadStatus: (thread) => statusByThreadId.get(thread.id) ?? null,
+      });
+    const folderEntries = [...pinnedFolderGroups, ...unpinnedFolderGroups].flatMap(
+      (group) => group.entries,
+    );
+    const projectThreads = [...folderEntries.map((entry) => entry.thread), ...unfiledThreads];
+    const projectStatus = resolveProjectStatusIndicator([...statusByThreadId.values()]);
     const requestedExtraPages =
       input.threadListExtraPagesByProjectCwd.get(input.normalizeProjectCwd(project.cwd)) ?? 0;
     const orderedProjectThreadIds = projectThreads.map((thread) => thread.id);
@@ -1543,6 +1674,8 @@ export function deriveSidebarProjectData(input: {
         allProjectThreadCount: allProjectThreads.length,
         projectThreads,
         orderedProjectThreadIds,
+        pinnedFolderGroups,
+        unpinnedFolderGroups,
         visibleEntries,
         // The thread list is hidden while the folder is closed, so paging affordances are moot.
         threadListExtraPages: 0,
@@ -1555,7 +1688,7 @@ export function deriveSidebarProjectData(input: {
     }
 
     const projectThreadTree = buildProjectThreadTree({
-      threads: projectThreads,
+      threads: unfiledThreads,
       forceVisibleThreadId: input.activeSidebarThreadId,
     });
     const orderedEntries: SidebarProjectEntry[] = projectThreadTree.map(
@@ -1588,6 +1721,8 @@ export function deriveSidebarProjectData(input: {
       allProjectThreadCount: allProjectThreads.length,
       projectThreads,
       orderedProjectThreadIds,
+      pinnedFolderGroups,
+      unpinnedFolderGroups,
       visibleEntries: renderedEntries,
       threadListExtraPages: paging.effectiveExtraPages,
       // The active-thread reveal can force rows beyond the page cap; only offer "Show more"

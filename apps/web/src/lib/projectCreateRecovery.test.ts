@@ -196,6 +196,7 @@ describe("projectCreateRecovery", () => {
       loadSnapshot: async () => ({
         snapshotSequence: 1,
         spaces: [],
+        folders: [],
         updatedAt: "2026-04-21T00:00:00.000Z",
         projects: [],
         threads: [],
@@ -205,6 +206,7 @@ describe("projectCreateRecovery", () => {
         return {
           snapshotSequence: 2,
           spaces: [],
+          folders: [],
           updatedAt: "2026-04-21T00:00:01.000Z",
           projects: [
             {

@@ -102,6 +102,7 @@ function createSnapshot(overrides?: Partial<OrchestrationReadModel["threads"][nu
   return {
     snapshotSequence: 1,
     spaces: [],
+    folders: [],
     projects: [
       {
         id: PROJECT_ID,

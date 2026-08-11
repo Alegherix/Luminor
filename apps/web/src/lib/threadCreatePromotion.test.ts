@@ -95,6 +95,7 @@ describe("threadCreatePromotion", () => {
     useStore.getState().syncServerShellSnapshot({
       snapshotSequence: 1,
       spaces: [],
+      folders: [],
       projects: [
         {
           id: projectId,
@@ -165,6 +166,7 @@ describe("threadCreatePromotion", () => {
       Promise.resolve({
         snapshotSequence: 1,
         spaces: [],
+        folders: [],
         projects: [
           {
             id: projectId,

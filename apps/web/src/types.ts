@@ -19,6 +19,7 @@ import type {
   ProjectScript as ContractProjectScript,
   ThreadId,
   ProjectId,
+  FolderId,
   SpaceId,
   SpaceIconName,
   TurnId,
@@ -193,6 +194,16 @@ export interface Space {
   updatedAt: string;
 }
 
+export interface Folder {
+  id: FolderId;
+  projectId: ProjectId;
+  name: string;
+  sortOrder: number;
+  isPinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ThreadWorkspaceState {
   envMode?: ThreadEnvironmentMode | undefined;
   branch: string | null;
@@ -219,6 +230,7 @@ export interface Thread extends ThreadWorkspaceState {
   id: ThreadId;
   codexThreadId: string | null;
   projectId: ProjectId;
+  folderId?: FolderId | null;
   title: string;
   modelSelection: ModelSelection;
   runtimeMode: RuntimeMode;
@@ -261,6 +273,7 @@ export interface ThreadShell extends ThreadWorkspaceState {
   id: ThreadId;
   codexThreadId: string | null;
   projectId: ProjectId;
+  folderId?: FolderId | null;
   title: string;
   modelSelection: ModelSelection;
   runtimeMode: RuntimeMode;
@@ -304,6 +317,7 @@ export interface ThreadTurnState {
 export interface SidebarThreadSummary {
   id: ThreadId;
   projectId: ProjectId;
+  folderId?: FolderId | null;
   title: string;
   modelSelection: ModelSelection;
   interactionMode: ProviderInteractionMode;

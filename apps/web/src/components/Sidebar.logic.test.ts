@@ -51,9 +51,10 @@ import {
   shouldPrunePinnedThreads,
   shouldClearThreadSelectionOnMouseDown,
   sortProjectsForSidebar,
+  sortProjectFolders,
   sortThreadsForSidebar,
 } from "./Sidebar.logic";
-import { ProjectId, ThreadId } from "@luminor/contracts";
+import { FolderId, ProjectId, ThreadId } from "@luminor/contracts";
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -61,6 +62,33 @@ import {
   type SidebarThreadSummary,
   type Thread,
 } from "../types";
+
+describe("sortProjectFolders", () => {
+  it("keeps pinned folders first and preserves stable project order", () => {
+    const projectId = ProjectId.makeUnsafe("project-1");
+    const makeFolder = (id: string, name: string, sortOrder: number, isPinned = false) => ({
+      id: FolderId.makeUnsafe(id),
+      projectId,
+      name,
+      sortOrder,
+      isPinned,
+      createdAt: "2026-08-10T10:00:00.000Z",
+      updatedAt: "2026-08-10T10:00:00.000Z",
+    });
+
+    expect(
+      sortProjectFolders([
+        makeFolder("folder-b", "Beta", 1),
+        makeFolder("folder-pinned", "Pinned", 9, true),
+        makeFolder("folder-a", "Alpha", 0),
+      ]).map((folder) => folder.id),
+    ).toEqual([
+      FolderId.makeUnsafe("folder-pinned"),
+      FolderId.makeUnsafe("folder-a"),
+      FolderId.makeUnsafe("folder-b"),
+    ]);
+  });
+});
 
 function makeLatestTurn(overrides?: {
   completedAt?: string | null;
@@ -1689,6 +1717,122 @@ describe("partitionSidebarThreadsByProjectIds", () => {
 });
 
 describe("deriveSidebarProjectData", () => {
+  it("partitions pinned Folders, unpinned Folders, and unfiled root Threads", () => {
+    const project = makeProject();
+    const pinnedFolder = {
+      id: FolderId.makeUnsafe("folder-pinned"),
+      projectId: project.id,
+      name: "Pinned folder",
+      sortOrder: 2,
+      isPinned: true,
+      createdAt: "2026-08-10T10:00:00.000Z",
+      updatedAt: "2026-08-10T10:00:00.000Z",
+    };
+    const folder = {
+      ...pinnedFolder,
+      id: FolderId.makeUnsafe("folder"),
+      name: "Folder",
+      isPinned: false,
+    };
+    const pinnedMember = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-pinned-member"),
+      folderId: pinnedFolder.id,
+      title: "Pinned member",
+    });
+    const subagent = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-subagent"),
+      parentThreadId: pinnedMember.id,
+      title: "Subagent",
+    });
+    const member = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-member"),
+      folderId: folder.id,
+      title: "Member",
+    });
+    const unfiled = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-unfiled"),
+      title: "Unfiled",
+    });
+    const pinnedUnfiled = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-pinned-unfiled"),
+      title: "Pinned unfiled",
+    });
+
+    const data = deriveSidebarProjectData({
+      projects: [project],
+      sortedSidebarThreadsByProjectId: groupSidebarThreadsByProjectId([
+        pinnedMember,
+        subagent,
+        member,
+        unfiled,
+        pinnedUnfiled,
+      ]),
+      foldersByProjectId: new Map([[project.id, [folder, pinnedFolder]]]),
+      pinnedThreadIds: [pinnedMember.id, pinnedUnfiled.id],
+      threadListExtraPagesByProjectCwd: new Map(),
+      normalizeProjectCwd: (cwd) => cwd,
+      activeSidebarThreadId: subagent.id,
+      previewLimit: 5,
+      previewPageSize: 5,
+    }).get(project.id);
+
+    expect(data?.pinnedFolderGroups.map((group) => group.folder.id)).toEqual([pinnedFolder.id]);
+    expect(data?.unpinnedFolderGroups.map((group) => group.folder.id)).toEqual([folder.id]);
+    expect(data?.pinnedFolderGroups[0]?.entries).toEqual([
+      expect.objectContaining({ rowId: pinnedMember.id, rootRowId: pinnedMember.id, depth: 0 }),
+      expect.objectContaining({ rowId: subagent.id, rootRowId: pinnedMember.id, depth: 1 }),
+    ]);
+    expect(data?.unpinnedFolderGroups[0]?.entries).toEqual([
+      expect.objectContaining({ rowId: member.id, rootRowId: member.id, depth: 0 }),
+    ]);
+    expect(data?.visibleEntries).toEqual([
+      expect.objectContaining({ rowId: unfiled.id, rootRowId: unfiled.id, depth: 0 }),
+    ]);
+    expect(data?.orderedProjectThreadIds).not.toContain(pinnedUnfiled.id);
+  });
+
+  it("keeps subagents nested under their parent even when they carry the inherited folder", () => {
+    const project = makeProject();
+    const folder = {
+      id: FolderId.makeUnsafe("folder"),
+      projectId: project.id,
+      name: "Folder",
+      sortOrder: 0,
+      isPinned: false,
+      createdAt: "2026-08-10T10:00:00.000Z",
+      updatedAt: "2026-08-10T10:00:00.000Z",
+    };
+    const parent = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-parent"),
+      folderId: folder.id,
+      title: "Parent",
+    });
+    const subagent = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-subagent"),
+      folderId: folder.id,
+      parentThreadId: parent.id,
+      title: "Subagent",
+    });
+
+    const data = deriveSidebarProjectData({
+      projects: [project],
+      sortedSidebarThreadsByProjectId: groupSidebarThreadsByProjectId([parent, subagent]),
+      foldersByProjectId: new Map([[project.id, [folder]]]),
+      pinnedThreadIds: [],
+      threadListExtraPagesByProjectCwd: new Map(),
+      normalizeProjectCwd: (cwd) => cwd,
+      activeSidebarThreadId: subagent.id,
+      previewLimit: 5,
+      previewPageSize: 5,
+    }).get(project.id);
+
+    expect(data?.unpinnedFolderGroups[0]?.entries).toEqual([
+      expect.objectContaining({ rowId: parent.id, rootRowId: parent.id, depth: 0 }),
+      expect.objectContaining({ rowId: subagent.id, rootRowId: parent.id, depth: 1 }),
+    ]);
+    expect(data?.visibleEntries).toEqual([]);
+  });
+
   it("keeps pinned threads in the total project thread count", () => {
     const project = makeProject();
     const pinnedThread = makeSidebarThreadSummary({
@@ -1874,6 +2018,74 @@ describe("deriveSidebarProjectData", () => {
       canShowLessThreads: true,
     });
     expect(derive(7)?.visibleEntries).toHaveLength(12);
+  });
+
+  it("rolls member Thread attention up to the Folder and sorts pinned Folders attention-first", () => {
+    const project = makeProject();
+    const makeFolder = (id: string, sortOrder: number, isPinned: boolean) => ({
+      id: FolderId.makeUnsafe(id),
+      projectId: project.id,
+      name: id,
+      sortOrder,
+      isPinned,
+      createdAt: "2026-08-10T10:00:00.000Z",
+      updatedAt: "2026-08-10T10:00:00.000Z",
+    });
+    const quietFolder = makeFolder("folder-pinned-quiet", 0, true);
+    const urgentFolder = makeFolder("folder-pinned-urgent", 1, true);
+    const emptyFolder = makeFolder("folder-pinned-empty", 2, true);
+    const unpinnedFolder = makeFolder("folder-unpinned", 3, false);
+    const threadStatusByThreadId = new Map<string, ThreadStatusPill>([
+      ["thread-quiet", statusPill("Completed")],
+      ["thread-urgent-working", statusPill("Working")],
+      ["thread-urgent-approval", statusPill("Pending Approval")],
+      ["thread-unpinned", statusPill("Pending Approval")],
+    ]);
+    const threads = [
+      makeSidebarThreadSummary({
+        id: ThreadId.makeUnsafe("thread-quiet"),
+        folderId: quietFolder.id,
+      }),
+      makeSidebarThreadSummary({
+        id: ThreadId.makeUnsafe("thread-urgent-working"),
+        folderId: urgentFolder.id,
+      }),
+      makeSidebarThreadSummary({
+        id: ThreadId.makeUnsafe("thread-urgent-approval"),
+        folderId: urgentFolder.id,
+      }),
+      makeSidebarThreadSummary({
+        id: ThreadId.makeUnsafe("thread-unpinned"),
+        folderId: unpinnedFolder.id,
+      }),
+    ];
+
+    const data = deriveSidebarProjectData({
+      projects: [project],
+      sortedSidebarThreadsByProjectId: groupSidebarThreadsByProjectId(threads),
+      foldersByProjectId: new Map([
+        [project.id, [quietFolder, urgentFolder, emptyFolder, unpinnedFolder]],
+      ]),
+      pinnedThreadIds: [],
+      threadListExtraPagesByProjectCwd: new Map(),
+      normalizeProjectCwd: (cwd) => cwd,
+      activeSidebarThreadId: undefined,
+      previewLimit: 5,
+      previewPageSize: 5,
+      resolveThreadStatus: (thread) => threadStatusByThreadId.get(thread.id) ?? null,
+    }).get(project.id);
+
+    expect(
+      data?.pinnedFolderGroups.map((group) => [group.folder.id, group.status?.label ?? null]),
+    ).toEqual([
+      [urgentFolder.id, "Pending Approval"],
+      [quietFolder.id, "Completed"],
+      [emptyFolder.id, null],
+    ]);
+    expect(
+      data?.unpinnedFolderGroups.map((group) => [group.folder.id, group.status?.label ?? null]),
+    ).toEqual([[unpinnedFolder.id, "Pending Approval"]]);
+    expect(data?.pinnedFolderGroups.map((group) => group.memberThreadCount)).toEqual([2, 1, 0]);
   });
 });
 

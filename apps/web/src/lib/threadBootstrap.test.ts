@@ -1,4 +1,4 @@
-import { ProjectId, type ModelSelection, ThreadId } from "@luminor/contracts";
+import { FolderId, ProjectId, type ModelSelection, ThreadId } from "@luminor/contracts";
 import { describe, expect, it } from "vitest";
 import { type ComposerThreadDraftState, type DraftThreadState } from "../composerDraftStore";
 import {
@@ -169,6 +169,7 @@ describe("threadBootstrap", () => {
     });
     expect(createActiveDraftThreadSnapshot(makeDraftThread(), PROJECT_ID)).toEqual({
       ...makeDraftThread(),
+      folderId: null,
       workingDirectory: null,
       lastKnownPr: null,
     });
@@ -249,6 +250,7 @@ describe("threadBootstrap", () => {
       }),
     ).toEqual({
       createdAt: "2026-04-05T10:00:00.000Z",
+      folderId: null,
       branch: "feature/new-terminal",
       worktreePath: "/repo/.worktrees/new-terminal",
       workingDirectory: null,
@@ -256,6 +258,31 @@ describe("threadBootstrap", () => {
       runtimeMode: "full-access",
       entryPoint: "terminal",
     });
+  });
+
+  it("seeds fresh drafts unfiled unless a folder is requested", () => {
+    const folderId = FolderId.makeUnsafe("folder-feature-work");
+    expect(
+      createFreshDraftThreadSeed({
+        createdAt: "2026-04-05T10:00:00.000Z",
+        entryPoint: "chat",
+        options: undefined,
+      }).folderId,
+    ).toBeNull();
+    expect(
+      createFreshDraftThreadSeed({
+        createdAt: "2026-04-05T10:00:00.000Z",
+        entryPoint: "chat",
+        options: { envMode: "local" },
+      }).folderId,
+    ).toBeNull();
+    expect(
+      createFreshDraftThreadSeed({
+        createdAt: "2026-04-05T10:00:00.000Z",
+        entryPoint: "chat",
+        options: { folderId },
+      }).folderId,
+    ).toBe(folderId);
   });
 
   it("marks fresh draft seeds as temporary when requested", () => {
@@ -269,6 +296,7 @@ describe("threadBootstrap", () => {
       }),
     ).toEqual({
       createdAt: "2026-04-05T10:00:00.000Z",
+      folderId: null,
       branch: null,
       worktreePath: null,
       workingDirectory: null,

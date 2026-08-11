@@ -287,6 +287,7 @@ function createSnapshotForTargetUser(options: {
   return {
     snapshotSequence: 1,
     spaces: [],
+    folders: [],
     projects: [
       {
         id: PROJECT_ID,
@@ -2054,6 +2055,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     useStore.setState({
       shellSnapshotSequence: 0,
       spaces: [],
+      folders: [],
       projects: [],
       threadIds: [],
       threadShellById: {},
@@ -2466,9 +2468,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         expect(arrowCenterX - buttonCenterX).toBeCloseTo(0, 2);
         expect(arrowCenterY - buttonCenterY).toBeCloseTo(1, 2);
         expect(getComputedStyle(sendButton).boxShadow).toBe("none");
-        expect(getComputedStyle(sendArrow).mask).toContain(
-          "/central-icons-reversed/arrow-up.svg",
-        );
+        expect(getComputedStyle(sendArrow).mask).toContain("/central-icons-reversed/arrow-up.svg");
       };
 
       expect(sendButton.disabled).toBe(true);
