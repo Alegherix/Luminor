@@ -28,7 +28,7 @@ export type ProjectRunCommandTarget =
 
 const DISCOVERED_PRIMARY_SCRIPT_ORDER = ["dev", "start"] as const;
 
-function discoveredScriptLabel(input: {
+export function discoveredScriptLabel(input: {
   target: ProjectDiscoveredScriptTarget;
   scriptName: string;
 }): string {

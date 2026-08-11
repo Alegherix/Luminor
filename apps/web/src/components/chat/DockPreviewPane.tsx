@@ -9,6 +9,7 @@
 import { PREVIEW_TERMINAL_ID, type ProjectId, type ThreadId } from "@luminor/contracts";
 import { useCallback, useState } from "react";
 
+import { usePreviewCommandSuggestions } from "~/hooks/usePreviewCommandSuggestions";
 import { useProjectPreviewScript } from "~/hooks/useProjectPreviewScript";
 import { useThreadPreview } from "~/hooks/useThreadPreview";
 import { LoaderIcon, PlayIcon, RefreshCwIcon, StopIcon, TerminalIcon } from "~/lib/icons";
@@ -68,6 +69,7 @@ export function DockPreviewPane(props: {
 }) {
   const { preview, start, stop, restart, setUrl } = useThreadPreview(props.hostThreadId);
   const previewScript = useProjectPreviewScript(props.projectId);
+  const commandSuggestions = usePreviewCommandSuggestions(props.projectId);
   const openPane = useRightDockStore((state) => state.openPane);
   const [reloadKey, setReloadKey] = useState(0);
   const view = resolvePreviewPaneView({
@@ -172,6 +174,7 @@ export function DockPreviewPane(props: {
         <PreviewSetupForm
           heading={view.body.heading}
           description={view.body.description}
+          commandSuggestions={commandSuggestions}
           onSubmit={saveScriptAndStart}
         />
       ) : (

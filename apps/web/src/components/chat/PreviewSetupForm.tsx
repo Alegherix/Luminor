@@ -6,12 +6,14 @@
 
 import { useId, useState, type FormEvent } from "react";
 
+import type { PreviewCommandSuggestion } from "~/previewCommandSuggestions";
 import { projectScriptUrlTemplateOrNull, type PreviewProjectScriptDraft } from "~/projectScripts";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 
 export const PREVIEW_COMMAND_REQUIRED_MESSAGE = "A preview command is required.";
+export const PREVIEW_COMMAND_SUGGESTIONS_HINT = "From package.json";
 export const PREVIEW_SETUP_SUBMIT_LABEL = "Save and start preview";
 export const PREVIEW_URL_TEMPLATE_PLACEHOLDER = "http://localhost:{port}";
 export const PREVIEW_URL_TEMPLATE_HINT =
@@ -20,6 +22,7 @@ export const PREVIEW_URL_TEMPLATE_HINT =
 export function PreviewSetupForm(props: {
   heading: string;
   description: string;
+  commandSuggestions?: readonly PreviewCommandSuggestion[];
   onSubmit: (draft: PreviewProjectScriptDraft) => Promise<void>;
 }) {
   const commandFieldId = useId();
@@ -28,6 +31,7 @@ export function PreviewSetupForm(props: {
   const [urlTemplate, setUrlTemplate] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const suggestions = props.commandSuggestions ?? [];
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -68,6 +72,31 @@ export function PreviewSetupForm(props: {
             value={command}
             onChange={(event) => setCommand(event.target.value)}
           />
+          {suggestions.length > 0 ? (
+            <div className="space-y-1 pt-0.5">
+              <p className="text-[11px] text-muted-foreground">
+                {PREVIEW_COMMAND_SUGGESTIONS_HINT}
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {suggestions.map((suggestion) => (
+                  <Button
+                    key={suggestion.command}
+                    type="button"
+                    size="chip"
+                    shape="capsule"
+                    variant="secondary-outline"
+                    title={suggestion.command}
+                    onClick={() => {
+                      setCommand(suggestion.command);
+                      setError(null);
+                    }}
+                  >
+                    {suggestion.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={urlTemplateFieldId}>URL template</Label>
