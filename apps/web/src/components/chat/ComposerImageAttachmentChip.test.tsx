@@ -45,15 +45,15 @@ describe("ComposerImageAttachmentChip", () => {
     expect(markup).not.toContain("h-14 w-14");
   });
 
-  it("renders an AppSnap as a compact media strip with contained framing", () => {
-    const appSnap = {
-      id: "appsnap-1",
+  it("renders legacy capture metadata as a compact media strip with contained framing", () => {
+    const captureImage = {
+      id: "capture-1",
       type: "image" as const,
-      name: "appsnap.png",
+      name: "capture.png",
       mimeType: "image/png",
       sizeBytes: 2048,
-      previewUrl: "blob:appsnap-1",
-      file: new File(["image"], "appsnap.png", { type: "image/png" }),
+      previewUrl: "blob:capture-1",
+      file: new File(["image"], "capture.png", { type: "image/png" }),
       source: {
         kind: "appsnap" as const,
         captureId: "capture-1",
@@ -61,13 +61,13 @@ describe("ComposerImageAttachmentChip", () => {
         appName: "Visual Studio Code",
         bundleIdentifier: "com.microsoft.VSCode",
         appIconDataUrl: "data:image/png;base64,aWNvbg==",
-        windowTitle: "AppSnapCoordinator.tsx — luminor",
+        windowTitle: "Composer.tsx — luminor",
       },
     };
     const markup = renderToStaticMarkup(
       <ComposerImageAttachmentChip
-        image={appSnap}
-        images={[appSnap]}
+        image={captureImage}
+        images={[captureImage]}
         nonPersisted={false}
         onExpandImage={() => {}}
         onRemoveImage={() => {}}
@@ -76,26 +76,24 @@ describe("ComposerImageAttachmentChip", () => {
 
     expect(markup).toContain("w-52");
     expect(markup).toContain("h-32");
-    // Screenshot is framed naturally (contain) rather than destructively cropped.
     expect(markup).toContain("object-contain");
     expect(markup).not.toContain("object-cover");
-    // Provenance collapses to one line joining distinct app + window labels.
-    expect(markup).toContain("AppSnapCoordinator.tsx — luminor / Visual Studio Code");
+    expect(markup).toContain("Composer.tsx — luminor / Visual Studio Code");
     expect(markup).toContain("data:image/png;base64,aWNvbg==");
-    expect(markup).toContain("Preview AppSnap from Visual Studio Code");
-    expect(markup).toContain("Remove AppSnap from Visual Studio Code");
+    expect(markup).toContain("Preview capture from Visual Studio Code");
+    expect(markup).toContain("Remove image from Visual Studio Code");
     expect(markup).not.toContain("Draft attachment may not persist");
   });
 
   it("deduplicates provenance when the window title echoes the app name", () => {
-    const appSnap = {
-      id: "appsnap-2",
+    const captureImage = {
+      id: "capture-2",
       type: "image" as const,
-      name: "appsnap.png",
+      name: "capture.png",
       mimeType: "image/png",
       sizeBytes: 2048,
-      previewUrl: "blob:appsnap-2",
-      file: new File(["image"], "appsnap.png", { type: "image/png" }),
+      previewUrl: "blob:capture-2",
+      file: new File(["image"], "capture.png", { type: "image/png" }),
       source: {
         kind: "appsnap" as const,
         captureId: "capture-2",
@@ -106,31 +104,28 @@ describe("ComposerImageAttachmentChip", () => {
     };
     const markup = renderToStaticMarkup(
       <ComposerImageAttachmentChip
-        image={appSnap}
-        images={[appSnap]}
+        image={captureImage}
+        images={[captureImage]}
         nonPersisted={false}
         onExpandImage={() => {}}
         onRemoveImage={() => {}}
       />,
     );
 
-    // The provenance line renders "ChatGPT" exactly once — no "ChatGPT / ChatGPT".
     expect(markup).not.toContain("ChatGPT / ChatGPT");
     const provenanceMatches = markup.match(/ChatGPT/g) ?? [];
-    // Only the visible provenance label (title attribute + text share the node).
     expect(provenanceMatches.length).toBeGreaterThan(0);
   });
 
-  it("renders legacy Appshot provenance as an AppSnap card", () => {
-    const appSnap = {
-      id: "appsnap-legacy",
+  it("renders the former capture discriminator as a source-aware card", () => {
+    const captureImage = {
+      id: "capture-legacy",
       type: "image" as const,
-      name: "appsnap.png",
+      name: "capture.png",
       mimeType: "image/png",
       sizeBytes: 2048,
-      previewUrl: "blob:appsnap-legacy",
-      file: new File(["image"], "appsnap.png", { type: "image/png" }),
-      // Older drafts persisted the provenance under the "appshot" discriminator.
+      previewUrl: "blob:capture-legacy",
+      file: new File(["image"], "capture.png", { type: "image/png" }),
       source: {
         kind: "appshot",
         captureId: "capture-legacy",
@@ -141,8 +136,8 @@ describe("ComposerImageAttachmentChip", () => {
     };
     const markup = renderToStaticMarkup(
       <ComposerImageAttachmentChip
-        image={appSnap}
-        images={[appSnap]}
+        image={captureImage}
+        images={[captureImage]}
         nonPersisted={false}
         onExpandImage={() => {}}
         onRemoveImage={() => {}}
@@ -150,7 +145,7 @@ describe("ComposerImageAttachmentChip", () => {
     );
 
     expect(markup).toContain("w-52");
-    expect(markup).toContain("Preview AppSnap from Safari");
+    expect(markup).toContain("Preview capture from Safari");
     expect(markup).toContain("Luminor / Safari");
   });
 });

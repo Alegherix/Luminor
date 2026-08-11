@@ -23,11 +23,6 @@ import {
   normalizeModelSlug,
   resolveSelectableModel,
 } from "@luminor/shared/model";
-import {
-  APP_SNAP_SHORTCUT_KEYS,
-  APP_SNAP_SHORTCUT_MODIFIERS,
-  DEFAULT_APP_SNAP_SHORTCUT,
-} from "@luminor/shared/appSnapShortcut";
 import { useLocalStorage } from "./hooks/useLocalStorage";
 import { EnvMode } from "./components/BranchToolbar.logic";
 import { normalizeCursorModelVariantBaseId } from "./cursorModelVariants";
@@ -93,15 +88,6 @@ export const DEFAULT_FOLLOW_UP_BEHAVIOR: FollowUpBehavior = "queue";
 export const UiDensity = Schema.Literals(UI_DENSITY_MODES);
 export type UiDensity = typeof UiDensity.Type;
 export { DEFAULT_UI_DENSITY };
-
-const AppSnapShortcut = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("both-option-keys") }),
-  Schema.Struct({
-    kind: Schema.Literal("key-chord"),
-    modifier: Schema.Literals(APP_SNAP_SHORTCUT_MODIFIERS),
-    key: Schema.Literals(APP_SNAP_SHORTCUT_KEYS),
-  }),
-]);
 
 export function getDefaultNativeFontSmoothing(platform = globalThis.navigator?.platform ?? "") {
   return /mac|iphone|ipad|ipod/i.test(platform);
@@ -237,15 +223,6 @@ export const AppSettingsSchema = Schema.Struct({
   enableNativeFontSmoothing: Schema.Boolean.pipe(withDefaults(getDefaultNativeFontSmoothing)),
   enableTaskCompletionToasts: Schema.Boolean.pipe(withDefaults(() => true)),
   enableSystemTaskCompletionNotifications: Schema.Boolean.pipe(withDefaults(() => true)),
-  // Local desktop preference. Native capability/permission state remains owned by Electron.
-  // AppSnap is opt-in because enabling its Settings toggle requests macOS
-  // Input Monitoring and Screen Recording permissions.
-  enableAppSnap: Schema.Boolean.pipe(withDefaults(() => false)),
-  appSnapShortcut: AppSnapShortcut.pipe(withDefaults(() => DEFAULT_APP_SNAP_SHORTCUT)),
-  // Local desktop preference: play the shutter cue when an AppSnap lands in a composer.
-  appSnapPlaySound: Schema.Boolean.pipe(withDefaults(() => true)),
-  // Deprecated rename bridge. Normalization migrates this value and then omits the key.
-  enableAppshots: Schema.optionalKey(Schema.Boolean),
   sidebarProjectSortOrder: SidebarProjectSortOrder.pipe(
     withDefaults(() => DEFAULT_SIDEBAR_PROJECT_SORT_ORDER),
   ),
@@ -505,14 +482,12 @@ function normalizeProviderBinaryPathOverride(
 
 function normalizeAppSettings(settings: AppSettings): AppSettings {
   const {
-    enableAppshots: legacyEnableAppshots,
     geminiBinaryPath: legacyGeminiBinaryPath,
     customGeminiModels: legacyCustomGeminiModels,
     ...currentSettings
   } = settings;
   return {
     ...currentSettings,
-    enableAppSnap: settings.enableAppSnap || legacyEnableAppshots === true,
     // Password fields are accepted only as write-only update patches. Never retain
     // reusable provider credentials in browser state or localStorage.
     kiloServerPassword: "",

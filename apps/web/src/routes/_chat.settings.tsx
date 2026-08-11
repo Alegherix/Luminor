@@ -5,7 +5,6 @@
 
 import { PROVIDER_DISPLAY_NAMES, type ProviderKind } from "@luminor/contracts";
 import { PROVIDER_DESCRIPTORS } from "@luminor/shared/providerMetadata";
-import { sameAppSnapShortcut } from "@luminor/shared/appSnapShortcut";
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
@@ -31,10 +30,7 @@ import {
   ArchivedSettingsPanel,
   WorktreesSettingsPanel,
 } from "~/components/settings/ConversationStorageSettingsPanels";
-import {
-  AppSnapSettingsPanel,
-  NotificationsSettingsPanel,
-} from "~/components/settings/DesktopSettingsPanels";
+import { NotificationsSettingsPanel } from "~/components/settings/DesktopSettingsPanels";
 import { ModelsSettingsPanel } from "~/components/settings/ModelsSettingsPanel";
 import {
   isProviderInstallSettingsDirty,
@@ -259,11 +255,6 @@ function SettingsRouteView() {
       ? ["Assistant output"]
       : []),
     ...(settings.followUpBehavior !== defaults.followUpBehavior ? ["Follow-up behavior"] : []),
-    ...(settings.enableAppSnap !== defaults.enableAppSnap ? ["AppSnap"] : []),
-    ...(!sameAppSnapShortcut(settings.appSnapShortcut, defaults.appSnapShortcut)
-      ? ["AppSnap shortcut"]
-      : []),
-    ...(settings.appSnapPlaySound !== defaults.appSnapPlaySound ? ["AppSnap capture sound"] : []),
     ...(settings.enableProviderUpdateChecks !== defaults.enableProviderUpdateChecks
       ? ["Provider update checks"]
       : []),
@@ -1092,12 +1083,6 @@ function SettingsRouteView() {
               <div className="contents">
                 <NotificationsSettingsPanel
                   active={activeSection === "notifications"}
-                  settings={settings}
-                  defaults={defaults}
-                  updateSettings={updateSettings}
-                />
-                <AppSnapSettingsPanel
-                  active={activeSection === "appsnap"}
                   settings={settings}
                   defaults={defaults}
                   updateSettings={updateSettings}

@@ -784,10 +784,7 @@ function revokeBlobPreviewUrlsAfterPaint(previewUrls: readonly string[]): void {
   });
 }
 
-// Shared by the live-composer and prompt-history attachment sync effects:
-// AppSnap images persist their bytes as IndexedDB blobs (reusing an existing
-// blob key when valid), everything else inlines a data URL. Falls back to the
-// already-persisted attachments for images whose serialization fails.
+// Shared by the live-composer and prompt-history attachment sync effects.
 async function stagePersistedComposerImageAttachments(input: {
   threadId: ThreadId;
   images: ReadonlyArray<ComposerImageAttachment>;
@@ -801,7 +798,7 @@ async function stagePersistedComposerImageAttachments(input: {
     await Promise.all(
       input.images.map(async (image) => {
         try {
-          if (image.source?.kind === "appsnap") {
+          if (image.source) {
             const existingPersisted = existingPersistedById.get(image.id);
             const expectedBlobKey = composerImageBlobKey(input.threadId, image.id);
             const blobKey =
@@ -7279,12 +7276,8 @@ export default function ChatView({
       queuedChatTurn?.images ??
       useComposerDraftStore.getState().draftsByThreadId[activeThread.id]?.images ??
       composerImages;
-    // AppSnap captures persist as IndexedDB blobs and hydrate into `images`
-    // asynchronously (see AppSnapCoordinator). Right after a reload the user can
-    // hit send before that hydration finishes; without this, the not-yet-hydrated
-    // capture would be silently dropped from the message and then have its blob
-    // deleted when the composer clears after send. Live sends only: a queued turn
-    // already captured a fully-resolved image snapshot when it was queued.
+    // Blob-backed persisted images hydrate asynchronously after reload. A live send
+    // must include any that have not reached the in-memory image list yet.
     if (queuedChatTurn === null) {
       const pendingBlobAttachments = findPendingBlobComposerAttachments({
         persistedAttachments:
