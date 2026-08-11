@@ -150,6 +150,8 @@ import {
 import {
   ThreadPreviewEvent,
   ThreadPreviewListResult,
+  ThreadPreviewSetUrlInput,
+  ThreadPreviewSetUrlResult,
   ThreadPreviewStartInput,
   ThreadPreviewStartResult,
   ThreadPreviewStopInput,
@@ -445,6 +447,12 @@ export const WsPreviewStartRpc = Rpc.make(WS_METHODS.previewStart, {
 export const WsPreviewStopRpc = Rpc.make(WS_METHODS.previewStop, {
   payload: ThreadPreviewStopInput,
   success: ThreadPreviewStopResult,
+  error: WsRpcError,
+});
+
+export const WsPreviewSetUrlRpc = Rpc.make(WS_METHODS.previewSetUrl, {
+  payload: ThreadPreviewSetUrlInput,
+  success: ThreadPreviewSetUrlResult,
   error: WsRpcError,
 });
 
@@ -1074,6 +1082,7 @@ export const WsFeatureRpcGroup = RpcGroup.make(
   WsProjectsProvisionFromGitHubRpc,
   WsPreviewStartRpc,
   WsPreviewStopRpc,
+  WsPreviewSetUrlRpc,
   WsPreviewListRpc,
   WsSubscribePreviewEventsRpc,
   WsStudioListThreadOutputsRpc,

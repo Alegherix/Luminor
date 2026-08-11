@@ -148,6 +148,10 @@
       "types": "./src/preview/previewOutput.ts",
       "import": "./src/preview/previewOutput.ts"
     },
+    "./preview/urlDetection": {
+      "types": "./src/preview/urlDetection.ts",
+      "import": "./src/preview/urlDetection.ts"
+    },
     "./preview/previewState": {
       "types": "./src/preview/previewState.ts",
       "import": "./src/preview/previewState.ts"

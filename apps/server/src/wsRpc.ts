@@ -1159,6 +1159,8 @@ const makeWsRpcHandlersLayer = () =>
           rpcEffect(threadPreviewManager.start(input), "Failed to start preview"),
         [WS_METHODS.previewStop]: (input) =>
           rpcEffect(threadPreviewManager.stopPreview(input.threadId), "Failed to stop preview"),
+        [WS_METHODS.previewSetUrl]: (input) =>
+          rpcEffect(threadPreviewManager.setUrl(input), "Failed to set preview URL"),
         [WS_METHODS.previewList]: () =>
           rpcEffect(threadPreviewManager.list, "Failed to list previews"),
         [WS_METHODS.subscribePreviewEvents]: (_, { clientId }) =>

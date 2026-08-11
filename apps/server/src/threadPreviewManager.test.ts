@@ -13,7 +13,7 @@ import {
 } from "@luminor/contracts";
 import { NetService, type NetServiceShape } from "@luminor/shared/Net";
 import { Effect, Fiber, Layer, Option, Stream } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { ProjectionSnapshotQueryShape } from "./orchestration/Services/ProjectionSnapshotQuery";
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery";
@@ -357,16 +357,110 @@ describe("ThreadPreviewManager", () => {
     expect(terminal.opens).toHaveLength(0);
   });
 
-  it("resolves no url when the preview script has no url template", async () => {
+  it("discovers a URL split across terminal output writes", async () => {
     const terminal = makeTerminalStub();
     const projection = makeProjectionStub({ scripts: [previewScript({ urlTemplate: null })] });
 
-    const started = await runPreview({ terminal, projection }, (manager) =>
-      manager.start({ threadId: THREAD_ID }),
+    const result = await runPreview({ terminal, projection }, (manager) =>
+      Effect.gen(function* () {
+        const started = yield* manager.start({ threadId: THREAD_ID });
+        terminal.emit({
+          type: "output",
+          threadId: THREAD_ID,
+          terminalId: PREVIEW_TERMINAL_ID,
+          createdAt: "2026-08-10T00:00:01.000Z",
+          data: "  ➜  Local: http://local",
+          byteLength: 25,
+        });
+        yield* Effect.sleep(10);
+        const beforeMatch = yield* manager.list;
+        terminal.emit({
+          type: "output",
+          threadId: THREAD_ID,
+          terminalId: PREVIEW_TERMINAL_ID,
+          createdAt: "2026-08-10T00:00:02.000Z",
+          data: "host:5173/dashboard\n",
+          byteLength: 20,
+        });
+        yield* Effect.sleep(10);
+        const afterMatch = yield* manager.list;
+        return { started, beforeMatch, afterMatch };
+      }),
     );
 
-    expect(started.preview.status).toBe("running");
-    expect(started.preview.url).toBeNull();
+    expect(result.started.preview.status).toBe("starting");
+    expect(result.beforeMatch.previews[0]?.status).toBe("starting");
+    expect(result.afterMatch.previews[0]?.status).toBe("running");
+    expect(result.afterMatch.previews[0]?.url).toBe("http://localhost:5173/dashboard");
+  });
+
+  it("does not treat a URL in an error message as ready output", async () => {
+    const terminal = makeTerminalStub();
+    const projection = makeProjectionStub({ scripts: [previewScript({ urlTemplate: null })] });
+
+    const listed = await runPreview({ terminal, projection }, (manager) =>
+      Effect.gen(function* () {
+        yield* manager.start({ threadId: THREAD_ID });
+        terminal.emit({
+          type: "output",
+          threadId: THREAD_ID,
+          terminalId: PREVIEW_TERMINAL_ID,
+          createdAt: "2026-08-10T00:00:01.000Z",
+          data: "Error: connect ECONNREFUSED http://localhost:5173\n",
+          byteLength: 51,
+        });
+        yield* Effect.sleep(10);
+        const listed = yield* manager.list;
+        yield* manager.stopPreview(THREAD_ID);
+        return listed;
+      }),
+    );
+
+    expect(listed.previews[0]?.status).toBe("starting");
+    expect(listed.previews[0]?.url).toBeNull();
+  });
+
+  it("reports a live process as running without a URL after 90 seconds", async () => {
+    vi.useFakeTimers();
+    try {
+      const terminal = makeTerminalStub();
+      const projection = makeProjectionStub({ scripts: [previewScript({ urlTemplate: null })] });
+
+      const listed = await runPreview({ terminal, projection }, (manager) =>
+        Effect.gen(function* () {
+          yield* manager.start({ threadId: THREAD_ID });
+          vi.advanceTimersByTime(90_000);
+          return yield* manager.list;
+        }),
+      );
+
+      expect(listed.previews[0]?.status).toBe("running");
+      expect(listed.previews[0]?.url).toBeNull();
+      expect(terminal.closes).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("persists a manually entered URL for the current preview run", async () => {
+    const terminal = makeTerminalStub();
+    const projection = makeProjectionStub({ scripts: [previewScript({ urlTemplate: null })] });
+
+    const result = await runPreview({ terminal, projection }, (manager) =>
+      Effect.gen(function* () {
+        yield* manager.start({ threadId: THREAD_ID });
+        const updated = yield* manager.setUrl({
+          threadId: THREAD_ID,
+          url: "0.0.0.0:4321/app",
+        });
+        const listed = yield* manager.list;
+        return { updated, listed };
+      }),
+    );
+
+    expect(result.updated.preview.status).toBe("running");
+    expect(result.updated.preview.url).toBe("http://localhost:4321/app");
+    expect(result.listed.previews[0]?.url).toBe("http://localhost:4321/app");
   });
 
   it("allocates distinct reserved ports for previews started concurrently", async () => {

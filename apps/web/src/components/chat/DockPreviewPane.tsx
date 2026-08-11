@@ -57,7 +57,7 @@ export function DockPreviewPane(props: {
   hasWorktree: boolean;
   onClose?: (() => void) | undefined;
 }) {
-  const { preview, start, stop } = useThreadPreview(props.hostThreadId);
+  const { preview, start, stop, setUrl } = useThreadPreview(props.hostThreadId);
   const [reloadKey, setReloadKey] = useState(0);
   const view = resolvePreviewPaneView({ preview, hasWorktree: props.hasWorktree });
 
@@ -131,10 +131,52 @@ export function DockPreviewPane(props: {
           className="min-h-0 w-full flex-1 border-0 bg-white"
           data-testid="preview-webview"
         />
+      ) : view.body.kind === "url-entry" ? (
+        <PreviewUrlEntryBody body={view.body} onSubmit={setUrl} />
       ) : (
         <PreviewPaneMessageBody body={view.body} onRunControl={runControl} />
       )}
     </div>
+  );
+}
+
+function PreviewUrlEntryBody(props: {
+  body: Extract<PreviewPaneBody, { kind: "url-entry" }>;
+  onSubmit: (url: string) => Promise<void>;
+}) {
+  const [url, setUrl] = useState("");
+
+  return (
+    <PanelStateMessage fill="flex">
+      <form
+        className="flex w-full max-w-80 flex-col items-center gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void props.onSubmit(url);
+        }}
+      >
+        <div className="flex flex-col items-center gap-1">
+          <p className="text-sm font-medium text-foreground">{props.body.heading}</p>
+          <p className="text-xs text-muted-foreground">{props.body.description}</p>
+        </div>
+        <label className="sr-only" htmlFor="preview-manual-url">
+          Preview URL
+        </label>
+        <input
+          id="preview-manual-url"
+          type="text"
+          inputMode="url"
+          autoComplete="url"
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          placeholder="http://localhost:5173"
+          className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+        />
+        <Button type="submit" size="sm" variant="secondary-outline" disabled={!url.trim()}>
+          Open preview
+        </Button>
+      </form>
+    </PanelStateMessage>
   );
 }
 
