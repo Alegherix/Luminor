@@ -23,6 +23,7 @@ import {
   commandForProjectScript,
   nextProjectScriptId,
   primaryProjectScript,
+  projectScriptUrlTemplateOrNull,
 } from "~/projectScripts";
 import { shortcutLabelForCommand } from "~/keybindings";
 import { cn, isMacPlatform } from "~/lib/utils";
@@ -44,7 +45,11 @@ import {
   ChatHeaderSplitDivider,
   ChatHeaderSplitGroup,
 } from "./chat/chatHeaderControls";
-import { ComposerPickerMenuPopup } from "./chat/ComposerPickerMenuPopup";
+import { ComposerPickerMenuPopup, ComposerPickerSelectPopup } from "./chat/ComposerPickerMenuPopup";
+import {
+  PREVIEW_URL_TEMPLATE_HINT,
+  PREVIEW_URL_TEMPLATE_PLACEHOLDER,
+} from "./chat/PreviewSetupForm";
 import {
   Dialog,
   DialogDescription,
@@ -58,8 +63,9 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Menu, MenuItem, MenuShortcut, MenuTrigger } from "./ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "./ui/popover";
-import { Switch } from "./ui/switch";
+import { Select, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Textarea } from "./ui/textarea";
+import { DisclosureRegion } from "./ui/DisclosureRegion";
 
 const SCRIPT_ICONS: Array<{ id: ProjectScriptIcon; label: string }> = [
   { id: "play", label: "Play" },
@@ -91,8 +97,19 @@ export interface NewProjectScriptInput {
   command: string;
   icon: ProjectScriptIcon;
   kind: ProjectScript["kind"];
+  urlTemplate: string | null;
   keybinding: string | null;
 }
+
+const SCRIPT_KIND_DETAILS: Record<ProjectScript["kind"], { label: string; description: string }> = {
+  manual: { label: "Manual", description: "Run it yourself from the top bar." },
+  setup: { label: "Setup", description: "Runs automatically on worktree creation." },
+  preview: { label: "Preview", description: "Serves this project in the Preview pane." },
+};
+
+const SCRIPT_KIND_ORDER = ["manual", "setup", "preview"] as const satisfies ReadonlyArray<
+  ProjectScript["kind"]
+>;
 
 interface ProjectScriptsControlProps {
   scripts: ProjectScript[];
@@ -179,6 +196,7 @@ export default function ProjectScriptsControl({
   const [icon, setIcon] = useState<ProjectScriptIcon>("play");
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [kind, setKind] = useState<ProjectScript["kind"]>("manual");
+  const [urlTemplate, setUrlTemplate] = useState("");
   const [keybinding, setKeybinding] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -237,6 +255,7 @@ export default function ProjectScriptsControl({
         command: trimmedCommand,
         icon,
         kind,
+        urlTemplate: kind === "preview" ? projectScriptUrlTemplateOrNull(urlTemplate) : null,
         keybinding: keybindingRule?.key ?? null,
       } satisfies NewProjectScriptInput;
       if (editingScriptId) {
@@ -258,6 +277,7 @@ export default function ProjectScriptsControl({
     setIcon("play");
     setIconPickerOpen(false);
     setKind("manual");
+    setUrlTemplate("");
     setKeybinding("");
     setValidationError(null);
     setDialogOpen(true);
@@ -270,6 +290,7 @@ export default function ProjectScriptsControl({
     setIcon(script.icon);
     setIconPickerOpen(false);
     setKind(script.kind);
+    setUrlTemplate(script.urlTemplate ?? "");
     setKeybinding(keybindingValueForCommand(keybindings, commandForProjectScript(script.id)) ?? "");
     setValidationError(null);
     setDialogOpen(true);
@@ -398,6 +419,7 @@ export default function ProjectScriptsControl({
           setCommand("");
           setIcon("play");
           setKind("manual");
+          setUrlTemplate("");
           setKeybinding("");
           setValidationError(null);
         }}
@@ -485,13 +507,41 @@ export default function ProjectScriptsControl({
                   onChange={(event) => setCommand(event.target.value)}
                 />
               </div>
-              <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm">
-                <span>Run automatically on worktree creation</span>
-                <Switch
-                  checked={kind === "setup"}
-                  onCheckedChange={(checked) => setKind(checked ? "setup" : "manual")}
-                />
-              </label>
+              <div className="space-y-1.5">
+                <Label htmlFor="script-kind">Role</Label>
+                <Select
+                  value={kind}
+                  onValueChange={(next) => {
+                    if (typeof next === "string") setKind(next as ProjectScript["kind"]);
+                  }}
+                >
+                  <SelectTrigger id="script-kind" className="w-full">
+                    <SelectValue>{SCRIPT_KIND_DETAILS[kind].label}</SelectValue>
+                  </SelectTrigger>
+                  <ComposerPickerSelectPopup align="start">
+                    {SCRIPT_KIND_ORDER.map((entry) => (
+                      <SelectItem key={entry} value={entry}>
+                        {SCRIPT_KIND_DETAILS[entry].label}
+                      </SelectItem>
+                    ))}
+                  </ComposerPickerSelectPopup>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {SCRIPT_KIND_DETAILS[kind].description}
+                </p>
+              </div>
+              <DisclosureRegion open={kind === "preview"}>
+                <div className="space-y-1.5">
+                  <Label htmlFor="script-url-template">URL template</Label>
+                  <Input
+                    id="script-url-template"
+                    placeholder={PREVIEW_URL_TEMPLATE_PLACEHOLDER}
+                    value={urlTemplate}
+                    onChange={(event) => setUrlTemplate(event.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">{PREVIEW_URL_TEMPLATE_HINT}</p>
+                </div>
+              </DisclosureRegion>
               {validationError && <p className="text-sm text-destructive">{validationError}</p>}
             </form>
           </DialogPanel>

@@ -812,6 +812,7 @@ export function SingleChatSurface(props: {
           <Suspense fallback={<PanelStateMessage>Loading preview...</PanelStateMessage>}>
             <DockPreviewPane
               hostThreadId={props.threadId}
+              projectId={props.projectId}
               hasWorktree={threadWorktreePath !== null}
               onClose={() => closePane(props.threadId, pane.id)}
             />

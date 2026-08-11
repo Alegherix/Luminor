@@ -32,7 +32,8 @@ export type PreviewPaneBody =
       readonly heading: string;
       readonly description: string;
       readonly action: PreviewPaneControlKind | null;
-    };
+    }
+  | { readonly kind: "configure"; readonly heading: string; readonly description: string };
 
 export interface PreviewPaneView {
   readonly status: ThreadPreviewStatus;
@@ -54,10 +55,12 @@ export const PREVIEW_IDLE_HEADING = "Preview is not running";
 export const PREVIEW_STARTING_HEADING = "Starting preview";
 export const PREVIEW_NO_URL_HEADING = "Preview is running";
 export const PREVIEW_FAILED_HEADING = "Preview failed";
+export const PREVIEW_NEEDS_SCRIPT_HEADING = "Set up the preview";
 
 export function resolvePreviewPaneView(input: {
   readonly preview: ThreadPreviewState | null;
   readonly hasWorktree: boolean;
+  readonly hasPreviewScript: boolean;
 }): PreviewPaneView {
   const preview = input.preview;
   const status = preview?.status ?? "idle";
@@ -127,6 +130,21 @@ export function resolvePreviewPaneView(input: {
         heading: PREVIEW_FAILED_HEADING,
         description: preview?.message ?? "The preview process exited.",
         action: "retry",
+      },
+    };
+  }
+
+  if (!input.hasPreviewScript) {
+    return {
+      status: "idle",
+      tone: "idle",
+      portLabel,
+      controls: [],
+      body: {
+        kind: "configure",
+        heading: PREVIEW_NEEDS_SCRIPT_HEADING,
+        description:
+          "Save the command that serves this project and it starts in this thread's worktree.",
       },
     };
   }

@@ -5,6 +5,7 @@ import {
   type ProjectScript,
 } from "@luminor/contracts";
 import {
+  normalizeProjectScriptRoles,
   previewProjectScript,
   projectScriptCwd,
   projectScriptRuntimeEnv,
@@ -87,4 +88,46 @@ export function primaryProjectScript(scripts: ProjectScript[]): ProjectScript | 
 
 export function setupProjectScript(scripts: ProjectScript[]): ProjectScript | null {
   return scripts.find((script) => script.kind === "setup") ?? null;
+}
+
+export const PREVIEW_PROJECT_SCRIPT_NAME = "Preview";
+
+export interface PreviewProjectScriptDraft {
+  readonly command: string;
+  readonly urlTemplate: string | null;
+}
+
+export interface PreviewProjectScriptUpsert {
+  readonly scripts: ProjectScript[];
+  readonly scriptId: string;
+}
+
+export function projectScriptUrlTemplateOrNull(rawValue: string): string | null {
+  const trimmed = rawValue.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function upsertPreviewProjectScript(
+  scripts: ReadonlyArray<ProjectScript>,
+  draft: PreviewProjectScriptDraft,
+): PreviewProjectScriptUpsert {
+  const existing = previewProjectScript(scripts);
+  const scriptId =
+    existing?.id ??
+    nextProjectScriptId(
+      PREVIEW_PROJECT_SCRIPT_NAME,
+      scripts.map((script) => script.id),
+    );
+  const nextScript: ProjectScript = {
+    id: scriptId,
+    name: existing?.name ?? PREVIEW_PROJECT_SCRIPT_NAME,
+    icon: existing?.icon ?? "play",
+    kind: "preview",
+    command: draft.command,
+    urlTemplate: draft.urlTemplate,
+  };
+  const merged = existing
+    ? scripts.map((script) => (script.id === scriptId ? nextScript : script))
+    : [...scripts, nextScript];
+  return { scripts: normalizeProjectScriptRoles(merged, scriptId), scriptId };
 }

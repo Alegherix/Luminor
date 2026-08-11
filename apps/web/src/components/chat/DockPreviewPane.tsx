@@ -6,18 +6,21 @@
 //             (state->render mapping), DockPaneHeader.
 // Exports: DockPreviewPane
 
-import { PREVIEW_TERMINAL_ID, type ThreadId } from "@luminor/contracts";
+import { PREVIEW_TERMINAL_ID, type ProjectId, type ThreadId } from "@luminor/contracts";
 import { useCallback, useState } from "react";
 
+import { useProjectPreviewScript } from "~/hooks/useProjectPreviewScript";
 import { useThreadPreview } from "~/hooks/useThreadPreview";
 import { LoaderIcon, PlayIcon, RefreshCwIcon, StopIcon, TerminalIcon, XIcon } from "~/lib/icons";
 import { cn } from "~/lib/utils";
+import type { PreviewProjectScriptDraft } from "~/projectScripts";
 import { useRightDockStore } from "~/rightDockStore";
 import { Button } from "../ui/button";
 import { IconButton } from "../ui/icon-button";
 import { DOCK_HEADER_ICON_BUTTON_CLASS } from "./chatHeaderControls";
 import { DockPaneHeader } from "./DockPaneHeader";
 import { PanelStateMessage } from "./PanelStateMessage";
+import { PreviewSetupForm } from "./PreviewSetupForm";
 import {
   resolvePreviewPaneView,
   type PreviewPaneBody,
@@ -59,13 +62,27 @@ const CONTROL_ICONS: Record<PreviewPaneControlKind, typeof PlayIcon> = {
 
 export function DockPreviewPane(props: {
   hostThreadId: ThreadId;
+  projectId: ProjectId | null;
   hasWorktree: boolean;
   onClose?: (() => void) | undefined;
 }) {
   const { preview, start, stop, restart, setUrl } = useThreadPreview(props.hostThreadId);
+  const previewScript = useProjectPreviewScript(props.projectId);
   const openPane = useRightDockStore((state) => state.openPane);
   const [reloadKey, setReloadKey] = useState(0);
-  const view = resolvePreviewPaneView({ preview, hasWorktree: props.hasWorktree });
+  const view = resolvePreviewPaneView({
+    preview,
+    hasWorktree: props.hasWorktree,
+    hasPreviewScript: previewScript.script !== null,
+  });
+
+  const saveScriptAndStart = useCallback(
+    async (draft: PreviewProjectScriptDraft) => {
+      await previewScript.save(draft);
+      await start();
+    },
+    [previewScript, start],
+  );
 
   const runControl = useCallback(
     (kind: PreviewPaneControlKind) => {
@@ -151,6 +168,12 @@ export function DockPreviewPane(props: {
         />
       ) : view.body.kind === "url-entry" ? (
         <PreviewUrlEntryBody body={view.body} onSubmit={setUrl} />
+      ) : view.body.kind === "configure" ? (
+        <PreviewSetupForm
+          heading={view.body.heading}
+          description={view.body.description}
+          onSubmit={saveScriptAndStart}
+        />
       ) : (
         <PreviewPaneMessageBody body={view.body} onRunControl={runControl} />
       )}
