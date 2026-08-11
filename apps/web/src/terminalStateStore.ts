@@ -624,11 +624,40 @@ function openThreadChatPage(state: ThreadTerminalState): ThreadTerminalState {
   };
 }
 
+interface OpenTerminalThreadPageOptions {
+  terminalOnly?: boolean;
+  terminalId?: string;
+  terminalLabel?: string;
+}
+
 function openThreadTerminalPage(
   state: ThreadTerminalState,
-  options?: { terminalOnly?: boolean },
+  options?: OpenTerminalThreadPageOptions,
 ): ThreadTerminalState {
   const normalized = normalizeThreadTerminalState(state);
+  if (options?.terminalId && isValidTerminalId(options.terminalId)) {
+    const terminalId = options.terminalId;
+    const terminalLabel = options.terminalLabel?.trim() || terminalId;
+    const terminalGroupId = fallbackGroupId(terminalId);
+    return normalizeThreadTerminalState({
+      ...normalized,
+      entryPoint: "terminal",
+      terminalOpen: true,
+      presentationMode: "workspace",
+      workspaceLayout:
+        options.terminalOnly === false ? normalized.workspaceLayout : "terminal-only",
+      workspaceActiveTab: "terminal",
+      terminalIds: [terminalId],
+      terminalLabelsById: { [terminalId]: terminalLabel },
+      terminalTitleOverridesById: { [terminalId]: terminalLabel },
+      terminalCliKindsById: {},
+      terminalAttentionStatesById: {},
+      runningTerminalIds: normalized.runningTerminalIds.filter((id) => id === terminalId),
+      activeTerminalId: terminalId,
+      terminalGroups: [createTerminalGroup(terminalGroupId, terminalId)],
+      activeTerminalGroupId: terminalGroupId,
+    });
+  }
   const shouldUseTerminalOnlyLayout =
     options?.terminalOnly ??
     (normalized.entryPoint === "terminal" ? normalized.workspaceLayout === "terminal-only" : true);
@@ -1200,7 +1229,7 @@ function updateTerminalStateByThreadId(
 interface TerminalStateStoreState {
   terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
   openChatThreadPage: (threadId: ThreadId) => void;
-  openTerminalThreadPage: (threadId: ThreadId, options?: { terminalOnly?: boolean }) => void;
+  openTerminalThreadPage: (threadId: ThreadId, options?: OpenTerminalThreadPageOptions) => void;
   setTerminalOpen: (threadId: ThreadId, open: boolean) => void;
   setTerminalPresentationMode: (threadId: ThreadId, mode: ThreadTerminalPresentationMode) => void;
   setTerminalWorkspaceLayout: (threadId: ThreadId, layout: ThreadTerminalWorkspaceLayout) => void;

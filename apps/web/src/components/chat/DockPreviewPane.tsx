@@ -6,12 +6,13 @@
 //             (state->render mapping), DockPaneHeader.
 // Exports: DockPreviewPane
 
-import type { ThreadId } from "@luminor/contracts";
+import { PREVIEW_TERMINAL_ID, type ThreadId } from "@luminor/contracts";
 import { useCallback, useState } from "react";
 
 import { useThreadPreview } from "~/hooks/useThreadPreview";
-import { LoaderIcon, PlayIcon, RefreshCwIcon, StopIcon, XIcon } from "~/lib/icons";
+import { LoaderIcon, PlayIcon, RefreshCwIcon, StopIcon, TerminalIcon, XIcon } from "~/lib/icons";
 import { cn } from "~/lib/utils";
+import { useRightDockStore } from "~/rightDockStore";
 import { Button } from "../ui/button";
 import { IconButton } from "../ui/icon-button";
 import { DOCK_HEADER_ICON_BUTTON_CLASS } from "./chatHeaderControls";
@@ -35,6 +36,8 @@ const CONTROL_LABELS: Record<PreviewPaneControlKind, string> = {
   start: "Start preview",
   cancel: "Cancel preview",
   reload: "Reload preview",
+  logs: "Open preview logs",
+  restart: "Restart preview",
   stop: "Stop preview",
   retry: "Retry preview",
 };
@@ -48,6 +51,8 @@ const CONTROL_ICONS: Record<PreviewPaneControlKind, typeof PlayIcon> = {
   start: PlayIcon,
   cancel: XIcon,
   reload: RefreshCwIcon,
+  logs: TerminalIcon,
+  restart: RefreshCwIcon,
   stop: StopIcon,
   retry: RefreshCwIcon,
 };
@@ -57,7 +62,8 @@ export function DockPreviewPane(props: {
   hasWorktree: boolean;
   onClose?: (() => void) | undefined;
 }) {
-  const { preview, start, stop } = useThreadPreview(props.hostThreadId);
+  const { preview, start, stop, restart } = useThreadPreview(props.hostThreadId);
+  const openPane = useRightDockStore((state) => state.openPane);
   const [reloadKey, setReloadKey] = useState(0);
   const view = resolvePreviewPaneView({ preview, hasWorktree: props.hasWorktree });
 
@@ -67,13 +73,25 @@ export function DockPreviewPane(props: {
         setReloadKey((current) => current + 1);
         return;
       }
+      if (kind === "logs") {
+        openPane(props.hostThreadId, {
+          kind: "terminal",
+          terminalThreadId: props.hostThreadId,
+          terminalId: PREVIEW_TERMINAL_ID,
+        });
+        return;
+      }
+      if (kind === "restart") {
+        void restart();
+        return;
+      }
       if (kind === "start" || kind === "retry") {
         void start();
         return;
       }
       void stop();
     },
-    [start, stop],
+    [openPane, props.hostThreadId, restart, start, stop],
   );
 
   return (

@@ -84,6 +84,31 @@ describe("terminalStateStore actions", () => {
     expect(terminalState.workspaceActiveTab).toBe("terminal");
   });
 
+  it("opens a named managed terminal as the only terminal in the workspace", () => {
+    const store = useTerminalStateStore.getState();
+    store.openTerminalThreadPage(THREAD_ID, {
+      terminalOnly: true,
+      terminalId: "preview",
+      terminalLabel: "Preview",
+    });
+
+    const terminalState = selectThreadTerminalState(
+      useTerminalStateStore.getState().terminalStateByThreadId,
+      THREAD_ID,
+    );
+    expect(terminalState.terminalIds).toEqual(["preview"]);
+    expect(terminalState.activeTerminalId).toBe("preview");
+    expect(terminalState.terminalLabelsById).toEqual({ preview: "Preview" });
+    expect(terminalState.terminalTitleOverridesById).toEqual({ preview: "Preview" });
+    expect(summarizeTerminalGroups(terminalState.terminalGroups)).toEqual([
+      {
+        id: "group-preview",
+        activeTerminalId: "preview",
+        terminalIds: ["preview"],
+      },
+    ]);
+  });
+
   it("opens and splits terminals into the active group", () => {
     const store = useTerminalStateStore.getState();
     store.setTerminalOpen(THREAD_ID, true);

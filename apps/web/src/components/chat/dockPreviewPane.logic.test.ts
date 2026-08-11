@@ -59,7 +59,7 @@ describe("resolvePreviewPaneView", () => {
     });
   });
 
-  it("embeds the url and offers reload plus stop while running", () => {
+  it("embeds the url and offers reload, logs, restart, and stop while running", () => {
     const view = resolvePreviewPaneView({
       preview: preview({ status: "running", url: "http://localhost:5173", port: 5173 }),
       hasWorktree: true,
@@ -67,7 +67,7 @@ describe("resolvePreviewPaneView", () => {
 
     expect(view.tone).toBe("running");
     expect(view.portLabel).toBe(":5173");
-    expect(view.controls).toEqual(["reload", "stop"]);
+    expect(view.controls).toEqual(["reload", "logs", "restart", "stop"]);
     expect(view.body).toEqual({ kind: "webview", url: "http://localhost:5173" });
   });
 
@@ -77,7 +77,7 @@ describe("resolvePreviewPaneView", () => {
       hasWorktree: true,
     });
 
-    expect(view.controls).toEqual(["stop"]);
+    expect(view.controls).toEqual(["logs", "restart", "stop"]);
     expect(view.body).toMatchObject({ kind: "message", heading: PREVIEW_NO_URL_HEADING });
   });
 
@@ -88,7 +88,7 @@ describe("resolvePreviewPaneView", () => {
     });
 
     expect(view.tone).toBe("failed");
-    expect(view.controls).toEqual(["retry"]);
+    expect(view.controls).toEqual(["logs", "restart"]);
     expect(view.body).toMatchObject({
       heading: PREVIEW_FAILED_HEADING,
       description: "Error: port already in use",

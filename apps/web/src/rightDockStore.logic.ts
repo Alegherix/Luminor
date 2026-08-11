@@ -31,6 +31,8 @@ export interface RightDockPane {
   kind: RightDockPaneKind;
   // sidechat panes point at the embedded thread.
   threadId: ThreadId | null;
+  terminalThreadId: ThreadId | null;
+  terminalId: string | null;
   // diff panes remember which turn/file they were opened on.
   diffTurnId: TurnId | null;
   diffFilePath: string | null;
@@ -90,6 +92,11 @@ function sanitizePersistedPane(value: unknown): RightDockPane | null {
     id: candidate.id,
     kind: candidate.kind,
     threadId: typeof candidate.threadId === "string" ? (candidate.threadId as ThreadId) : null,
+    terminalThreadId:
+      typeof candidate.terminalThreadId === "string"
+        ? (candidate.terminalThreadId as ThreadId)
+        : null,
+    terminalId: typeof candidate.terminalId === "string" ? candidate.terminalId : null,
     diffTurnId: typeof candidate.diffTurnId === "string" ? (candidate.diffTurnId as TurnId) : null,
     diffFilePath: typeof candidate.diffFilePath === "string" ? candidate.diffFilePath : null,
     filePath: typeof candidate.filePath === "string" ? candidate.filePath : null,
@@ -162,6 +169,8 @@ export interface OpenPaneInput {
   paneId: string;
   kind: RightDockPaneKind;
   threadId?: ThreadId | null;
+  terminalThreadId?: ThreadId | null;
+  terminalId?: string | null;
   diffTurnId?: TurnId | null;
   diffFilePath?: string | null;
   filePath?: string | null;
@@ -176,6 +185,8 @@ function createPane(input: OpenPaneInput): RightDockPane {
     id: input.paneId,
     kind: input.kind,
     threadId: input.threadId ?? null,
+    terminalThreadId: input.terminalThreadId ?? null,
+    terminalId: input.terminalId ?? null,
     diffTurnId: input.diffTurnId ?? null,
     diffFilePath: input.diffFilePath ?? null,
     filePath: input.filePath ?? null,
@@ -192,6 +203,15 @@ function createPane(input: OpenPaneInput): RightDockPane {
 function singletonPaneReopenPatch(input: OpenPaneInput): Partial<RightDockPane> | null {
   if (input.kind === "sidechat" && input.threadId !== undefined) {
     return { threadId: input.threadId ?? null };
+  }
+  if (
+    input.kind === "terminal" &&
+    (input.terminalThreadId !== undefined || input.terminalId !== undefined)
+  ) {
+    return {
+      terminalThreadId: input.terminalThreadId ?? null,
+      terminalId: input.terminalId ?? null,
+    };
   }
   if (
     input.kind === "diff" &&
