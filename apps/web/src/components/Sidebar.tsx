@@ -81,6 +81,7 @@ import {
   MAX_PINNED_PROJECTS,
   type DesktopUpdateState,
   type OrchestrationShellSnapshot,
+  type FolderOwner,
   PROVIDER_DISPLAY_NAMES,
   ProjectId,
   FolderId,
@@ -92,6 +93,13 @@ import {
   WS_GITHUB_PROJECT_PROVISIONING_CAPABILITY,
 } from "@luminor/contracts";
 import { isGenericChatThreadTitle } from "@luminor/shared/chatThreads";
+import {
+  folderOwnerKey,
+  projectFolderOwner,
+  projectFolderOwnerKey,
+  projectIdFromFolderOwner,
+  type FolderOwnerKey,
+} from "@luminor/shared/folderOwnership";
 import { getDefaultModel } from "@luminor/shared/model";
 import { pluralize } from "@luminor/shared/text";
 import { resolveThreadWorkspaceCwd } from "@luminor/shared/threadEnvironment";
@@ -1621,7 +1629,7 @@ export default function Sidebar() {
   const [renameDialogThreadId, setRenameDialogThreadId] = useState<ThreadId | null>(null);
   const [renameProjectDialogId, setRenameProjectDialogId] = useState<ProjectId | null>(null);
   const [folderEditorState, setFolderEditorState] = useState<
-    | { mode: "create"; projectId: ProjectId; threadIds?: readonly ThreadId[] }
+    | { mode: "create"; owner: FolderOwner; threadIds?: readonly ThreadId[] }
     | { mode: "rename"; folderId: FolderId }
     | null
   >(null);
@@ -1845,18 +1853,19 @@ export default function Sidebar() {
     () => new Map(projects.map((project) => [project.id, project] as const)),
     [projects],
   );
-  const foldersByProjectId = useMemo(() => {
-    const grouped = new Map<ProjectId, Folder[]>();
+  const foldersByOwner = useMemo(() => {
+    const grouped = new Map<FolderOwnerKey, Folder[]>();
     for (const folder of folders) {
-      const projectFolders = grouped.get(folder.projectId);
-      if (projectFolders) {
-        projectFolders.push(folder);
+      const ownerKey = folderOwnerKey(folder.owner);
+      const ownerFolders = grouped.get(ownerKey);
+      if (ownerFolders) {
+        ownerFolders.push(folder);
       } else {
-        grouped.set(folder.projectId, [folder]);
+        grouped.set(ownerKey, [folder]);
       }
     }
-    for (const [projectId, projectFolders] of grouped) {
-      grouped.set(projectId, sortProjectFolders(projectFolders));
+    for (const [ownerKey, ownerFolders] of grouped) {
+      grouped.set(ownerKey, sortProjectFolders(ownerFolders));
     }
     return grouped;
   }, [folders]);
@@ -3027,7 +3036,13 @@ export default function Sidebar() {
         input.folderId === null
           ? null
           : (folders.find((folder) => folder.id === input.folderId) ?? null);
-      if (input.folderId !== null && targetFolder?.projectId !== plan.projectId) return;
+      if (
+        input.folderId !== null &&
+        targetFolder &&
+        projectIdFromFolderOwner(targetFolder.owner) !== plan.projectId
+      ) {
+        return;
+      }
       if (plan.pendingThreadIds.length === 0) return;
       const outcome = await moveThreadsToFolder({
         api,
@@ -3052,7 +3067,7 @@ export default function Sidebar() {
       if (input.action.kind === "new-folder") {
         setFolderEditorState({
           mode: "create",
-          projectId: input.projectId,
+          owner: projectFolderOwner(input.projectId),
           threadIds: input.threadIds,
         });
         return;
@@ -3120,7 +3135,7 @@ export default function Sidebar() {
       });
       const folderMoveItems = buildFolderMoveMenuItems({
         scope: resolveFolderMoveScope([thread]),
-        folders: foldersByProjectId.get(thread.projectId) ?? [],
+        folders: foldersByOwner.get(projectFolderOwnerKey(thread.projectId)) ?? [],
       });
       const clicked = await api.contextMenu.show(
         [
@@ -3307,7 +3322,7 @@ export default function Sidebar() {
       copyThreadIdToClipboard,
       clearDismissedThreadStatus,
       clearThreadNotification,
-      foldersByProjectId,
+      foldersByOwner,
       handleFolderMoveMenuAction,
       handoffThread,
       markThreadUnread,
@@ -3332,7 +3347,9 @@ export default function Sidebar() {
       const folderMoveScope = resolveFolderMoveScope(resolveFolderMoveThreads(ids));
       const folderMoveItems = buildFolderMoveMenuItems({
         scope: folderMoveScope,
-        folders: folderMoveScope ? (foldersByProjectId.get(folderMoveScope.projectId) ?? []) : [],
+        folders: folderMoveScope
+          ? (foldersByOwner.get(projectFolderOwnerKey(folderMoveScope.projectId)) ?? [])
+          : [],
         count: folderMoveScope?.threadIds.length ?? 0,
       });
 
@@ -3431,7 +3448,7 @@ export default function Sidebar() {
       clearSelection,
       clearDismissedThreadStatus,
       deleteThread,
-      foldersByProjectId,
+      foldersByOwner,
       handleFolderMoveMenuAction,
       markThreadUnread,
       removeFromSelection,
@@ -3690,7 +3707,7 @@ export default function Sidebar() {
         return;
       }
       if (clicked === "new-folder") {
-        setFolderEditorState({ mode: "create", projectId });
+        setFolderEditorState({ mode: "create", owner: projectFolderOwner(projectId) });
         return;
       }
       if (clicked === "rename") {
@@ -3803,34 +3820,42 @@ export default function Sidebar() {
       if (!api || !folderEditorState) {
         throw new Error("The app server is unavailable.");
       }
+      const createOwner = folderEditorState.mode === "create" ? folderEditorState.owner : null;
+      const createProjectId = createOwner ? projectIdFromFolderOwner(createOwner) : null;
+      const renameFolderId =
+        folderEditorState.mode === "rename" ? folderEditorState.folderId : null;
+      const groupedThreadIds =
+        folderEditorState.mode === "create" ? (folderEditorState.threadIds ?? []) : [];
+      const scope =
+        groupedThreadIds.length > 0
+          ? resolveFolderMoveScope(resolveFolderMoveThreads(groupedThreadIds))
+          : null;
+      const failureTitle =
+        folderEditorState.mode === "create" ? "Unable to create folder" : "Unable to rename folder";
       try {
-        if (folderEditorState.mode === "create") {
-          const groupedThreadIds = folderEditorState.threadIds ?? [];
-          const scope =
-            groupedThreadIds.length > 0
-              ? resolveFolderMoveScope(resolveFolderMoveThreads(groupedThreadIds))
-              : null;
-          if (scope && scope.projectId === folderEditorState.projectId) {
-            const { folderId, ...outcome } = await groupThreadsIntoNewFolder({
-              api,
-              projectId: folderEditorState.projectId,
-              name,
-              threadIds: scope.threadIds,
-            });
-            settleFolderMove({ outcome, folderId, folderName: name });
-          } else {
-            await createFolder({ api, projectId: folderEditorState.projectId, name });
+        if (createOwner !== null) {
+          if (scope !== null) {
+            if (scope.projectId === createProjectId) {
+              const { folderId, ...outcome } = await groupThreadsIntoNewFolder({
+                api,
+                owner: createOwner,
+                name,
+                threadIds: scope.threadIds,
+              });
+              settleFolderMove({ outcome, folderId, folderName: name });
+              return;
+            }
           }
-        } else {
-          await renameFolder({ api, folderId: folderEditorState.folderId, name });
+          await createFolder({ api, owner: createOwner, name });
+          return;
+        }
+        if (renameFolderId !== null) {
+          await renameFolder({ api, folderId: renameFolderId, name });
         }
       } catch (error) {
         toastManager.add({
           type: "error",
-          title:
-            folderEditorState.mode === "create"
-              ? "Unable to create folder"
-              : "Unable to rename folder",
+          title: failureTitle,
           description: error instanceof Error ? error.message : "Try again.",
         });
         throw error;
@@ -3847,8 +3872,9 @@ export default function Sidebar() {
         next.add(folder.id);
         return next;
       });
-      prefetchModelsForProjectNewThread(folder.projectId, { includeDroid: true });
-      void handleNewThread(folder.projectId, {
+      const projectId = projectIdFromFolderOwner(folder.owner);
+      prefetchModelsForProjectNewThread(projectId, { includeDroid: true });
+      void handleNewThread(projectId, {
         envMode: resolveSidebarNewThreadEnvMode({
           defaultEnvMode: appSettings.defaultThreadEnvMode,
         }),
@@ -4185,7 +4211,7 @@ export default function Sidebar() {
       deriveSidebarProjectData({
         projects: standardProjects,
         sortedSidebarThreadsByProjectId,
-        foldersByProjectId,
+        foldersByOwner,
         pinnedThreadIds,
         threadListExtraPagesByProjectCwd,
         normalizeProjectCwd: normalizeSidebarProjectThreadListCwd,
@@ -4198,7 +4224,7 @@ export default function Sidebar() {
       activeSidebarThreadId,
       threadListExtraPagesByProjectCwd,
       pinnedThreadIds,
-      foldersByProjectId,
+      foldersByOwner,
       sortedSidebarThreadsByProjectId,
       standardProjects,
       resolveThreadStatusForSidebar,
@@ -5173,11 +5199,12 @@ export default function Sidebar() {
             isDropTarget && "bg-info/12 ring-1 ring-info/65 ring-inset",
           )}
           onDragOver={(event) => {
-            if (threadDragProjectIdRef.current !== folder.projectId) return;
+            const projectId = projectIdFromFolderOwner(folder.owner);
+            if (threadDragProjectIdRef.current !== projectId) return;
             if (
               !canAcceptThreadDrag(
                 event.dataTransfer.types,
-                threadDragProjectIdRef.current === folder.projectId,
+                threadDragProjectIdRef.current === projectId,
               )
             ) {
               return;
@@ -5194,7 +5221,7 @@ export default function Sidebar() {
             setFolderDropTargetId((current) => (current === folder.id ? null : current));
           }}
           onDrop={(event) => {
-            const payload = acceptThreadFolderDrag(event, folder.projectId);
+            const payload = acceptThreadFolderDrag(event, projectIdFromFolderOwner(folder.owner));
             if (!payload) return;
             event.preventDefault();
             event.stopPropagation();
@@ -5205,71 +5232,71 @@ export default function Sidebar() {
             });
           }}
         >
-        <SidebarMenuSubButton
-          render={<button type="button" />}
-          size="sm"
-          aria-expanded={expanded}
-          className={cn(
-            "h-7 w-full translate-x-0 justify-start rounded-lg pr-2 pl-2 text-left text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/88 hover:text-foreground",
-            isDropTarget && "text-foreground",
-          )}
-          onClick={() => {
-            setExpandedFolderIds((current) => {
-              const next = new Set(current);
-              if (next.has(folder.id)) {
-                next.delete(folder.id);
-              } else {
-                next.add(folder.id);
-              }
-              return next;
-            });
-          }}
-          onDoubleClick={() => setFolderEditorState({ mode: "rename", folderId: folder.id })}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            void handleFolderContextMenu(folder, { x: event.clientX, y: event.clientY });
-          }}
-        >
-          <DisclosureChevron open={expanded} className="size-3 text-muted-foreground/60" />
-          <SidebarLeadingIcon size="sm" tone="text-inherit">
-            <SidebarGlyph icon={expanded ? FolderOpenIcon : FolderIcon} variant="leading" />
-          </SidebarLeadingIcon>
-          <span className="min-w-0 flex-1 truncate">{folder.name}</span>
-          {folder.isPinned || rollupStatus ? (
-            <span className="ml-auto flex shrink-0 items-center gap-1.5 self-center">
-              {folder.isPinned ? (
-                <PinStatusIcon
-                  pinned
-                  role="img"
-                  aria-label="Pinned folder"
-                  className="size-3 text-muted-foreground/70"
-                />
-              ) : null}
-              {rollupStatus ? <SidebarStatusTrailingGlyph status={rollupStatus} /> : null}
-            </span>
-          ) : null}
-        </SidebarMenuSubButton>
-        <div className={disclosureShellClassName(expanded)}>
-          <div className={DISCLOSURE_INNER_CLASS}>
-            <SidebarMenuSub
-              className={cn(
-                "mx-0 my-0 w-full translate-x-0 border-l-0 px-0 py-0",
-                SIDEBAR_NESTED_LIST_GAP_CLASS_NAME,
-                disclosureContentClassName(expanded),
-              )}
-            >
-              {memberThreadCount === 0 ? (
-                <div className="py-1 pl-9 text-[length:var(--app-font-size-ui-xs,10px)] text-muted-foreground/55">
-                  Empty folder
-                </div>
-              ) : (
-                entries.map((entry) =>
-                  renderThreadRow(entry.thread, orderedProjectThreadIds, entry.depth + 1),
-                )
-              )}
-            </SidebarMenuSub>
+          <SidebarMenuSubButton
+            render={<button type="button" />}
+            size="sm"
+            aria-expanded={expanded}
+            className={cn(
+              "h-7 w-full translate-x-0 justify-start rounded-lg pr-2 pl-2 text-left text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/88 hover:text-foreground",
+              isDropTarget && "text-foreground",
+            )}
+            onClick={() => {
+              setExpandedFolderIds((current) => {
+                const next = new Set(current);
+                if (next.has(folder.id)) {
+                  next.delete(folder.id);
+                } else {
+                  next.add(folder.id);
+                }
+                return next;
+              });
+            }}
+            onDoubleClick={() => setFolderEditorState({ mode: "rename", folderId: folder.id })}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              void handleFolderContextMenu(folder, { x: event.clientX, y: event.clientY });
+            }}
+          >
+            <DisclosureChevron open={expanded} className="size-3 text-muted-foreground/60" />
+            <SidebarLeadingIcon size="sm" tone="text-inherit">
+              <SidebarGlyph icon={expanded ? FolderOpenIcon : FolderIcon} variant="leading" />
+            </SidebarLeadingIcon>
+            <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+            {folder.isPinned || rollupStatus ? (
+              <span className="ml-auto flex shrink-0 items-center gap-1.5 self-center">
+                {folder.isPinned ? (
+                  <PinStatusIcon
+                    pinned
+                    role="img"
+                    aria-label="Pinned folder"
+                    className="size-3 text-muted-foreground/70"
+                  />
+                ) : null}
+                {rollupStatus ? <SidebarStatusTrailingGlyph status={rollupStatus} /> : null}
+              </span>
+            ) : null}
+          </SidebarMenuSubButton>
+          <div className={disclosureShellClassName(expanded)}>
+            <div className={DISCLOSURE_INNER_CLASS}>
+              <SidebarMenuSub
+                className={cn(
+                  "mx-0 my-0 w-full translate-x-0 border-l-0 px-0 py-0",
+                  SIDEBAR_NESTED_LIST_GAP_CLASS_NAME,
+                  disclosureContentClassName(expanded),
+                )}
+              >
+                {memberThreadCount === 0 ? (
+                  <div className="py-1 pl-9 text-[length:var(--app-font-size-ui-xs,10px)] text-muted-foreground/55">
+                    Empty folder
+                  </div>
+                ) : (
+                  entries.map((entry) =>
+                    renderThreadRow(entry.thread, orderedProjectThreadIds, entry.depth + 1),
+                  )
+                )}
+              </SidebarMenuSub>
+            </div>
           </div>
-        </div>
         </div>
       </SidebarMenuSubItem>
     );
@@ -5551,9 +5578,7 @@ export default function Sidebar() {
                   if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
                     return;
                   }
-                  setUnfiledDropProjectId((current) =>
-                    current === project.id ? null : current,
-                  );
+                  setUnfiledDropProjectId((current) => (current === project.id ? null : current));
                 }}
                 onDrop={(event) => {
                   const payload = acceptThreadFolderDrag(event, project.id);

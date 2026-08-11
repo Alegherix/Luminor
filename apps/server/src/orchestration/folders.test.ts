@@ -7,6 +7,7 @@ import {
   type OrchestrationCommand,
 } from "@luminor/contracts";
 import { Effect } from "effect";
+import { projectFolderOwner, folderOwnersEqual } from "@luminor/shared/folderOwnership";
 import { describe, expect, it } from "vitest";
 
 import { decideOrchestrationCommand } from "./decider.ts";
@@ -69,7 +70,7 @@ describe("Folders", () => {
       type: "folder.create",
       commandId: CommandId.makeUnsafe("cmd-folder-create"),
       folderId,
-      projectId,
+      owner: projectFolderOwner(projectId),
       name: "Feature work",
       createdAt,
     });
@@ -78,7 +79,7 @@ describe("Folders", () => {
     expect(readModel.folders).toEqual([
       expect.objectContaining({
         id: folderId,
-        projectId,
+        owner: projectFolderOwner(projectId),
         name: "Feature work",
         sortOrder: 0,
         isPinned: false,
@@ -121,7 +122,7 @@ describe("Folders", () => {
       type: "folder.create",
       commandId: CommandId.makeUnsafe("cmd-folder-create"),
       folderId: FolderId.makeUnsafe("folder-first"),
-      projectId,
+      owner: projectFolderOwner(projectId),
       name: "Planning",
       createdAt,
     }));
@@ -133,7 +134,7 @@ describe("Folders", () => {
             type: "folder.create",
             commandId: CommandId.makeUnsafe("cmd-folder-duplicate"),
             folderId: FolderId.makeUnsafe("folder-second"),
-            projectId,
+            owner: projectFolderOwner(projectId),
             name: "planning",
             createdAt,
           },
@@ -149,7 +150,7 @@ describe("Folders", () => {
             type: "folder.create",
             commandId: CommandId.makeUnsafe("cmd-folder-missing-project"),
             folderId: FolderId.makeUnsafe("folder-missing-project"),
-            projectId: ProjectId.makeUnsafe("missing-project"),
+            owner: projectFolderOwner(ProjectId.makeUnsafe("missing-project")),
             name: "Missing",
             createdAt,
           },
@@ -198,7 +199,7 @@ describe("Folders", () => {
         type: "folder.create",
         commandId: CommandId.makeUnsafe(`cmd-${folderId}`),
         folderId,
-        projectId,
+        owner: projectFolderOwner(projectId),
         name,
         createdAt,
       }));
@@ -272,7 +273,7 @@ describe("Folders", () => {
         type: "folder.create",
         commandId: CommandId.makeUnsafe(`cmd-${folderId}`),
         folderId,
-        projectId,
+        owner: projectFolderOwner(projectId),
         name: folderId,
         createdAt,
       }));
@@ -360,7 +361,7 @@ describe("Folders", () => {
         type: "folder.create",
         commandId: CommandId.makeUnsafe(`cmd-${folderId}`),
         folderId,
-        projectId,
+        owner: projectFolderOwner(projectId),
         name: folderId,
         createdAt,
       }));
@@ -427,7 +428,9 @@ describe("Folders", () => {
     });
     expect(
       deletion.readModel.folders.filter(
-        (folder) => folder.projectId === deletedProjectId && folder.deletedAt === null,
+        (folder) =>
+          folderOwnersEqual(folder.owner, projectFolderOwner(deletedProjectId)) &&
+          folder.deletedAt === null,
       ),
     ).toEqual([]);
   });
@@ -450,7 +453,7 @@ describe("Folders", () => {
       type: "folder.create",
       commandId: CommandId.makeUnsafe("cmd-folder-create"),
       folderId,
-      projectId,
+      owner: projectFolderOwner(projectId),
       name: "Radar",
       createdAt,
     }));
@@ -518,7 +521,7 @@ describe("Folders", () => {
       type: "folder.create",
       commandId: CommandId.makeUnsafe("cmd-folder-create"),
       folderId,
-      projectId,
+      owner: projectFolderOwner(projectId),
       name: "Radar",
       createdAt,
     }));
@@ -578,7 +581,7 @@ describe("Folders", () => {
       type: "folder.create",
       commandId: CommandId.makeUnsafe("cmd-folder-create"),
       folderId,
-      projectId,
+      owner: projectFolderOwner(projectId),
       name: "Feature work",
       createdAt,
     }));
@@ -636,7 +639,7 @@ describe("Folders", () => {
       type: "folder.create",
       commandId: CommandId.makeUnsafe("cmd-folder-other-project"),
       folderId: otherProjectFolderId,
-      projectId: otherProjectId,
+      owner: projectFolderOwner(otherProjectId),
       name: "Other project folder",
       createdAt,
     }));
@@ -701,7 +704,7 @@ describe("Folders", () => {
       type: "folder.create",
       commandId: CommandId.makeUnsafe("cmd-folder-create"),
       folderId,
-      projectId,
+      owner: projectFolderOwner(projectId),
       name: "Feature work",
       createdAt,
     }));

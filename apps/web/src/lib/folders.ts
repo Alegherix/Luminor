@@ -1,10 +1,10 @@
-import type { FolderId, NativeApi, ProjectId, ThreadId } from "@luminor/contracts";
+import type { FolderId, FolderOwner, NativeApi, ThreadId } from "@luminor/contracts";
 
 import { newCommandId, newFolderId } from "./utils";
 
 export async function createFolder(input: {
   api: NativeApi;
-  projectId: ProjectId;
+  owner: FolderOwner;
   name: string;
 }): Promise<FolderId> {
   const folderId = newFolderId();
@@ -12,7 +12,7 @@ export async function createFolder(input: {
     type: "folder.create",
     commandId: newCommandId(),
     folderId,
-    projectId: input.projectId,
+    owner: input.owner,
     name: input.name,
     createdAt: new Date().toISOString(),
   });

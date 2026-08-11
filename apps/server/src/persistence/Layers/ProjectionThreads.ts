@@ -5,7 +5,7 @@ import * as SchemaGetter from "effect/SchemaGetter";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
-  ClearProjectionThreadFolderMembershipsByProjectInput,
+  ClearProjectionThreadFolderMembershipsByOwnerInput,
   DeleteProjectionThreadInput,
   GetProjectionThreadInput,
   ListProjectionThreadsByProjectInput,
@@ -298,15 +298,15 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
       `,
   });
 
-  const clearFolderMembershipsByProjectIdRow = SqlSchema.void({
-    Request: ClearProjectionThreadFolderMembershipsByProjectInput,
-    execute: ({ projectId, updatedAt }) =>
+  const clearFolderMembershipsByOwnerRow = SqlSchema.void({
+    Request: ClearProjectionThreadFolderMembershipsByOwnerInput,
+    execute: ({ owner, updatedAt }) =>
       sql`
         UPDATE projection_threads
         SET
           folder_id = NULL,
           updated_at = CASE WHEN updated_at > ${updatedAt} THEN updated_at ELSE ${updatedAt} END
-        WHERE project_id = ${projectId}
+        WHERE project_id = ${owner.projectId}
           AND folder_id IS NOT NULL
       `,
   });
@@ -331,13 +331,11 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.deleteById:query")),
     );
 
-  const clearFolderMembershipsByProjectId: ProjectionThreadRepositoryShape["clearFolderMembershipsByProjectId"] =
+  const clearFolderMembershipsByOwner: ProjectionThreadRepositoryShape["clearFolderMembershipsByOwner"] =
     (input) =>
-      clearFolderMembershipsByProjectIdRow(input).pipe(
+      clearFolderMembershipsByOwnerRow(input).pipe(
         Effect.mapError(
-          toPersistenceSqlError(
-            "ProjectionThreadRepository.clearFolderMembershipsByProjectId:query",
-          ),
+          toPersistenceSqlError("ProjectionThreadRepository.clearFolderMembershipsByOwner:query"),
         ),
       );
 
@@ -346,7 +344,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
     getById,
     listByProjectId,
     deleteById,
-    clearFolderMembershipsByProjectId,
+    clearFolderMembershipsByOwner,
   } satisfies ProjectionThreadRepositoryShape;
 });
 

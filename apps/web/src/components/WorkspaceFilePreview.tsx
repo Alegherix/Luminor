@@ -610,9 +610,7 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
       })
       .catch((error: unknown) => {
         setEditBuffer((current) =>
-          current?.key === documentKey
-            ? { ...current, error: readFileSaveError(error) }
-            : current,
+          current?.key === documentKey ? { ...current, error: readFileSaveError(error) } : current,
         );
       });
   };
@@ -724,9 +722,10 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
           cwd: workspaceRoot,
           relativePath: writeRelativePath,
           contents: nextContents,
-          expectedVersion: taskFileDiskVersionRef.current.get(fileKey) ?? current.version,
-          encoding: current.encoding,
-          lineEnding: current.lineEnding,
+          expectedVersion:
+            taskFileDiskVersionRef.current.get(fileKey) ?? current.version ?? undefined,
+          encoding: current.encoding ?? undefined,
+          lineEnding: current.lineEnding ?? undefined,
         });
         taskFileDiskVersionRef.current.set(fileKey, result.version);
         queryClient.setQueryData<ProjectReadFileResult>(options.queryKey, (cached) =>

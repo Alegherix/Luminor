@@ -18,7 +18,7 @@ export const applyFolderMetadataProjection = (input: {
       case "folder.created":
         yield* input.projectionFolderRepository.upsert({
           folderId: input.event.payload.folderId,
-          projectId: input.event.payload.projectId,
+          owner: input.event.payload.owner,
           name: input.event.payload.name,
           sortOrder: input.event.payload.sortOrder,
           isPinned: input.event.payload.isPinned ? 1 : 0,

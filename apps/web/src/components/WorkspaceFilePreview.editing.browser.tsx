@@ -82,7 +82,7 @@ it("tracks dirty state and saves the loaded version with Ctrl+S", async () => {
     await editor.fill("export const value = 2;\n");
     await expect.element(page.getByRole("status", { name: "Unsaved changes" })).toBeVisible();
 
-    pressKeyboardSave(editor.element());
+    pressKeyboardSave(editor.element() as HTMLElement);
 
     await vi.waitFor(() =>
       expect(writeFile).toHaveBeenCalledWith({
@@ -120,7 +120,7 @@ it("keeps the buffer dirty and shows guarded write failures", async () => {
 
     const editor = page.getByRole("textbox", { name: `Edit ${FILE_PATH}` });
     await editor.fill("manual edit\n");
-    pressKeyboardSave(editor.element());
+    pressKeyboardSave(editor.element() as HTMLElement);
 
     await expect.element(page.getByRole("alert")).toHaveTextContent(conflictMessage);
     await expect.element(page.getByRole("status", { name: "Unsaved changes" })).toBeVisible();
@@ -134,7 +134,8 @@ it("keeps the buffer dirty and shows guarded write failures", async () => {
 it("keeps markdown task previews and guarded versions in sync after an editor save", async () => {
   const markdownPath = "README.md";
   const taskVersion = `sha256:${"3".repeat(64)}`;
-  let completeTaskWrite: ((result: { relativePath: string; version: string }) => void) | null = null;
+  let completeTaskWrite: ((result: { relativePath: string; version: string }) => void) | null =
+    null;
   const pendingTaskWrite = new Promise<{ relativePath: string; version: string }>((resolve) => {
     completeTaskWrite = resolve;
   });
@@ -161,7 +162,7 @@ it("keeps markdown task previews and guarded versions in sync after an editor sa
 
     const editor = page.getByRole("textbox", { name: `Edit ${markdownPath}` });
     await editor.fill("- [ ] updated task\n");
-    pressKeyboardSave(editor.element());
+    pressKeyboardSave(editor.element() as HTMLElement);
     await vi.waitFor(() => expect(writeFile).toHaveBeenCalledTimes(1));
     await page.getByRole("radio", { name: "Preview" }).click();
 
@@ -178,7 +179,10 @@ it("keeps markdown task previews and guarded versions in sync after an editor sa
         lineEnding: "lf",
       }),
     );
-    completeTaskWrite?.({ relativePath: markdownPath, version: taskVersion });
+    (completeTaskWrite as ((result: { relativePath: string; version: string }) => void) | null)?.({
+      relativePath: markdownPath,
+      version: taskVersion,
+    });
   } finally {
     restoreNativeApi();
   }
@@ -207,11 +211,7 @@ it("keeps oversized and mixed-line-ending files read-only", async () => {
 
     await screen.rerender(
       <QueryClientProvider client={queryClient}>
-        <WorkspaceFilePreview
-          workspaceRoot={WORKSPACE_ROOT}
-          filePath="src/mixed.ts"
-          editable
-        />
+        <WorkspaceFilePreview workspaceRoot={WORKSPACE_ROOT} filePath="src/mixed.ts" editable />
       </QueryClientProvider>,
     );
     await vi.waitFor(() => expect(readFile).toHaveBeenCalledTimes(2));

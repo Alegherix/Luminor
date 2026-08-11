@@ -158,7 +158,7 @@ describe("agent gateway MCP injection", () => {
     assert.isTrue(configHasTomlTableHeader("  [ mcp_servers . luminor ]", "[mcp_servers.luminor]"));
     assert.isTrue(configHasTomlTableHeader('[mcp_servers."luminor"]', "[mcp_servers.luminor]"));
     assert.isTrue(configHasTomlTableHeader("['mcp_servers'.'luminor']", "[mcp_servers.luminor]"));
-    assert.isTrue(configHasTomlTableHeader('[mcp_servers."syn\\u0061ra"]', "[mcp_servers.luminor]"));
+    assert.isTrue(configHasTomlTableHeader('[mcp_servers."syn\\u0061ra"]', "[mcp_servers.synara]"));
     assert.isTrue(
       configHasTomlTableHeader('["shell_environment_policy"]', "[shell_environment_policy]"),
     );

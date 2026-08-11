@@ -4,6 +4,7 @@
 // Targets: resolveFolderMoveScope, planFolderMove, buildFolderMoveMenuItems, parseFolderMoveMenuId, moveThreadsToFolder, groupThreadsIntoNewFolder, describeFolderMoveOutcome.
 
 import { FolderId, ProjectId, ThreadId, type NativeApi } from "@luminor/contracts";
+import { projectFolderOwner } from "@luminor/shared/folderOwnership";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -193,14 +194,14 @@ describe("groupThreadsIntoNewFolder", () => {
 
     const result = await groupThreadsIntoNewFolder({
       api: makeApi(dispatchCommand),
-      projectId: PROJECT_A,
+      owner: projectFolderOwner(PROJECT_A),
       name: "Feature",
       threadIds: [THREAD_1, THREAD_2],
     });
 
     expect(dispatchCommand.mock.calls[0]?.[0]).toMatchObject({
       type: "folder.create",
-      projectId: PROJECT_A,
+      owner: projectFolderOwner(PROJECT_A),
       name: "Feature",
       folderId: result.folderId,
     });
@@ -218,7 +219,7 @@ describe("groupThreadsIntoNewFolder", () => {
     await expect(
       groupThreadsIntoNewFolder({
         api: makeApi(dispatchCommand),
-        projectId: PROJECT_A,
+        owner: projectFolderOwner(PROJECT_A),
         name: "Feature",
         threadIds: [THREAD_1],
       }),

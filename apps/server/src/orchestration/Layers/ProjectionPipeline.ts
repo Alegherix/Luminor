@@ -12,6 +12,7 @@ import {
   setThreadMarkerLabel,
 } from "@luminor/shared/threadMarkers";
 import { isStalePendingRequestFailureDetail } from "@luminor/shared/threadSummary";
+import { projectFolderOwner } from "@luminor/shared/folderOwnership";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect, FileSystem, Layer, Option, Path, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -500,14 +501,14 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
       case "project.deleted":
         return applyProjectMetadataProjection({ event, projectionProjectRepository }).pipe(
           Effect.andThen(
-            projectionFolderRepository.markDeletedByProjectId({
-              projectId: event.payload.projectId,
+            projectionFolderRepository.markDeletedByOwner({
+              owner: projectFolderOwner(event.payload.projectId),
               deletedAt: event.payload.deletedAt,
             }),
           ),
           Effect.andThen(
-            projectionThreadRepository.clearFolderMembershipsByProjectId({
-              projectId: event.payload.projectId,
+            projectionThreadRepository.clearFolderMembershipsByOwner({
+              owner: projectFolderOwner(event.payload.projectId),
               updatedAt: event.payload.deletedAt,
             }),
           ),
@@ -2192,14 +2193,14 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
       case "project.deleted":
         return applyProjectMetadataProjection({ event, projectionProjectRepository }).pipe(
           Effect.andThen(
-            projectionFolderRepository.markDeletedByProjectId({
-              projectId: event.payload.projectId,
+            projectionFolderRepository.markDeletedByOwner({
+              owner: projectFolderOwner(event.payload.projectId),
               deletedAt: event.payload.deletedAt,
             }),
           ),
           Effect.andThen(
-            projectionThreadRepository.clearFolderMembershipsByProjectId({
-              projectId: event.payload.projectId,
+            projectionThreadRepository.clearFolderMembershipsByOwner({
+              owner: projectFolderOwner(event.payload.projectId),
               updatedAt: event.payload.deletedAt,
             }),
           ),

@@ -8,6 +8,7 @@ import {
   type RuntimeMode,
 } from "@luminor/contracts";
 import { describe, expect, it, vi } from "vitest";
+import type { WorkLogEntry } from "../workLog";
 
 import {
   appendVoiceTranscriptToPrompt,
@@ -67,7 +68,7 @@ import {
 
 describe("composer strip work-log derivation", () => {
   it("reuses the active derivation unless a subagent view needs its parent source", () => {
-    const activeWorkLogEntries = [];
+    const activeWorkLogEntries: WorkLogEntry[] = [];
     const deriveParentWorkLogEntries = vi.fn(() => []);
 
     expect(
