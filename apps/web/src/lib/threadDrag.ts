@@ -20,12 +20,16 @@ export function writeThreadDragPayload(
   payload: ThreadDragPayload,
 ): void {
   dataTransfer.effectAllowed = "move";
-  dataTransfer.setData(THREAD_DRAG_MIME, JSON.stringify(payload));
+  const serialized = JSON.stringify(payload);
+  dataTransfer.setData(THREAD_DRAG_MIME, serialized);
+  // Chromium/Electron often omits custom MIME types from `types` during dragover
+  // unless a standard type is also present; keep a plain-text mirror for that.
+  dataTransfer.setData("text/plain", serialized);
 }
 
 export function readThreadDragPayload(dataTransfer: DataTransfer): ThreadDragPayload | null {
   try {
-    const raw = dataTransfer.getData(THREAD_DRAG_MIME);
+    const raw = dataTransfer.getData(THREAD_DRAG_MIME) || dataTransfer.getData("text/plain");
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<ThreadDragPayload>;
     if (typeof parsed.threadId !== "string") return null;
@@ -41,10 +45,22 @@ export function readThreadDragPayload(dataTransfer: DataTransfer): ThreadDragPay
 }
 
 export function hasThreadDrag(types: readonly string[]): boolean {
+  const mime = THREAD_DRAG_MIME.toLowerCase();
   for (let index = 0; index < types.length; index += 1) {
-    if (types[index] === THREAD_DRAG_MIME) return true;
+    if (types[index]?.toLowerCase() === mime) return true;
   }
   return false;
+}
+
+/**
+ * Prefer MIME types when the browser exposes them; fall back to a same-window
+ * drag marker because Chromium can hide custom types until drop.
+ */
+export function canAcceptThreadDrag(
+  types: readonly string[],
+  hasActiveLocalDrag: boolean,
+): boolean {
+  return hasActiveLocalDrag || hasThreadDrag(types);
 }
 
 export function threadDragPayloadThreadIds(payload: ThreadDragPayload): readonly ThreadId[] {

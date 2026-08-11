@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   THREAD_DRAG_MIME,
+  canAcceptThreadDrag,
   hasThreadDrag,
   readThreadDragPayload,
   threadDragPayloadThreadIds,
@@ -61,5 +62,21 @@ describe("thread drag payload", () => {
     const malformed = fakeDataTransfer();
     malformed.setData(THREAD_DRAG_MIME, "{not json");
     expect(readThreadDragPayload(malformed)).toBeNull();
+  });
+
+  it("accepts local same-window drags even when types hide the custom MIME", () => {
+    expect(canAcceptThreadDrag([], true)).toBe(true);
+    expect(canAcceptThreadDrag([], false)).toBe(false);
+    expect(canAcceptThreadDrag([THREAD_DRAG_MIME.toUpperCase()], false)).toBe(true);
+    // text/plain alone must not look like a thread drag (composer file drops use it).
+    expect(canAcceptThreadDrag(["text/plain"], false)).toBe(false);
+  });
+
+  it("reads the plain-text mirror when the custom MIME payload is empty", () => {
+    const dataTransfer = fakeDataTransfer();
+    writeThreadDragPayload(dataTransfer, { threadId: THREAD_1 });
+    expect(dataTransfer.getData("text/plain")).toContain("thread-1");
+    dataTransfer.setData(THREAD_DRAG_MIME, "");
+    expect(readThreadDragPayload(dataTransfer)).toEqual({ threadId: THREAD_1 });
   });
 });

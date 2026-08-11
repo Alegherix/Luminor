@@ -389,10 +389,11 @@ import {
 import { selectSplitView, useSplitViewStore } from "../splitViewStore";
 import { useRightDockStore } from "../rightDockStore";
 import {
-  hasThreadDrag,
+  canAcceptThreadDrag,
   readThreadDragPayload,
   threadDragPayloadThreadIds,
   writeThreadDragPayload,
+  type ThreadDragPayload,
 } from "../lib/threadDrag";
 import { useTemporaryThreadStore } from "../temporaryThreadStore";
 import { useThreadActivationController } from "../hooks/useThreadActivationController";
@@ -1628,9 +1629,14 @@ export default function Sidebar() {
     () => new Set(),
   );
   const [folderDropTargetId, setFolderDropTargetId] = useState<FolderId | null>(null);
-  // `dataTransfer.getData` is unreadable while a drag is in flight, so the drag
-  // source records what it carries for hover-time drop validation.
+  const [unfiledDropProjectId, setUnfiledDropProjectId] = useState<ProjectId | null>(null);
+  const [activeThreadDragProjectId, setActiveThreadDragProjectId] = useState<ProjectId | null>(
+    null,
+  );
+  // `dataTransfer.getData` / custom MIME types are unreliable while a drag is in
+  // flight (especially in Electron), so the drag source mirrors payload + project.
   const threadDragProjectIdRef = useRef<ProjectId | null>(null);
+  const threadDragPayloadRef = useRef<ThreadDragPayload | null>(null);
   const [projectContextMenuState, setProjectContextMenuState] =
     useState<ProjectContextMenuState | null>(null);
   // "Show more" paging state: extra pages of THREAD_PREVIEW_PAGE_SIZE rows per project cwd.
@@ -5015,13 +5021,17 @@ export default function Sidebar() {
                     selectedThreadIds.size > 1 && selectedThreadIds.has(thread.id)
                       ? [...selectedThreadIds]
                       : [thread.id];
-                  threadDragProjectIdRef.current =
+                  const dragProjectId =
                     resolveFolderMoveScope(resolveFolderMoveThreads(draggedThreadIds))?.projectId ??
                     null;
-                  writeThreadDragPayload(event.dataTransfer, {
+                  const payload: ThreadDragPayload = {
                     threadId: thread.id,
                     ...(draggedThreadIds.length > 1 ? { threadIds: draggedThreadIds } : {}),
-                  });
+                  };
+                  threadDragProjectIdRef.current = dragProjectId;
+                  threadDragPayloadRef.current = dragProjectId ? payload : null;
+                  setActiveThreadDragProjectId(dragProjectId);
+                  writeThreadDragPayload(event.dataTransfer, payload);
                   if (dragImage) {
                     const rect = dragImage.getBoundingClientRect();
                     event.dataTransfer.setDragImage(
@@ -5032,8 +5042,7 @@ export default function Sidebar() {
                   }
                 }}
                 onDragEnd={() => {
-                  threadDragProjectIdRef.current = null;
-                  setFolderDropTargetId(null);
+                  clearThreadFolderDragUi();
                 }}
                 onClick={(event) => {
                   handleThreadClick(event, thread.id, orderedProjectThreadIds);
@@ -5127,6 +5136,26 @@ export default function Sidebar() {
     );
   }
 
+  function clearThreadFolderDragUi() {
+    threadDragProjectIdRef.current = null;
+    threadDragPayloadRef.current = null;
+    setFolderDropTargetId(null);
+    setUnfiledDropProjectId(null);
+    setActiveThreadDragProjectId(null);
+  }
+
+  function acceptThreadFolderDrag(
+    event: ReactDragEvent,
+    projectId: ProjectId,
+  ): ThreadDragPayload | null {
+    const hasLocalDrag = threadDragProjectIdRef.current === projectId;
+    if (!canAcceptThreadDrag(event.dataTransfer.types, hasLocalDrag)) return null;
+    if (threadDragProjectIdRef.current && threadDragProjectIdRef.current !== projectId) {
+      return null;
+    }
+    return readThreadDragPayload(event.dataTransfer) ?? threadDragPayloadRef.current;
+  }
+
   function renderFolderRow(
     group: SidebarProjectFolderGroup,
     orderedProjectThreadIds: readonly ThreadId[],
@@ -5134,41 +5163,56 @@ export default function Sidebar() {
     const { folder, entries, memberThreadCount } = group;
     const expanded = expandedFolderIds.has(folder.id);
     const isDropTarget = folderDropTargetId === folder.id;
-    const acceptsActiveThreadDrag = () => threadDragProjectIdRef.current === folder.projectId;
     const rollupStatus = expanded ? null : group.status;
     return (
       <SidebarMenuSubItem key={folder.id} className="w-full">
-        <SidebarMenuSubButton
-          render={<button type="button" />}
-          size="sm"
-          aria-expanded={expanded}
+        <div
           data-folder-drop-target={isDropTarget ? "active" : undefined}
           className={cn(
-            "h-7 w-full translate-x-0 justify-start rounded-lg pr-2 pl-2 text-left text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/88 hover:text-foreground",
-            isDropTarget && "bg-info/12 text-foreground ring-1 ring-info/65 ring-inset",
+            "w-full rounded-lg",
+            isDropTarget && "bg-info/12 ring-1 ring-info/65 ring-inset",
           )}
           onDragOver={(event) => {
-            if (!hasThreadDrag(event.dataTransfer.types) || !acceptsActiveThreadDrag()) return;
+            if (threadDragProjectIdRef.current !== folder.projectId) return;
+            if (
+              !canAcceptThreadDrag(
+                event.dataTransfer.types,
+                threadDragProjectIdRef.current === folder.projectId,
+              )
+            ) {
+              return;
+            }
             event.preventDefault();
+            event.stopPropagation();
             event.dataTransfer.dropEffect = "move";
+            setUnfiledDropProjectId(null);
             setFolderDropTargetId(folder.id);
           }}
-          onDragLeave={() => {
+          onDragLeave={(event) => {
+            const nextTarget = event.relatedTarget;
+            if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
             setFolderDropTargetId((current) => (current === folder.id ? null : current));
           }}
           onDrop={(event) => {
-            if (!hasThreadDrag(event.dataTransfer.types) || !acceptsActiveThreadDrag()) return;
+            const payload = acceptThreadFolderDrag(event, folder.projectId);
+            if (!payload) return;
             event.preventDefault();
             event.stopPropagation();
-            setFolderDropTargetId(null);
-            const payload = readThreadDragPayload(event.dataTransfer);
-            threadDragProjectIdRef.current = null;
-            if (!payload) return;
+            clearThreadFolderDragUi();
             void applyThreadFolderMove({
               threadIds: threadDragPayloadThreadIds(payload),
               folderId: folder.id,
             });
           }}
+        >
+        <SidebarMenuSubButton
+          render={<button type="button" />}
+          size="sm"
+          aria-expanded={expanded}
+          className={cn(
+            "h-7 w-full translate-x-0 justify-start rounded-lg pr-2 pl-2 text-left text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/88 hover:text-foreground",
+            isDropTarget && "text-foreground",
+          )}
           onClick={() => {
             setExpandedFolderIds((current) => {
               const next = new Set(current);
@@ -5225,6 +5269,7 @@ export default function Sidebar() {
               )}
             </SidebarMenuSub>
           </div>
+        </div>
         </div>
       </SidebarMenuSubItem>
     );
@@ -5473,9 +5518,66 @@ export default function Sidebar() {
               {pinnedFolderGroups.map((group) => renderFolderRow(group, orderedProjectThreadIds))}
               {unpinnedFolderGroups.map((group) => renderFolderRow(group, orderedProjectThreadIds))}
 
-              {visibleEntries.map((entry) =>
-                renderThreadRow(entry.thread, orderedProjectThreadIds, entry.depth),
-              )}
+              <div
+                data-unfiled-drop-target={
+                  unfiledDropProjectId === project.id ? "active" : undefined
+                }
+                className={cn(
+                  "w-full rounded-lg",
+                  unfiledDropProjectId === project.id &&
+                    "bg-info/12 ring-1 ring-info/65 ring-inset",
+                  activeThreadDragProjectId === project.id &&
+                    visibleEntries.length === 0 &&
+                    "min-h-7",
+                )}
+                onDragOver={(event) => {
+                  if (threadDragProjectIdRef.current !== project.id) return;
+                  if (
+                    !canAcceptThreadDrag(
+                      event.dataTransfer.types,
+                      threadDragProjectIdRef.current === project.id,
+                    )
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  event.stopPropagation();
+                  event.dataTransfer.dropEffect = "move";
+                  setFolderDropTargetId(null);
+                  setUnfiledDropProjectId(project.id);
+                }}
+                onDragLeave={(event) => {
+                  const nextTarget = event.relatedTarget;
+                  if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+                    return;
+                  }
+                  setUnfiledDropProjectId((current) =>
+                    current === project.id ? null : current,
+                  );
+                }}
+                onDrop={(event) => {
+                  const payload = acceptThreadFolderDrag(event, project.id);
+                  if (!payload) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  clearThreadFolderDragUi();
+                  void applyThreadFolderMove({
+                    threadIds: threadDragPayloadThreadIds(payload),
+                    folderId: null,
+                  });
+                }}
+              >
+                {visibleEntries.map((entry) =>
+                  renderThreadRow(entry.thread, orderedProjectThreadIds, entry.depth),
+                )}
+                {activeThreadDragProjectId === project.id &&
+                visibleEntries.length === 0 &&
+                (pinnedFolderGroups.length > 0 || unpinnedFolderGroups.length > 0) ? (
+                  <div className="py-1 pl-8 text-[length:var(--app-font-size-ui-xs,10px)] text-muted-foreground/45">
+                    Drop here to unfile
+                  </div>
+                ) : null}
+              </div>
 
               {(canShowMoreThreads || canShowLessThreads) && (
                 <SidebarMenuSubItem className="w-full">
