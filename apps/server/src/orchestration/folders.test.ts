@@ -3,11 +3,16 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   FolderId,
   ProjectId,
+  SpaceId,
   ThreadId,
   type OrchestrationCommand,
 } from "@luminor/contracts";
 import { Effect } from "effect";
-import { projectFolderOwner, folderOwnersEqual } from "@luminor/shared/folderOwnership";
+import {
+  projectFolderOwner,
+  spaceFolderOwner,
+  folderOwnersEqual,
+} from "@luminor/shared/folderOwnership";
 import { describe, expect, it } from "vitest";
 
 import { decideOrchestrationCommand } from "./decider.ts";
@@ -157,6 +162,83 @@ describe("Folders", () => {
           readModel,
         }),
       ),
+    ).rejects.toThrow(/does not exist/i);
+  });
+
+  it("creates and projects folders owned by active spaces", async () => {
+    const createdAt = "2026-08-11T10:00:00.000Z";
+    const workSpaceId = SpaceId.makeUnsafe("space-work-folders");
+    const personalSpaceId = SpaceId.makeUnsafe("space-personal-folders");
+    let readModel = createEmptyReadModel(createdAt);
+
+    for (const [spaceId, name] of [
+      [workSpaceId, "Work"],
+      [personalSpaceId, "Personal"],
+    ] as const) {
+      ({ readModel } = await dispatch(readModel, {
+        type: "space.create",
+        commandId: CommandId.makeUnsafe(`cmd-create-${spaceId}`),
+        spaceId,
+        name,
+        icon: "bag",
+        createdAt,
+      }));
+    }
+
+    const creation = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-create-work-folder"),
+      folderId: FolderId.makeUnsafe("folder-work-feature"),
+      owner: spaceFolderOwner(workSpaceId),
+      name: "Cross-repo feature",
+      createdAt,
+    });
+    readModel = creation.readModel;
+
+    expect(creation.events).toEqual([
+      expect.objectContaining({
+        type: "folder.created",
+        payload: expect.objectContaining({ owner: spaceFolderOwner(workSpaceId) }),
+      }),
+    ]);
+    expect(readModel.folders).toEqual([
+      expect.objectContaining({
+        owner: spaceFolderOwner(workSpaceId),
+        name: "Cross-repo feature",
+        sortOrder: 0,
+      }),
+    ]);
+
+    const otherSpace = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-create-personal-folder"),
+      folderId: FolderId.makeUnsafe("folder-personal-feature"),
+      owner: spaceFolderOwner(personalSpaceId),
+      name: "Cross-repo feature",
+      createdAt,
+    });
+    expect(otherSpace.readModel.folders).toHaveLength(2);
+
+    await expect(
+      dispatch(readModel, {
+        type: "folder.create",
+        commandId: CommandId.makeUnsafe("cmd-create-duplicate-work-folder"),
+        folderId: FolderId.makeUnsafe("folder-work-duplicate"),
+        owner: spaceFolderOwner(workSpaceId),
+        name: "cross-repo feature",
+        createdAt,
+      }),
+    ).rejects.toThrow(/already exists/i);
+
+    await expect(
+      dispatch(readModel, {
+        type: "folder.create",
+        commandId: CommandId.makeUnsafe("cmd-create-missing-space-folder"),
+        folderId: FolderId.makeUnsafe("folder-missing-space"),
+        owner: spaceFolderOwner(SpaceId.makeUnsafe("space-missing")),
+        name: "Missing",
+        createdAt,
+      }),
     ).rejects.toThrow(/does not exist/i);
   });
 

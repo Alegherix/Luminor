@@ -470,16 +470,30 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
   switch (command.type) {
     case "folder.create": {
       yield* requireFolderAbsent({ readModel, command, folderId: command.folderId });
-      const project = yield* requireProject({
-        readModel,
-        command,
-        projectId: command.owner.projectId,
-      });
-      if (project.deletedAt !== null || project.kind !== "project") {
-        return yield* new OrchestrationCommandInvariantError({
-          commandType: command.type,
-          detail: `Folders can only be created under an active project.`,
+      if (command.owner.kind === "project") {
+        const project = yield* requireProject({
+          readModel,
+          command,
+          projectId: command.owner.projectId,
         });
+        if (project.deletedAt !== null || project.kind !== "project") {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: "Folders can only be created under an active project or space.",
+          });
+        }
+      } else {
+        const space = yield* requireSpace({
+          readModel,
+          command,
+          spaceId: command.owner.spaceId,
+        });
+        if (space.deletedAt !== null) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: "Folders can only be created under an active project or space.",
+          });
+        }
       }
       yield* requireFolderNameAvailable({
         readModel,

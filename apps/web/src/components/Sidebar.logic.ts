@@ -7,9 +7,14 @@ import {
   type KeybindingCommand,
   type ProjectId,
   type PullRequestReviewRequestCountResult,
+  type SpaceId,
   type ThreadId,
 } from "@luminor/contracts";
-import { projectFolderOwnerKey, type FolderOwnerKey } from "@luminor/shared/folderOwnership";
+import {
+  projectFolderOwnerKey,
+  spaceFolderOwnerKey,
+  type FolderOwnerKey,
+} from "@luminor/shared/folderOwnership";
 import { pluralize } from "@luminor/shared/text";
 import { resolveThreadEnvironmentMode } from "@luminor/shared/threadEnvironment";
 import { isWorkspaceRootWithin, workspaceRootsEqual } from "@luminor/shared/threadWorkspace";
@@ -67,6 +72,15 @@ export function sortProjectFolders(folders: readonly Folder[]): Folder[] {
     (left, right) =>
       Number(right.isPinned) - Number(left.isPinned) || compareFoldersByStableOrder(left, right),
   );
+}
+
+export function getActiveSpaceFolders(input: {
+  readonly activeSpaceId: SpaceId | null;
+  readonly foldersByOwner: ReadonlyMap<FolderOwnerKey, Folder[]>;
+}): readonly Folder[] {
+  return input.activeSpaceId === null
+    ? []
+    : (input.foldersByOwner.get(spaceFolderOwnerKey(input.activeSpaceId)) ?? []);
 }
 
 export function isProjectsSidebarSurface(input: {

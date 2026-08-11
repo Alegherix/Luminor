@@ -98,6 +98,7 @@ import {
   projectFolderOwner,
   projectFolderOwnerKey,
   projectIdFromFolderOwner,
+  spaceFolderOwner,
   type FolderOwnerKey,
 } from "@luminor/shared/folderOwnership";
 import { getDefaultModel } from "@luminor/shared/model";
@@ -317,6 +318,7 @@ import {
   deriveSidebarProjectData,
   createSidebarThreadHoverAnchorId,
   findWorkspaceRootMatch,
+  getActiveSpaceFolders,
   getPinnedThreadsForSidebar,
   getUnpinnedThreadsForSidebar,
   orderPinnedProjectsForSidebar,
@@ -326,6 +328,7 @@ import {
   getVisibleSidebarEntriesForPreview,
   groupSidebarThreadsByProjectId,
   partitionSidebarThreadsByProjectIds,
+  partitionProjectThreadsByFolders,
   isLatestPinnedProjectMutation,
   isProjectsSidebarSurface,
   pruneProjectThreadListPagingForCollapsedProjects,
@@ -1869,6 +1872,15 @@ export default function Sidebar() {
     }
     return grouped;
   }, [folders]);
+  const activeSpaceFolderGroups = useMemo(() => {
+    const { pinnedFolderGroups, unpinnedFolderGroups } = partitionProjectThreadsByFolders({
+      threads: [],
+      folders: getActiveSpaceFolders({ activeSpaceId, foldersByOwner }),
+      pinnedThreadIds: [],
+      activeThreadId: undefined,
+    });
+    return [...pinnedFolderGroups, ...unpinnedFolderGroups];
+  }, [activeSpaceId, foldersByOwner]);
   const editedFolder =
     folderEditorState?.mode === "rename"
       ? (folders.find((folder) => folder.id === folderEditorState.folderId) ?? null)
@@ -3873,6 +3885,7 @@ export default function Sidebar() {
         return next;
       });
       const projectId = projectIdFromFolderOwner(folder.owner);
+      if (projectId === null) return;
       prefetchModelsForProjectNewThread(projectId, { includeDroid: true });
       void handleNewThread(projectId, {
         envMode: resolveSidebarNewThreadEnvMode({
@@ -5190,6 +5203,7 @@ export default function Sidebar() {
     const expanded = expandedFolderIds.has(folder.id);
     const isDropTarget = folderDropTargetId === folder.id;
     const rollupStatus = expanded ? null : group.status;
+    const projectId = projectIdFromFolderOwner(folder.owner);
     return (
       <SidebarMenuSubItem key={folder.id} className="w-full">
         <div
@@ -5199,7 +5213,7 @@ export default function Sidebar() {
             isDropTarget && "bg-info/12 ring-1 ring-info/65 ring-inset",
           )}
           onDragOver={(event) => {
-            const projectId = projectIdFromFolderOwner(folder.owner);
+            if (projectId === null) return;
             if (threadDragProjectIdRef.current !== projectId) return;
             if (
               !canAcceptThreadDrag(
@@ -5221,7 +5235,8 @@ export default function Sidebar() {
             setFolderDropTargetId((current) => (current === folder.id ? null : current));
           }}
           onDrop={(event) => {
-            const payload = acceptThreadFolderDrag(event, projectIdFromFolderOwner(folder.owner));
+            if (projectId === null) return;
+            const payload = acceptThreadFolderDrag(event, projectId);
             if (!payload) return;
             event.preventDefault();
             event.stopPropagation();
@@ -5251,8 +5266,13 @@ export default function Sidebar() {
                 return next;
               });
             }}
-            onDoubleClick={() => setFolderEditorState({ mode: "rename", folderId: folder.id })}
+            onDoubleClick={() => {
+              if (projectId !== null) {
+                setFolderEditorState({ mode: "rename", folderId: folder.id });
+              }
+            }}
             onContextMenu={(event) => {
+              if (projectId === null) return;
               event.preventDefault();
               void handleFolderContextMenu(folder, { x: event.clientX, y: event.clientY });
             }}
@@ -6646,6 +6666,9 @@ export default function Sidebar() {
                     voidSpace={voidSpace}
                     onSelect={handleSelectSpace}
                     onCreate={() => openSpaceCreator()}
+                    onCreateFolder={(space) =>
+                      setFolderEditorState({ mode: "create", owner: spaceFolderOwner(space.id) })
+                    }
                     onEdit={(space) => openSpaceEditor(space.id)}
                     onDelete={(space) => void handleDeleteSpace(space.id)}
                     onReorder={handleReorderSpaces}
@@ -6658,6 +6681,19 @@ export default function Sidebar() {
                     }
                     jumpShortcutLabelForTab={jumpShortcutLabelForSpaceTab}
                   />
+                  {activeSpaceFolderGroups.length > 0 ? (
+                    <div className="mb-3">
+                      {renderListSectionHeader("Folders", null)}
+                      <SidebarMenuSub
+                        className={cn(
+                          "mx-0 my-0 w-full translate-x-0 border-l-0 px-0 py-0",
+                          SIDEBAR_NESTED_LIST_GAP_CLASS_NAME,
+                        )}
+                      >
+                        {activeSpaceFolderGroups.map((group) => renderFolderRow(group, []))}
+                      </SidebarMenuSub>
+                    </div>
+                  ) : null}
                   {renderPinnedThreadsSection()}
                   {renderListSectionHeader(
                     "Projects",
@@ -7331,7 +7367,9 @@ export default function Sidebar() {
         description={
           groupedFolderThreadCount > 0
             ? `The ${groupedFolderThreadCount} selected ${pluralize(groupedFolderThreadCount, "thread")} move into this folder.`
-            : "Folders organize threads within this project."
+            : folderEditorState?.mode === "create" && folderEditorState.owner.kind === "space"
+              ? "Folders organize threads within this space."
+              : "Folders organize threads within this project."
         }
         initialValue={editedFolder?.name ?? ""}
         placeholder="Folder name"

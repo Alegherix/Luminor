@@ -8,7 +8,7 @@ import {
 } from "@luminor/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer, Option } from "effect";
-import { projectFolderOwner } from "@luminor/shared/folderOwnership";
+import { projectFolderOwner, spaceFolderOwner } from "@luminor/shared/folderOwnership";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
@@ -35,6 +35,47 @@ const projectionRepositoriesLayer = it.layer(
 );
 
 projectionRepositoriesLayer("Projection repositories", (it) => {
+  it.effect("round-trips project and space Folder owners", () =>
+    Effect.gen(function* () {
+      const folders = yield* ProjectionFolderRepository;
+      const sql = yield* SqlClient.SqlClient;
+      const createdAt = "2026-08-11T10:00:00.000Z";
+      const rows = [
+        {
+          folderId: FolderId.makeUnsafe("folder-owner-project"),
+          owner: projectFolderOwner(ProjectId.makeUnsafe("project-folder-owner")),
+          name: "Project folder",
+        },
+        {
+          folderId: FolderId.makeUnsafe("folder-owner-space"),
+          owner: spaceFolderOwner(SpaceId.makeUnsafe("space-folder-owner")),
+          name: "Space folder",
+        },
+      ] as const;
+
+      for (const [sortOrder, row] of rows.entries()) {
+        yield* folders.upsert({
+          ...row,
+          sortOrder,
+          isPinned: 0,
+          createdAt,
+          updatedAt: createdAt,
+          deletedAt: null,
+        });
+      }
+
+      const persisted = yield* folders.listAll();
+      assert.deepStrictEqual(
+        new Map(persisted.map((folder) => [folder.folderId, folder.owner])),
+        new Map(rows.map((folder) => [folder.folderId, folder.owner])),
+      );
+      yield* sql`
+        DELETE FROM projection_folders
+        WHERE folder_id IN ('folder-owner-project', 'folder-owner-space')
+      `;
+    }),
+  );
+
   it.effect("clears active and soft-deleted project assignments for a deleted space", () =>
     Effect.gen(function* () {
       const projects = yield* ProjectionProjectRepository;
