@@ -5,6 +5,7 @@
 import {
   MAX_PINNED_PROJECTS,
   type FolderId,
+  type FolderOwner,
   type KeybindingCommand,
   type ProjectId,
   type PullRequestReviewRequestCountResult,
@@ -13,6 +14,7 @@ import {
 } from "@luminor/contracts";
 import {
   projectFolderOwnerKey,
+  resolveFolderPlacementRejection,
   spaceFolderOwnerKey,
   type FolderOwnerKey,
 } from "@luminor/shared/folderOwnership";
@@ -95,6 +97,62 @@ export function collectSpaceFolderIds(
     }
   }
   return folderIds;
+}
+
+export type FolderNewThreadProject = {
+  readonly id: ProjectId;
+  readonly name: string;
+  readonly cwd: string;
+  readonly spaceId?: SpaceId | null;
+};
+
+export type FolderNewThreadIntent =
+  | { readonly kind: "create"; readonly projectId: ProjectId }
+  | { readonly kind: "choose-project"; readonly projects: readonly FolderNewThreadProject[] }
+  | { readonly kind: "no-eligible-project" };
+
+export function resolveFolderNewThreadProjects<T extends FolderNewThreadProject>(input: {
+  readonly owner: FolderOwner;
+  readonly projects: readonly T[];
+}): readonly T[] {
+  return input.projects
+    .filter(
+      (project) =>
+        resolveFolderPlacementRejection({
+          owner: input.owner,
+          projectId: project.id,
+          projectSpaceId: project.spaceId ?? null,
+        }) === null,
+    )
+    .toSorted((left, right) =>
+      left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
+    );
+}
+
+export function resolveFolderNewThreadIntent<T extends FolderNewThreadProject>(input: {
+  readonly owner: FolderOwner;
+  readonly projects: readonly T[];
+}): FolderNewThreadIntent {
+  if (input.owner.kind === "project") {
+    return { kind: "create", projectId: input.owner.projectId };
+  }
+  const projects = resolveFolderNewThreadProjects(input);
+  return projects.length === 0
+    ? { kind: "no-eligible-project" }
+    : { kind: "choose-project", projects };
+}
+
+export function filterFolderNewThreadProjects<T extends FolderNewThreadProject>(input: {
+  readonly projects: readonly T[];
+  readonly query: string;
+}): readonly T[] {
+  const normalizedQuery = input.query.trim().toLocaleLowerCase();
+  if (normalizedQuery.length === 0) return input.projects;
+  return input.projects.filter(
+    (project) =>
+      project.name.toLocaleLowerCase().includes(normalizedQuery) ||
+      project.cwd.toLocaleLowerCase().includes(normalizedQuery),
+  );
 }
 
 export function isProjectsSidebarSurface(input: {
