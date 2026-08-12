@@ -7512,6 +7512,7 @@ function SidebarSearchPaletteController(props: {
   });
   const threads = useStore(selectAllThreads);
   const sidebarDisplayThreads = useStore(selectSidebarDisplayThreads);
+  const folders = useStore((store) => store.folders);
   const importProviders: ReadonlyArray<ImportProviderKind> = (
     ["codex", "claudeAgent", "cursor", "kilo", "opencode"] as const
   ).filter((provider, index) => supportsThreadImport(importProviderCapabilityQueries[index]?.data));
@@ -7520,11 +7521,14 @@ function SidebarSearchPaletteController(props: {
     const searchProjectById = new Map(
       props.projects.map((project) => [project.id, project] as const),
     );
+    const folderById = new Map(folders.map((folder) => [folder.id, folder] as const));
     return sidebarDisplayThreads.flatMap((threadSummary) => {
       const thread = threadById.get(threadSummary.id);
       if (!thread) {
         return [];
       }
+
+      const folder = thread.folderId ? (folderById.get(thread.folderId) ?? null) : null;
 
       return [
         {
@@ -7535,6 +7539,7 @@ function SidebarSearchPaletteController(props: {
           projectRemoteName:
             props.projectById.get(thread.projectId)?.remoteName ?? "Unknown project",
           spaceName: searchProjectById.get(thread.projectId)?.spaceName ?? "Global",
+          folder: folder === null ? null : { name: folder.name, owner: folder.owner },
           provider: thread.modelSelection.provider,
           createdAt: thread.createdAt,
           updatedAt: thread.updatedAt,
@@ -7544,7 +7549,7 @@ function SidebarSearchPaletteController(props: {
         },
       ];
     });
-  }, [props.projectById, props.projects, sidebarDisplayThreads, threads]);
+  }, [folders, props.projectById, props.projects, sidebarDisplayThreads, threads]);
 
   return (
     <SidebarSearchPalette

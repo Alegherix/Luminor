@@ -3,7 +3,8 @@
 // message-content hits while still surfacing a useful snippet for chat matches.
 import type { ComponentType } from "react";
 
-import type { ProviderKind } from "@luminor/contracts";
+import type { FolderOwner, ProviderKind } from "@luminor/contracts";
+import { folderOwnerDisplayName } from "@luminor/shared/folderOwnership";
 import { basenameOfPath } from "../file-icons";
 import type { ThemeMode, ThemeVariant } from "../theme/theme.logic";
 
@@ -53,6 +54,16 @@ export interface SidebarSearchProjectMatch {
   project: SidebarSearchProject;
 }
 
+export interface SidebarSearchThreadFolder {
+  name: string;
+  owner: FolderOwner;
+}
+
+export interface SidebarSearchThreadLocation {
+  parentName: string;
+  folderName: string | null;
+}
+
 export interface SidebarSearchThread {
   id: string;
   title: string;
@@ -60,6 +71,7 @@ export interface SidebarSearchThread {
   projectName: string;
   projectRemoteName: string;
   spaceName: string;
+  folder?: SidebarSearchThreadFolder | null | undefined;
   provider: ProviderKind;
   createdAt: string;
   updatedAt?: string | undefined;
@@ -244,6 +256,24 @@ function scoreProject(project: SidebarSearchProject, query: string): number | nu
   if (cwd.includes(query)) return 70;
   if (spaceName.includes(query)) return 60;
   return null;
+}
+
+export function resolveSidebarSearchThreadLocation(
+  thread: SidebarSearchThread,
+): SidebarSearchThreadLocation {
+  const folder = thread.folder ?? null;
+  if (folder === null) {
+    return { parentName: thread.projectName, folderName: null };
+  }
+
+  return {
+    parentName: folderOwnerDisplayName({
+      owner: folder.owner,
+      projectName: thread.projectName,
+      spaceName: thread.spaceName,
+    }),
+    folderName: folder.name,
+  };
 }
 
 export function matchSidebarSearchActions(
