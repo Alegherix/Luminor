@@ -217,7 +217,7 @@ export const makeAgentGateway = Effect.gen(function* () {
     definition: {
       name: "luminor_create_threads",
       description:
-        "Create an exact batch of 1–20 standalone Luminor threads. Worktree threads start on a Luminor-managed temporary branch pinned at baseRef (or the selected checkout's HEAD) and copy local checkout changes plus .worktreeinclude files when the ref is that checkout's HEAD; on the first turn Luminor may rename the branch after the prompt and publish it. Validation/preflight failures create nothing and may be corrected with the same requestId; durable retries replay the exact operation.",
+        "Create an exact batch of 1–20 standalone Luminor threads. Worktree threads start on a Luminor-managed temporary branch pinned at baseRef (or the selected checkout's HEAD) and copy local checkout changes plus .worktreeinclude files when the ref is that checkout's HEAD; on the first turn Luminor may rename the branch after the prompt and publish it. Validation/preflight failures create nothing and may be corrected with the same requestId; durable retries replay the exact operation. After this plan completes and every created thread is terminal, the same caller turn may submit another distinct plan for the next wave.",
       inputSchema: {
         type: "object",
         properties: {

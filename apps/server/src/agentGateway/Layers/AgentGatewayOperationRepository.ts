@@ -55,13 +55,33 @@ export const makeAgentGatewayOperationRepository = Effect.gen(function* () {
       WHERE caller_thread_id = ${input.callerThreadId}
         AND caller_turn_id = ${input.callerTurnId}
         AND operation_kind = ${input.operationKind}
-      LIMIT 1
+      ORDER BY created_at ASC, operation_id ASC
     `;
 
   const reserve: AgentGatewayOperationRepositoryShape["reserve"] = (input) =>
     sql
       .withTransaction(
         Effect.gen(function* () {
+          const scoped = yield* readByScope(input);
+          const matchingRequest = scoped.find(
+            (operation) => operation.requestId === input.requestId,
+          );
+          if (matchingRequest) {
+            return {
+              kind:
+                matchingRequest.fingerprint === input.fingerprint
+                  ? "replay"
+                  : "idempotency_conflict",
+              operation: matchingRequest,
+            } satisfies ReserveAgentGatewayOperationResult;
+          }
+          const blocking = scoped.find((operation) => operation.status !== "completed");
+          if (blocking) {
+            return {
+              kind: "creation_plan_locked",
+              operation: blocking,
+            } satisfies ReserveAgentGatewayOperationResult;
+          }
           const inserted = yield* sql<{ readonly operationId: string }>`
             INSERT INTO agent_gateway_operations (
               operation_id,
@@ -92,24 +112,35 @@ export const makeAgentGatewayOperationRepository = Effect.gen(function* () {
               ${input.now},
               ${input.now}
             )
-            ON CONFLICT (caller_thread_id, caller_turn_id, operation_kind) DO NOTHING
+            ON CONFLICT (caller_thread_id, caller_turn_id, operation_kind, request_id) DO NOTHING
             RETURNING operation_id AS "operationId"
           `;
-          const [operation] = yield* readByScope(input);
-          if (!operation) {
+          if (inserted.length === 0) {
+            const raced = (yield* readByScope(input)).find(
+              (operation) => operation.requestId === input.requestId,
+            );
+            if (!raced) {
+              return yield* Effect.fail(
+                new Error("Reserved gateway operation could not be read back."),
+              );
+            }
+            return {
+              kind: raced.fingerprint === input.fingerprint ? "replay" : "idempotency_conflict",
+              operation: raced,
+            } satisfies ReserveAgentGatewayOperationResult;
+          }
+          const reserved = (yield* readByScope(input)).find(
+            (operation) => operation.operationId === input.operationId,
+          );
+          if (!reserved) {
             return yield* Effect.fail(
               new Error("Reserved gateway operation could not be read back."),
             );
           }
-          let kind: ReserveAgentGatewayOperationResult["kind"];
-          if (inserted.length > 0) {
-            kind = "reserved";
-          } else if (operation.requestId === input.requestId) {
-            kind = operation.fingerprint === input.fingerprint ? "replay" : "idempotency_conflict";
-          } else {
-            kind = "creation_plan_locked";
-          }
-          return { kind, operation } satisfies ReserveAgentGatewayOperationResult;
+          return {
+            kind: "reserved",
+            operation: reserved,
+          } satisfies ReserveAgentGatewayOperationResult;
         }),
       )
       .pipe(Effect.mapError(mapSqlError("reserve")));
@@ -253,9 +284,12 @@ export const makeAgentGatewayOperationRepository = Effect.gen(function* () {
 
   const getByScope: AgentGatewayOperationRepositoryShape["getByScope"] = (input) =>
     readByScope(input).pipe(
-      Effect.map((rows) => rows[0] ?? null),
+      Effect.map((rows) => rows[rows.length - 1] ?? null),
       Effect.mapError(mapSqlError("getByScope")),
     );
+
+  const listByScope: AgentGatewayOperationRepositoryShape["listByScope"] = (input) =>
+    readByScope(input).pipe(Effect.mapError(mapSqlError("listByScope")));
 
   const listNonTerminal: AgentGatewayOperationRepositoryShape["listNonTerminal"] = () =>
     sql<OperationRow>`
@@ -288,6 +322,7 @@ export const makeAgentGatewayOperationRepository = Effect.gen(function* () {
     fail,
     getById,
     getByScope,
+    listByScope,
     listNonTerminal,
   } satisfies AgentGatewayOperationRepositoryShape;
 });

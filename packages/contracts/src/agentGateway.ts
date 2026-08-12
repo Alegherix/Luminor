@@ -13,6 +13,7 @@ import { ProviderModelDescriptor } from "./providerDiscovery";
 import { ServerProviderAuthStatus } from "./server";
 
 export const LUMINOR_GATEWAY_MAX_THREADS_PER_OPERATION = 20;
+export const LUMINOR_GATEWAY_MAX_THREADS_PER_TURN = 20;
 export const LUMINOR_GATEWAY_MAX_REQUEST_ID_LENGTH = 256;
 export const LUMINOR_GATEWAY_MAX_WAIT_MS = 60_000;
 
@@ -134,8 +135,10 @@ export const LuminorCapabilitiesResult = Schema.Struct({
   providers: Schema.Array(LuminorProviderCatalog),
   limits: Schema.Struct({
     maxThreadsPerOperation: Schema.Int,
+    maxThreadsPerTurn: Schema.Int,
     maxWaitMs: Schema.Int,
     oneCreationPlanPerActiveTurn: Schema.Boolean,
+    oneInFlightCreationPlanPerActiveTurn: Schema.Boolean,
   }),
 });
 export type LuminorCapabilitiesResult = typeof LuminorCapabilitiesResult.Type;

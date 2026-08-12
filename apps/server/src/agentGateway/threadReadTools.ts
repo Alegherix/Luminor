@@ -1,5 +1,6 @@
 import {
   LUMINOR_GATEWAY_MAX_THREADS_PER_OPERATION,
+  LUMINOR_GATEWAY_MAX_THREADS_PER_TURN,
   ThreadId,
   TurnId,
   type OrchestrationThreadShell,
@@ -164,8 +165,10 @@ export function makeThreadReadTools(input: ThreadReadToolsInput): ReadonlyArray<
           providers,
           limits: {
             maxThreadsPerOperation: LUMINOR_GATEWAY_MAX_THREADS_PER_OPERATION,
+            maxThreadsPerTurn: LUMINOR_GATEWAY_MAX_THREADS_PER_TURN,
             maxWaitMs: 60_000,
-            oneCreationPlanPerActiveTurn: true,
+            oneCreationPlanPerActiveTurn: false,
+            oneInFlightCreationPlanPerActiveTurn: true,
           },
         });
       }).pipe(Effect.catch((error) => Effect.succeed(mcpToolResultError(errorText(error))))),

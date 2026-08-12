@@ -3,7 +3,7 @@ import type { ProviderKind } from "@luminor/contracts";
 import { AUTOMATION_AUTHORING_GUIDANCE } from "./automationAuthoringGuidance.ts";
 
 /** Canonical, versioned host policy delivered to every supported provider. */
-export const LUMINOR_HARNESS_POLICY_VERSION = "2026-08-03.1";
+export const LUMINOR_HARNESS_POLICY_VERSION = "2026-08-12.1";
 export const LUMINOR_HARNESS_POLICY_MARKER = `[Luminor harness policy ${LUMINOR_HARNESS_POLICY_VERSION}]`;
 
 export interface LuminorHarnessCapabilities {
@@ -25,6 +25,7 @@ export function renderLuminorHarnessPolicy(capabilities: LuminorHarnessCapabilit
         "For thread discovery and diagnosis, use luminor_list_threads, luminor_read_thread, luminor_read_thread_activity, luminor_read_thread_events, luminor_read_thread_runtime_events, and luminor_diagnose_thread before inspecting Luminor's SQLite files or process logs. Fall back to host storage only when a tool's coverage metadata says the required evidence is unavailable.",
         "Provider-native subagent or Task tools are implementation details: they do not create Luminor threads and must not substitute for an explicit request to create Luminor threads.",
         "For a plural thread request, submit one exact luminor_create_threads plan. The array length is the exact requested count.",
+        "A caller turn may commit another distinct creation plan only after the previous plan has completed and every thread it created is terminal. Failed plans are not replaced in the same turn. Call luminor_wait_for_threads until the previous wave is terminal before creating the next wave. Total threads created across all plans in one turn cannot exceed the gateway per-turn limit.",
         "If luminor_create_threads rejects the plan during validation or preflight before returning an operationId, correct that same plan and retry it with the same requestId. This is safe because no durable operation, thread, or worktree was created.",
         "Use luminor_capabilities to select canonical provider, model, and option values. Never guess a model slug or silently substitute a provider or model.",
         "Provider option keys are not interchangeable: Codex uses options.reasoningEffort and Claude Agent uses options.effort. Follow luminor_capabilities.targetConstruction for every provider instead of inspecting Luminor source code.",

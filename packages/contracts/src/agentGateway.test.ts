@@ -124,8 +124,10 @@ describe("agent gateway contracts", () => {
         ],
         limits: {
           maxThreadsPerOperation: 20,
+          maxThreadsPerTurn: 20,
           maxWaitMs: 60_000,
-          oneCreationPlanPerActiveTurn: true,
+          oneCreationPlanPerActiveTurn: false,
+          oneInFlightCreationPlanPerActiveTurn: true,
         },
       }),
     );

@@ -109,6 +109,7 @@ import Migration0090 from "./Migrations/090_Folders.ts";
 import Migration0091 from "./Migrations/091_ThreadFolderMembership.ts";
 import Migration0092 from "./Migrations/092_ProjectScriptKinds.ts";
 import Migration0093 from "./Migrations/093_SpaceFolderOwnership.ts";
+import Migration0094 from "./Migrations/094_AgentGatewaySequentialCreationPlans.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -217,6 +218,7 @@ export const migrationEntries = [
   [91, "ThreadFolderMembership", Migration0091],
   [92, "ProjectScriptKinds", Migration0092],
   [93, "SpaceFolderOwnership", Migration0093],
+  [94, "AgentGatewaySequentialCreationPlans", Migration0094],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

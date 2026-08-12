@@ -827,11 +827,15 @@ function makeHarnessLayer(
   } as unknown as (typeof ProviderHealth)["Service"]);
 
   const operationsByScope = new Map<string, AgentGatewayOperationRecord>();
+  const operationScopeKey = (operation: {
+    readonly callerThreadId: string;
+    readonly callerTurnId: string;
+    readonly operationKind: "create_threads";
+    readonly requestId: string;
+  }) =>
+    `${operation.callerThreadId}:${operation.callerTurnId}:${operation.operationKind}:${operation.requestId}`;
   for (const operation of options.interruptedOperations ?? []) {
-    operationsByScope.set(
-      `${operation.callerThreadId}:${operation.callerTurnId}:${operation.operationKind}`,
-      operation,
-    );
+    operationsByScope.set(operationScopeKey(operation), operation);
   }
   const operationLayer = Layer.succeed(AgentGatewayOperationRepository, {
     reserve: (input: {
@@ -846,16 +850,22 @@ function makeHarnessLayer(
       now: string;
     }) =>
       Effect.gen(function* () {
-        const key = `${input.callerThreadId}:${input.callerTurnId}:${input.operationKind}`;
+        const key = operationScopeKey(input);
         const existing = operationsByScope.get(key);
         if (existing) {
           const kind =
-            existing.requestId !== input.requestId
-              ? "creation_plan_locked"
-              : existing.fingerprint !== input.fingerprint
-                ? "idempotency_conflict"
-                : "replay";
+            existing.fingerprint !== input.fingerprint ? "idempotency_conflict" : "replay";
           return { kind, operation: existing };
+        }
+        const blocking = [...operationsByScope.values()].find(
+          (operation) =>
+            operation.callerThreadId === input.callerThreadId &&
+            operation.callerTurnId === input.callerTurnId &&
+            operation.operationKind === input.operationKind &&
+            operation.status !== "completed",
+        );
+        if (blocking) {
+          return { kind: "creation_plan_locked" as const, operation: blocking };
         }
         const operation: AgentGatewayOperationRecord = {
           ...input,
@@ -1010,11 +1020,27 @@ function makeHarnessLayer(
       callerTurnId: string;
       operationKind: "create_threads";
     }) =>
-      Effect.sync(
-        () =>
-          operationsByScope.get(
-            `${input.callerThreadId}:${input.callerTurnId}:${input.operationKind}`,
-          ) ?? null,
+      Effect.sync(() => {
+        const scoped = [...operationsByScope.values()].filter(
+          (operation) =>
+            operation.callerThreadId === input.callerThreadId &&
+            operation.callerTurnId === input.callerTurnId &&
+            operation.operationKind === input.operationKind,
+        );
+        return scoped[scoped.length - 1] ?? null;
+      }),
+    listByScope: (input: {
+      callerThreadId: string;
+      callerTurnId: string;
+      operationKind: "create_threads";
+    }) =>
+      Effect.sync(() =>
+        [...operationsByScope.values()].filter(
+          (operation) =>
+            operation.callerThreadId === input.callerThreadId &&
+            operation.callerTurnId === input.callerTurnId &&
+            operation.operationKind === input.operationKind,
+        ),
       ),
     listNonTerminal: () =>
       Effect.sync(() =>
@@ -2940,7 +2966,7 @@ describe("AgentGateway", () => {
     }).pipe(Effect.provide(gatewayLayer));
   });
 
-  it.effect("locks a second distinct creation plan in the same caller turn", () => {
+  it.effect("locks a second distinct creation plan until the previous wave is terminal", () => {
     const { gatewayLayer, makeHarness } = makeHarnessLayer(baseThreads);
     return Effect.gen(function* () {
       const harness = yield* makeHarness;
@@ -2971,6 +2997,101 @@ describe("AgentGateway", () => {
       assert.equal(
         (toolResultJson(second.result).error as { code: string }).code,
         "creation_plan_locked",
+      );
+      assert.equal(
+        harness.dispatched.filter((command) => command.type === "thread.create").length,
+        1,
+      );
+    }).pipe(Effect.provide(gatewayLayer));
+  });
+
+  it.effect("allows a later wave after the previous created threads are terminal", () => {
+    const { gatewayLayer, makeHarness } = makeHarnessLayer(baseThreads);
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness;
+      const first = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_create_threads",
+        args: {
+          requestId: "wave-1",
+          threads: [{ prompt: "first wave", target: { provider: "codex", model: "gpt-5.5" } }],
+        },
+      });
+      assert.isFalse(isToolError(first.result), toolErrorText(first.result));
+      const firstThreadId = (toolResultJson(first.result).threadIds as string[])[0]!;
+      harness.setThreadDetail(
+        makeThreadDetail(
+          makeThreadShell(firstThreadId, {
+            latestTurn: {
+              turnId: TurnId.makeUnsafe("turn-wave-1"),
+              state: "completed",
+              requestedAt: NOW,
+              startedAt: NOW,
+              completedAt: NOW,
+              assistantMessageId: null,
+            },
+          }),
+        ),
+      );
+      const second = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_create_threads",
+        args: {
+          requestId: "wave-2",
+          threads: [{ prompt: "second wave", target: { provider: "codex", model: "gpt-5.5" } }],
+        },
+      });
+      assert.isFalse(isToolError(second.result), toolErrorText(second.result));
+      assert.equal(
+        harness.dispatched.filter((command) => command.type === "thread.create").length,
+        2,
+      );
+    }).pipe(Effect.provide(gatewayLayer));
+  });
+
+  it.effect("caps total created threads across sequential plans in one turn", () => {
+    const { gatewayLayer, makeHarness } = makeHarnessLayer(baseThreads);
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness;
+      const first = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_create_threads",
+        args: {
+          requestId: "wave-budget-1",
+          threads: [{ prompt: "first", target: { provider: "codex", model: "gpt-5.5" } }],
+        },
+      });
+      assert.isFalse(isToolError(first.result), toolErrorText(first.result));
+      const firstThreadId = (toolResultJson(first.result).threadIds as string[])[0]!;
+      harness.setThreadDetail(
+        makeThreadDetail(
+          makeThreadShell(firstThreadId, {
+            latestTurn: {
+              turnId: TurnId.makeUnsafe("turn-budget-1"),
+              state: "completed",
+              requestedAt: NOW,
+              startedAt: NOW,
+              completedAt: NOW,
+              assistantMessageId: null,
+            },
+          }),
+        ),
+      );
+      const second = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_create_threads",
+        args: {
+          requestId: "wave-budget-2",
+          threads: Array.from({ length: 20 }, (_, index) => ({
+            prompt: `overflow ${index}`,
+            target: { provider: "codex" as const, model: "gpt-5.5" },
+          })),
+        },
+      });
+      assert.isTrue(isToolError(second.result));
+      assert.equal(
+        (toolResultJson(second.result).error as { code: string }).code,
+        "creation_limit_exceeded",
       );
       assert.equal(
         harness.dispatched.filter((command) => command.type === "thread.create").length,

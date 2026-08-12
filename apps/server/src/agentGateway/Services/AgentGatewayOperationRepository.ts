@@ -89,6 +89,11 @@ export interface AgentGatewayOperationRepositoryShape {
     readonly callerTurnId: string;
     readonly operationKind: "create_threads";
   }) => Effect.Effect<AgentGatewayOperationRecord | null, Error>;
+  readonly listByScope: (input: {
+    readonly callerThreadId: string;
+    readonly callerTurnId: string;
+    readonly operationKind: "create_threads";
+  }) => Effect.Effect<ReadonlyArray<AgentGatewayOperationRecord>, Error>;
   readonly listNonTerminal: () => Effect.Effect<ReadonlyArray<AgentGatewayOperationRecord>, Error>;
 }
 

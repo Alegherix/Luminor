@@ -35,7 +35,7 @@ layer("AgentGatewayOperationRepository", (it) => {
     }),
   );
 
-  it.effect("distinguishes request conflicts from a second plan in the same turn", () =>
+  it.effect("distinguishes request conflicts from a second in-flight plan in the same turn", () =>
     Effect.gen(function* () {
       const repository = yield* AgentGatewayOperationRepository;
       const scoped = { ...base, callerTurnId: "turn-2", operationId: "operation-2" };
@@ -58,6 +58,32 @@ layer("AgentGatewayOperationRepository", (it) => {
         })).kind,
         "creation_plan_locked",
       );
+    }),
+  );
+
+  it.effect("reserves a later plan in the same turn after the previous plan completed", () =>
+    Effect.gen(function* () {
+      const repository = yield* AgentGatewayOperationRepository;
+      const scoped = { ...base, callerTurnId: "turn-wave", operationId: "operation-wave-1" };
+      yield* repository.reserve(scoped);
+      yield* repository.markDispatching({ operationId: scoped.operationId, now: scoped.now });
+      yield* repository.complete({
+        operationId: scoped.operationId,
+        resultJson: '{"threadIds":["child-1"]}',
+        now: "2026-07-16T00:00:02.000Z",
+      });
+
+      const second = yield* repository.reserve({
+        ...scoped,
+        operationId: "operation-wave-2",
+        requestId: "request-2",
+        fingerprint: "wave-2",
+        requestedCount: 1,
+        now: "2026-07-16T00:00:03.000Z",
+      });
+      assert.equal(second.kind, "reserved");
+      assert.equal(second.operation.operationId, "operation-wave-2");
+      assert.equal((yield* repository.listByScope(scoped)).length, 2);
     }),
   );
 

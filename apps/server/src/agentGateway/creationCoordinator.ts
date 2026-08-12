@@ -14,6 +14,7 @@ import {
   type ProviderKind,
   type LuminorCreateThreadsInput,
   type LuminorCreateThreadsResult,
+  LUMINOR_GATEWAY_MAX_THREADS_PER_TURN,
 } from "@luminor/contracts";
 import { buildPromptThreadTitleFallback } from "@luminor/shared/chatThreads";
 import { WORKTREE_BRANCH_PREFIX } from "@luminor/shared/git";
@@ -50,6 +51,12 @@ import {
 } from "./targetResolver.ts";
 import { ToolInputError, errorText } from "./toolInput.ts";
 import { GatewayToolError, gatewayToolErrorResult } from "./toolRuntime.ts";
+import {
+  isGatewayTurnStateTerminal,
+  parseCreatedThreadIds,
+  previousCreationPlanBlocksNextWave,
+  previousWaveNeedsTerminalThreads,
+} from "./creationPlanGate.ts";
 
 const CREATION_REPLAY_WAIT_MS = 60_000;
 
@@ -123,7 +130,7 @@ export type GatewayCreationContext =
 type CreationOperationRecord = AgentGatewayOperationRecord | ExternalMcpOperationRecord;
 
 interface CreationOperationStore {
-  readonly getExisting: () => Effect.Effect<CreationOperationRecord | null, Error>;
+  readonly listByScope: () => Effect.Effect<ReadonlyArray<CreationOperationRecord>, Error>;
   readonly getById: (operationId: string) => Effect.Effect<CreationOperationRecord | null, Error>;
   readonly reserve: (input: {
     readonly operationId: string;
@@ -347,8 +354,8 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
       const operationStore: CreationOperationStore =
         context.kind === "provider-session"
           ? {
-              getExisting: () =>
-                operationRepository.getByScope({
+              listByScope: () =>
+                operationRepository.listByScope({
                   callerThreadId: context.callerThreadId,
                   callerTurnId: context.callerTurnId!,
                   operationKind: "create_threads",
@@ -371,11 +378,13 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
               markTaskStatus: () => Effect.void,
             }
           : {
-              getExisting: () =>
-                externalOperationRepository!.getOperationByRequest({
-                  integrationId: context.integrationId,
-                  requestId: input.requestId,
-                }),
+              listByScope: () =>
+                externalOperationRepository!
+                  .getOperationByRequest({
+                    integrationId: context.integrationId,
+                    requestId: input.requestId,
+                  })
+                  .pipe(Effect.map((operation) => (operation === null ? [] : [operation]))),
               getById: externalOperationRepository!.getOperationById,
               reserve: (reservation) =>
                 externalOperationRepository!.reserveOperation({
@@ -402,28 +411,13 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
                   now: gatewayIsoNow(),
                 }),
             };
-      const existingOperation = yield* operationStore
-        .getExisting()
+      const scopedOperations = yield* operationStore
+        .listByScope()
         .pipe(Effect.mapError((error) => new ToolInputError(errorText(error))));
+      const existingOperation =
+        scopedOperations.find((operation) => operation.requestId === input.requestId) ?? null;
       if (existingOperation !== null) {
         yield* context.assertAuthority();
-        if (
-          context.kind === "provider-session" &&
-          existingOperation.requestId !== input.requestId
-        ) {
-          return yield* Effect.fail(
-            new GatewayToolError(
-              "creation_plan_locked",
-              "This caller turn already committed a different thread-creation plan. A new user turn is required for another plan.",
-              {
-                operationId: existingOperation.operationId,
-                requestId: existingOperation.requestId,
-                requestedCount: existingOperation.requestedCount,
-                status: existingOperation.status,
-              },
-            ),
-          );
-        }
         if (existingOperation.fingerprint !== fingerprint) {
           return yield* Effect.fail(
             new GatewayToolError(
@@ -453,6 +447,84 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
           existingOperation.operationId,
           context.assertAuthority,
         );
+      }
+      if (context.kind === "provider-session") {
+        yield* context.assertAuthority();
+        const blocking = scopedOperations.find((operation) =>
+          previousCreationPlanBlocksNextWave(operation.status),
+        );
+        if (blocking) {
+          return yield* Effect.fail(
+            new GatewayToolError(
+              "creation_plan_locked",
+              blocking.status === "failed"
+                ? "This caller turn already has a failed thread-creation plan. Failed plans are not replaced in the same turn."
+                : "This caller turn already has an in-flight thread-creation plan.",
+              {
+                operationId: blocking.operationId,
+                requestId: blocking.requestId,
+                requestedCount: blocking.requestedCount,
+                status: blocking.status,
+              },
+            ),
+          );
+        }
+        const usedCount = scopedOperations.reduce(
+          (sum, operation) => sum + operation.requestedCount,
+          0,
+        );
+        if (usedCount + input.threads.length > LUMINOR_GATEWAY_MAX_THREADS_PER_TURN) {
+          return yield* Effect.fail(
+            new GatewayToolError(
+              "creation_limit_exceeded",
+              `This caller turn already created ${usedCount} thread(s); another ${input.threads.length} would exceed the ${LUMINOR_GATEWAY_MAX_THREADS_PER_TURN} per-turn limit.`,
+              {
+                usedCount,
+                requestedCount: input.threads.length,
+                maxThreadsPerTurn: LUMINOR_GATEWAY_MAX_THREADS_PER_TURN,
+              },
+            ),
+          );
+        }
+        for (const operation of scopedOperations) {
+          if (previousWaveNeedsTerminalThreads(operation)) {
+            return yield* Effect.fail(
+              new GatewayToolError(
+                "creation_plan_locked",
+                "Wait for the previous wave to become terminal before creating the next plan. Call luminor_wait_for_threads until every created thread is terminal.",
+                {
+                  operationId: operation.operationId,
+                  requestId: operation.requestId,
+                  requestedCount: operation.requestedCount,
+                  status: operation.status,
+                },
+              ),
+            );
+          }
+          const createdThreadIds = parseCreatedThreadIds(operation.resultJson);
+          for (const threadId of createdThreadIds) {
+            const shell = yield* snapshotQuery
+              .getThreadShellById(ThreadId.makeUnsafe(threadId))
+              .pipe(Effect.mapError((error) => new ToolInputError(errorText(error))));
+            const state = Option.isSome(shell) ? (shell.value.latestTurn?.state ?? null) : null;
+            if (Option.isNone(shell) || !isGatewayTurnStateTerminal(state)) {
+              return yield* Effect.fail(
+                new GatewayToolError(
+                  "creation_plan_locked",
+                  "Wait for the previous wave to become terminal before creating the next plan. Call luminor_wait_for_threads until every created thread is terminal.",
+                  {
+                    operationId: operation.operationId,
+                    requestId: operation.requestId,
+                    requestedCount: operation.requestedCount,
+                    status: operation.status,
+                    threadId,
+                    turnState: state,
+                  },
+                ),
+              );
+            }
+          }
+        }
       }
       const deprecatedBranchName = input.threads.find((spec) => spec.branchName !== undefined);
       if (deprecatedBranchName) {
@@ -922,7 +994,11 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
             return yield* Effect.fail(
               new GatewayToolError(
                 "creation_plan_locked",
-                "This caller turn already committed a different thread-creation plan. A new user turn is required for another plan.",
+                reservation.operation.status === "failed"
+                  ? "This caller turn already has a failed thread-creation plan. Failed plans are not replaced in the same turn."
+                  : reservation.operation.status === "completed"
+                    ? "Wait for the previous wave to become terminal before creating the next plan. Call luminor_wait_for_threads until every created thread is terminal."
+                    : "This caller turn already has an in-flight thread-creation plan.",
                 {
                   operationId: reservation.operation.operationId,
                   requestId: reservation.operation.requestId,

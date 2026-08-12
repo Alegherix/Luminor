@@ -14,6 +14,8 @@ describe("Luminor harness policy", () => {
     assert.include(policy, LUMINOR_HARNESS_POLICY_MARKER);
     assert.include(policy, "Luminor is the host and harness");
     assert.include(policy, "one exact luminor_create_threads plan");
+    assert.include(policy, "another distinct creation plan");
+    assert.include(policy, "previous wave is terminal");
     assert.include(policy, "before returning an operationId");
     assert.include(policy, "luminor_wait_for_threads");
     assert.include(policy, "Use the browser_* tools");
