@@ -134,6 +134,7 @@ import {
   shouldCheckForUpdatesOnForeground,
 } from "./updateState";
 import { registerDesktopVoiceTranscriptionHandler } from "./voiceTranscription";
+import { registerMeetingsCalendarIpc } from "./meetingsCalendarIpc";
 import {
   applyDesktopPhysicalZoomAction,
   resolveDesktopMenuAccelerator,
@@ -3733,6 +3734,10 @@ function registerIpcHandlers(): void {
       }),
   );
   registerDesktopVoiceTranscriptionHandler();
+  registerMeetingsCalendarIpc({
+    homeDir: BASE_DIR,
+    getOwnerWindow: () => BrowserWindow.getFocusedWindow() ?? mainWindow,
+  });
   startBrowserPerformanceLogging();
   registerBrowserIpcHandlers(ipcMain, browserManager);
 }

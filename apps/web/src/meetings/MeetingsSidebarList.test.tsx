@@ -1,13 +1,53 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { createIdleMeetingsWorkspace } from "./meetingsWorkspace";
+import { createIdleMeetingsWorkspace, type MeetingsWorkspaceSnapshot } from "./meetingsWorkspace";
 import { MeetingsSidebarList } from "./MeetingsSidebarList";
 
+const NOW = new Date("2026-08-12T12:00:00.000Z");
+
+const signedInWorkspace: MeetingsWorkspaceSnapshot = {
+  connection: "signed-in",
+  accountEmail: "me@example.com",
+  selectedSessionId: "later",
+  pastedMeetUrl: "",
+  sessions: [
+    {
+      id: "live",
+      title: "Interview",
+      startAt: "2026-08-12T11:30:00.000Z",
+      endAt: "2026-08-12T12:30:00.000Z",
+      meetUrl: "https://meet.google.com/live",
+      attendees: [],
+      status: "live",
+    },
+    {
+      id: "later",
+      title: "Retro",
+      startAt: "2026-08-12T15:00:00.000Z",
+      endAt: "2026-08-12T15:45:00.000Z",
+      meetUrl: null,
+      attendees: [],
+      status: "upcoming",
+    },
+    {
+      id: "ended",
+      title: "Standup",
+      startAt: "2026-08-12T09:00:00.000Z",
+      endAt: "2026-08-12T09:30:00.000Z",
+      meetUrl: null,
+      attendees: [],
+      status: "ended",
+    },
+  ],
+};
+
 describe("MeetingsSidebarList", () => {
-  it("renders empty today, live, and ended section chrome", () => {
+  it("renders empty today, live, and ended section chrome when signed in with no events", () => {
     const html = renderToStaticMarkup(
-      <MeetingsSidebarList workspace={createIdleMeetingsWorkspace()} />,
+      <MeetingsSidebarList
+        workspace={{ ...createIdleMeetingsWorkspace(), connection: "signed-in" }}
+      />,
     );
 
     expect(html).toContain("Live");
@@ -16,5 +56,37 @@ describe("MeetingsSidebarList", () => {
     expect(html).toContain("No live meeting");
     expect(html).toContain("No other meetings today");
     expect(html).toContain("No ended meetings today");
+  });
+
+  it("explains how to connect Google Calendar when signed out", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsSidebarList workspace={createIdleMeetingsWorkspace()} />,
+    );
+
+    expect(html).toContain("Connect Google Calendar");
+    expect(html).toContain("installed OAuth client");
+    expect(html).toContain("primary calendar");
+    expect(html).not.toContain("No live meeting");
+  });
+
+  it("lists today's meetings and marks the selected row", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsSidebarList workspace={signedInWorkspace} now={NOW} />,
+    );
+
+    expect(html).toContain("Interview");
+    expect(html).toContain("Retro");
+    expect(html).toContain("Standup");
+    expect(html).toContain('aria-pressed="true"');
+  });
+
+  it("renders selectable meeting rows", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsSidebarList workspace={signedInWorkspace} now={NOW} />,
+    );
+
+    expect(html).toContain('type="button"');
+    expect(html).toContain("Interview");
+    expect(html).toContain("Retro");
   });
 });

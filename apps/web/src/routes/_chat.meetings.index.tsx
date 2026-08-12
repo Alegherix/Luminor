@@ -2,13 +2,14 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { RouteInsetSurface } from "~/components/RouteInsetSurface";
 import { MeetingsIdleCanvas } from "~/meetings/MeetingsIdleCanvas";
-import { IDLE_MEETINGS_WORKSPACE } from "~/meetings/meetingsWorkspace";
+import { useMeetingsWorkspace } from "~/meetings/useMeetingsWorkspace";
 import { isElectron } from "~/env";
 
 function MeetingsIndexRouteView() {
+  const { snapshot } = useMeetingsWorkspace();
   return (
     <RouteInsetSurface>
-      <MeetingsIdleCanvas workspace={IDLE_MEETINGS_WORKSPACE} />
+      <MeetingsIdleCanvas workspace={snapshot} />
     </RouteInsetSurface>
   );
 }

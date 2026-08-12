@@ -221,4 +221,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       };
     },
   },
+  meetings: {
+    getStatus: () => ipcRenderer.invoke(IPC.meetings.getStatus),
+    connect: () => ipcRenderer.invoke(IPC.meetings.connect),
+    listToday: () => ipcRenderer.invoke(IPC.meetings.listToday),
+  },
 } satisfies DesktopBridge);

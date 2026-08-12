@@ -420,6 +420,26 @@ export interface LuminorStorageSnapshot {
   readonly entries: Readonly<Record<string, string>>;
 }
 
+export interface MeetingsCalendarStatus {
+  readonly connected: boolean;
+  readonly accountEmail: string | null;
+}
+
+export interface MeetingsCalendarEvent {
+  readonly id: string;
+  readonly title: string;
+  readonly startAt: string;
+  readonly endAt: string;
+  readonly meetUrl: string | null;
+  readonly attendees: readonly string[];
+}
+
+export interface DesktopMeetingsBridge {
+  getStatus: () => Promise<MeetingsCalendarStatus>;
+  connect: () => Promise<MeetingsCalendarStatus>;
+  listToday: () => Promise<readonly MeetingsCalendarEvent[]>;
+}
+
 export interface DesktopBridge {
   getWsUrl: () => string | null;
   /**
@@ -483,6 +503,7 @@ export interface DesktopBridge {
     ) => () => void;
     onBrowserCopyLink: (listener: (event: BrowserCopyLinkEvent) => void) => () => void;
   };
+  meetings?: DesktopMeetingsBridge;
 }
 
 export interface NativeApi {

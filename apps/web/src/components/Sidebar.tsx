@@ -403,8 +403,7 @@ import {
   SIDEBAR_SECTION_LABEL_CLASS_NAME,
 } from "../sidebarRowStyles";
 import { SettingsSidebarNav } from "./SettingsSidebarNav";
-import { MeetingsSidebarList } from "~/meetings/MeetingsSidebarList";
-import { IDLE_MEETINGS_WORKSPACE } from "~/meetings/meetingsWorkspace";
+import { MeetingsSidebar } from "~/meetings/MeetingsSidebar";
 import {
   ComposerPickerMenuPopup,
   ComposerPickerMenuSubPopup,
@@ -6688,7 +6687,7 @@ export default function Sidebar() {
               className="sidebar-surface-enter"
             >
               {isOnMeetings ? (
-                <MeetingsSidebarList workspace={IDLE_MEETINGS_WORKSPACE} />
+                <MeetingsSidebar />
               ) : (
                 <>
                   {/* Primary sidebar actions stay limited to features we currently ship. */}
