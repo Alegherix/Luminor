@@ -25,6 +25,8 @@ import {
   groupSidebarThreadsByProjectId,
   isLatestPinnedProjectMutation,
   isProjectsSidebarSurface,
+  resolveActiveSidebarView,
+  resolveSidebarSurfacePickerViews,
   getUnpinnedThreadsForSidebar,
   getVisibleSidebarThreadIds,
   getVisibleThreadsForProject,
@@ -254,9 +256,48 @@ describe("filterFolderNewThreadProjects", () => {
 
 describe("isProjectsSidebarSurface", () => {
   it("enables Space shortcuts only where the Space switcher is visible", () => {
-    expect(isProjectsSidebarSurface({ isOnSettings: false, isOnStudio: false })).toBe(true);
-    expect(isProjectsSidebarSurface({ isOnSettings: false, isOnStudio: true })).toBe(false);
-    expect(isProjectsSidebarSurface({ isOnSettings: true, isOnStudio: false })).toBe(false);
+    expect(
+      isProjectsSidebarSurface({ isOnSettings: false, isOnStudio: false, isOnMeetings: false }),
+    ).toBe(true);
+    expect(
+      isProjectsSidebarSurface({ isOnSettings: false, isOnStudio: true, isOnMeetings: false }),
+    ).toBe(false);
+    expect(
+      isProjectsSidebarSurface({ isOnSettings: true, isOnStudio: false, isOnMeetings: false }),
+    ).toBe(false);
+    expect(
+      isProjectsSidebarSurface({ isOnSettings: false, isOnStudio: false, isOnMeetings: true }),
+    ).toBe(false);
+  });
+});
+
+describe("resolveSidebarSurfacePickerViews", () => {
+  it("puts Möten next to Luminor on desktop and keeps Studio behind its setting", () => {
+    expect(resolveSidebarSurfacePickerViews({ isDesktop: true, showStudioSection: true })).toEqual([
+      "threads",
+      "meetings",
+      "studio",
+    ]);
+    expect(resolveSidebarSurfacePickerViews({ isDesktop: true, showStudioSection: false })).toEqual(
+      ["threads", "meetings"],
+    );
+  });
+
+  it("omits Möten on the web client without changing Studio visibility", () => {
+    expect(resolveSidebarSurfacePickerViews({ isDesktop: false, showStudioSection: true })).toEqual(
+      ["threads", "studio"],
+    );
+    expect(
+      resolveSidebarSurfacePickerViews({ isDesktop: false, showStudioSection: false }),
+    ).toEqual(["threads"]);
+  });
+});
+
+describe("resolveActiveSidebarView", () => {
+  it("prefers meetings over Studio when both flags cannot apply", () => {
+    expect(resolveActiveSidebarView({ isOnMeetings: true, isOnStudio: false })).toBe("meetings");
+    expect(resolveActiveSidebarView({ isOnMeetings: false, isOnStudio: true })).toBe("studio");
+    expect(resolveActiveSidebarView({ isOnMeetings: false, isOnStudio: false })).toBe("threads");
   });
 });
 
