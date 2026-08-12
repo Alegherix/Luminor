@@ -4,11 +4,13 @@ import {
   CommandId,
   CorrelationId,
   EventId,
+  FolderId,
   MessageId,
   ProjectId,
   ThreadId,
   TurnId,
 } from "@luminor/contracts";
+import { projectFolderOwner } from "@luminor/shared/folderOwnership";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Stream } from "effect";
@@ -3716,6 +3718,100 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
           { turnId: "turn-completed", checkpointTurnCount: 1, status: "completed" },
         ]);
       }),
+  );
+
+  it.effect("persists folder membership from thread.created into projection rows", () =>
+    Effect.gen(function* () {
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const appendAndProject = makeAppendAndProject(eventStore, projectionPipeline);
+      const projectId = ProjectId.makeUnsafe("project-folder-create");
+      const folderId = FolderId.makeUnsafe("folder-create-member");
+      const threadId = ThreadId.makeUnsafe("thread-folder-create");
+      const now = "2026-08-12T12:00:00.000Z";
+
+      yield* appendAndProject({
+        type: "project.created",
+        eventId: EventId.makeUnsafe("evt-folder-create-1"),
+        aggregateKind: "project",
+        aggregateId: projectId,
+        occurredAt: now,
+        commandId: CommandId.makeUnsafe("cmd-folder-create-1"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-folder-create-1"),
+        metadata: {},
+        payload: {
+          projectId,
+          title: "Project Folder Create",
+          workspaceRoot: "/tmp/project-folder-create",
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      yield* appendAndProject({
+        type: "folder.created",
+        eventId: EventId.makeUnsafe("evt-folder-create-2"),
+        aggregateKind: "folder",
+        aggregateId: folderId,
+        occurredAt: now,
+        commandId: CommandId.makeUnsafe("cmd-folder-create-2"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-folder-create-2"),
+        metadata: {},
+        payload: {
+          folderId,
+          owner: projectFolderOwner(projectId),
+          name: "Feature work",
+          sortOrder: 0,
+          isPinned: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      yield* appendAndProject({
+        type: "thread.created",
+        eventId: EventId.makeUnsafe("evt-folder-create-3"),
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: now,
+        commandId: CommandId.makeUnsafe("cmd-folder-create-3"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-folder-create-3"),
+        metadata: {},
+        payload: {
+          threadId,
+          projectId,
+          folderId,
+          title: "Filed on create",
+          modelSelection: {
+            provider: "codex",
+            model: "gpt-5-codex",
+          },
+          runtimeMode: "full-access",
+          branch: null,
+          worktreePath: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      const rows = yield* sql<{
+        readonly threadId: string;
+        readonly folderId: string | null;
+      }>`
+        SELECT
+          thread_id AS "threadId",
+          folder_id AS "folderId"
+        FROM projection_threads
+        WHERE thread_id = ${threadId}
+      `;
+      assert.deepEqual(rows, [{ threadId, folderId }]);
+    }),
   );
 
   it.effect("does not fallback-retain messages whose turnId is removed by revert", () =>

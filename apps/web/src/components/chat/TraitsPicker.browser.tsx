@@ -301,25 +301,23 @@ describe("TraitsPicker (Claude)", () => {
   it("shows the non-default auto-compact budget in the trigger label", async () => {
     await using _ = await mountClaudePicker({
       model: "claude-opus-4-6",
-      options: { autoCompactWindow: "1m" },
+      options: { autoCompactWindow: "200k" },
     });
 
     await vi.waitFor(() => {
-      expect(document.body.textContent ?? "").toContain("1M");
+      expect(document.body.textContent ?? "").toContain("200k");
     });
   });
 
   it("keeps the Claude auto-compact budget per-thread instead of sticky", async () => {
     await using _ = await mountClaudePicker({
       model: "claude-opus-4-6",
-      options: { autoCompactWindow: "200k" },
+      options: { autoCompactWindow: "1m" },
     });
 
     await page.getByRole("button").click();
-    await page.getByRole("menuitemradio", { name: "1M (model default)" }).click();
+    await page.getByRole("menuitemradio", { name: "200k" }).click();
 
-    // A 1M thread can grow far beyond the normal compaction point: keep the explicit
-    // thread choice, but never leak it into sticky defaults for future threads.
     const sticky = useComposerDraftStore.getState().stickyModelSelectionByProvider.claudeAgent;
     expect(sticky?.provider === "claudeAgent" ? sticky.options?.autoCompactWindow : undefined).toBe(
       undefined,

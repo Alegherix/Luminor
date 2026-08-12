@@ -857,14 +857,14 @@ describe("composerDraftStore sticky composer settings", () => {
     store.setProviderModelOptions(
       threadId,
       "claudeAgent",
-      { effort: "xhigh", autoCompactWindow: "1m" },
+      { effort: "xhigh", autoCompactWindow: "200k" },
       { persistSticky: true, model: "claude-opus-4-7" },
     );
 
     expect(
       useComposerDraftStore.getState().draftsByThreadId[threadId]?.modelSelectionByProvider
         .claudeAgent?.options,
-    ).toEqual({ effort: "xhigh", autoCompactWindow: "1m" });
+    ).toEqual({ effort: "xhigh", autoCompactWindow: "200k" });
     expect(useComposerDraftStore.getState().stickyModelSelectionByProvider.claudeAgent).toEqual(
       modelSelection("claudeAgent", "claude-opus-4-7", { effort: "xhigh" }),
     );
@@ -877,7 +877,7 @@ describe("composerDraftStore sticky composer settings", () => {
     store.setProviderModelOptions(
       threadId,
       "claudeAgent",
-      { effort: "xhigh", contextWindow: "1m" },
+      { effort: "xhigh", contextWindow: "200k" },
       { persistSticky: true, model: "claude-opus-4-7" },
     );
 
@@ -886,7 +886,7 @@ describe("composerDraftStore sticky composer settings", () => {
     expect(state.draftsByThreadId[threadId]?.modelSelectionByProvider.claudeAgent?.options).toEqual(
       {
         effort: "xhigh",
-        autoCompactWindow: "1m",
+        autoCompactWindow: "200k",
       },
     );
     // The sticky snapshot only carries options that are safe to inherit.

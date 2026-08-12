@@ -487,14 +487,14 @@ describe("context window helpers", () => {
   it("separates Claude's real context capacity from its auto-compact budget", () => {
     const opusCaps = getModelCapabilities("claudeAgent", "claude-opus-4-6");
     expect(getDefaultContextWindow(opusCaps)).toBeNull();
-    expect(getDefaultAutoCompactWindow(opusCaps)).toBe("200k");
+    expect(getDefaultAutoCompactWindow(opusCaps)).toBe("1m");
     expect(opusCaps.contextWindowTokens).toBe(1_000_000);
     expect(getModelCapabilities("claudeAgent", "claude-opus-4-5").contextWindowTokens).toBe(
       200_000,
     );
     const opus5Caps = getModelCapabilities("claudeAgent", "claude-opus-5");
     expect(opus5Caps.contextWindowTokens).toBe(1_000_000);
-    expect(getDefaultAutoCompactWindow(opus5Caps)).toBe("200k");
+    expect(getDefaultAutoCompactWindow(opus5Caps)).toBe("1m");
     expect(getDefaultContextWindow(getModelCapabilities("codex", "gpt-5.4"))).toBeNull();
   });
 
@@ -562,7 +562,7 @@ describe("normalizeClaudeModelOptions", () => {
       normalizeClaudeModelOptions("claude-opus-4-6", {
         effort: "high",
         fastMode: false,
-        autoCompactWindow: "200k",
+        autoCompactWindow: "1m",
       }),
     ).toBeUndefined();
   });
@@ -570,20 +570,20 @@ describe("normalizeClaudeModelOptions", () => {
   it("preserves non-default Claude auto-compact budgets", () => {
     expect(
       normalizeClaudeModelOptions("claude-opus-4-6", {
-        autoCompactWindow: "1m",
+        autoCompactWindow: "200k",
       }),
     ).toEqual({
-      autoCompactWindow: "1m",
+      autoCompactWindow: "200k",
     });
   });
 
   it("migrates the legacy context-window field to the auto-compact budget", () => {
     expect(
       normalizeClaudeModelOptions("claude-opus-4-6", {
-        contextWindow: "1m",
+        contextWindow: "200k",
       }),
     ).toEqual({
-      autoCompactWindow: "1m",
+      autoCompactWindow: "200k",
     });
   });
 

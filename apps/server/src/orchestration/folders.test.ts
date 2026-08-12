@@ -925,6 +925,113 @@ describe("Folders", () => {
     );
   });
 
+  it("creates a Thread directly inside a space Folder when the project is in that space", async () => {
+    const createdAt = "2026-08-12T09:00:00.000Z";
+    const spaceId = SpaceId.makeUnsafe("space-create-in-folder");
+    const projectId = ProjectId.makeUnsafe("project-create-in-space-folder");
+    const folderId = FolderId.makeUnsafe("folder-space-create-target");
+    const threadId = ThreadId.makeUnsafe("thread-created-in-space-folder");
+    let readModel = createEmptyReadModel(createdAt);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "space.create",
+      commandId: CommandId.makeUnsafe("cmd-space-create"),
+      spaceId,
+      name: "Work",
+      icon: "bag",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-project-create"),
+      projectId,
+      title: "Frontend",
+      workspaceRoot: "/tmp/luminor-create-in-space-folder",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.meta.update",
+      commandId: CommandId.makeUnsafe("cmd-project-assign-space"),
+      projectId,
+      spaceId,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-space-folder-create"),
+      folderId,
+      owner: spaceFolderOwner(spaceId),
+      name: "Slice 2",
+      createdAt,
+    }));
+
+    const creation = await dispatch(readModel, {
+      ...threadCreateCommand({
+        commandId: "cmd-thread-in-space-folder",
+        threadId,
+        projectId,
+        title: "Frontend: Slice 2",
+        createdAt,
+      }),
+      folderId,
+    });
+    readModel = creation.readModel;
+
+    expect(creation.events[0]?.payload).toMatchObject({ folderId });
+    expect(readModel.threads.find((thread) => thread.id === threadId)?.folderId).toBe(folderId);
+  });
+
+  it("rejects creating a Thread in a space Folder when the project is outside that space", async () => {
+    const createdAt = "2026-08-12T09:05:00.000Z";
+    const spaceId = SpaceId.makeUnsafe("space-create-reject");
+    const projectId = ProjectId.makeUnsafe("project-outside-space");
+    const folderId = FolderId.makeUnsafe("folder-space-reject");
+    const threadId = ThreadId.makeUnsafe("thread-outside-space-folder");
+    let readModel = createEmptyReadModel(createdAt);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "space.create",
+      commandId: CommandId.makeUnsafe("cmd-space-create"),
+      spaceId,
+      name: "Work",
+      icon: "bag",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-project-create"),
+      projectId,
+      title: "Outside",
+      workspaceRoot: "/tmp/luminor-create-space-reject",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-space-folder-create"),
+      folderId,
+      owner: spaceFolderOwner(spaceId),
+      name: "Slice",
+      createdAt,
+    }));
+
+    await expect(
+      Effect.runPromise(
+        decideOrchestrationCommand({
+          command: {
+            ...threadCreateCommand({
+              commandId: "cmd-thread-outside-space",
+              threadId,
+              projectId,
+              title: "Should fail",
+              createdAt,
+            }),
+            folderId,
+          },
+          readModel,
+        }),
+      ),
+    ).rejects.toThrow(/is not in this space/i);
+  });
+
   it("rejects creating a Thread in a missing or cross-project Folder", async () => {
     const createdAt = "2026-08-10T10:00:00.000Z";
     const projectId = ProjectId.makeUnsafe("project-create-reject");

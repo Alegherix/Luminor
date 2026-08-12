@@ -796,7 +796,7 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(createInput?.options.effort, undefined);
       assert.deepEqual(createInput?.options.settings, {
         autoCompactEnabled: true,
-        autoCompactWindow: 200_000,
+        autoCompactWindow: 1_000_000,
         effortLevel: "xhigh",
         ultracode: true,
       });
@@ -904,7 +904,7 @@ describe("ClaudeAdapterLive", () => {
       const createInput = harness.getLastCreateQueryInput();
       assert.deepEqual(createInput?.options.settings, {
         autoCompactEnabled: true,
-        autoCompactWindow: 200_000,
+        autoCompactWindow: 1_000_000,
       });
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
@@ -932,7 +932,7 @@ describe("ClaudeAdapterLive", () => {
       const createInput = harness.getLastCreateQueryInput();
       assert.deepEqual(createInput?.options.settings, {
         autoCompactEnabled: true,
-        autoCompactWindow: 200_000,
+        autoCompactWindow: 1_000_000,
         fastMode: true,
       });
     }).pipe(
@@ -961,7 +961,7 @@ describe("ClaudeAdapterLive", () => {
       const createInput = harness.getLastCreateQueryInput();
       assert.deepEqual(createInput?.options.settings, {
         autoCompactEnabled: true,
-        autoCompactWindow: 200_000,
+        autoCompactWindow: 1_000_000,
       });
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
@@ -7633,14 +7633,14 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
           provider: "claudeAgent",
           model: "claude-opus-4-6",
           options: {
-            autoCompactWindow: "1m",
+            autoCompactWindow: "200k",
           },
         },
         attachments: [],
       });
 
       assert.deepEqual(harness.query.setModelCalls, ["claude-opus-4-6"]);
-      assert.deepEqual(harness.query.applyFlagSettingsCalls, [{ autoCompactWindow: 1_000_000 }]);
+      assert.deepEqual(harness.query.applyFlagSettingsCalls, [{ autoCompactWindow: 200_000 }]);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
@@ -7663,7 +7663,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
         modelSelection: {
           provider: "claudeAgent",
           model: "claude-opus-4-6",
-          options: { autoCompactWindow: "1m" },
+          options: { autoCompactWindow: "200k" },
         },
       });
       yield* adapter.sendTurn({
@@ -7686,7 +7686,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
       });
 
       assert.deepEqual(harness.query.applyFlagSettingsCalls, [
-        { autoCompactWindow: 200_000 },
+        { autoCompactWindow: 1_000_000 },
         { autoCompactWindow: null },
       ]);
       const configuredEvents = Array.from(yield* Fiber.join(configuredEventsFiber));
@@ -7694,7 +7694,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
         configuredEvents.map((event) =>
           event.type === "session.configured" ? event.payload.config.autoCompactWindow : undefined,
         ),
-        [1_000_000, 200_000, null],
+        [200_000, 1_000_000, null],
       );
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
@@ -7934,43 +7934,12 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
       const settings = harness.getLastCreateQueryInput()?.options.settings;
       assert.ok(settings && typeof settings === "object");
       assert.equal((settings as { autoCompactEnabled?: boolean }).autoCompactEnabled, true);
-      assert.equal((settings as { autoCompactWindow?: number }).autoCompactWindow, 200_000);
+      assert.equal((settings as { autoCompactWindow?: number }).autoCompactWindow, 1_000_000);
 
       const configuredEvent = yield* Fiber.join(configuredEventFiber);
       assert.equal(configuredEvent._tag, "Some");
       if (configuredEvent._tag === "Some" && configuredEvent.value.type === "session.configured") {
-        assert.equal(configuredEvent.value.payload.config.autoCompactWindow, 200_000);
-      }
-    }).pipe(
-      Effect.provideService(Random.Random, makeDeterministicRandomService()),
-      Effect.provide(harness.layer),
-    );
-  });
-
-  it.effect("warns immediately when a thread starts with the 1M auto-compact budget", () => {
-    const harness = makeHarness();
-    return Effect.gen(function* () {
-      const adapter = yield* ClaudeAdapter;
-      const warningFiber = yield* Stream.filter(
-        adapter.streamEvents,
-        (event) => event.type === "runtime.warning" && event.payload.message.includes("1M limit"),
-      ).pipe(Stream.runHead, Effect.forkChild);
-
-      yield* adapter.startSession({
-        threadId: THREAD_ID,
-        provider: "claudeAgent",
-        runtimeMode: "full-access",
-        modelSelection: {
-          provider: "claudeAgent",
-          model: "claude-opus-4-8",
-          options: { autoCompactWindow: "1m" },
-        },
-      });
-
-      const warning = yield* Fiber.join(warningFiber);
-      assert.equal(warning._tag, "Some");
-      if (warning._tag === "Some" && warning.value.type === "runtime.warning") {
-        assert.ok(warning.value.payload.message.includes("switch Auto-compact to 200k"));
+        assert.equal(configuredEvent.value.payload.config.autoCompactWindow, 1_000_000);
       }
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),

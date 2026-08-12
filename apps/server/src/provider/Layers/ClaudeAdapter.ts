@@ -105,7 +105,6 @@ import { buildFileAttachmentsPromptBlock } from "../attachmentProjection.ts";
 import { loadClaudeAgentSdk } from "../claudeAgentSdk.ts";
 import { buildClaudeProcessEnv } from "../claudeProcessEnv.ts";
 import {
-  CLAUDE_CONTEXT_WINDOW_MAX_TOKENS,
   decideClaudeContextUsageWarnings,
   maxClaudeContextWindowFromModelUsage,
   mergeClaudeTokenUsageSnapshot,
@@ -5041,8 +5040,6 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             : (toPermissionMode(providerOptions?.permissionMode) ??
               (input.runtimeMode === "full-access" ? "bypassPermissions" : undefined));
         const settings = {
-          // Native 1M models otherwise compact near their full model limit. Keep
-          // Luminor's safer 200k budget explicit unless the thread opts into 1M.
           autoCompactEnabled: true,
           ...(requestedAutoCompactWindowTokens !== undefined
             ? { autoCompactWindow: requestedAutoCompactWindowTokens }
@@ -5373,14 +5370,6 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
               },
               providerRefs: {},
             });
-
-            if (context.currentAutoCompactWindow === CLAUDE_CONTEXT_WINDOW_MAX_TOKENS["1m"]) {
-              context.emittedContextUsageWarnings.add("one-million-window");
-              yield* emitRuntimeWarning(
-                context,
-                "Claude's auto-compact budget is set to the model's 1M limit for this thread. Long conversations can consume usage limits much faster; switch Auto-compact to 200k unless the larger working context is intentional.",
-              );
-            }
 
             const streamFiber = Effect.runFork(runSdkStream(context));
             context.streamFiber = streamFiber;

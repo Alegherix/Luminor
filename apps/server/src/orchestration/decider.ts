@@ -20,7 +20,6 @@ import {
   deriveAssociatedWorktreeMetadataPatch,
   workspaceRootsEqual,
 } from "@luminor/shared/threadWorkspace";
-import { projectFolderOwner } from "@luminor/shared/folderOwnership";
 import { doThreadMarkerRangesOverlap } from "@luminor/shared/threadMarkers";
 import { collectSubagentDescendants } from "@luminor/shared/threadHierarchy";
 import { autoRuntimeModeSelectionIssue } from "@luminor/shared/runtimeMode";
@@ -52,7 +51,6 @@ import {
   requireFolder,
   requireFolderAbsent,
   requireFolderAcceptsProject,
-  requireFolderOwnedBy,
   requireFolderNameAvailable,
   requireProjectAbsent,
   requireProjectHasNoThreads,
@@ -412,11 +410,11 @@ function resolveCreatedThreadFolderId(input: {
 }): Effect.Effect<OrchestrationThread["folderId"], OrchestrationCommandInvariantError> {
   const { command, readModel } = input;
   if (command.folderId !== undefined && command.folderId !== null) {
-    return requireFolderOwnedBy({
+    return requireFolderAcceptsProject({
       readModel,
       command,
       folderId: command.folderId,
-      owner: projectFolderOwner(command.projectId),
+      projectId: command.projectId,
     }).pipe(Effect.map((folder) => folder.id));
   }
   if (command.parentThreadId === null || command.parentThreadId === undefined) {
