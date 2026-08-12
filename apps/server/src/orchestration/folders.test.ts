@@ -1333,4 +1333,73 @@ describe("Folders", () => {
       readModel.threads.find((thread) => thread.id === outsideThreadId)?.folderId ?? null,
     ).toBeNull();
   });
+
+  it("moves a Thread between project and space Folders in both directions without touching its project", async () => {
+    const createdAt = "2026-08-10T10:00:00.000Z";
+    const spaceId = SpaceId.makeUnsafe("space-matrix");
+    const projectId = ProjectId.makeUnsafe("project-matrix");
+    const threadId = ThreadId.makeUnsafe("thread-matrix");
+    const projectFolderId = FolderId.makeUnsafe("folder-matrix-project");
+    const spaceFolderId = FolderId.makeUnsafe("folder-matrix-space");
+    let readModel = createEmptyReadModel(createdAt);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "space.create",
+      commandId: CommandId.makeUnsafe("cmd-matrix-space"),
+      spaceId,
+      name: "Matrix",
+      icon: "bag",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-matrix-project"),
+      projectId,
+      title: "Matrix",
+      workspaceRoot: "/tmp/luminor-matrix",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.meta.update",
+      commandId: CommandId.makeUnsafe("cmd-matrix-assign"),
+      projectId,
+      spaceId,
+    }));
+    ({ readModel } = await dispatch(
+      readModel,
+      threadCreateCommand({
+        commandId: "cmd-matrix-thread",
+        threadId,
+        projectId,
+        title: "Matrix",
+        createdAt,
+      }),
+    ));
+    for (const [folderId, owner, name] of [
+      [projectFolderId, projectFolderOwner(projectId), "Project folder"],
+      [spaceFolderId, spaceFolderOwner(spaceId), "Space folder"],
+    ] as const) {
+      ({ readModel } = await dispatch(readModel, {
+        type: "folder.create",
+        commandId: CommandId.makeUnsafe(`cmd-matrix-${folderId}`),
+        folderId,
+        owner,
+        name,
+        createdAt,
+      }));
+    }
+
+    const moveTargets = [projectFolderId, spaceFolderId, projectFolderId, null] as const;
+    for (const [step, folderId] of moveTargets.entries()) {
+      ({ readModel } = await dispatch(readModel, {
+        type: "thread.meta.update",
+        commandId: CommandId.makeUnsafe(`cmd-matrix-move-${step}`),
+        threadId,
+        folderId,
+      }));
+      const moved = readModel.threads.find((thread) => thread.id === threadId);
+      expect(moved?.folderId ?? null).toBe(folderId);
+      expect(moved?.projectId).toBe(projectId);
+    }
+  });
 });
