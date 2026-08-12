@@ -404,6 +404,8 @@ import {
 } from "../sidebarRowStyles";
 import { SettingsSidebarNav } from "./SettingsSidebarNav";
 import { MeetingsSidebar } from "~/meetings/MeetingsSidebar";
+import { meetingsSurfaceJoined } from "~/meetings/meetingsWorkspace";
+import { useMeetingsWorkspaceSnapshot } from "~/meetings/useMeetingsWorkspace";
 import {
   ComposerPickerMenuPopup,
   ComposerPickerMenuSubPopup,
@@ -621,6 +623,12 @@ function buildThreadJumpLabelMap(input: {
 }
 function WorktreeBadgeGlyph({ className }: { className?: string }) {
   return <WorktreeIcon aria-hidden="true" className={sidebarGlyphClass("meta", className)} />;
+}
+
+export function MeetingsSurfacePresenceDot() {
+  return (
+    <span aria-label="In a meeting" className="size-1.5 shrink-0 rounded-full bg-emerald-400" />
+  );
 }
 
 /** Pulsing green dot shown before a project name while a dev run is live. */
@@ -1322,12 +1330,15 @@ export function SidebarSurfacePicker({
   activeView,
   onSelectView,
   onPrewarmView,
+  meetingsJoined,
 }: {
   views: ReadonlyArray<SidebarView>;
   activeView: SidebarView;
   onSelectView: (view: SidebarView) => void;
   onPrewarmView?: (view: SidebarView) => void;
+  meetingsJoined?: boolean;
 }) {
+  const showMeetingsJoined = meetingsJoined === true;
   const activeCopy = SIDEBAR_SURFACE_PICKER_COPY[activeView];
 
   return (
@@ -1353,6 +1364,7 @@ export function SidebarSurfacePicker({
         >
           {activeCopy.title}
         </span>
+        {showMeetingsJoined ? <MeetingsSurfacePresenceDot /> : null}
         <DisclosureChevron open className="text-muted-foreground/70" />
       </MenuTrigger>
       <ComposerPickerMenuPopup
@@ -1381,8 +1393,13 @@ export function SidebarSurfacePicker({
                 className="items-center rounded-[10px] data-checked:bg-[var(--color-background-button-secondary-hover)]"
               >
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="text-[13px] font-medium leading-none text-foreground">
-                    {copy.title}
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-[13px] font-medium leading-none text-foreground">
+                      {copy.title}
+                    </span>
+                    {showMeetingsJoined && view === "meetings" ? (
+                      <MeetingsSurfacePresenceDot />
+                    ) : null}
                   </span>
                   <span className="text-[11px] leading-snug text-muted-foreground">
                     {copy.description}
@@ -1451,6 +1468,7 @@ export default function Sidebar() {
   });
   const isOnStudioRoute = pathname.startsWith("/studio");
   const isOnMeetings = pathname.startsWith("/meetings");
+  const meetingsJoined = meetingsSurfaceJoined(useMeetingsWorkspaceSnapshot());
   const isOnKanban = pathname.startsWith("/kanban");
   const isOnAutomations = pathname.startsWith("/automations");
   const isOnPullRequests = pathname.startsWith("/pull-requests");
@@ -6647,6 +6665,7 @@ export default function Sidebar() {
                 activeView={resolveActiveSidebarView({ isOnMeetings, isOnStudio })}
                 onSelectView={handleSidebarViewChange}
                 onPrewarmView={prewarmSidebarViewTarget}
+                meetingsJoined={meetingsJoined}
               />
               <div className="ml-auto flex items-center gap-1.5">
                 {!isOnMeetings ? (

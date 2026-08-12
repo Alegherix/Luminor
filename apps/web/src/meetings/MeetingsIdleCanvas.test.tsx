@@ -33,6 +33,7 @@ describe("MeetingsIdleCanvas", () => {
               meetUrl: "https://meet.google.com/retro",
               attendees: [],
               status: "upcoming",
+              source: "calendar",
             },
           ],
         }}
@@ -41,5 +42,19 @@ describe("MeetingsIdleCanvas", () => {
 
     expect(html).toContain("Retro");
     expect(html).not.toContain("Select a meeting to get started");
+  });
+
+  it("shows a clear error when a pasted Meet link is rejected", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsIdleCanvas
+        workspace={{
+          ...createIdleMeetingsWorkspace(),
+          joinError: "That is not a Google Meet link.",
+        }}
+      />,
+    );
+
+    expect(html).toContain("That is not a Google Meet link.");
+    expect(html).toContain('role="alert"');
   });
 });

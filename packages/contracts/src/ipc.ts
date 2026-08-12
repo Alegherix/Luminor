@@ -434,10 +434,30 @@ export interface MeetingsCalendarEvent {
   readonly attendees: readonly string[];
 }
 
+export interface MeetingsEmbedBounds {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface MeetingsEmbedState {
+  readonly joined: boolean;
+  readonly visible: boolean;
+  readonly url: string | null;
+  readonly partition: string;
+}
+
 export interface DesktopMeetingsBridge {
   getStatus: () => Promise<MeetingsCalendarStatus>;
   connect: () => Promise<MeetingsCalendarStatus>;
   listToday: () => Promise<readonly MeetingsCalendarEvent[]>;
+  joinEmbed: (input: { url: string }) => Promise<MeetingsEmbedState>;
+  hideEmbed: () => Promise<MeetingsEmbedState>;
+  showEmbed: () => Promise<MeetingsEmbedState>;
+  leaveEmbed: () => Promise<MeetingsEmbedState>;
+  setEmbedBounds: (bounds: MeetingsEmbedBounds | null) => Promise<MeetingsEmbedState>;
+  getEmbedState: () => Promise<MeetingsEmbedState>;
 }
 
 export interface DesktopBridge {

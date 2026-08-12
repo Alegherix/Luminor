@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { createDesktopMeetingsCalendarHost } from "./desktopMeetingsCalendar";
+import { createDesktopMeetingsEmbedHost } from "./desktopMeetingsEmbed";
 import {
   createMeetingsWorkspace,
   IDLE_MEETINGS_WORKSPACE,
@@ -17,8 +18,18 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null;
 function getSharedMeetingsWorkspace(): MeetingsWorkspace {
   sharedWorkspace ??= createMeetingsWorkspace({
     calendar: createDesktopMeetingsCalendarHost(),
+    embed: createDesktopMeetingsEmbedHost(),
   });
   return sharedWorkspace;
+}
+
+export function useMeetingsWorkspaceSnapshot(): MeetingsWorkspaceSnapshot {
+  const workspace = getSharedMeetingsWorkspace();
+  return useSyncExternalStore(
+    workspace.subscribe,
+    workspace.getSnapshot,
+    () => IDLE_MEETINGS_WORKSPACE,
+  );
 }
 
 function startRefreshWhileOpen(workspace: MeetingsWorkspace): () => void {
@@ -44,13 +55,14 @@ export function useMeetingsWorkspace(): {
   connect: () => Promise<void>;
   connecting: boolean;
   connectError: string | null;
+  joinPastedUrl: (url: string) => Promise<void>;
+  joinSession: (sessionId: string) => Promise<void>;
+  leave: () => Promise<void>;
+  hideEmbed: () => Promise<void>;
+  showEmbed: () => Promise<void>;
 } {
   const workspace = getSharedMeetingsWorkspace();
-  const snapshot = useSyncExternalStore(
-    workspace.subscribe,
-    workspace.getSnapshot,
-    () => IDLE_MEETINGS_WORKSPACE,
-  );
+  const snapshot = useMeetingsWorkspaceSnapshot();
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const connectInFlight = useRef(false);
@@ -82,5 +94,10 @@ export function useMeetingsWorkspace(): {
     connect,
     connecting,
     connectError,
+    joinPastedUrl: workspace.joinPastedUrl,
+    joinSession: workspace.joinSession,
+    leave: workspace.leave,
+    hideEmbed: workspace.hideEmbed,
+    showEmbed: workspace.showEmbed,
   };
 }

@@ -19,17 +19,29 @@ function MeetPlaceholderIcon() {
   );
 }
 
-function ignoreJoinAttempt(event?: FormEvent) {
-  event?.preventDefault();
-}
-
 export function MeetingsIdleCanvas({
   workspace,
+  onJoinPastedUrl,
+  onJoinSelected,
+  joining = false,
 }: {
   readonly workspace?: MeetingsWorkspaceSnapshot;
+  readonly onJoinPastedUrl?: (url: string) => void;
+  readonly onJoinSelected?: () => void;
+  readonly joining?: boolean;
 }) {
   const selectedMeeting = workspace ? selectedMeetingSession(workspace) : null;
   const [pastedMeetUrl, setPastedMeetUrl] = useState(workspace?.pastedMeetUrl ?? "");
+  const joinError = workspace?.joinError ?? null;
+
+  const submitPastedUrl = (event: FormEvent) => {
+    event.preventDefault();
+    const url = pastedMeetUrl.trim();
+    if (url.length === 0 || joining) {
+      return;
+    }
+    onJoinPastedUrl?.(url);
+  };
 
   return (
     <section
@@ -52,7 +64,7 @@ export function MeetingsIdleCanvas({
         <form
           className="flex w-full flex-col gap-2 text-left"
           aria-label="Join Google Meet by link"
-          onSubmit={ignoreJoinAttempt}
+          onSubmit={submitPastedUrl}
         >
           <Label htmlFor="meetings-pasted-meet-url">Google Meet link</Label>
           <div className="flex items-center gap-2">
@@ -64,11 +76,17 @@ export function MeetingsIdleCanvas({
               value={pastedMeetUrl}
               onChange={(event) => setPastedMeetUrl(event.currentTarget.value)}
               className="min-w-0 flex-1"
+              aria-invalid={joinError !== null}
             />
-            <Button type="submit" disabled={pastedMeetUrl.trim().length === 0}>
+            <Button type="submit" disabled={joining || pastedMeetUrl.trim().length === 0}>
               Join
             </Button>
           </div>
+          {joinError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {joinError}
+            </p>
+          ) : null}
         </form>
 
         <fieldset
@@ -85,8 +103,8 @@ export function MeetingsIdleCanvas({
               </p>
               <Button
                 type="button"
-                disabled={!selectedMeeting.meetUrl}
-                onClick={() => ignoreJoinAttempt()}
+                disabled={joining || !selectedMeeting.meetUrl}
+                onClick={() => onJoinSelected?.()}
               >
                 Join
               </Button>

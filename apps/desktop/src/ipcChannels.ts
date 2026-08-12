@@ -32,6 +32,12 @@ export const DESKTOP_IPC_CHANNELS = {
     getStatus: "desktop:meetings-get-status",
     connect: "desktop:meetings-connect",
     listToday: "desktop:meetings-list-today",
+    joinEmbed: "desktop:meetings-join-embed",
+    hideEmbed: "desktop:meetings-hide-embed",
+    showEmbed: "desktop:meetings-show-embed",
+    leaveEmbed: "desktop:meetings-leave-embed",
+    setEmbedBounds: "desktop:meetings-set-embed-bounds",
+    getEmbedState: "desktop:meetings-get-embed-state",
   },
   storageMigration: {
     read: "desktop:storage-migration-read",

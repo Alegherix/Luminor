@@ -114,7 +114,7 @@ export function MeetingsSidebarList({
   readonly connecting?: boolean;
   readonly connectError?: string | null;
 }) {
-  if (workspace.connection === "signed-out") {
+  if (workspace.connection === "signed-out" && workspace.sessions.length === 0) {
     return (
       <SidebarGroup className="px-1.5 py-1.5">
         <section className="flex flex-col gap-3 px-2 py-2" aria-label="Connect Google Calendar">

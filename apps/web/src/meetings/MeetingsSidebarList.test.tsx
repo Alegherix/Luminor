@@ -10,6 +10,9 @@ const signedInWorkspace: MeetingsWorkspaceSnapshot = {
   connection: "signed-in",
   accountEmail: "me@example.com",
   selectedSessionId: "later",
+  joinedSessionId: null,
+  embedVisible: false,
+  joinError: null,
   pastedMeetUrl: "",
   sessions: [
     {
@@ -20,6 +23,7 @@ const signedInWorkspace: MeetingsWorkspaceSnapshot = {
       meetUrl: "https://meet.google.com/live",
       attendees: [],
       status: "live",
+      source: "calendar",
     },
     {
       id: "later",
@@ -29,6 +33,7 @@ const signedInWorkspace: MeetingsWorkspaceSnapshot = {
       meetUrl: null,
       attendees: [],
       status: "upcoming",
+      source: "calendar",
     },
     {
       id: "ended",
@@ -38,6 +43,7 @@ const signedInWorkspace: MeetingsWorkspaceSnapshot = {
       meetUrl: null,
       attendees: [],
       status: "ended",
+      source: "calendar",
     },
   ],
 };
@@ -88,5 +94,61 @@ describe("MeetingsSidebarList", () => {
     expect(html).toContain('type="button"');
     expect(html).toContain("Interview");
     expect(html).toContain("Retro");
+  });
+
+  it("lists a pasted Meet join even when Calendar is signed out", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsSidebarList
+        now={NOW}
+        workspace={{
+          ...createIdleMeetingsWorkspace(),
+          selectedSessionId: "pasted:abc-defg-hij",
+          joinedSessionId: "pasted:abc-defg-hij",
+          sessions: [
+            {
+              id: "pasted:abc-defg-hij",
+              title: "Meet abc-defg-hij",
+              startAt: "2026-08-12T12:00:00.000Z",
+              endAt: null,
+              meetUrl: "https://meet.google.com/abc-defg-hij",
+              attendees: [],
+              status: "live",
+              source: "pasted",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(html).toContain("Meet abc-defg-hij");
+    expect(html).not.toContain("Connect Google Calendar");
+  });
+
+  it("lists a pasted Meet join in today's sidebar", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsSidebarList
+        now={NOW}
+        workspace={{
+          ...signedInWorkspace,
+          selectedSessionId: "pasted:abc-defg-hij",
+          joinedSessionId: "pasted:abc-defg-hij",
+          sessions: [
+            ...signedInWorkspace.sessions,
+            {
+              id: "pasted:abc-defg-hij",
+              title: "Meet abc-defg-hij",
+              startAt: "2026-08-12T12:00:00.000Z",
+              endAt: null,
+              meetUrl: "https://meet.google.com/abc-defg-hij",
+              attendees: [],
+              status: "live",
+              source: "pasted",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(html).toContain("Meet abc-defg-hij");
   });
 });
