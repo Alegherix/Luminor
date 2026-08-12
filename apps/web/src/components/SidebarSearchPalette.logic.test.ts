@@ -1,10 +1,13 @@
 import { assert, describe, it } from "vitest";
 
+import { ProjectId, SpaceId } from "@luminor/contracts";
+import { projectFolderOwner, spaceFolderOwner } from "@luminor/shared/folderOwnership";
 import {
   matchSidebarSearchActions,
   matchSidebarSearchProjects,
   matchSidebarSearchThemes,
   matchSidebarSearchThreads,
+  resolveSidebarSearchThreadLocation,
   type SidebarSearchAction,
   type SidebarSearchProject,
   type SidebarSearchTheme,
@@ -157,7 +160,53 @@ const threads: SidebarSearchThread[] = [
   },
 ];
 
+const unfiledThread: SidebarSearchThread = {
+  id: "thread-alpha-unfiled",
+  title: "Composer refactor",
+  projectId: "project-alpha",
+  projectName: "Alpha Repo",
+  projectRemoteName: "Alpha Repo",
+  spaceName: "Work",
+  provider: "claudeAgent",
+  createdAt: "2026-04-09T09:00:00.000Z",
+  updatedAt: "2026-04-09T11:30:00.000Z",
+  messages: [],
+};
+
 describe("SidebarSearchPalette.logic", () => {
+  it("locates a thread without a folder by its project alone", () => {
+    assert.deepEqual(resolveSidebarSearchThreadLocation(unfiledThread), {
+      parentName: "Alpha Repo",
+      folderName: null,
+    });
+  });
+
+  it("locates a thread in a project folder under that project", () => {
+    assert.deepEqual(
+      resolveSidebarSearchThreadLocation({
+        ...unfiledThread,
+        folder: {
+          name: "Auth",
+          owner: projectFolderOwner(ProjectId.makeUnsafe("project-alpha")),
+        },
+      }),
+      { parentName: "Alpha Repo", folderName: "Auth" },
+    );
+  });
+
+  it("locates a thread in a space folder under that space", () => {
+    assert.deepEqual(
+      resolveSidebarSearchThreadLocation({
+        ...unfiledThread,
+        folder: {
+          name: "Auth",
+          owner: spaceFolderOwner(SpaceId.makeUnsafe("space-work")),
+        },
+      }),
+      { parentName: "Work", folderName: "Auth" },
+    );
+  });
+
   it("keeps suggested actions in source order for an empty query", () => {
     const result = matchSidebarSearchActions(actions, "");
 

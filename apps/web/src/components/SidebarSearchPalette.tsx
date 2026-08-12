@@ -49,6 +49,7 @@ import {
   matchSidebarSearchProjects,
   matchSidebarSearchThemes,
   matchSidebarSearchThreads,
+  resolveSidebarSearchThreadLocation,
 } from "./SidebarSearchPalette.logic";
 import { useTheme } from "../hooks/useTheme";
 import { getAvailableCodeThemes, getCodeThemeSeed } from "../theme/theme.logic";
@@ -294,6 +295,31 @@ function threadMatchLabel(input: {
     return "Project match";
   }
   return null;
+}
+
+function ThreadLocationBreadcrumb(props: { thread: SidebarSearchThread }) {
+  const location = resolveSidebarSearchThreadLocation(props.thread);
+  const title =
+    location.folderName === null
+      ? location.parentName
+      : `${location.parentName} / ${location.folderName}`;
+
+  return (
+    <span
+      title={title}
+      className="flex w-32 shrink-0 items-baseline justify-end gap-1 text-[length:var(--app-font-size-ui-meta,10px)] text-muted-foreground/79"
+    >
+      <span className="min-w-0 truncate">{location.parentName}</span>
+      {location.folderName === null ? null : (
+        <>
+          <span className="shrink-0 text-muted-foreground/50">/</span>
+          <span className="max-w-[60%] shrink-0 truncate text-foreground/72">
+            {location.folderName}
+          </span>
+        </>
+      )}
+    </span>
+  );
 }
 
 function tokenizeHighlightQuery(query: string): string[] {
@@ -917,13 +943,7 @@ export function SidebarSearchPalette(props: SidebarSearchPaletteProps) {
                                     query={query}
                                   />
                                 </div>
-                                {/* Project only, not "project · space": this column is
-                                    96px, and a thread's Space is already implied by its
-                                    project. Space stays searchable — it just does not
-                                    get to eat the name the user is scanning for. */}
-                                <span className="w-24 shrink-0 truncate text-right text-[length:var(--app-font-size-ui-meta,10px)] text-muted-foreground/79">
-                                  {thread.projectName}
-                                </span>
+                                <ThreadLocationBreadcrumb thread={thread} />
                                 {thread.updatedAt || thread.createdAt ? (
                                   <span className="w-10 shrink-0 text-right text-[length:var(--app-font-size-ui-timestamp,10px)] text-muted-foreground/79">
                                     {formatRelativeTime(thread.updatedAt ?? thread.createdAt)}
@@ -989,7 +1009,7 @@ export function SidebarSearchPalette(props: SidebarSearchPaletteProps) {
                                   destination is worth naming. It rides in the same right-hand
                                   column the thread rows use for their parent, rather than
                                   in front of the path, which is what identifies a project. */}
-                              <span className="w-24 shrink-0 truncate text-right text-[length:var(--app-font-size-ui-meta,10px)] text-muted-foreground/79">
+                              <span className="w-32 shrink-0 truncate text-right text-[length:var(--app-font-size-ui-meta,10px)] text-muted-foreground/79">
                                 {project.spaceName}
                               </span>
                             </div>

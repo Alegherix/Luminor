@@ -24,6 +24,14 @@ export function folderOwnerKey(owner: FolderOwner): FolderOwnerKey {
     : `${owner.kind}:${owner.spaceId}`;
 }
 
+export function folderOwnerDisplayName(input: {
+  readonly owner: FolderOwner;
+  readonly projectName: string;
+  readonly spaceName: string;
+}): string {
+  return input.owner.kind === "project" ? input.projectName : input.spaceName;
+}
+
 export function folderOwnersEqual(left: FolderOwner, right: FolderOwner): boolean {
   return folderOwnerKey(left) === folderOwnerKey(right);
 }
