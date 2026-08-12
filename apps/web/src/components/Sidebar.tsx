@@ -236,6 +236,7 @@ import {
   SidebarThreadRowContent,
   type SidebarThreadTerminalStatus,
 } from "./SidebarThreadRowContent";
+import { FolderNewThreadProjectDialog } from "./FolderNewThreadProjectDialog";
 import { RenameDialog } from "./RenameDialog";
 import { RenameThreadDialog } from "./RenameThreadDialog";
 import ReleaseHistoryDialog from "./ReleaseHistoryDialog";
@@ -322,6 +323,7 @@ import {
   deriveSidebarProjectData,
   createSidebarThreadHoverAnchorId,
   findWorkspaceRootMatch,
+  type FolderNewThreadProject,
   getActiveSpaceFolders,
   getPinnedThreadsForSidebar,
   getUnpinnedThreadsForSidebar,
@@ -339,6 +341,7 @@ import {
   recoverExistingAddProjectTarget,
   runExclusiveProjectAddition,
   runProjectProvisionWithCancellationRecovery,
+  resolveFolderNewThreadIntent,
   resolvePullRequestReviewBadge,
   resolveSidebarThreadListPaging,
   DEBUG_FEATURE_FLAGS_MENU_STORAGE_KEY,
@@ -492,6 +495,7 @@ const SIDEBAR_LIST_ANIMATION_OPTIONS = {
   duration: 180,
   easing: "ease-out",
 } as const;
+const EMPTY_FOLDER_NEW_THREAD_PROJECTS: readonly FolderNewThreadProject[] = [];
 const EMPTY_THREAD_JUMP_LABELS = new Map<ThreadId, string>();
 const EMPTY_SHORTCUT_PARTS: readonly string[] = [];
 const ADD_PROJECT_SNAPSHOT_CATCH_UP_MAX_ATTEMPTS = 6;
@@ -1640,6 +1644,11 @@ export default function Sidebar() {
     | { mode: "rename"; folderId: FolderId }
     | null
   >(null);
+  const [folderNewThreadPicker, setFolderNewThreadPicker] = useState<{
+    folderId: FolderId;
+    folderName: string;
+    projects: readonly FolderNewThreadProject[];
+  } | null>(null);
   const [expandedFolderIds, setExpandedFolderIds] = useState<ReadonlySet<FolderId>>(
     () => new Set(),
   );
@@ -3914,6 +3923,20 @@ export default function Sidebar() {
     [folderEditorState, resolveFolderMoveThreads, settleFolderMove],
   );
 
+  const startNewThreadInFolder = useCallback(
+    (folderId: FolderId, projectId: ProjectId) => {
+      prefetchModelsForProjectNewThread(projectId, { includeDroid: true });
+      void handleNewThread(projectId, {
+        envMode: resolveSidebarNewThreadEnvMode({
+          defaultEnvMode: appSettings.defaultThreadEnvMode,
+        }),
+        folderId,
+        fresh: true,
+      }).catch(() => undefined);
+    },
+    [appSettings.defaultThreadEnvMode, handleNewThread, prefetchModelsForProjectNewThread],
+  );
+
   const handleNewThreadInFolder = useCallback(
     (folder: Folder) => {
       setExpandedFolderIds((current) => {
@@ -3922,18 +3945,29 @@ export default function Sidebar() {
         next.add(folder.id);
         return next;
       });
-      const projectId = projectIdFromFolderOwner(folder.owner);
-      if (projectId === null) return;
-      prefetchModelsForProjectNewThread(projectId, { includeDroid: true });
-      void handleNewThread(projectId, {
-        envMode: resolveSidebarNewThreadEnvMode({
-          defaultEnvMode: appSettings.defaultThreadEnvMode,
-        }),
+      const intent = resolveFolderNewThreadIntent({
+        owner: folder.owner,
+        projects: ordinarySpaceProjects,
+      });
+      if (intent.kind === "create") {
+        startNewThreadInFolder(folder.id, intent.projectId);
+        return;
+      }
+      if (intent.kind === "no-eligible-project") {
+        toastManager.add({
+          type: "error",
+          title: "No project in this space",
+          description: "Assign a project to this space before starting a thread in its folders.",
+        });
+        return;
+      }
+      setFolderNewThreadPicker({
         folderId: folder.id,
-        fresh: true,
-      }).catch(() => undefined);
+        folderName: folder.name,
+        projects: intent.projects,
+      });
     },
-    [appSettings.defaultThreadEnvMode, handleNewThread, prefetchModelsForProjectNewThread],
+    [ordinarySpaceProjects, startNewThreadInFolder],
   );
 
   const handleFolderContextMenu = useCallback(
@@ -3942,20 +3976,18 @@ export default function Sidebar() {
       if (!api) return;
       const isProjectFolder = folder.owner.kind === "project";
       const menuItems = [
-        ...(isProjectFolder ? [{ id: "new-thread", label: "New thread in folder" }] : []),
+        { id: "new-thread", label: "New thread in folder" },
         {
           id: "toggle-pin",
           label: pinActionLabel("folder", folder.isPinned),
-          separatorBefore: isProjectFolder,
+          separatorBefore: true,
         },
         { id: "rename", label: "Rename folder" },
         { id: "delete", label: "Delete folder", destructive: true, separatorBefore: true },
       ];
       const clicked = await api.contextMenu.show(menuItems, position);
       if (clicked === "new-thread") {
-        if (isProjectFolder) {
-          handleNewThreadInFolder(folder);
-        }
+        handleNewThreadInFolder(folder);
         return;
       }
       if (clicked === "toggle-pin") {
@@ -7439,6 +7471,20 @@ export default function Sidebar() {
           if (!nextOpen) setFolderEditorState(null);
         }}
         onSave={handleFolderEditorSave}
+      />
+
+      <FolderNewThreadProjectDialog
+        open={folderNewThreadPicker !== null}
+        folderName={folderNewThreadPicker?.folderName ?? ""}
+        projects={folderNewThreadPicker?.projects ?? EMPTY_FOLDER_NEW_THREAD_PROJECTS}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setFolderNewThreadPicker(null);
+        }}
+        onSelectProject={(projectId) => {
+          if (folderNewThreadPicker === null) return;
+          startNewThreadInFolder(folderNewThreadPicker.folderId, projectId);
+          setFolderNewThreadPicker(null);
+        }}
       />
 
       {searchPaletteOpen ? (

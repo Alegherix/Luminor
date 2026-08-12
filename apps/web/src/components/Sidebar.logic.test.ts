@@ -9,6 +9,7 @@ import {
   deriveSidebarProjectData,
   describeAddProjectError,
   extractDuplicateProjectCreateProjectId,
+  filterFolderNewThreadProjects,
   findDeepestWorkspaceRootMatch,
   findWorkspaceRootMatch,
   getFallbackThreadIdAfterDelete,
@@ -37,6 +38,7 @@ import {
   recoverExistingAddProjectTarget,
   runExclusiveProjectAddition,
   runProjectProvisionWithCancellationRecovery,
+  resolveFolderNewThreadIntent,
   resolvePullRequestReviewBadge,
   resolveSidebarThreadListPaging,
   resolveProjectEmptyState,
@@ -169,6 +171,86 @@ function makeLatestTurn(overrides?: {
     completedAt: overrides?.completedAt ?? "2026-03-09T10:05:00.000Z",
   };
 }
+
+describe("resolveFolderNewThreadIntent", () => {
+  const workSpaceId = SpaceId.makeUnsafe("space-work");
+  const personalSpaceId = SpaceId.makeUnsafe("space-personal");
+  const backendProjectId = ProjectId.makeUnsafe("project-backend");
+  const frontendProjectId = ProjectId.makeUnsafe("project-frontend");
+  const personalProjectId = ProjectId.makeUnsafe("project-personal");
+  const spaceProjects = [
+    { id: frontendProjectId, name: "Frontend", cwd: "/repos/frontend", spaceId: workSpaceId },
+    { id: personalProjectId, name: "Notes", cwd: "/repos/notes", spaceId: personalSpaceId },
+    { id: backendProjectId, name: "Backend", cwd: "/repos/backend", spaceId: workSpaceId },
+  ];
+
+  it("creates directly in the owning project of a project folder", () => {
+    expect(
+      resolveFolderNewThreadIntent({
+        owner: projectFolderOwner(backendProjectId),
+        projects: spaceProjects,
+      }),
+    ).toEqual({ kind: "create", projectId: backendProjectId });
+  });
+
+  it("asks for a project, listing only the space's projects and preselecting none", () => {
+    const intent = resolveFolderNewThreadIntent({
+      owner: spaceFolderOwner(workSpaceId),
+      projects: spaceProjects,
+    });
+
+    expect(intent.kind).toBe("choose-project");
+    expect(intent.kind === "choose-project" ? intent.projects.map((p) => p.id) : []).toEqual([
+      backendProjectId,
+      frontendProjectId,
+    ]);
+    expect(intent).not.toHaveProperty("projectId");
+  });
+
+  it("reports that a space with no projects has nothing to create a thread in", () => {
+    expect(
+      resolveFolderNewThreadIntent({
+        owner: spaceFolderOwner(personalSpaceId),
+        projects: [spaceProjects[0]!, spaceProjects[2]!],
+      }),
+    ).toEqual({ kind: "no-eligible-project" });
+  });
+
+  it("treats a missing space assignment as outside every space folder", () => {
+    expect(
+      resolveFolderNewThreadIntent({
+        owner: spaceFolderOwner(workSpaceId),
+        projects: [{ id: backendProjectId, name: "Backend", cwd: "/repos/backend" }],
+      }),
+    ).toEqual({ kind: "no-eligible-project" });
+  });
+});
+
+describe("filterFolderNewThreadProjects", () => {
+  const projects = [
+    {
+      id: ProjectId.makeUnsafe("project-backend"),
+      name: "Backend",
+      cwd: "/repos/backend",
+    },
+    {
+      id: ProjectId.makeUnsafe("project-frontend"),
+      name: "Frontend",
+      cwd: "/repos/web-client",
+    },
+  ];
+
+  it("matches on project name and path, and keeps every project for an empty query", () => {
+    expect(filterFolderNewThreadProjects({ projects, query: "  " })).toEqual(projects);
+    expect(
+      filterFolderNewThreadProjects({ projects, query: "back" }).map((project) => project.id),
+    ).toEqual([ProjectId.makeUnsafe("project-backend")]);
+    expect(
+      filterFolderNewThreadProjects({ projects, query: "web-client" }).map((project) => project.id),
+    ).toEqual([ProjectId.makeUnsafe("project-frontend")]);
+    expect(filterFolderNewThreadProjects({ projects, query: "mobile" })).toEqual([]);
+  });
+});
 
 describe("isProjectsSidebarSurface", () => {
   it("enables Space shortcuts only where the Space switcher is visible", () => {
