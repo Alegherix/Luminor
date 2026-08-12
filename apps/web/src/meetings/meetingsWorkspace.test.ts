@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  computeMeetingReminders,
   createIdleMeetingsWorkspace,
   createMeetingsWorkspace,
+  meetingReminderFiredKey,
+  meetingRowOffersJoin,
+  MEETING_JOIN_AVAILABLE_WINDOW_MS,
+  MEETING_STARTING_WINDOW_MS,
   meetingsSidebarSections,
   meetingsSurfaceJoined,
   selectedMeetingSession,
@@ -357,5 +362,289 @@ describe("meetings join and leave", () => {
     expect(meetingsSidebarSections(workspace.getSnapshot(), NOW).ended[0]?.id).toBe(
       "pasted:abc-defg-hij",
     );
+  });
+});
+
+describe("computeMeetingReminders", () => {
+  const meetUrl = "https://meet.google.com/abc-defg-hij";
+
+  it("fires meeting.starting from 10 minutes before start until the join window", () => {
+    const session = {
+      id: "standup",
+      title: "Standup",
+      startAt: "2026-08-12T12:10:00.000Z",
+      endAt: "2026-08-12T12:40:00.000Z",
+      meetUrl,
+      attendees: [],
+      status: "upcoming" as const,
+      source: "calendar" as const,
+    };
+
+    expect(
+      computeMeetingReminders({
+        sessions: [session],
+        now: new Date("2026-08-12T12:00:00.000Z"),
+        alreadyFired: new Set(),
+      }).map((reminder) => reminder.kind),
+    ).toEqual(["meeting.starting"]);
+    expect(
+      computeMeetingReminders({
+        sessions: [session],
+        now: new Date("2026-08-12T12:07:59.000Z"),
+        alreadyFired: new Set(),
+      }).map((reminder) => reminder.kind),
+    ).toEqual(["meeting.starting"]);
+    expect(
+      computeMeetingReminders({
+        sessions: [session],
+        now: new Date(Date.parse(session.startAt) - MEETING_STARTING_WINDOW_MS - 1),
+        alreadyFired: new Set(),
+      }),
+    ).toEqual([]);
+  });
+
+  it("fires meeting.join_available from 2 minutes before start until the meeting ends", () => {
+    const session = {
+      id: "standup",
+      title: "Standup",
+      startAt: "2026-08-12T12:10:00.000Z",
+      endAt: "2026-08-12T12:40:00.000Z",
+      meetUrl,
+      attendees: [],
+      status: "upcoming" as const,
+      source: "calendar" as const,
+    };
+
+    expect(
+      computeMeetingReminders({
+        sessions: [session],
+        now: new Date(Date.parse(session.startAt) - MEETING_JOIN_AVAILABLE_WINDOW_MS),
+        alreadyFired: new Set(),
+      }).map((reminder) => reminder.kind),
+    ).toEqual(["meeting.join_available"]);
+    expect(
+      computeMeetingReminders({
+        sessions: [session],
+        now: new Date("2026-08-12T12:20:00.000Z"),
+        alreadyFired: new Set(),
+      }).map((reminder) => reminder.kind),
+    ).toEqual(["meeting.join_available"]);
+    expect(
+      computeMeetingReminders({
+        sessions: [session],
+        now: new Date("2026-08-12T12:39:59.000Z"),
+        alreadyFired: new Set(),
+      }).map((reminder) => reminder.kind),
+    ).toEqual(["meeting.join_available"]);
+    expect(
+      computeMeetingReminders({
+        sessions: [session],
+        now: new Date(session.endAt),
+        alreadyFired: new Set(),
+      }),
+    ).toEqual([]);
+  });
+
+  it("does not fire meeting.starting once the join window opens", () => {
+    const session = {
+      id: "standup",
+      title: "Standup",
+      startAt: "2026-08-12T12:10:00.000Z",
+      endAt: "2026-08-12T12:40:00.000Z",
+      meetUrl,
+      attendees: [],
+      status: "upcoming" as const,
+      source: "calendar" as const,
+    };
+
+    expect(
+      computeMeetingReminders({
+        sessions: [session],
+        now: new Date(Date.parse(session.startAt) - MEETING_JOIN_AVAILABLE_WINDOW_MS),
+        alreadyFired: new Set(),
+      }).map((reminder) => reminder.kind),
+    ).toEqual(["meeting.join_available"]);
+  });
+
+  it("does not fire meeting.join_available without a Meet URL", () => {
+    const session = {
+      id: "standup",
+      title: "Standup",
+      startAt: "2026-08-12T12:10:00.000Z",
+      endAt: "2026-08-12T12:40:00.000Z",
+      meetUrl: null,
+      attendees: [],
+      status: "upcoming" as const,
+      source: "calendar" as const,
+    };
+
+    expect(
+      computeMeetingReminders({
+        sessions: [session],
+        now: new Date("2026-08-12T12:09:00.000Z"),
+        alreadyFired: new Set(),
+      }).map((reminder) => reminder.kind),
+    ).toEqual([]);
+  });
+
+  it("does not re-fire an already surfaced reminder", () => {
+    const session = {
+      id: "standup",
+      title: "Standup",
+      startAt: "2026-08-12T12:10:00.000Z",
+      endAt: "2026-08-12T12:40:00.000Z",
+      meetUrl,
+      attendees: [],
+      status: "upcoming" as const,
+      source: "calendar" as const,
+    };
+
+    expect(
+      computeMeetingReminders({
+        sessions: [session],
+        now: new Date("2026-08-12T12:00:00.000Z"),
+        alreadyFired: new Set([
+          meetingReminderFiredKey({ sessionId: "standup", kind: "meeting.starting" }),
+        ]),
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("meetingRowOffersJoin", () => {
+  it("offers Join on a live Meet row even when no reminder has been seen", () => {
+    const snapshot = {
+      ...createIdleMeetingsWorkspace(),
+      connection: "signed-in" as const,
+      sessions: [
+        {
+          id: "live",
+          title: "Interview",
+          startAt: "2026-08-12T11:30:00.000Z",
+          endAt: "2026-08-12T12:30:00.000Z",
+          meetUrl: "https://meet.google.com/abc-defg-hij",
+          attendees: [],
+          status: "live" as const,
+          source: "calendar" as const,
+        },
+      ],
+    };
+
+    expect(meetingRowOffersJoin(snapshot.sessions[0]!, snapshot, NOW)).toBe(true);
+  });
+
+  it("does not offer Join on an already joined or ended row", () => {
+    const live = {
+      id: "live",
+      title: "Interview",
+      startAt: "2026-08-12T11:30:00.000Z",
+      endAt: "2026-08-12T12:30:00.000Z",
+      meetUrl: "https://meet.google.com/abc-defg-hij",
+      attendees: [],
+      status: "live" as const,
+      source: "calendar" as const,
+    };
+    const ended = {
+      ...live,
+      id: "ended",
+      startAt: "2026-08-12T09:00:00.000Z",
+      endAt: "2026-08-12T09:30:00.000Z",
+      status: "ended" as const,
+    };
+
+    expect(
+      meetingRowOffersJoin(
+        live,
+        { ...createIdleMeetingsWorkspace(), joinedSessionId: "live" },
+        NOW,
+      ),
+    ).toBe(false);
+    expect(meetingRowOffersJoin(ended, createIdleMeetingsWorkspace(), NOW)).toBe(false);
+  });
+});
+
+describe("meetings reminders workspace", () => {
+  it("exposes meeting.starting and meeting.join_available on the workspace clock", async () => {
+    let now = new Date("2026-08-12T12:00:00.000Z");
+    const calendar = fakeCalendar({
+      connected: true,
+      events: [
+        event({
+          id: "standup",
+          title: "Standup",
+          startAt: "2026-08-12T12:10:00.000Z",
+          endAt: "2026-08-12T12:40:00.000Z",
+          meetUrl: "https://meet.google.com/abc-defg-hij",
+        }),
+      ],
+    });
+    const workspace = createMeetingsWorkspace({ clock: () => now, calendar });
+    await workspace.hydrate();
+
+    expect(workspace.getSnapshot().dueReminders.map((reminder) => reminder.kind)).toEqual([
+      "meeting.starting",
+    ]);
+
+    now = new Date("2026-08-12T12:08:00.000Z");
+    workspace.tick();
+    expect(workspace.getSnapshot().dueReminders.map((reminder) => reminder.kind)).toEqual([
+      "meeting.join_available",
+    ]);
+  });
+
+  it("joinFromReminder selects the meeting and joins without switching surfaces", async () => {
+    const embed = fakeEmbed();
+    const calendar = fakeCalendar({
+      connected: true,
+      events: [
+        event({
+          id: "standup",
+          title: "Standup",
+          startAt: "2026-08-12T12:10:00.000Z",
+          endAt: "2026-08-12T12:40:00.000Z",
+          meetUrl: "https://meet.google.com/abc-defg-hij",
+        }),
+      ],
+    });
+    const workspace = createMeetingsWorkspace({ clock: () => NOW, calendar, embed });
+    await workspace.hydrate();
+    const reminder = workspace.getSnapshot().dueReminders[0];
+    expect(reminder).toMatchObject({ kind: "meeting.starting", sessionId: "standup" });
+
+    await workspace.joinFromReminder(reminder!);
+
+    expect(workspace.getSnapshot().selectedSessionId).toBe("standup");
+    expect(workspace.getSnapshot().joinedSessionId).toBe("standup");
+    expect(embed.calls).toEqual(["getState", "join:https://meet.google.com/abc-defg-hij"]);
+    expect(workspace.getSnapshot()).not.toHaveProperty("surface");
+    expect(
+      meetingRowOffersJoin(workspace.getSnapshot().sessions[0]!, workspace.getSnapshot(), NOW),
+    ).toBe(false);
+  });
+
+  it("keeps Join on a live row after acknowledging a missed reminder", async () => {
+    const calendar = fakeCalendar({
+      connected: true,
+      events: [
+        event({
+          id: "live",
+          title: "Interview",
+          startAt: "2026-08-12T11:30:00.000Z",
+          endAt: "2026-08-12T12:30:00.000Z",
+          meetUrl: "https://meet.google.com/abc-defg-hij",
+        }),
+      ],
+    });
+    const workspace = createMeetingsWorkspace({ clock: () => NOW, calendar });
+    await workspace.hydrate();
+    const reminder = workspace.getSnapshot().dueReminders[0];
+    expect(reminder?.kind).toBe("meeting.join_available");
+
+    workspace.acknowledgeReminder(reminder!);
+
+    expect(workspace.getSnapshot().dueReminders).toEqual([]);
+    expect(
+      meetingRowOffersJoin(workspace.getSnapshot().sessions[0]!, workspace.getSnapshot(), NOW),
+    ).toBe(true);
   });
 });

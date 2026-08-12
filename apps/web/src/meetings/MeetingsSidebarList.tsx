@@ -9,6 +9,7 @@ import {
   SIDEBAR_SECTION_LABEL_CLASS_NAME,
 } from "~/sidebarRowStyles";
 import {
+  meetingRowOffersJoin,
   meetingsSidebarSections,
   type MeetingSession,
   type MeetingsWorkspaceSnapshot,
@@ -46,14 +47,18 @@ function MeetingsSidebarSection({
   section,
   emptyLabel,
   sessions,
-  selectedSessionId,
+  workspace,
+  now,
   onSelectSession,
+  onJoinSession,
 }: {
   readonly section: "live" | "today" | "ended";
   readonly emptyLabel: string;
   readonly sessions: readonly MeetingSession[];
-  readonly selectedSessionId: string | null;
+  readonly workspace: MeetingsWorkspaceSnapshot;
+  readonly now?: Date | undefined;
   readonly onSelectSession?: ((sessionId: string) => void) | undefined;
+  readonly onJoinSession?: ((sessionId: string) => void) | undefined;
 }) {
   return (
     <section className="my-1" aria-label={SECTION_LABELS[section]}>
@@ -69,27 +74,41 @@ function MeetingsSidebarSection({
       ) : (
         <ul className="flex flex-col gap-0.5">
           {sessions.map((session) => {
-            const selected = session.id === selectedSessionId;
+            const selected = session.id === workspace.selectedSessionId;
             const time = formatSessionTime(session);
+            const offersJoin = meetingRowOffersJoin(session, workspace, now ?? new Date());
             return (
               <li key={session.id}>
-                <button
-                  type="button"
-                  aria-pressed={selected}
+                <div
                   className={cn(
                     SIDEBAR_HEADER_ROW_CLASS_NAME,
                     selected ? SIDEBAR_ROW_ACTIVE_CLASS_NAME : SIDEBAR_ROW_HOVER_CLASS_NAME,
                     selected ? undefined : SIDEBAR_ROW_IDLE_TEXT_CLASS_NAME,
                   )}
-                  onClick={() => onSelectSession?.(session.id)}
                 >
-                  <span className="min-w-0 flex-1 truncate text-left">{session.title}</span>
+                  <button
+                    type="button"
+                    aria-pressed={selected}
+                    className="min-w-0 flex-1 truncate text-left"
+                    onClick={() => onSelectSession?.(session.id)}
+                  >
+                    {session.title}
+                  </button>
                   {time ? (
                     <span className="shrink-0 text-[length:var(--app-font-size-ui-sm,11px)] text-muted-foreground">
                       {time}
                     </span>
                   ) : null}
-                </button>
+                  {offersJoin ? (
+                    <button
+                      type="button"
+                      className="shrink-0 text-[length:var(--app-font-size-ui-sm,11px)] font-medium text-foreground"
+                      onClick={() => onJoinSession?.(session.id)}
+                    >
+                      Join
+                    </button>
+                  ) : null}
+                </div>
               </li>
             );
           })}
@@ -103,6 +122,7 @@ export function MeetingsSidebarList({
   workspace,
   now,
   onSelectSession,
+  onJoinSession,
   onConnect,
   connecting = false,
   connectError = null,
@@ -110,6 +130,7 @@ export function MeetingsSidebarList({
   readonly workspace: MeetingsWorkspaceSnapshot;
   readonly now?: Date;
   readonly onSelectSession?: (sessionId: string) => void;
+  readonly onJoinSession?: (sessionId: string) => void;
   readonly onConnect?: () => void;
   readonly connecting?: boolean;
   readonly connectError?: string | null;
@@ -148,22 +169,28 @@ export function MeetingsSidebarList({
         section="live"
         sessions={sections.live}
         emptyLabel={sections.live.length === 0 ? EMPTY_SECTION_COPY.live : ""}
-        selectedSessionId={workspace.selectedSessionId}
+        workspace={workspace}
+        now={now}
         onSelectSession={onSelectSession}
+        onJoinSession={onJoinSession}
       />
       <MeetingsSidebarSection
         section="today"
         sessions={sections.today}
         emptyLabel={sections.today.length === 0 ? EMPTY_SECTION_COPY.today : ""}
-        selectedSessionId={workspace.selectedSessionId}
+        workspace={workspace}
+        now={now}
         onSelectSession={onSelectSession}
+        onJoinSession={onJoinSession}
       />
       <MeetingsSidebarSection
         section="ended"
         sessions={sections.ended}
         emptyLabel={sections.ended.length === 0 ? EMPTY_SECTION_COPY.ended : ""}
-        selectedSessionId={workspace.selectedSessionId}
+        workspace={workspace}
+        now={now}
         onSelectSession={onSelectSession}
+        onJoinSession={onJoinSession}
       />
     </SidebarGroup>
   );

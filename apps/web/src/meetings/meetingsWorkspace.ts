@@ -22,6 +22,15 @@ export type MeetingSession = {
   readonly source: MeetingSessionSource;
 };
 
+export type MeetingReminderKind = "meeting.starting" | "meeting.join_available";
+
+export type MeetingReminder = {
+  readonly kind: MeetingReminderKind;
+  readonly sessionId: string;
+  readonly title: string;
+  readonly meetUrl: string | null;
+};
+
 export type MeetingsWorkspaceSnapshot = {
   readonly connection: MeetingsConnectionStatus;
   readonly accountEmail: string | null;
@@ -31,6 +40,7 @@ export type MeetingsWorkspaceSnapshot = {
   readonly joinError: string | null;
   readonly sessions: readonly MeetingSession[];
   readonly pastedMeetUrl: string;
+  readonly dueReminders: readonly MeetingReminder[];
 };
 
 export type MeetingsEmbedState = {
@@ -80,6 +90,9 @@ export type MeetingsWorkspace = {
   hydrate(): Promise<void>;
   connect(): Promise<void>;
   refresh(): Promise<void>;
+  tick(): void;
+  acknowledgeReminder(reminder: MeetingReminder): void;
+  joinFromReminder(reminder: MeetingReminder): Promise<void>;
   joinPastedUrl(url: string): Promise<void>;
   joinSession(sessionId: string): Promise<void>;
   leave(): Promise<void>;
@@ -97,7 +110,19 @@ export function createIdleMeetingsWorkspace(): MeetingsWorkspaceSnapshot {
     joinError: null,
     sessions: [],
     pastedMeetUrl: "",
+    dueReminders: [],
   };
+}
+
+export const MEETING_STARTING_WINDOW_MS = 10 * 60_000;
+export const MEETING_JOIN_AVAILABLE_WINDOW_MS = 2 * 60_000;
+export const MEETING_REMINDER_TICK_MS = 30_000;
+
+export function meetingReminderFiredKey(input: {
+  readonly sessionId: string;
+  readonly kind: MeetingReminderKind;
+}): string {
+  return `${input.sessionId}|${input.kind}`;
 }
 
 export function meetingsSurfaceJoined(snapshot: MeetingsWorkspaceSnapshot): boolean {
@@ -176,6 +201,104 @@ export function meetingsSidebarSections(
   };
 }
 
+function isInsideMeetingReminderWindow(input: {
+  readonly session: Pick<MeetingSession, "startAt" | "endAt" | "status">;
+  readonly nowMs: number;
+  readonly windowMs: number;
+  readonly expiresBeforeStartMs?: number;
+}): boolean {
+  const startMs = input.session.startAt === null ? Number.NaN : Date.parse(input.session.startAt);
+  const endMs =
+    input.session.endAt === null ? Number.POSITIVE_INFINITY : Date.parse(input.session.endAt);
+  if (!Number.isFinite(startMs) || (input.session.endAt !== null && !Number.isFinite(endMs))) {
+    return false;
+  }
+  if (input.session.status === "ended" || input.nowMs >= endMs) {
+    return false;
+  }
+  if (input.nowMs < startMs - input.windowMs) {
+    return false;
+  }
+  return (
+    input.expiresBeforeStartMs === undefined || input.nowMs < startMs - input.expiresBeforeStartMs
+  );
+}
+
+export function computeMeetingReminders(input: {
+  readonly sessions: readonly MeetingSession[];
+  readonly now: Date;
+  readonly alreadyFired: ReadonlySet<string>;
+  readonly joinedSessionId?: string | null;
+}): MeetingReminder[] {
+  const nowMs = input.now.getTime();
+  const reminders: MeetingReminder[] = [];
+
+  for (const session of input.sessions) {
+    if (input.joinedSessionId !== null && session.id === input.joinedSessionId) {
+      continue;
+    }
+    const current = withSessionStatus(session, input.now);
+
+    if (
+      isInsideMeetingReminderWindow({
+        session: current,
+        nowMs,
+        windowMs: MEETING_STARTING_WINDOW_MS,
+        expiresBeforeStartMs: MEETING_JOIN_AVAILABLE_WINDOW_MS,
+      })
+    ) {
+      const starting: MeetingReminder = {
+        kind: "meeting.starting",
+        sessionId: session.id,
+        title: session.title,
+        meetUrl: session.meetUrl,
+      };
+      if (!input.alreadyFired.has(meetingReminderFiredKey(starting))) {
+        reminders.push(starting);
+      }
+    }
+
+    if (
+      session.meetUrl &&
+      isGoogleMeetJoinUrl(session.meetUrl) &&
+      isInsideMeetingReminderWindow({
+        session: current,
+        nowMs,
+        windowMs: MEETING_JOIN_AVAILABLE_WINDOW_MS,
+      })
+    ) {
+      const joinAvailable: MeetingReminder = {
+        kind: "meeting.join_available",
+        sessionId: session.id,
+        title: session.title,
+        meetUrl: session.meetUrl,
+      };
+      if (!input.alreadyFired.has(meetingReminderFiredKey(joinAvailable))) {
+        reminders.push(joinAvailable);
+      }
+    }
+  }
+
+  return reminders;
+}
+
+export function meetingRowOffersJoin(
+  session: MeetingSession,
+  snapshot: MeetingsWorkspaceSnapshot,
+  now: Date = new Date(),
+): boolean {
+  if (snapshot.joinedSessionId === session.id) {
+    return false;
+  }
+  if (!session.meetUrl || !isGoogleMeetJoinUrl(session.meetUrl)) {
+    return false;
+  }
+  if (meetingSessionStatus(session, now) === "ended") {
+    return false;
+  }
+  return meetingsSidebarSections(snapshot, now).live.some((item) => item.id === session.id);
+}
+
 function toMeetingSession(event: MeetingsCalendarEvent, now: Date): MeetingSession {
   return {
     id: event.id,
@@ -238,6 +361,7 @@ export function createMeetingsWorkspace(
   const embed = input.embed ?? idleEmbed;
   let snapshot = createIdleMeetingsWorkspace();
   const listeners = new Set<() => void>();
+  const alreadyFired = new Set<string>();
 
   const emit = () => {
     for (const listener of listeners) {
@@ -245,8 +369,23 @@ export function createMeetingsWorkspace(
     }
   };
 
+  const withDueReminders = (next: MeetingsWorkspaceSnapshot): MeetingsWorkspaceSnapshot => {
+    const now = clock();
+    const sessions = next.sessions.map((session) => withSessionStatus(session, now));
+    return {
+      ...next,
+      sessions,
+      dueReminders: computeMeetingReminders({
+        sessions,
+        now,
+        alreadyFired,
+        joinedSessionId: next.joinedSessionId,
+      }),
+    };
+  };
+
   const setSnapshot = (next: MeetingsWorkspaceSnapshot) => {
-    snapshot = next;
+    snapshot = withDueReminders(next);
     emit();
   };
 
@@ -421,6 +560,22 @@ export function createMeetingsWorkspace(
     });
   };
 
+  const joinSession = async (sessionId: string) => {
+    const session = snapshot.sessions.find((item) => item.id === sessionId);
+    if (!session) {
+      return;
+    }
+    if (!session.meetUrl || !isGoogleMeetJoinUrl(session.meetUrl)) {
+      setSnapshot({
+        ...snapshot,
+        selectedSessionId: sessionId,
+        joinError: MISSING_MEET_URL_MESSAGE,
+      });
+      return;
+    }
+    await joinMeetUrl({ session, meetUrl: session.meetUrl });
+  };
+
   return {
     getSnapshot: () => snapshot,
     subscribe: (listener) => {
@@ -444,6 +599,26 @@ export function createMeetingsWorkspace(
     },
     refresh: async () => {
       await hydrateFromStatus(await calendar.getStatus());
+    },
+    tick: () => {
+      setSnapshot(snapshot);
+    },
+    acknowledgeReminder: (reminder) => {
+      alreadyFired.add(meetingReminderFiredKey(reminder));
+      setSnapshot(snapshot);
+    },
+    joinFromReminder: async (reminder) => {
+      alreadyFired.add(meetingReminderFiredKey(reminder));
+      const session = snapshot.sessions.find((item) => item.id === reminder.sessionId);
+      if (!session) {
+        setSnapshot(snapshot);
+        return;
+      }
+      setSnapshot({ ...snapshot, selectedSessionId: session.id, joinError: null });
+      if (!session.meetUrl || !isGoogleMeetJoinUrl(session.meetUrl)) {
+        return;
+      }
+      await joinSession(session.id);
     },
     joinPastedUrl: async (url) => {
       const meetUrl = normalizePastedMeetUrl(url);
@@ -478,21 +653,7 @@ export function createMeetingsWorkspace(
           };
       await joinMeetUrl({ session, meetUrl, pastedMeetUrl: url });
     },
-    joinSession: async (sessionId) => {
-      const session = snapshot.sessions.find((item) => item.id === sessionId);
-      if (!session) {
-        return;
-      }
-      if (!session.meetUrl || !isGoogleMeetJoinUrl(session.meetUrl)) {
-        setSnapshot({
-          ...snapshot,
-          selectedSessionId: sessionId,
-          joinError: MISSING_MEET_URL_MESSAGE,
-        });
-        return;
-      }
-      await joinMeetUrl({ session, meetUrl: session.meetUrl });
-    },
+    joinSession,
     leave: async () => {
       if (snapshot.joinedSessionId === null) {
         return;

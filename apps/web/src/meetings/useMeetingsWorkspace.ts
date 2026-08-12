@@ -5,6 +5,7 @@ import { createDesktopMeetingsEmbedHost } from "./desktopMeetingsEmbed";
 import {
   createMeetingsWorkspace,
   IDLE_MEETINGS_WORKSPACE,
+  type MeetingReminder,
   type MeetingsWorkspace,
   type MeetingsWorkspaceSnapshot,
 } from "./meetingsWorkspace";
@@ -55,6 +56,9 @@ export function useMeetingsWorkspace(): {
   connect: () => Promise<void>;
   connecting: boolean;
   connectError: string | null;
+  tick: () => void;
+  acknowledgeReminder: (reminder: MeetingReminder) => void;
+  joinFromReminder: (reminder: MeetingReminder) => Promise<void>;
   joinPastedUrl: (url: string) => Promise<void>;
   joinSession: (sessionId: string) => Promise<void>;
   leave: () => Promise<void>;
@@ -94,6 +98,9 @@ export function useMeetingsWorkspace(): {
     connect,
     connecting,
     connectError,
+    tick: workspace.tick,
+    acknowledgeReminder: workspace.acknowledgeReminder,
+    joinFromReminder: workspace.joinFromReminder,
     joinPastedUrl: workspace.joinPastedUrl,
     joinSession: workspace.joinSession,
     leave: workspace.leave,

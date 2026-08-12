@@ -14,6 +14,7 @@ const signedInWorkspace: MeetingsWorkspaceSnapshot = {
   embedVisible: false,
   joinError: null,
   pastedMeetUrl: "",
+  dueReminders: [],
   sessions: [
     {
       id: "live",
@@ -150,5 +151,26 @@ describe("MeetingsSidebarList", () => {
     );
 
     expect(html).toContain("Meet abc-defg-hij");
+  });
+
+  it("offers Join on a live Meet row even when the reminder toast was never seen", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsSidebarList workspace={signedInWorkspace} now={NOW} />,
+    );
+
+    expect(html).toMatch(/Interview[\s\S]*Join/);
+    expect(html).not.toMatch(/Retro[\s\S]*Join[\s\S]*Standup/);
+  });
+
+  it("hides Join on the live row after that meeting is already joined", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsSidebarList
+        now={NOW}
+        workspace={{ ...signedInWorkspace, joinedSessionId: "live" }}
+      />,
+    );
+
+    expect(html).toContain("Interview");
+    expect(html).not.toMatch(/Interview[\s\S]*Join/);
   });
 });
