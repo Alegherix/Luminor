@@ -30,8 +30,6 @@ function rosterRowFallback(entry: ProviderUsageSummaryEntry): string {
 }
 
 function UsageRosterRow({ entry }: { entry: ProviderUsageSummaryEntry }) {
-  const resetText = entry.tightestRow?.resetText ?? null;
-
   return (
     <div className="space-y-1.5 px-2 py-1.5">
       <div className="flex items-center gap-1.5">
@@ -39,11 +37,6 @@ function UsageRosterRow({ entry }: { entry: ProviderUsageSummaryEntry }) {
         <span className="min-w-0 flex-1 truncate font-medium">
           {providerUsageDisplayName(entry.provider)}
         </span>
-        {resetText ? (
-          <span className={cn(META_TEXT_CLASS, "shrink-0 tabular-nums text-muted-foreground")}>
-            {resetText}
-          </span>
-        ) : null}
       </div>
       {entry.rows.length > 0 ? (
         <ProviderUsageLimitRows rows={entry.rows} surface="popover" />

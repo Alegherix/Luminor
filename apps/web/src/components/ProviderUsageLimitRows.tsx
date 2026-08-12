@@ -13,32 +13,9 @@ import { UsageProgressTrack } from "./UsageProgressTrack";
 
 export type ProviderUsageLimitRowsSurface = "settings" | "popover";
 
-function ProviderUsagePaceLine({
-  row,
-  surface,
-}: {
-  row: ProviderUsageDisplayRow;
-  surface: ProviderUsageLimitRowsSurface;
-}) {
+function ProviderUsagePaceLine({ row }: { row: ProviderUsageDisplayRow }) {
   const paceDetails = providerUsagePaceDetails(row);
   if (!paceDetails) return null;
-
-  if (surface === "popover") {
-    return (
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-3 text-muted-foreground">
-        {paceDetails.amountText ? (
-          <div className="min-w-0 truncate tabular-nums">{paceDetails.amountText}</div>
-        ) : (
-          <div />
-        )}
-        {paceDetails.etaText ? (
-          <div className="min-w-0 truncate text-right tabular-nums text-muted-foreground/80">
-            {paceDetails.etaText}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
 
   return (
     <div className="flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
@@ -84,7 +61,7 @@ function SettingsUsageLimitRow({ row }: { row: ProviderUsageDisplayRow }) {
         <span>{row.leftText}</span>
         {row.resetText ? <span>{row.resetText}</span> : null}
       </div>
-      <ProviderUsagePaceLine row={row} surface="settings" />
+      <ProviderUsagePaceLine row={row} />
     </div>
   );
 }
@@ -102,7 +79,6 @@ function PopoverUsageLimitRow({ row }: { row: ProviderUsageDisplayRow }) {
         </div>
       </div>
       <ProviderUsageTrack row={row} surface="popover" />
-      <ProviderUsagePaceLine row={row} surface="popover" />
     </div>
   );
 }
