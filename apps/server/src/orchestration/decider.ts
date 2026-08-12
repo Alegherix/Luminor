@@ -158,6 +158,47 @@ function folderAutoUnpinEvents(input: {
   ];
 }
 
+function unfileProjectThreadsFromSpaceFolders(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly commandId: OrchestrationCommand["commandId"];
+  readonly occurredAt: string;
+  readonly projectId: OrchestrationThread["projectId"];
+  readonly spaceId?: NonNullable<OrchestrationReadModel["projects"][number]["spaceId"]>;
+}): ReadonlyArray<Omit<OrchestrationEvent, "sequence">> {
+  const folderIds = new Set(
+    input.readModel.folders
+      .filter(
+        (folder) =>
+          folder.deletedAt === null &&
+          folder.owner.kind === "space" &&
+          (input.spaceId === undefined || folder.owner.spaceId === input.spaceId),
+      )
+      .map((folder) => folder.id),
+  );
+
+  return input.readModel.threads
+    .filter((thread) => {
+      const folderId = thread.folderId;
+      return thread.projectId === input.projectId && folderId != null && folderIds.has(folderId);
+    })
+    .map(
+      (thread): Omit<OrchestrationEvent, "sequence"> => ({
+        ...withEventBase({
+          aggregateKind: "thread",
+          aggregateId: thread.id,
+          occurredAt: input.occurredAt,
+          commandId: input.commandId,
+        }),
+        type: "thread.meta-updated",
+        payload: {
+          threadId: thread.id,
+          folderId: null,
+          updatedAt: input.occurredAt,
+        },
+      }),
+    );
+}
+
 function checkpointRevertSucceededEvent(input: {
   readonly commandId: OrchestrationCommand["commandId"];
   readonly threadId: Extract<OrchestrationCommand, { type: "thread.revert.complete" }>["threadId"];
@@ -764,6 +805,18 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           projectWorkspaceRoot: project.workspaceRoot,
           workspacePaths,
         });
+        if (project.spaceId != null) {
+          const sourceSpaceId = project.spaceId;
+          events.push(
+            ...unfileProjectThreadsFromSpaceFolders({
+              readModel,
+              commandId: command.commandId,
+              occurredAt,
+              projectId: project.id,
+              spaceId: sourceSpaceId,
+            }),
+          );
+        }
         events.push({
           ...withEventBase({
             aggregateKind: "project",
@@ -832,6 +885,14 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         for (const staleProject of staleProjects) {
           // A removed folder can leave an active project shell with no live threads.
           // Retire that stale shell so re-adding the same folder creates a fresh project.
+          events.push(
+            ...unfileProjectThreadsFromSpaceFolders({
+              readModel,
+              commandId: command.commandId,
+              occurredAt: command.createdAt,
+              projectId: staleProject.id,
+            }),
+          );
           events.push({
             ...withEventBase({
               aggregateKind: "project",
@@ -1026,7 +1087,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         wasPinned: existingProject.isPinned === true,
       });
       const occurredAt = nowIso();
-      return {
+      const updateEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...withEventBase({
           aggregateKind: "project",
           aggregateId: command.projectId,
@@ -1048,6 +1109,20 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           updatedAt: occurredAt,
         },
       };
+      if (changedSpaceId === undefined || existingProject.spaceId == null) {
+        return updateEvent;
+      }
+      const sourceSpaceId = existingProject.spaceId;
+      return [
+        ...unfileProjectThreadsFromSpaceFolders({
+          readModel,
+          commandId: command.commandId,
+          occurredAt,
+          projectId: command.projectId,
+          spaceId: sourceSpaceId,
+        }),
+        updateEvent,
+      ];
     }
 
     case "project.delete": {
@@ -1062,7 +1137,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         projectId: command.projectId,
       });
       const occurredAt = nowIso();
-      return {
+      const deleteEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...withEventBase({
           aggregateKind: "project",
           aggregateId: command.projectId,
@@ -1075,6 +1150,13 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           deletedAt: occurredAt,
         },
       };
+      const unfileEvents = unfileProjectThreadsFromSpaceFolders({
+        readModel,
+        commandId: command.commandId,
+        occurredAt,
+        projectId: command.projectId,
+      });
+      return unfileEvents.length === 0 ? deleteEvent : [...unfileEvents, deleteEvent];
     }
 
     case "thread.create": {

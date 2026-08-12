@@ -55,6 +55,83 @@ function threadCreateCommand(input: {
   };
 }
 
+async function createSpaceFolderFixture() {
+  const createdAt = "2026-08-12T08:00:00.000Z";
+  const sourceSpaceId = SpaceId.makeUnsafe("space-source");
+  const destinationSpaceId = SpaceId.makeUnsafe("space-destination");
+  const departingProjectId = ProjectId.makeUnsafe("project-departing");
+  const stayingProjectId = ProjectId.makeUnsafe("project-staying");
+  const departingThreadId = ThreadId.makeUnsafe("thread-departing");
+  const stayingThreadId = ThreadId.makeUnsafe("thread-staying");
+  const folderId = FolderId.makeUnsafe("folder-shared-feature");
+  let readModel = createEmptyReadModel(createdAt);
+
+  for (const [spaceId, name] of [
+    [sourceSpaceId, "Source"],
+    [destinationSpaceId, "Destination"],
+  ] as const) {
+    ({ readModel } = await dispatch(readModel, {
+      type: "space.create",
+      commandId: CommandId.makeUnsafe(`cmd-create-${spaceId}`),
+      spaceId,
+      name,
+      icon: "bag",
+      createdAt,
+    }));
+  }
+  for (const [projectId, threadId] of [
+    [departingProjectId, departingThreadId],
+    [stayingProjectId, stayingThreadId],
+  ] as const) {
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe(`cmd-create-${projectId}`),
+      projectId,
+      title: projectId,
+      workspaceRoot: `/tmp/${projectId}`,
+      spaceId: sourceSpaceId,
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(
+      readModel,
+      threadCreateCommand({
+        commandId: `cmd-create-${threadId}`,
+        threadId,
+        projectId,
+        title: threadId,
+        createdAt,
+      }),
+    ));
+  }
+  ({ readModel } = await dispatch(readModel, {
+    type: "folder.create",
+    commandId: CommandId.makeUnsafe("cmd-create-shared-folder"),
+    folderId,
+    owner: spaceFolderOwner(sourceSpaceId),
+    name: "Shared feature",
+    createdAt,
+  }));
+  for (const threadId of [departingThreadId, stayingThreadId] as const) {
+    ({ readModel } = await dispatch(readModel, {
+      type: "thread.meta.update",
+      commandId: CommandId.makeUnsafe(`cmd-file-${threadId}`),
+      threadId,
+      folderId,
+    }));
+  }
+
+  return {
+    readModel,
+    sourceSpaceId,
+    destinationSpaceId,
+    departingProjectId,
+    stayingProjectId,
+    departingThreadId,
+    stayingThreadId,
+    folderId,
+  };
+}
+
 describe("Folders", () => {
   it("projects create, rename, and delete commands into the read model", async () => {
     const createdAt = "2026-08-10T10:00:00.000Z";
@@ -987,6 +1064,177 @@ describe("Folders", () => {
     }));
     expect(readModel.threads.find((thread) => thread.id === sidechatThreadId)?.folderId).toBe(
       folderId,
+    );
+  });
+
+  it("unfiles every thread when a space-owned folder is deleted", async () => {
+    const {
+      readModel,
+      departingThreadId,
+      stayingThreadId,
+      departingProjectId,
+      stayingProjectId,
+      folderId,
+    } = await createSpaceFolderFixture();
+
+    const deletion = await dispatch(readModel, {
+      type: "folder.delete",
+      commandId: CommandId.makeUnsafe("cmd-delete-shared-folder"),
+      folderId,
+    });
+
+    expect(deletion.events.map((event) => event.type)).toEqual([
+      "thread.meta-updated",
+      "thread.meta-updated",
+      "folder.deleted",
+    ]);
+    expect(
+      deletion.readModel.threads.map((thread) => [
+        thread.id,
+        thread.projectId,
+        thread.folderId,
+        thread.deletedAt,
+      ]),
+    ).toEqual([
+      [departingThreadId, departingProjectId, null, null],
+      [stayingThreadId, stayingProjectId, null, null],
+    ]);
+    expect(deletion.readModel.folders.find((folder) => folder.id === folderId)?.deletedAt).not.toBe(
+      null,
+    );
+  });
+
+  it.each(["project.meta.update", "space.projects.assign"] as const)(
+    "unfiles only the departing project's threads when reassigned through %s",
+    async (commandType) => {
+      const {
+        readModel,
+        sourceSpaceId,
+        destinationSpaceId,
+        departingProjectId,
+        stayingProjectId,
+        departingThreadId,
+        stayingThreadId,
+        folderId,
+      } = await createSpaceFolderFixture();
+
+      const reassignment = await dispatch(
+        readModel,
+        commandType === "project.meta.update"
+          ? {
+              type: "project.meta.update",
+              commandId: CommandId.makeUnsafe("cmd-reassign-project"),
+              projectId: departingProjectId,
+              spaceId: destinationSpaceId,
+            }
+          : {
+              type: "space.projects.assign",
+              commandId: CommandId.makeUnsafe("cmd-batch-reassign-project"),
+              spaceId: destinationSpaceId,
+              projectIds: [departingProjectId],
+            },
+      );
+
+      expect(reassignment.events.map((event) => event.type)).toEqual([
+        "thread.meta-updated",
+        "project.meta-updated",
+      ]);
+      expect(
+        reassignment.readModel.threads.find((thread) => thread.id === departingThreadId),
+      ).toMatchObject({ projectId: departingProjectId, folderId: null, deletedAt: null });
+      expect(
+        reassignment.readModel.threads.find((thread) => thread.id === stayingThreadId),
+      ).toMatchObject({ projectId: stayingProjectId, folderId, deletedAt: null });
+      expect(
+        reassignment.readModel.projects.find((project) => project.id === departingProjectId)
+          ?.spaceId,
+      ).toBe(destinationSpaceId);
+      expect(
+        reassignment.readModel.projects.find((project) => project.id === stayingProjectId)?.spaceId,
+      ).toBe(sourceSpaceId);
+    },
+  );
+
+  it("unfiles only the deleted project's threads from a shared space folder", async () => {
+    const {
+      readModel: initialReadModel,
+      departingProjectId,
+      departingThreadId,
+      stayingProjectId,
+      stayingThreadId,
+      folderId,
+    } = await createSpaceFolderFixture();
+    const threadDeletion = await dispatch(initialReadModel, {
+      type: "thread.delete",
+      commandId: CommandId.makeUnsafe("cmd-delete-departing-thread"),
+      threadId: departingThreadId,
+    });
+
+    const projectDeletion = await dispatch(threadDeletion.readModel, {
+      type: "project.delete",
+      commandId: CommandId.makeUnsafe("cmd-delete-departing-project"),
+      projectId: departingProjectId,
+    });
+
+    expect(projectDeletion.events.map((event) => event.type)).toEqual([
+      "thread.meta-updated",
+      "project.deleted",
+    ]);
+    expect(
+      projectDeletion.readModel.threads.find((thread) => thread.id === departingThreadId),
+    ).toMatchObject({
+      projectId: departingProjectId,
+      folderId: null,
+      deletedAt: expect.any(String),
+    });
+    expect(
+      projectDeletion.readModel.threads.find((thread) => thread.id === stayingThreadId),
+    ).toMatchObject({ projectId: stayingProjectId, folderId, deletedAt: null });
+    expect(
+      projectDeletion.readModel.folders.find((folder) => folder.id === folderId),
+    ).toMatchObject({
+      owner: expect.objectContaining({ kind: "space" }),
+      deletedAt: null,
+    });
+  });
+
+  it("unfiles space-folder threads when project creation retires a stale project", async () => {
+    const {
+      readModel: initialReadModel,
+      departingProjectId,
+      departingThreadId,
+      stayingProjectId,
+      stayingThreadId,
+      folderId,
+    } = await createSpaceFolderFixture();
+    const threadDeletion = await dispatch(initialReadModel, {
+      type: "thread.delete",
+      commandId: CommandId.makeUnsafe("cmd-delete-stale-thread"),
+      threadId: departingThreadId,
+    });
+
+    const replacement = await dispatch(threadDeletion.readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-create-replacement-project"),
+      projectId: ProjectId.makeUnsafe("project-replacement"),
+      title: "Replacement",
+      workspaceRoot: `/tmp/${departingProjectId}`,
+      createdAt: "2026-08-12T09:00:00.000Z",
+    });
+
+    expect(replacement.events.map((event) => event.type)).toEqual([
+      "thread.meta-updated",
+      "project.deleted",
+      "project.created",
+    ]);
+    expect(
+      replacement.readModel.threads.find((thread) => thread.id === departingThreadId),
+    ).toMatchObject({ projectId: departingProjectId, folderId: null });
+    expect(
+      replacement.readModel.threads.find((thread) => thread.id === stayingThreadId),
+    ).toMatchObject({ projectId: stayingProjectId, folderId, deletedAt: null });
+    expect(replacement.readModel.folders.find((folder) => folder.id === folderId)?.deletedAt).toBe(
+      null,
     );
   });
 
