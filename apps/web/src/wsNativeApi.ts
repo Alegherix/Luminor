@@ -29,6 +29,7 @@ import {
   type OrchestrationShellStreamItem,
   type OrchestrationThreadStreamItem,
   type ProjectDevServerEvent,
+  type ThreadPreviewEvent,
   type ServerProviderStatusesUpdatedPayload,
   type ServerLifecycleStreamEvent,
   type ServerSettingsUpdatedPayload,
@@ -150,6 +151,7 @@ function omitNullUserInputAnswers(
 }
 const terminalEventListeners = createListenerRegistry<TerminalEvent>();
 const projectDevServerEventListeners = createListenerRegistry<ProjectDevServerEvent>();
+const threadPreviewEventListeners = createListenerRegistry<ThreadPreviewEvent>();
 const automationEventListeners = createListenerRegistry<AutomationStreamEvent>();
 const orchestrationDomainEventListeners = createListenerRegistry<OrchestrationEvent>();
 const orchestrationShellEventListeners = createListenerRegistry<OrchestrationShellStreamItem>();
@@ -168,6 +170,7 @@ function clearWsNativeApiListeners(): void {
   projectProvisionProgressListeners.clear();
   terminalEventListeners.clear();
   projectDevServerEventListeners.clear();
+  threadPreviewEventListeners.clear();
   automationEventListeners.clear();
   orchestrationDomainEventListeners.clear();
   orchestrationShellEventListeners.clear();
@@ -456,6 +459,9 @@ export function createWsNativeApi(): NativeApi {
   transport.subscribe(WS_CHANNELS.projectDevServerEvent, (message) => {
     projectDevServerEventListeners.emit(message.data);
   });
+  transport.subscribe(WS_CHANNELS.previewStatus, (message) => {
+    threadPreviewEventListeners.emit(message.data);
+  });
   transport.subscribe(WS_CHANNELS.automationEvent, (message) => {
     automationEventListeners.emit(message.data);
   });
@@ -526,6 +532,13 @@ export function createWsNativeApi(): NativeApi {
           ...(options?.signal ? { signal: options.signal } : {}),
         }),
       onProvisionProgress: projectProvisionProgressListeners.subscribe,
+    },
+    preview: {
+      start: (input) => transport.request(WS_METHODS.previewStart, input),
+      stop: (input) => transport.request(WS_METHODS.previewStop, input),
+      setUrl: (input) => transport.request(WS_METHODS.previewSetUrl, input),
+      list: () => transport.request(WS_METHODS.previewList),
+      onStatusEvent: threadPreviewEventListeners.subscribe,
     },
     filesystem: {
       browse: (input) => transport.request(WS_METHODS.filesystemBrowse, input),

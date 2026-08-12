@@ -7,6 +7,7 @@ import {
   isThreadCurrentlyArchived,
   isThreadLifecycleCleanupEvent,
   logCleanupCauseUnlessInterrupted,
+  stopPreviewForThreadLifecycleEvent,
 } from "./ThreadDeletionReactor";
 
 function lifecycleEvent(type: "thread.archived" | "thread.deleted"): OrchestrationEvent {
@@ -30,6 +31,37 @@ describe("isThreadLifecycleCleanupEvent", () => {
   it("routes both archive and delete through server-owned cleanup", () => {
     expect(isThreadLifecycleCleanupEvent(lifecycleEvent("thread.archived"))).toBe(true);
     expect(isThreadLifecycleCleanupEvent(lifecycleEvent("thread.deleted"))).toBe(true);
+  });
+});
+
+describe("stopPreviewForThreadLifecycleEvent", () => {
+  it("routes archive and delete through the preview manager", async () => {
+    const stopped: string[] = [];
+    const threadPreviewManager = {
+      stopPreview: (threadId: string) =>
+        Effect.sync(() => {
+          stopped.push(threadId);
+          return { stopped: true };
+        }),
+    };
+
+    await Effect.runPromise(
+      stopPreviewForThreadLifecycleEvent(
+        threadPreviewManager,
+        lifecycleEvent("thread.archived") as Extract<
+          OrchestrationEvent,
+          { type: "thread.archived" }
+        >,
+      ),
+    );
+    await Effect.runPromise(
+      stopPreviewForThreadLifecycleEvent(
+        threadPreviewManager,
+        lifecycleEvent("thread.deleted") as Extract<OrchestrationEvent, { type: "thread.deleted" }>,
+      ),
+    );
+
+    expect(stopped).toEqual(["thread-thread.archived", "thread-thread.deleted"]);
   });
 });
 

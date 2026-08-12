@@ -360,7 +360,7 @@ describe("store event reducer", () => {
               name: "Lint",
               command: "bun lint",
               icon: "lint",
-              runOnWorktreeCreate: false,
+              kind: "manual",
             },
           ],
           updatedAt: "2026-02-27T00:05:00.000Z",
@@ -384,7 +384,7 @@ describe("store event reducer", () => {
           name: "Lint",
           command: "bun lint",
           icon: "lint",
-          runOnWorktreeCreate: false,
+          kind: "manual",
         },
       ],
     });

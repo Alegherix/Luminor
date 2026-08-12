@@ -31,6 +31,7 @@ import {
   type OrchestrationShellStreamItem,
   type OrchestrationThreadStreamItem,
   type ProjectDevServerEvent,
+  type ThreadPreviewEvent,
   type ServerConfigStreamEvent,
   type ServerLifecycleStreamEvent,
   type ServerProviderStatusesUpdatedPayload,
@@ -41,6 +42,10 @@ import {
   type WsPushMessage,
   ThreadId,
 } from "@luminor/contracts";
+import {
+  CONNECTION_INTERRUPTED_USER_MESSAGE,
+  isEffectFiberInterruptError,
+} from "@luminor/shared/errorMessages";
 import {
   Cause,
   Data,
@@ -78,7 +83,7 @@ export class WsTransportRequestInterruptedError extends Data.TaggedError(
   "WsTransportRequestInterruptedError",
 )<{
   readonly message: string;
-  readonly code: "WS_REQUEST_TIMEOUT" | "WS_REQUEST_ABORTED";
+  readonly code: "WS_REQUEST_TIMEOUT" | "WS_REQUEST_ABORTED" | "WS_CONNECTION_INTERRUPTED";
   readonly method: string;
   readonly timeoutMs?: number;
   readonly cause?: unknown;
@@ -163,6 +168,16 @@ const makeRpcClient = RpcClient.make(WsFeatureRpcGroup);
 const makeBootstrapRpcClient = RpcClient.make(WsBootstrapRpcGroup);
 const REQUEST_TIMEOUT_MS = 60_000;
 const FEATURE_CONNECTION_PROBE_TIMEOUT_MS = 10_000;
+// Reconnects (stream recovery, socket death) close the client scope and
+// interrupt in-flight one-shot RPCs with Effect's "All fibers interrupted…"
+// error. A couple of silent retries cover the race without the user having to
+// mash Send / Archive again. Long-lived progress streams must not be retried
+// here — restarting them would re-run the underlying operation.
+const MAX_RPC_INTERRUPT_RETRIES = 2;
+const NON_RETRYABLE_INTERRUPT_METHODS = new Set<string>([
+  WS_METHODS.gitRunStackedAction,
+  WS_METHODS.projectsProvisionFromGitHub,
+]);
 
 function resolveRpcUrl(rawUrl: string, path: string): string {
   const url = new URL(rawUrl);
@@ -602,92 +617,144 @@ export class WsTransport {
     const requestOptions: WsRequestOptions =
       options?.timeoutMs === undefined ? { ...options, timeoutMs: REQUEST_TIMEOUT_MS } : options;
     const abortScope = makeRequestAbortScope(requestOptions);
+    let interruptAttempts = 0;
     try {
-      if (method === ORCHESTRATION_WS_METHODS.unsubscribeShell) {
-        this.shellSubscribed = false;
-        await awaitWithAbort(this.stopStream("orchestration.shell"), abortScope.signal);
-        return undefined as T;
+      while (true) {
+        try {
+          return await this.executeRequestOnce<T>(method, params, abortScope.signal);
+        } catch (error) {
+          if (abortScope.didTimeout()) {
+            throw new WsTransportRequestInterruptedError({
+              message: `WebSocket RPC ${method} timed out after ${requestOptions.timeoutMs}ms.`,
+              code: "WS_REQUEST_TIMEOUT",
+              method,
+              ...(requestOptions.timeoutMs !== undefined && requestOptions.timeoutMs !== null
+                ? { timeoutMs: requestOptions.timeoutMs }
+                : {}),
+              cause: error,
+            });
+          }
+          if (requestOptions.signal?.aborted) {
+            throw new WsTransportRequestInterruptedError({
+              message: `WebSocket RPC ${method} was cancelled.`,
+              code: "WS_REQUEST_ABORTED",
+              method,
+              cause: requestOptions.signal.reason ?? error,
+            });
+          }
+          // Reconnects close the client scope and interrupt in-flight Effect
+          // fibers. Retry a few times on a fresh client so Send/Archive do not
+          // fail with Effect's internal interrupt message.
+          if (
+            isEffectFiberInterruptError(error) &&
+            !this.disposed &&
+            !NON_RETRYABLE_INTERRUPT_METHODS.has(method) &&
+            interruptAttempts < MAX_RPC_INTERRUPT_RETRIES
+          ) {
+            interruptAttempts += 1;
+            await this.waitForRequestInterruptRecovery(abortScope.signal);
+            continue;
+          }
+          if (isEffectFiberInterruptError(error)) {
+            throw new WsTransportRequestInterruptedError({
+              message: CONNECTION_INTERRUPTED_USER_MESSAGE,
+              code: "WS_CONNECTION_INTERRUPTED",
+              method,
+              cause: error,
+            });
+          }
+          throw error;
+        }
       }
-      if (method === ORCHESTRATION_WS_METHODS.unsubscribeThread) {
-        const threadId = (params as { threadId: string }).threadId;
-        this.threadSubscriptions.delete(threadId);
-        await awaitWithAbort(
-          this.stopStream(`orchestration.thread:${threadId}`),
-          abortScope.signal,
-        );
-        return undefined as T;
-      }
-
-      const client = await awaitWithAbort(this.getClient(), abortScope.signal);
-
-      if (method === WS_METHODS.gitRunStackedAction) {
-        return (await this.runGitActionStream(client, params, abortScope.signal)) as T;
-      }
-      if (method === WS_METHODS.projectsProvisionFromGitHub) {
-        return (await this.runProjectProvisionStream(client, params, abortScope.signal)) as T;
-      }
-
-      if (method === ORCHESTRATION_WS_METHODS.subscribeShell) {
-        this.shellSubscribed = true;
-        this.resetStreamCapacityRetry("orchestration.shell");
-        this.resetStreamCompletionRetry("orchestration.shell");
-        await this.startShellStream(client, this.shellSnapshotDelivered);
-        return undefined as T;
-      }
-      if (method === ORCHESTRATION_WS_METHODS.subscribeThread) {
-        const threadId = (params as { threadId: string }).threadId;
-        this.resetStreamCapacityRetry(`orchestration.thread:${threadId}`);
-        this.resetStreamCompletionRetry(`orchestration.thread:${threadId}`);
-        // Preserve the stored input identity across explicit refreshes so stale
-        // restart callbacks cannot supersede the newly requested stream.
-        const existingInput = this.threadSubscriptions.get(threadId);
-        const input = threadStreamInputsEqual(existingInput, params) ? existingInput : params;
-        this.threadSubscriptions.set(threadId, input);
-        await this.startThreadStream(client, threadId, input as never, true);
-        return undefined as T;
-      }
-
-      const rpcInput =
-        method === ORCHESTRATION_WS_METHODS.dispatchCommand
-          ? (params as { command: unknown }).command
-          : (params ?? {});
-      const normalizedRpcInput = omitNullUserInputAnswers(rpcInput);
-      const call = (
-        client as unknown as Record<
-          string,
-          (input: unknown) => Effect.Effect<unknown, WsTransportRpcError, never>
-        >
-      )[method];
-      if (!call) throw new WsTransportRpcError({ message: `Unknown RPC method: ${method}` });
-      const clientRuntime = this.getClientRuntime(client);
-      return (await clientRuntime.runPromise(
-        call(normalizedRpcInput),
-        abortScope.signal ? { signal: abortScope.signal } : undefined,
-      )) as T;
-    } catch (error) {
-      if (abortScope.didTimeout()) {
-        throw new WsTransportRequestInterruptedError({
-          message: `WebSocket RPC ${method} timed out after ${requestOptions.timeoutMs}ms.`,
-          code: "WS_REQUEST_TIMEOUT",
-          method,
-          ...(requestOptions.timeoutMs !== undefined && requestOptions.timeoutMs !== null
-            ? { timeoutMs: requestOptions.timeoutMs }
-            : {}),
-          cause: error,
-        });
-      }
-      if (requestOptions.signal?.aborted) {
-        throw new WsTransportRequestInterruptedError({
-          message: `WebSocket RPC ${method} was cancelled.`,
-          code: "WS_REQUEST_ABORTED",
-          method,
-          cause: requestOptions.signal.reason ?? error,
-        });
-      }
-      throw error;
     } finally {
       abortScope.cleanup();
     }
+  }
+
+  private async executeRequestOnce<T>(
+    method: string,
+    params: unknown,
+    signal: AbortSignal | undefined,
+  ): Promise<T> {
+    if (method === ORCHESTRATION_WS_METHODS.unsubscribeShell) {
+      this.shellSubscribed = false;
+      await awaitWithAbort(this.stopStream("orchestration.shell"), signal);
+      return undefined as T;
+    }
+    if (method === ORCHESTRATION_WS_METHODS.unsubscribeThread) {
+      const threadId = (params as { threadId: string }).threadId;
+      this.threadSubscriptions.delete(threadId);
+      await awaitWithAbort(this.stopStream(`orchestration.thread:${threadId}`), signal);
+      return undefined as T;
+    }
+
+    const client = await awaitWithAbort(this.getClient(), signal);
+
+    if (method === WS_METHODS.gitRunStackedAction) {
+      return (await this.runGitActionStream(client, params, signal)) as T;
+    }
+    if (method === WS_METHODS.projectsProvisionFromGitHub) {
+      return (await this.runProjectProvisionStream(client, params, signal)) as T;
+    }
+
+    if (method === ORCHESTRATION_WS_METHODS.subscribeShell) {
+      this.shellSubscribed = true;
+      this.resetStreamCapacityRetry("orchestration.shell");
+      this.resetStreamCompletionRetry("orchestration.shell");
+      await this.startShellStream(client, this.shellSnapshotDelivered);
+      return undefined as T;
+    }
+    if (method === ORCHESTRATION_WS_METHODS.subscribeThread) {
+      const threadId = (params as { threadId: string }).threadId;
+      this.resetStreamCapacityRetry(`orchestration.thread:${threadId}`);
+      this.resetStreamCompletionRetry(`orchestration.thread:${threadId}`);
+      // Preserve the stored input identity across explicit refreshes so stale
+      // restart callbacks cannot supersede the newly requested stream.
+      const existingInput = this.threadSubscriptions.get(threadId);
+      const input = threadStreamInputsEqual(existingInput, params) ? existingInput : params;
+      this.threadSubscriptions.set(threadId, input);
+      await this.startThreadStream(client, threadId, input as never, true);
+      return undefined as T;
+    }
+
+    const rpcInput =
+      method === ORCHESTRATION_WS_METHODS.dispatchCommand
+        ? (params as { command: unknown }).command
+        : (params ?? {});
+    const normalizedRpcInput = omitNullUserInputAnswers(rpcInput);
+    const call = (
+      client as unknown as Record<
+        string,
+        (input: unknown) => Effect.Effect<unknown, WsTransportRpcError, never>
+      >
+    )[method];
+    if (!call) throw new WsTransportRpcError({ message: `Unknown RPC method: ${method}` });
+    const clientRuntime = this.getClientRuntime(client);
+    return (await clientRuntime.runPromise(
+      call(normalizedRpcInput),
+      signal ? { signal } : undefined,
+    )) as T;
+  }
+
+  /**
+   * After a fiber interrupt, wait for an in-flight reconnect or start one so
+   * the next attempt uses a live client rather than a closed scope.
+   */
+  private async waitForRequestInterruptRecovery(signal: AbortSignal | undefined): Promise<void> {
+    if (this.disposed) return;
+    const recovery =
+      this.reconnectPromise ??
+      // One-shot RPCs can be interrupted by a dead socket before any stream
+      // failure handler has called reconnect(). Start recovery here so the
+      // retry does not re-use the interrupted client.
+      this.reconnect().catch(() => undefined);
+    await awaitWithAbort(
+      Promise.resolve(recovery).then(
+        () => undefined,
+        () => undefined,
+      ),
+      signal,
+    );
   }
 
   subscribe<C extends WsPushChannel>(
@@ -1238,6 +1305,14 @@ export class WsTransport {
             (event: ProjectDevServerEvent) => this.emit(WS_CHANNELS.projectDevServerEvent, event),
             restartChannel,
           );
+        } else if (channel === WS_CHANNELS.previewStatus) {
+          this.startStream(
+            client,
+            "thread.previews",
+            client[WS_METHODS.subscribePreviewEvents]({}),
+            (event: ThreadPreviewEvent) => this.emit(WS_CHANNELS.previewStatus, event),
+            restartChannel,
+          );
         } else if (channel === WS_CHANNELS.automationEvent) {
           this.startStream(
             client,
@@ -1278,6 +1353,7 @@ export class WsTransport {
     else if (channel === WS_CHANNELS.serverSettingsUpdated) this.stopStream("server.settings");
     else if (channel === WS_CHANNELS.terminalEvent) this.stopStream("terminal.events");
     else if (channel === WS_CHANNELS.projectDevServerEvent) this.stopStream("project.devServers");
+    else if (channel === WS_CHANNELS.previewStatus) this.stopStream("thread.previews");
     else if (channel === WS_CHANNELS.automationEvent) this.stopStream("automation.events");
     else if (channel === ORCHESTRATION_WS_CHANNELS.domainEvent)
       this.stopStream("orchestration.domain");

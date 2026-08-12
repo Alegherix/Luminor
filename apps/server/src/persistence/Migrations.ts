@@ -107,7 +107,8 @@ import Migration0088 from "./Migrations/088_ProjectionThreadsSettledAt.ts";
 import Migration0089 from "./Migrations/089_RecoverRetentionHiddenThreads.ts";
 import Migration0090 from "./Migrations/090_Folders.ts";
 import Migration0091 from "./Migrations/091_ThreadFolderMembership.ts";
-import Migration0092 from "./Migrations/092_SpaceFolderOwnership.ts";
+import Migration0092 from "./Migrations/092_ProjectScriptKinds.ts";
+import Migration0093 from "./Migrations/093_SpaceFolderOwnership.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -214,7 +215,8 @@ export const migrationEntries = [
   [89, "RecoverRetentionHiddenThreads", Migration0089],
   [90, "Folders", Migration0090],
   [91, "ThreadFolderMembership", Migration0091],
-  [92, "SpaceFolderOwnership", Migration0092],
+  [92, "ProjectScriptKinds", Migration0092],
+  [93, "SpaceFolderOwnership", Migration0093],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

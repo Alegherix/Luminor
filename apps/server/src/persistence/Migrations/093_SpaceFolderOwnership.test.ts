@@ -7,11 +7,11 @@ import * as NodeSqliteClient from "../NodeSqliteClient.ts";
 
 const layer = it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()));
 
-layer("092_SpaceFolderOwnership", (it) => {
+layer("093_SpaceFolderOwnership", (it) => {
   it.effect("rebuilds Folder storage while preserving project-owned rows", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* runMigrations({ toMigrationInclusive: 91 });
+      yield* runMigrations({ toMigrationInclusive: 92 });
       yield* sql`
         INSERT INTO projection_folders (
           folder_id, project_id, name, sort_order, is_pinned, created_at, updated_at, deleted_at
@@ -21,8 +21,8 @@ layer("092_SpaceFolderOwnership", (it) => {
         )
       `;
 
-      const executed = yield* runMigrations({ toMigrationInclusive: 92 });
-      assert.deepStrictEqual(executed, [[92, "SpaceFolderOwnership"]]);
+      const executed = yield* runMigrations({ toMigrationInclusive: 93 });
+      assert.deepStrictEqual(executed, [[93, "SpaceFolderOwnership"]]);
 
       const columns = yield* sql<{ readonly name: string; readonly notNull: number }>`
         SELECT name, "notnull" AS "notNull" FROM pragma_table_info('projection_folders')

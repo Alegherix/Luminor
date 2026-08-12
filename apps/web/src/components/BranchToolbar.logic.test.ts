@@ -427,6 +427,57 @@ describe("resolveBranchSelectionTarget", () => {
     });
   });
 
+  it("stays local when the branch lives in the checkout that hosts the project root", () => {
+    expect(
+      resolveBranchSelectionTarget({
+        activeProjectCwd: "/repo/.luminor/worktrees/feature-a/apps/server/test",
+        activeWorktreePath: null,
+        branch: {
+          isDefault: true,
+          worktreePath: "/repo",
+        },
+      }),
+    ).toEqual({
+      checkoutCwd: "/repo",
+      nextWorktreePath: null,
+      reuseExistingWorktree: true,
+    });
+  });
+
+  it("stays local when the branch lives in the enclosing worktree of a subdirectory project", () => {
+    expect(
+      resolveBranchSelectionTarget({
+        activeProjectCwd: "/repo/.luminor/worktrees/feature-a/apps/server/test",
+        activeWorktreePath: null,
+        branch: {
+          isDefault: false,
+          worktreePath: "/repo/.luminor/worktrees/feature-a/",
+        },
+      }),
+    ).toEqual({
+      checkoutCwd: "/repo/.luminor/worktrees/feature-a/",
+      nextWorktreePath: null,
+      reuseExistingWorktree: true,
+    });
+  });
+
+  it("keeps the thread in its own worktree when the branch already lives there", () => {
+    expect(
+      resolveBranchSelectionTarget({
+        activeProjectCwd: "/repo",
+        activeWorktreePath: "/repo/.luminor/worktrees/feature-a",
+        branch: {
+          isDefault: false,
+          worktreePath: "/repo/.luminor/worktrees/feature-a",
+        },
+      }),
+    ).toEqual({
+      checkoutCwd: "/repo/.luminor/worktrees/feature-a",
+      nextWorktreePath: "/repo/.luminor/worktrees/feature-a",
+      reuseExistingWorktree: true,
+    });
+  });
+
   it("keeps checkout in the current worktree for non-default branches", () => {
     expect(
       resolveBranchSelectionTarget({

@@ -144,6 +144,8 @@ describe("pullRequestDetailInputFromPane", () => {
     pullRequestRepository: "acme/widgets",
     pullRequestNumber: 350,
     pullRequestInitialTab: null,
+    terminalThreadId: null,
+    terminalId: null,
   };
 
   it("builds the detail input from a fully-populated pull request pane", () => {

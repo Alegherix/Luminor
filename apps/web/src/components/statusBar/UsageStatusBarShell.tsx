@@ -21,7 +21,9 @@ export function UsageStatusBarShell({ children }: { children: ReactNode }) {
       className="flex h-svh min-h-0 w-full min-w-0 flex-col"
       style={{ [STATUS_BAR_HEIGHT_VAR]: STATUS_BAR_HEIGHT } as CSSProperties}
     >
-      <div className="relative flex min-h-0 w-full min-w-0 flex-1">{children}</div>
+      <div className="relative flex min-h-0 w-full min-w-0 flex-1 overflow-hidden">
+        {children}
+      </div>
       <UsageStatusBar usage={usage} />
     </div>
   );

@@ -23,6 +23,8 @@ const BROWSER_PANE: RightDockPane = {
   pullRequestRepository: null,
   pullRequestNumber: null,
   pullRequestInitialTab: null,
+  terminalThreadId: null,
+  terminalId: null,
 };
 
 interface RuntimeActivationProps {

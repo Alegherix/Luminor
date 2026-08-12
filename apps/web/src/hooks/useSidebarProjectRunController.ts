@@ -70,7 +70,7 @@ export function useSidebarProjectRunController(input: {
     queries: runnableProjects.map((project) =>
       projectDiscoverScriptsQueryOptions({
         cwd: project.cwd,
-        enabled: !project.scripts.some((script) => !script.runOnWorktreeCreate),
+        enabled: !project.scripts.some((script) => script.kind === "manual"),
       }),
     ),
   });

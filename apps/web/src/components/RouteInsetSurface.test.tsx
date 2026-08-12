@@ -55,7 +55,7 @@ describe("RouteInsetSurface", () => {
     );
     expect(mainTag).toContain('data-slot="sidebar-inset"');
     expect(mainTag).toContain("peer-data-[variant=sidebar]");
-    expect(mainTag).toContain("h-dvh");
+    expect(mainTag).toContain("h-[calc(100dvh-var(--app-status-bar-height,0px))]");
     expect(mainTag).not.toContain("overflow-hidden");
     expect(surfaceTag).toContain("chat-content-card");
     expect(surfaceTag).toContain("overflow-hidden");

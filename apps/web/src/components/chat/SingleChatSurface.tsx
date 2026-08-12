@@ -1,5 +1,6 @@
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 import { isWorkspaceRelativePathSafe } from "@luminor/shared/path";
+import { resolveThreadWorkspaceState } from "@luminor/shared/threadEnvironment";
 import type { ProjectId, ThreadId, TurnId } from "@luminor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -116,6 +117,7 @@ const EditorWorkspaceView = lazy(() =>
   })),
 );
 const DockTerminalPane = lazy(() => import("./DockTerminalPane"));
+const DockPreviewPane = lazy(() => import("./DockPreviewPane"));
 const GitPanel = lazy(() => import("./GitPanel"));
 const DockExplorerPane = lazy(() =>
   import("./DockExplorerPane").then((module) => ({
@@ -221,12 +223,23 @@ export function SingleChatSurface(props: {
     gitCwd: workspaceRoot,
     isGitRepo: hasGitRepository,
   });
+  const threadWorktreePath =
+    threadWorkspaceMetadata.worktreePath ?? draftThread?.worktreePath ?? null;
+  const threadWorkspaceState = resolveThreadWorkspaceState({
+    envMode: threadWorkspaceMetadata.envMode ?? draftThread?.envMode ?? null,
+    worktreePath: threadWorktreePath,
+  });
   const dockLauncherItems = resolveRightDockLauncherItems({
     hasWorkspace: workspaceRoot !== null,
     hasGitRepository,
     hasReview: dockDiffTotals.fileCount > 0,
+    isWorktreePending: threadWorkspaceState === "worktree-pending",
   });
-  const availableDockPaneKinds = dockLauncherItems.map(({ kind }) => kind);
+  // Gated tools stay visible in the launcher but must not be openable from the
+  // "+" menu until their prerequisite exists.
+  const availableDockPaneKinds = dockLauncherItems
+    .filter(({ disabled }) => !disabled)
+    .map(({ kind }) => kind);
   const projects = useStore((store) => store.projects);
   const threadsHydrated = useStore((store) => store.threadsHydrated);
   const { settings: appSettings } = useAppSettings();
@@ -793,7 +806,20 @@ export function SingleChatSurface(props: {
             <DockTerminalPane
               hostThreadId={props.threadId}
               projectId={props.projectId}
+              terminalThreadId={pane.terminalThreadId}
+              terminalId={pane.terminalId}
               isActive={context.isActive && dockState.open}
+            />
+          </Suspense>
+        );
+      case "preview":
+        return (
+          <Suspense fallback={<PanelStateMessage>Loading preview...</PanelStateMessage>}>
+            <DockPreviewPane
+              hostThreadId={props.threadId}
+              projectId={props.projectId}
+              workspaceState={workspaceRoot === null ? null : threadWorkspaceState}
+              onClose={() => closePane(props.threadId, pane.id)}
             />
           </Suspense>
         );

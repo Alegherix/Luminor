@@ -136,6 +136,30 @@
       "types": "./src/projectDirectoryName.ts",
       "import": "./src/projectDirectoryName.ts"
     },
+    "./projectScripts": {
+      "types": "./src/projectScripts.ts",
+      "import": "./src/projectScripts.ts"
+    },
+    "./preview/previewUrl": {
+      "types": "./src/preview/previewUrl.ts",
+      "import": "./src/preview/previewUrl.ts"
+    },
+    "./preview/previewOutput": {
+      "types": "./src/preview/previewOutput.ts",
+      "import": "./src/preview/previewOutput.ts"
+    },
+    "./preview/urlDetection": {
+      "types": "./src/preview/urlDetection.ts",
+      "import": "./src/preview/urlDetection.ts"
+    },
+    "./preview/previewState": {
+      "types": "./src/preview/previewState.ts",
+      "import": "./src/preview/previewState.ts"
+    },
+    "./preview/portAllocation": {
+      "types": "./src/preview/portAllocation.ts",
+      "import": "./src/preview/portAllocation.ts"
+    },
     "./pinnedMessages": {
       "types": "./src/pinnedMessages.ts",
       "import": "./src/pinnedMessages.ts"

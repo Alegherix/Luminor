@@ -24,6 +24,7 @@ describe("RIGHT_DOCK_PANE_KINDS (single source of truth)", () => {
       "explorer",
       "file",
       "terminal",
+      "preview",
       "sidechat",
       "git",
       "pullRequest",
@@ -34,6 +35,7 @@ describe("RIGHT_DOCK_PANE_KINDS (single source of truth)", () => {
     for (const kind of RIGHT_DOCK_PANE_KINDS) {
       expect(SINGLETON_PANE_KINDS.has(kind)).toBe(kind !== "file");
     }
+    expect(SINGLETON_PANE_KINDS.has("preview")).toBe(true);
   });
 });
 
@@ -45,6 +47,7 @@ describe("isRightDockPaneKind", () => {
       "explorer",
       "file",
       "terminal",
+      "preview",
       "sidechat",
       "git",
       "pullRequest",
@@ -205,6 +208,44 @@ describe("sidechat pane", () => {
     expect(
       findMissingSidechatPaneIds(state, new Set([ThreadId.makeUnsafe("missing-thread")])),
     ).toEqual([]);
+  });
+});
+
+describe("terminal pane", () => {
+  it("reuses the singleton pane and updates its managed terminal binding", () => {
+    const first = openPaneInState(createDefaultRightDockState(), {
+      paneId: "terminal-pane",
+      kind: "terminal",
+    });
+    const reopened = openPaneInState(first, {
+      paneId: "ignored",
+      kind: "terminal",
+      terminalThreadId: ThreadId.makeUnsafe("host-thread"),
+      terminalId: "preview",
+    });
+
+    expect(reopened.panes).toHaveLength(1);
+    expect(reopened.activePaneId).toBe("terminal-pane");
+    expect(reopened.panes[0]?.terminalThreadId).toBe("host-thread");
+    expect(reopened.panes[0]?.terminalId).toBe("preview");
+  });
+
+  it("sanitizes a persisted managed terminal binding", () => {
+    const state = sanitizeRightDockThreadState({
+      open: true,
+      activePaneId: "terminal-pane",
+      panes: [
+        {
+          id: "terminal-pane",
+          kind: "terminal",
+          terminalThreadId: "host-thread",
+          terminalId: "preview",
+        },
+      ],
+    });
+
+    expect(state.panes[0]?.terminalThreadId).toBe("host-thread");
+    expect(state.panes[0]?.terminalId).toBe("preview");
   });
 });
 

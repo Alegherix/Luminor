@@ -184,6 +184,27 @@ export function dedupeRemoteBranchesWithLocalMatches(
   });
 }
 
+function normalizeGitPath(path: string): string {
+  return path.replace(/\/+$/, "");
+}
+
+function isSameGitPath(left: string | null | undefined, right: string | null | undefined): boolean {
+  if (!left || !right) {
+    return false;
+  }
+  return normalizeGitPath(left) === normalizeGitPath(right);
+}
+
+/** True when `checkoutPath` is the tree the project already lives in - either the project
+ *  root itself or a checkout containing it. A project rooted at a subdirectory never equals
+ *  its checkout root, so an equality-only test mistakes that checkout - or any enclosing
+ *  one, including the user's primary clone - for a separate worktree the thread may adopt. */
+function checkoutHostsProject(checkoutPath: string, activeProjectCwd: string): boolean {
+  const checkout = normalizeGitPath(checkoutPath);
+  const project = normalizeGitPath(activeProjectCwd);
+  return project === checkout || project.startsWith(`${checkout}/`);
+}
+
 export function resolveBranchSelectionTarget(input: {
   activeProjectCwd: string;
   activeWorktreePath: string | null;
@@ -196,9 +217,16 @@ export function resolveBranchSelectionTarget(input: {
   const { activeProjectCwd, activeWorktreePath, branch } = input;
 
   if (branch.worktreePath) {
+    const staysInCurrentWorktree = isSameGitPath(branch.worktreePath, activeWorktreePath);
+    const adoptable =
+      !staysInCurrentWorktree && !checkoutHostsProject(branch.worktreePath, activeProjectCwd);
     return {
       checkoutCwd: branch.worktreePath,
-      nextWorktreePath: branch.worktreePath === activeProjectCwd ? null : branch.worktreePath,
+      nextWorktreePath: adoptable
+        ? branch.worktreePath
+        : staysInCurrentWorktree
+          ? activeWorktreePath
+          : null,
       reuseExistingWorktree: true,
     };
   }
