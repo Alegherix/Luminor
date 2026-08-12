@@ -1,7 +1,7 @@
 // FILE: threadFolderMoves.test.ts
 // Purpose: Cover thread→folder move eligibility, menu construction, batching, and partial-failure reporting.
 // Layer: Web client helper test
-// Targets: resolveFolderMoveScope, planFolderMove, buildFolderMoveMenuItems, parseFolderMoveMenuId, moveThreadsToFolder, groupThreadsIntoNewFolder, describeFolderMoveOutcome.
+// Targets: resolveFolderMoveScope, resolveSingleProjectFolderMoveScope, resolveFolderDropTarget, planFolderMove, buildFolderMoveMenuItems, parseFolderMoveMenuId, moveThreadsToFolder, groupThreadsIntoNewFolder, describeFolderMoveOutcome.
 
 import { FolderId, ProjectId, SpaceId, ThreadId, type NativeApi } from "@luminor/contracts";
 import { projectFolderOwner, spaceFolderOwner } from "@luminor/shared/folderOwnership";
@@ -16,6 +16,7 @@ import {
   planFolderMove,
   resolveFolderDropTarget,
   resolveFolderMoveScope,
+  resolveSingleProjectFolderMoveScope,
   type FolderMoveThread,
 } from "./threadFolderMoves";
 
@@ -44,85 +45,191 @@ describe("resolveFolderMoveScope", () => {
     ]);
 
     expect(scope).not.toBeNull();
-    expect(scope?.projectId).toBe(PROJECT_A);
+    expect(scope?.projectIds).toEqual([PROJECT_A]);
     expect(scope?.threadIds).toEqual([THREAD_1, THREAD_2]);
     expect(scope?.skippedThreadIds).toEqual([THREAD_3]);
     expect([...(scope?.folderIds ?? [])]).toEqual([null, FOLDER_A]);
   });
 
-  it("rejects a selection spanning projects instead of moving part of it", () => {
-    expect(
-      resolveFolderMoveScope([
-        thread({ id: THREAD_1 }),
-        thread({ id: THREAD_2, projectId: PROJECT_B }),
-      ]),
-    ).toBeNull();
+  it("keeps a selection spanning projects, which a space folder can host", () => {
+    const scope = resolveFolderMoveScope([
+      thread({ id: THREAD_1 }),
+      thread({ id: THREAD_2, projectId: PROJECT_B }),
+      thread({ id: THREAD_3, projectId: PROJECT_B }),
+    ]);
+
+    expect(scope?.projectIds).toEqual([PROJECT_A, PROJECT_B]);
+    expect(scope?.threadIds).toEqual([THREAD_1, THREAD_2, THREAD_3]);
   });
 
   it("rejects a selection of only subagent rows", () => {
     expect(resolveFolderMoveScope([thread({ id: THREAD_3, parentThreadId: THREAD_1 })])).toBeNull();
   });
+});
 
-  describe("resolveFolderDropTarget", () => {
-    const SPACE = SpaceId.makeUnsafe("space-feature-work");
-    const OTHER_SPACE = SpaceId.makeUnsafe("space-other");
+describe("resolveSingleProjectFolderMoveScope", () => {
+  it("narrows a single-project selection to the project owning its folders", () => {
+    const scope = resolveSingleProjectFolderMoveScope(
+      resolveFolderMoveScope([thread({ id: THREAD_1 }), thread({ id: THREAD_2 })]),
+    );
 
-    it("accepts a folder owned by the dragged threads' project", () => {
+    expect(scope?.projectId).toBe(PROJECT_A);
+    expect(scope?.threadIds).toEqual([THREAD_1, THREAD_2]);
+  });
+
+  it("refuses a selection spanning projects, which no project owner can serve", () => {
+    expect(
+      resolveSingleProjectFolderMoveScope(
+        resolveFolderMoveScope([
+          thread({ id: THREAD_1 }),
+          thread({ id: THREAD_2, projectId: PROJECT_B }),
+        ]),
+      ),
+    ).toBeNull();
+    expect(resolveSingleProjectFolderMoveScope(null)).toBeNull();
+  });
+});
+
+describe("resolveFolderDropTarget", () => {
+  const SPACE = SpaceId.makeUnsafe("space-feature-work");
+  const OTHER_SPACE = SpaceId.makeUnsafe("space-other");
+  const spaceOf = (spaceIdByProjectId: Partial<Record<ProjectId, SpaceId>>) => ({
+    resolveProjectSpaceId: (projectId: ProjectId) => spaceIdByProjectId[projectId] ?? null,
+  });
+
+  it("accepts a folder owned by the dragged threads' project", () => {
+    expect(
+      resolveFolderDropTarget({
+        projectIds: [PROJECT_A],
+        owner: projectFolderOwner(PROJECT_A),
+        ...spaceOf({}),
+      }),
+    ).toEqual({ accepted: true });
+  });
+
+  it("refuses a folder owned by another project and names the offending project", () => {
+    expect(
+      resolveFolderDropTarget({
+        projectIds: [PROJECT_A],
+        owner: projectFolderOwner(PROJECT_B),
+        ...spaceOf({ [PROJECT_A]: SPACE }),
+      }),
+    ).toEqual({ accepted: false, rejection: "other-project", rejectedProjectId: PROJECT_A });
+  });
+
+  it("accepts a space folder when the project is in that space", () => {
+    expect(
+      resolveFolderDropTarget({
+        projectIds: [PROJECT_A],
+        owner: spaceFolderOwner(SPACE),
+        ...spaceOf({ [PROJECT_A]: SPACE }),
+      }),
+    ).toEqual({ accepted: true });
+  });
+
+  it("refuses a space folder when the project is outside the space", () => {
+    expect(
+      resolveFolderDropTarget({
+        projectIds: [PROJECT_A],
+        owner: spaceFolderOwner(SPACE),
+        ...spaceOf({ [PROJECT_A]: OTHER_SPACE }),
+      }),
+    ).toEqual({
+      accepted: false,
+      rejection: "project-outside-space",
+      rejectedProjectId: PROJECT_A,
+    });
+    expect(
+      resolveFolderDropTarget({
+        projectIds: [PROJECT_A],
+        owner: spaceFolderOwner(SPACE),
+        ...spaceOf({}),
+      }),
+    ).toEqual({
+      accepted: false,
+      rejection: "project-outside-space",
+      rejectedProjectId: PROJECT_A,
+    });
+  });
+
+  it("accepts a space folder for a selection spanning two projects of that space", () => {
+    expect(
+      resolveFolderDropTarget({
+        projectIds: [PROJECT_A, PROJECT_B],
+        owner: spaceFolderOwner(SPACE),
+        ...spaceOf({ [PROJECT_A]: SPACE, [PROJECT_B]: SPACE }),
+      }),
+    ).toEqual({ accepted: true });
+  });
+
+  it("refuses the whole selection when one project is outside the target space", () => {
+    expect(
+      resolveFolderDropTarget({
+        projectIds: [PROJECT_A, PROJECT_B],
+        owner: spaceFolderOwner(SPACE),
+        ...spaceOf({ [PROJECT_A]: SPACE, [PROJECT_B]: OTHER_SPACE }),
+      }),
+    ).toEqual({
+      accepted: false,
+      rejection: "project-outside-space",
+      rejectedProjectId: PROJECT_B,
+    });
+  });
+
+  it("refuses a project folder for a selection spanning projects, target owner deciding", () => {
+    expect(
+      resolveFolderDropTarget({
+        projectIds: [PROJECT_A, PROJECT_B],
+        owner: projectFolderOwner(PROJECT_A),
+        ...spaceOf({ [PROJECT_A]: SPACE, [PROJECT_B]: SPACE }),
+      }),
+    ).toEqual({ accepted: false, rejection: "other-project", rejectedProjectId: PROJECT_B });
+  });
+
+  it("lets the target owner decide for a selection spanning both folder kinds", () => {
+    const spanningBothKinds = resolveFolderMoveScope([
+      thread({ id: THREAD_1, folderId: FOLDER_A }),
+      thread({ id: THREAD_2, projectId: PROJECT_B, folderId: FOLDER_B }),
+    ]);
+    const inOneSpace = spaceOf({ [PROJECT_A]: SPACE, [PROJECT_B]: SPACE });
+
+    expect(
+      resolveFolderDropTarget({
+        projectIds: spanningBothKinds?.projectIds ?? [],
+        owner: spaceFolderOwner(SPACE),
+        ...inOneSpace,
+      }),
+    ).toEqual({ accepted: true });
+    expect(
+      resolveFolderDropTarget({
+        projectIds: spanningBothKinds?.projectIds ?? [],
+        owner: projectFolderOwner(PROJECT_A),
+        ...inOneSpace,
+      }),
+    ).toEqual({ accepted: false, rejection: "other-project", rejectedProjectId: PROJECT_B });
+  });
+
+  it("accepts a project's unfiled area for its own threads whichever folder kind they leave", () => {
+    for (const folderId of [FOLDER_A, FOLDER_B, null] as const) {
+      const scope = resolveFolderMoveScope([thread({ id: THREAD_1, folderId })]);
       expect(
         resolveFolderDropTarget({
-          projectId: PROJECT_A,
+          projectIds: scope?.projectIds ?? [],
           owner: projectFolderOwner(PROJECT_A),
-          projectSpaceId: null,
+          ...spaceOf({ [PROJECT_A]: SPACE }),
         }),
       ).toEqual({ accepted: true });
-    });
+    }
+  });
 
-    it("refuses a folder owned by another project", () => {
-      expect(
-        resolveFolderDropTarget({
-          projectId: PROJECT_A,
-          owner: projectFolderOwner(PROJECT_B),
-          projectSpaceId: SPACE,
-        }),
-      ).toEqual({ accepted: false, rejection: "other-project" });
-    });
-
-    it("accepts a space folder when the project is in that space", () => {
-      expect(
-        resolveFolderDropTarget({
-          projectId: PROJECT_A,
-          owner: spaceFolderOwner(SPACE),
-          projectSpaceId: SPACE,
-        }),
-      ).toEqual({ accepted: true });
-    });
-
-    it("refuses a space folder when the project is outside the space", () => {
-      expect(
-        resolveFolderDropTarget({
-          projectId: PROJECT_A,
-          owner: spaceFolderOwner(SPACE),
-          projectSpaceId: OTHER_SPACE,
-        }),
-      ).toEqual({ accepted: false, rejection: "project-outside-space" });
-      expect(
-        resolveFolderDropTarget({
-          projectId: PROJECT_A,
-          owner: spaceFolderOwner(SPACE),
-          projectSpaceId: null,
-        }),
-      ).toEqual({ accepted: false, rejection: "project-outside-space" });
-    });
-
-    it("refuses without a cause when the drag has no single project", () => {
-      expect(
-        resolveFolderDropTarget({
-          projectId: null,
-          owner: spaceFolderOwner(SPACE),
-          projectSpaceId: null,
-        }),
-      ).toEqual({ accepted: false, rejection: null });
-    });
+  it("refuses without a cause when the drag carries no thread", () => {
+    expect(
+      resolveFolderDropTarget({
+        projectIds: [],
+        owner: spaceFolderOwner(SPACE),
+        ...spaceOf({}),
+      }),
+    ).toEqual({ accepted: false, rejection: null, rejectedProjectId: null });
   });
 });
 
@@ -146,10 +253,20 @@ describe("planFolderMove", () => {
     expect(plan?.pendingThreadIds).toEqual([THREAD_2]);
   });
 
-  it("returns no plan for a cross-project selection", () => {
+  it("carries every project of a cross-project selection for the target to judge", () => {
+    const plan = planFolderMove({
+      threads: [thread({ id: THREAD_1 }), thread({ id: THREAD_2, projectId: PROJECT_B })],
+      folderId: FOLDER_A,
+    });
+
+    expect(plan?.projectIds).toEqual([PROJECT_A, PROJECT_B]);
+    expect(plan?.pendingThreadIds).toEqual([THREAD_1, THREAD_2]);
+  });
+
+  it("returns no plan when the selection has no root thread", () => {
     expect(
       planFolderMove({
-        threads: [thread({ id: THREAD_1 }), thread({ id: THREAD_2, projectId: PROJECT_B })],
+        threads: [thread({ id: THREAD_3, parentThreadId: THREAD_1 })],
         folderId: FOLDER_A,
       }),
     ).toBeNull();

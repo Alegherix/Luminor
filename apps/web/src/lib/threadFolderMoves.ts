@@ -1,8 +1,9 @@
 // FILE: threadFolderMoves.ts
 // Purpose: Single source for thread→folder membership moves (eligibility, batching, partial-failure reporting).
 // Layer: Web client shared helper (sidebar context menus, folder drag-and-drop, group-into-new-folder)
-// Exports: resolveFolderMoveScope, resolveFolderDropTarget, planFolderMove, buildFolderMoveMenuItems, parseFolderMoveMenuId,
-//          moveThreadsToFolder, groupThreadsIntoNewFolder, describeFolderMoveOutcome
+// Exports: resolveFolderMoveScope, resolveSingleProjectFolderMoveScope, resolveFolderDropTarget, planFolderMove,
+//          buildFolderMoveMenuItems, parseFolderMoveMenuId, moveThreadsToFolder, groupThreadsIntoNewFolder,
+//          describeFolderMoveOutcome
 
 import type {
   FolderId,
@@ -28,7 +29,8 @@ export type FolderMoveThread = {
 };
 
 export type FolderMoveScope = {
-  projectId: ProjectId;
+  /** Projects the eligible threads belong to, deduplicated in input order. */
+  projectIds: readonly ProjectId[];
   /** Root threads eligible for a membership change, in input order. */
   threadIds: readonly ThreadId[];
   /** Current membership across the scope (`null` means unfiled), used to hide no-op targets. */
@@ -36,6 +38,9 @@ export type FolderMoveScope = {
   /** Rows that follow their root thread's membership instead of carrying their own. */
   skippedThreadIds: readonly ThreadId[];
 };
+
+/** A scope narrowed to the one project whose folders and owner can serve it. */
+export type SingleProjectFolderMoveScope = FolderMoveScope & { projectId: ProjectId };
 
 export type FolderMovePlan = FolderMoveScope & {
   folderId: FolderId | null;
@@ -57,8 +62,8 @@ export type FolderMoveReport = {
 };
 
 /**
- * Membership lives on root threads inside a single project, so a selection spanning
- * projects has no valid folder target and must not be partially applied.
+ * Membership lives on root threads. A selection may span projects, because a space folder
+ * accepts every project of its space; which owners can serve it is decided per target.
  */
 export function resolveFolderMoveScope(
   threads: readonly FolderMoveThread[],
@@ -67,40 +72,66 @@ export function resolveFolderMoveScope(
   const skippedThreadIds = threads
     .filter((thread) => Boolean(thread.parentThreadId))
     .map((thread) => thread.id);
-  const firstRoot = rootThreads[0];
-  if (!firstRoot) return null;
-  if (rootThreads.some((thread) => thread.projectId !== firstRoot.projectId)) return null;
+  if (rootThreads.length === 0) return null;
 
   return {
-    projectId: firstRoot.projectId,
+    projectIds: [...new Set(rootThreads.map((thread) => thread.projectId))],
     threadIds: rootThreads.map((thread) => thread.id),
     folderIds: new Set(rootThreads.map((thread) => thread.folderId ?? null)),
     skippedThreadIds,
   };
 }
 
+/**
+ * Paths that need one project up front — a project-keyed folder list, or the owner of a
+ * folder about to be created — cannot serve a selection spanning projects.
+ */
+export function resolveSingleProjectFolderMoveScope(
+  scope: FolderMoveScope | null,
+): SingleProjectFolderMoveScope | null {
+  if (scope === null) return null;
+  const [projectId, ...otherProjectIds] = scope.projectIds;
+  if (projectId === undefined || otherProjectIds.length > 0) return null;
+  return { ...scope, projectId };
+}
+
 export type FolderDropResolution =
   | { readonly accepted: true }
-  | { readonly accepted: false; readonly rejection: FolderPlacementRejection | null };
+  | {
+      readonly accepted: false;
+      readonly rejection: FolderPlacementRejection | null;
+      /** Project that caused the refusal, so the message can name it. */
+      readonly rejectedProjectId: ProjectId | null;
+    };
+
+const NOTHING_TO_MOVE: FolderDropResolution = {
+  accepted: false,
+  rejection: null,
+  rejectedProjectId: null,
+};
 
 /**
  * Mirrors the decider's placement invariant so a drop target can refuse before dispatch and
- * name the cause. `rejection: null` means there is nothing to move, which needs no message.
+ * name the cause. The target's owner decides for every dragged project, and one invalid
+ * project refuses the whole drop rather than letting part of it through.
+ * `rejection: null` means there is nothing to move, which needs no message.
  */
 export function resolveFolderDropTarget(input: {
-  /** Project shared by the dragged threads; `null` when the selection has no single project. */
-  projectId: ProjectId | null;
   owner: FolderOwner;
-  /** Space of the dragged threads' project; `null` when the project belongs to no space. */
-  projectSpaceId: SpaceId | null;
+  /** Projects of the dragged threads; every one must be valid for the target owner. */
+  projectIds: readonly ProjectId[];
+  resolveProjectSpaceId: (projectId: ProjectId) => SpaceId | null;
 }): FolderDropResolution {
-  if (input.projectId === null) return { accepted: false, rejection: null };
-  const rejection = resolveFolderPlacementRejection({
-    owner: input.owner,
-    projectId: input.projectId,
-    projectSpaceId: input.projectSpaceId,
-  });
-  return rejection === null ? { accepted: true } : { accepted: false, rejection };
+  if (input.projectIds.length === 0) return NOTHING_TO_MOVE;
+  for (const projectId of input.projectIds) {
+    const rejection = resolveFolderPlacementRejection({
+      owner: input.owner,
+      projectId,
+      projectSpaceId: input.resolveProjectSpaceId(projectId),
+    });
+    if (rejection !== null) return { accepted: false, rejection, rejectedProjectId: projectId };
+  }
+  return { accepted: true };
 }
 
 export const FOLDER_MOVE_MENU_ID_PREFIX = "move-folder:";
