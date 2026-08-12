@@ -624,7 +624,7 @@ function openThreadChatPage(state: ThreadTerminalState): ThreadTerminalState {
   };
 }
 
-interface OpenTerminalThreadPageOptions {
+export interface OpenTerminalThreadPageOptions {
   terminalOnly?: boolean;
   terminalId?: string;
   terminalLabel?: string;
