@@ -24,7 +24,12 @@ import { cn } from "~/lib/utils";
 import { formatElapsed } from "../../session-logic";
 import { RAISED_SURFACE_CHROME_CLASS_NAME } from "../chat/composerPickerStyles";
 import { KanbanStatusIcon } from "./KanbanStatusIcon";
-import { KANBAN_COLUMN_LABELS, kanbanThreadCardId, type KanbanCard } from "./kanban.logic";
+import {
+  KANBAN_COLUMN_LABELS,
+  kanbanCardPullRequest,
+  kanbanThreadCardId,
+  type KanbanCard,
+} from "./kanban.logic";
 
 export interface KanbanCardViewProps {
   card: KanbanCard;
@@ -102,7 +107,7 @@ function KanbanCardViewComponent({
     envMode: card.envMode,
     worktreePath: card.worktreePath,
   }).worktreeBadgeLabel;
-  const pr = card.thread?.lastKnownPr ?? null;
+  const pr = kanbanCardPullRequest(card);
   const activeWorkElapsed =
     card.activeWorkStartedAt && nowMs
       ? formatElapsed(card.activeWorkStartedAt, new Date(nowMs).toISOString())

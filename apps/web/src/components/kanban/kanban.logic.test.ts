@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { OrchestrationThreadPullRequest } from "@luminor/contracts";
+import type { OrchestrationThreadPullRequest, PullRequestListEntry } from "@luminor/contracts";
 import { ProjectId, ThreadId } from "@luminor/contracts";
 import { DEFAULT_INTERACTION_MODE } from "../../types";
 import type { SidebarThreadSummary, ThreadSession } from "../../types";
@@ -17,10 +17,13 @@ import {
   flattenProjectBoardForOverview,
   isKanbanDraftOnlyCard,
   kanbanCardMatchesFilters,
+  kanbanCardPullRequest,
   kanbanDraftCardId,
   kanbanThreadCardId,
+  matchPullRequestListEntryForCard,
   normalizeKanbanBoardFilters,
   orderDraftCards,
+  overlayKanbanBoardPullRequests,
   reorderDraftCardIds,
   resolveDraftDropAction,
   resolveKanbanPrFilterState,
@@ -991,11 +994,48 @@ function makePr(
   return {
     number: 1 as OrchestrationThreadPullRequest["number"],
     title: "PR" as OrchestrationThreadPullRequest["title"],
-    url: "https://example.com/pr/1",
+    url: "https://github.com/acme/widgets/pull/1",
     baseBranch: "main" as OrchestrationThreadPullRequest["baseBranch"],
     headBranch: "feat" as OrchestrationThreadPullRequest["headBranch"],
     state: "open",
     ...overrides,
+  };
+}
+
+function makeListEntry(overrides: Partial<PullRequestListEntry> = {}): PullRequestListEntry {
+  const entry: PullRequestListEntry = {
+    projectId: ProjectId.makeUnsafe("project-1"),
+    projectTitle: "Luminor",
+    repository: "acme/widgets",
+    number: 1 as PullRequestListEntry["number"],
+    title: "PR" as PullRequestListEntry["title"],
+    url: "https://github.com/acme/widgets/pull/1",
+    author: null,
+    headBranch: "feat" as PullRequestListEntry["headBranch"],
+    baseBranch: "main" as PullRequestListEntry["baseBranch"],
+    state: "open",
+    isDraft: false,
+    additions: 1 as PullRequestListEntry["additions"],
+    deletions: 0 as PullRequestListEntry["deletions"],
+    createdAt: "2026-03-09T10:00:00.000Z",
+    updatedAt: "2026-03-09T10:00:00.000Z",
+    reviewDecision: null,
+    viewerReviewRequested: false,
+    isPinned: false,
+    projectContexts: [],
+    mergeability: "unknown",
+    labels: [],
+    ...overrides,
+  };
+  return {
+    ...entry,
+    projectContexts: overrides.projectContexts ?? [
+      {
+        projectId: entry.projectId,
+        projectTitle: entry.projectTitle,
+        isPinned: entry.isPinned ?? false,
+      },
+    ],
   };
 }
 
@@ -1146,5 +1186,112 @@ describe("kanban board filters", () => {
         { prStates: ["draft"], workStates: [], projectIds: [] },
       ),
     ).toBe(true);
+  });
+
+  it("matches a card to the live PR list by branch when lastKnownPr is missing", () => {
+    const thread = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-open"),
+      branch: "feat/client-qa",
+      latestTurn: makeLatestTurn(),
+    });
+    const card = buildKanbanBoard(makeBoardInput({ threads: [thread] })).projects[0]?.done[0];
+    expect(card).toBeDefined();
+    expect(kanbanCardPullRequest(card!)).toBeNull();
+    expect(
+      matchPullRequestListEntryForCard(
+        card!,
+        [makeListEntry({ headBranch: "feat/client-qa" as PullRequestListEntry["headBranch"] })],
+      )?.number,
+    ).toBe(1);
+  });
+
+  it("prefers the live list state over a stale persisted lastKnownPr", () => {
+    const thread = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-stale"),
+      lastKnownPr: makePr({ isDraft: true }),
+      latestTurn: makeLatestTurn(),
+    });
+    const board = overlayKanbanBoardPullRequests(
+      buildKanbanBoard(makeBoardInput({ threads: [thread] })),
+      [makeListEntry({ isDraft: false, mergeability: "mergeable" })],
+    );
+    const card = board.projects[0]?.done[0];
+    expect(resolveKanbanPrFilterState(kanbanCardPullRequest(card!))).toBe("reviewNeeded");
+    expect(
+      kanbanCardMatchesFilters(card!, {
+        prStates: ["reviewNeeded"],
+        workStates: [],
+        projectIds: [],
+      }),
+    ).toBe(true);
+    expect(
+      kanbanCardMatchesFilters(card!, {
+        prStates: ["draft"],
+        workStates: [],
+        projectIds: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("filters review-needed cards from the live PR list even without lastKnownPr", () => {
+    const openThread = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-review-live"),
+      branch: "feat/review",
+      latestTurn: makeLatestTurn(),
+    });
+    const otherThread = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-other"),
+      branch: "feat/other",
+      latestTurn: makeLatestTurn(),
+    });
+    const board = overlayKanbanBoardPullRequests(
+      buildKanbanBoard(makeBoardInput({ threads: [openThread, otherThread] })),
+      [
+        makeListEntry({
+          number: 12 as PullRequestListEntry["number"],
+          headBranch: "feat/review" as PullRequestListEntry["headBranch"],
+          url: "https://github.com/acme/widgets/pull/12",
+        }),
+      ],
+    );
+    const filtered = applyKanbanBoardFilters(board, {
+      prStates: ["reviewNeeded"],
+      workStates: [],
+      projectIds: [],
+    });
+
+    expect(filtered.totalCount).toBe(1);
+    expect(filtered.projects[0]?.done.map((card) => card.threadId)).toEqual([
+      "thread-review-live",
+    ]);
+  });
+
+  it("scopes a shared branch name to the card's project", () => {
+    const frontendId = ProjectId.makeUnsafe("project-frontend");
+    const luminorId = ProjectId.makeUnsafe("project-luminor");
+    const card: Pick<KanbanCard, "projectId" | "branch" | "thread" | "pullRequest"> = {
+      projectId: frontendId,
+      branch: "feat/shared",
+      thread: makeSidebarThreadSummary({ projectId: frontendId, branch: "feat/shared" }),
+    };
+    const matched = matchPullRequestListEntryForCard(card, [
+      makeListEntry({
+        projectId: luminorId,
+        projectTitle: "Luminor",
+        repository: "acme/luminor",
+        number: 2 as PullRequestListEntry["number"],
+        url: "https://github.com/acme/luminor/pull/2",
+        headBranch: "feat/shared" as PullRequestListEntry["headBranch"],
+      }),
+      makeListEntry({
+        projectId: frontendId,
+        projectTitle: "frontend",
+        repository: "acme/frontend",
+        number: 9 as PullRequestListEntry["number"],
+        url: "https://github.com/acme/frontend/pull/9",
+        headBranch: "feat/shared" as PullRequestListEntry["headBranch"],
+      }),
+    ]);
+    expect(matched?.number).toBe(9);
   });
 });

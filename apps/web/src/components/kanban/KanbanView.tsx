@@ -55,19 +55,23 @@ import { KanbanOverview } from "./KanbanOverview";
 import { KanbanProjectBoardView } from "./KanbanProjectBoardView";
 import { useKanbanBoard } from "./useKanbanBoard";
 import { useKanbanCardContextMenu } from "./useKanbanCardContextMenu";
+import { useKanbanPullRequestEntries } from "./useKanbanPullRequestEntries";
 import {
   applyKanbanBoardFilters,
   areKanbanFiltersActive,
   EMPTY_KANBAN_BOARD_FILTERS,
+  overlayKanbanBoardPullRequests,
   type KanbanCard,
 } from "./kanban.logic";
 
 export default function KanbanView({ projectId }: { projectId: string | null }) {
   const navigate = useNavigate();
   const board = useKanbanBoard();
+  const pullRequestEntries = useKanbanPullRequestEntries();
   const boardFilters = useKanbanUiStore((state) => state.boardFilters);
   const setBoardFilters = useKanbanUiStore((state) => state.setBoardFilters);
-  const visibleBoard = applyKanbanBoardFilters(board, boardFilters);
+  const boardWithPullRequests = overlayKanbanBoardPullRequests(board, pullRequestEntries);
+  const visibleBoard = applyKanbanBoardFilters(boardWithPullRequests, boardFilters);
   const filtersActive = areKanbanFiltersActive(boardFilters);
   const threadsHydrated = useStore((state) => state.threadsHydrated);
   const desktopTopBarTrafficLightGutterClassName = useDesktopTopBarTrafficLightGutterClassName();

@@ -8,10 +8,15 @@ import type {
   OrchestrationThreadPullRequest,
   ProjectId,
   ProviderKind,
+  PullRequestListEntry,
   ThreadEnvironmentMode,
   ThreadId,
 } from "@luminor/contracts";
 import { buildPromptThreadTitleFallback } from "@luminor/shared/chatThreads";
+import {
+  parseGitHubRepositoryNameWithOwnerFromPullRequestUrl,
+  pullRequestListEntryHasProject,
+} from "@luminor/shared/githubRepository";
 import { isPendingThreadWorktree } from "@luminor/shared/threadEnvironment";
 import type { ComposerThreadDraftState } from "../../composerDraftStore";
 import {
@@ -148,6 +153,7 @@ export interface KanbanCard {
   worktreePath: string | null;
   /** Backing summary; null for local-only draft threads that have not been promoted yet. */
   thread: SidebarThreadSummary | null;
+  pullRequest?: OrchestrationThreadPullRequest | null;
   /** Trimmed composer prompt a draft card dispatches when dropped on In Progress. */
   draftPrompt: string;
   /** Prompt carries attachments the board cannot dispatch — open the chat instead. */
@@ -792,15 +798,158 @@ export function resolveKanbanWorkFilterState(
   return null;
 }
 
+export function kanbanCardPullRequest(
+  card: Pick<KanbanCard, "thread" | "pullRequest">,
+): OrchestrationThreadPullRequest | null {
+  return card.pullRequest ?? card.thread?.lastKnownPr ?? null;
+}
+
+function kanbanCardBranch(card: Pick<KanbanCard, "branch" | "thread">): string | null {
+  const branch = card.thread?.branch ?? card.thread?.associatedWorktreeBranch ?? card.branch;
+  const trimmed = branch?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function pullRequestListEntryToThreadPullRequest(
+  entry: PullRequestListEntry,
+): OrchestrationThreadPullRequest {
+  return {
+    number: entry.number,
+    title: entry.title,
+    url: entry.url,
+    baseBranch: entry.baseBranch,
+    headBranch: entry.headBranch,
+    state: entry.state,
+    isDraft: entry.isDraft,
+    mergeability: entry.mergeability,
+    additions: entry.additions,
+    deletions: entry.deletions,
+  };
+}
+
+function threadPullRequestsEquivalent(
+  left: OrchestrationThreadPullRequest | null | undefined,
+  right: OrchestrationThreadPullRequest,
+): boolean {
+  return (
+    left != null &&
+    left.number === right.number &&
+    left.url === right.url &&
+    left.state === right.state &&
+    left.title === right.title &&
+    (left.isDraft ?? false) === (right.isDraft ?? false) &&
+    (left.mergeability ?? "unknown") === (right.mergeability ?? "unknown")
+  );
+}
+
+function pickPreferredPullRequestListEntry(
+  entries: readonly PullRequestListEntry[],
+): PullRequestListEntry | null {
+  return entries.find((entry) => entry.state === "open") ?? entries[0] ?? null;
+}
+
+export function matchPullRequestListEntryForCard(
+  card: Pick<KanbanCard, "projectId" | "branch" | "thread" | "pullRequest">,
+  entries: readonly PullRequestListEntry[],
+): PullRequestListEntry | null {
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const knownPr = kanbanCardPullRequest(card);
+  if (knownPr) {
+    const knownRepository = parseGitHubRepositoryNameWithOwnerFromPullRequestUrl(knownPr.url);
+    const byIdentity = entries.filter((entry) => {
+      if (entry.url === knownPr.url) {
+        return true;
+      }
+      if (entry.number !== knownPr.number) {
+        return false;
+      }
+      if (knownRepository !== null) {
+        return entry.repository.trim().toLowerCase() === knownRepository.toLowerCase();
+      }
+      return pullRequestListEntryHasProject(entry, card.projectId);
+    });
+    const matched = pickPreferredPullRequestListEntry(byIdentity);
+    if (matched) {
+      return matched;
+    }
+  }
+
+  const branch = kanbanCardBranch(card);
+  if (branch === null) {
+    return null;
+  }
+  const normalizedBranch = branch.toLowerCase();
+  const byBranch = entries.filter(
+    (entry) => entry.headBranch.trim().toLowerCase() === normalizedBranch,
+  );
+  if (byBranch.length === 0) {
+    return null;
+  }
+  const inProject = byBranch.filter((entry) =>
+    pullRequestListEntryHasProject(entry, card.projectId),
+  );
+  return pickPreferredPullRequestListEntry(inProject.length > 0 ? inProject : byBranch);
+}
+
+function overlayKanbanCardPullRequest(
+  card: KanbanCard,
+  entries: readonly PullRequestListEntry[],
+): KanbanCard {
+  const matched = matchPullRequestListEntryForCard(card, entries);
+  if (!matched) {
+    return card;
+  }
+  const pullRequest = pullRequestListEntryToThreadPullRequest(matched);
+  if (threadPullRequestsEquivalent(card.pullRequest, pullRequest)) {
+    return card;
+  }
+  return { ...card, pullRequest };
+}
+
+export function overlayKanbanBoardPullRequests(
+  board: KanbanBoard,
+  entries: readonly PullRequestListEntry[],
+): KanbanBoard {
+  if (entries.length === 0) {
+    return board;
+  }
+  let changed = false;
+  const projects = board.projects.map((project) => {
+    const overlayColumn = (cards: KanbanCard[]): KanbanCard[] => {
+      let columnChanged = false;
+      const next = cards.map((card) => {
+        const overlaid = overlayKanbanCardPullRequest(card, entries);
+        if (overlaid !== card) {
+          columnChanged = true;
+        }
+        return overlaid;
+      });
+      return columnChanged ? next : cards;
+    };
+    const draft = overlayColumn(project.draft);
+    const inProgress = overlayColumn(project.inProgress);
+    const done = overlayColumn(project.done);
+    if (draft === project.draft && inProgress === project.inProgress && done === project.done) {
+      return project;
+    }
+    changed = true;
+    return { ...project, draft, inProgress, done };
+  });
+  return changed ? { ...board, projects } : board;
+}
+
 export function kanbanCardMatchesFilters(
-  card: Pick<KanbanCard, "column" | "thread" | "projectId">,
+  card: Pick<KanbanCard, "column" | "thread" | "projectId" | "branch" | "pullRequest">,
   filters: KanbanBoardFilters,
 ): boolean {
   if (filters.projectIds.length > 0 && !filters.projectIds.includes(card.projectId)) {
     return false;
   }
   if (filters.prStates.length > 0) {
-    const prState = resolveKanbanPrFilterState(card.thread?.lastKnownPr);
+    const prState = resolveKanbanPrFilterState(kanbanCardPullRequest(card));
     if (prState === null || !filters.prStates.includes(prState)) {
       return false;
     }
