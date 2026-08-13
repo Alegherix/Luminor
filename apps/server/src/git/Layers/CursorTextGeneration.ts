@@ -24,12 +24,14 @@ import {
   buildCommitMessagePrompt,
   buildDiffSummaryPrompt,
   buildPrContentPrompt,
+  buildMeetingSummaryPrompt,
   buildThreadRecapPrompt,
   buildThreadTitlePrompt,
   decodeStructuredTextGenerationOutput,
   type RawTextFallback,
   sanitizeCommitSubject,
   sanitizeDiffSummary,
+  sanitizeMeetingSummary,
   sanitizeThreadRecap,
   sanitizePrTitle,
 } from "../textGenerationShared.ts";
@@ -383,6 +385,36 @@ const makeCursorTextGeneration = Effect.gen(function* () {
     };
   });
 
+  const generateMeetingSummary: TextGenerationShape["generateMeetingSummary"] = Effect.fn(
+    "CursorTextGeneration.generateMeetingSummary",
+  )(function* (input) {
+    const modelSelection = resolveCursorModelSelection(input);
+    if (!modelSelection) {
+      return yield* new TextGenerationError({
+        operation: "generateMeetingSummary",
+        detail: "Invalid Cursor model selection.",
+      });
+    }
+
+    const { prompt, outputSchemaJson, rawTextFallback } = buildMeetingSummaryPrompt({
+      title: input.title,
+      transcript: input.transcript,
+    });
+    const generated = yield* runCursorJson({
+      operation: "generateMeetingSummary",
+      cwd: input.cwd,
+      prompt,
+      outputSchemaJson,
+      rawTextFallback,
+      modelSelection,
+      ...(input.providerOptions ? { providerOptions: input.providerOptions } : {}),
+    });
+
+    return {
+      summary: sanitizeMeetingSummary(generated.summary),
+    };
+  });
+
   const generateAutomationIntent: TextGenerationShape["generateAutomationIntent"] = Effect.fn(
     "CursorTextGeneration.generateAutomationIntent",
   )(function* (input) {
@@ -437,6 +469,7 @@ const makeCursorTextGeneration = Effect.gen(function* () {
     generateBranchName,
     generateThreadTitle,
     generateThreadRecap,
+    generateMeetingSummary,
     generateAutomationIntent,
     evaluateAutomationCompletion,
   } satisfies TextGenerationShape;

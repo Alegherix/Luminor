@@ -122,6 +122,10 @@ export function meetingsTranscriptTextPath(homeDir: string, sessionId: string): 
   return Path.join(meetingsTranscriptDir(homeDir, sessionId), "transcript.txt");
 }
 
+export function meetingsSummaryPath(homeDir: string, sessionId: string): string {
+  return Path.join(meetingsTranscriptDir(homeDir, sessionId), "summary.md");
+}
+
 export function expandTranscriptionArgs(
   args: readonly string[],
   input: { readonly recordingPath: string; readonly outputPath: string },
@@ -442,6 +446,30 @@ export function createMeetingsTranscriptionManager(deps: MeetingsTranscriptionMa
         updatedAt: now().toISOString(),
       });
       return { status: "configured", error: null };
+    },
+
+    async writeSummary(input: {
+      sessionId: string;
+      text: string;
+    }): Promise<{ summaryPath: string }> {
+      const summaryPath = meetingsSummaryPath(deps.homeDir, input.sessionId);
+      const text = input.text.endsWith("\n") ? input.text : `${input.text}\n`;
+      await fs.mkdir(Path.dirname(summaryPath), { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
+      await fs.writeFile(summaryPath, text, { mode: PRIVATE_FILE_MODE });
+      return { summaryPath };
+    },
+
+    async readSummary(sessionId: string): Promise<{ text: string; summaryPath: string } | null> {
+      const summaryPath = meetingsSummaryPath(deps.homeDir, sessionId);
+      try {
+        const text = (await fs.readFile(summaryPath, "utf8")).trim();
+        if (text.length === 0) {
+          return null;
+        }
+        return { text, summaryPath };
+      } catch {
+        return null;
+      }
     },
   };
 }

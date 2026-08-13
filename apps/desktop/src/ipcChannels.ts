@@ -47,6 +47,8 @@ export const DESKTOP_IPC_CHANNELS = {
     transcribeRecording: "desktop:meetings-transcribe-recording",
     getTranscript: "desktop:meetings-get-transcript",
     pointAtTranscriptionEnvironment: "desktop:meetings-point-at-transcription-environment",
+    writeSummary: "desktop:meetings-write-summary",
+    getSummary: "desktop:meetings-get-summary",
   },
   storageMigration: {
     read: "desktop:storage-migration-read",

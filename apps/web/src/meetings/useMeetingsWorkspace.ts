@@ -4,6 +4,7 @@ import { createDesktopMeetingsCalendarHost } from "./desktopMeetingsCalendar";
 import { createDesktopMeetingsEmbedHost } from "./desktopMeetingsEmbed";
 import { createDesktopMeetingsExternalHost } from "./desktopMeetingsExternal";
 import { createDesktopMeetingsRecordingHost } from "./desktopMeetingsRecording";
+import { createDesktopMeetingsSummaryHost } from "./desktopMeetingsSummary";
 import { createDesktopMeetingsTranscriptionHost } from "./desktopMeetingsTranscription";
 import {
   createMeetingsWorkspace,
@@ -26,6 +27,7 @@ function getSharedMeetingsWorkspace(): MeetingsWorkspace {
     external: createDesktopMeetingsExternalHost(),
     recording: createDesktopMeetingsRecordingHost(),
     transcription: createDesktopMeetingsTranscriptionHost(),
+    summary: createDesktopMeetingsSummaryHost(),
   });
   return sharedWorkspace;
 }

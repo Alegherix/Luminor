@@ -130,6 +130,20 @@ export interface ThreadRecapGenerationResult {
   recap: string;
 }
 
+export interface MeetingSummaryGenerationInput {
+  cwd: string;
+  title: string;
+  transcript: string;
+  codexHomePath?: string;
+  model?: string;
+  modelSelection?: ModelSelection;
+  providerOptions?: ProviderStartOptions;
+}
+
+export interface MeetingSummaryGenerationResult {
+  summary: string;
+}
+
 export interface AutomationIntentGenerationInput {
   cwd: string;
   message: string;
@@ -176,6 +190,7 @@ export type TextGenerationOperation =
   | "generateBranchName"
   | "generateThreadTitle"
   | "generateThreadRecap"
+  | "generateMeetingSummary"
   | "generateAutomationIntent"
   | "evaluateAutomationCompletion";
 
@@ -224,6 +239,13 @@ export interface TextGenerationShape {
   readonly generateThreadRecap: (
     input: ThreadRecapGenerationInput,
   ) => Effect.Effect<ThreadRecapGenerationResult, TextGenerationError>;
+
+  /**
+   * Generate a markdown meeting summary from a finished transcript.
+   */
+  readonly generateMeetingSummary: (
+    input: MeetingSummaryGenerationInput,
+  ) => Effect.Effect<MeetingSummaryGenerationResult, TextGenerationError>;
 
   /**
    * Convert a composer automation invocation into a structured creation intent.

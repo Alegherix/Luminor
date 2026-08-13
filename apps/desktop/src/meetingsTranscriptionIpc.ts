@@ -74,4 +74,39 @@ export function registerMeetingsTranscriptionIpc(input: {
     IPC.pointAtTranscriptionEnvironment,
     async (): Promise<MeetingsTranscriptionPointResult> => manager.pointAtEnvironment(),
   );
+
+  ipcMain.removeHandler(IPC.writeSummary);
+  ipcMain.handle(
+    IPC.writeSummary,
+    async (_event, payload: unknown): Promise<{ summaryPath: string }> => {
+      const record = typeof payload === "object" && payload !== null ? payload : {};
+      const sessionId = (record as { sessionId?: unknown }).sessionId;
+      const text = (record as { text?: unknown }).text;
+      if (typeof sessionId !== "string" || sessionId.trim().length === 0) {
+        throw new Error("missing sessionId");
+      }
+      if (typeof text !== "string" || text.trim().length === 0) {
+        throw new Error("missing summary text");
+      }
+      return manager.writeSummary({
+        sessionId: sessionId.trim(),
+        text,
+      });
+    },
+  );
+
+  ipcMain.removeHandler(IPC.getSummary);
+  ipcMain.handle(
+    IPC.getSummary,
+    async (_event, payload: unknown): Promise<{ text: string; summaryPath: string } | null> => {
+      const sessionId =
+        typeof payload === "object" && payload !== null
+          ? (payload as { sessionId?: unknown }).sessionId
+          : undefined;
+      if (typeof sessionId !== "string" || sessionId.trim().length === 0) {
+        throw new Error("missing sessionId");
+      }
+      return manager.readSummary(sessionId.trim());
+    },
+  );
 }

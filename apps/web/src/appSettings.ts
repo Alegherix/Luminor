@@ -1171,6 +1171,37 @@ export function getCustomBinaryPathForProvider(
   }
 }
 
+export function readPersistedDefaultProvider(): ProviderKind {
+  if (typeof localStorage === "undefined") {
+    return "codex";
+  }
+  try {
+    const raw = localStorage.getItem(APP_SETTINGS_STORAGE_KEY);
+    if (!raw) {
+      return "codex";
+    }
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !("defaultProvider" in parsed)) {
+      return "codex";
+    }
+    const provider = (parsed as { defaultProvider?: unknown }).defaultProvider;
+    if (
+      provider === "codex" ||
+      provider === "claudeAgent" ||
+      provider === "cursor" ||
+      provider === "antigravity" ||
+      provider === "grok" ||
+      provider === "droid" ||
+      provider === "kilo" ||
+      provider === "opencode" ||
+      provider === "pi"
+    ) {
+      return provider;
+    }
+  } catch {}
+  return "codex";
+}
+
 export function useAppSettings() {
   const queryClient = useQueryClient();
   const serverSettingsQuery = useQuery(serverSettingsQueryOptions());

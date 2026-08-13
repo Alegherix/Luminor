@@ -45,12 +45,14 @@ import {
   buildCommitMessagePrompt,
   buildDiffSummaryPrompt,
   buildPrContentPrompt,
+  buildMeetingSummaryPrompt,
   buildThreadRecapPrompt,
   buildThreadTitlePrompt,
   decodeStructuredTextGenerationOutput,
   type RawTextFallback,
   sanitizeCommitSubject,
   sanitizeDiffSummary,
+  sanitizeMeetingSummary,
   sanitizeThreadRecap,
   sanitizePrTitle,
 } from "../textGenerationShared.ts";
@@ -664,6 +666,36 @@ const makeOpenCodeCompatibleTextGeneration = (config: OpenCodeCompatibleTextGene
       };
     });
 
+    const generateMeetingSummary: TextGenerationShape["generateMeetingSummary"] = Effect.fn(
+      `${config.serviceName}.generateMeetingSummary`,
+    )(function* (input) {
+      const modelSelection = resolveOpenCodeCompatibleModelSelection(config, input);
+      if (!modelSelection) {
+        return yield* new TextGenerationError({
+          operation: "generateMeetingSummary",
+          detail: `Invalid ${config.displayName} model selection.`,
+        });
+      }
+
+      const { prompt, outputSchemaJson, rawTextFallback } = buildMeetingSummaryPrompt({
+        title: input.title,
+        transcript: input.transcript,
+      });
+      const generated = yield* runOpenCodeJson({
+        operation: "generateMeetingSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson,
+        rawTextFallback,
+        modelSelection,
+        ...(input.providerOptions ? { providerOptions: input.providerOptions } : {}),
+      });
+
+      return {
+        summary: sanitizeMeetingSummary(generated.summary),
+      };
+    });
+
     const generateAutomationIntent: TextGenerationShape["generateAutomationIntent"] = Effect.fn(
       `${config.serviceName}.generateAutomationIntent`,
     )(function* (input) {
@@ -718,6 +750,7 @@ const makeOpenCodeCompatibleTextGeneration = (config: OpenCodeCompatibleTextGene
       generateBranchName,
       generateThreadTitle,
       generateThreadRecap,
+      generateMeetingSummary,
       generateAutomationIntent,
       evaluateAutomationCompletion,
     } satisfies TextGenerationShape;

@@ -142,6 +142,8 @@ import type {
   ServerDiagnosticsResult,
   ServerGenerateAutomationIntentInput,
   ServerGenerateAutomationIntentResult,
+  ServerGenerateMeetingSummaryInput,
+  ServerGenerateMeetingSummaryResult,
   ServerGenerateThreadRecapInput,
   ServerGenerateThreadRecapResult,
   ServerGetEnvironmentResult,
@@ -485,6 +487,15 @@ export interface MeetingsTranscriptionPointResult {
   readonly error: string | null;
 }
 
+export interface MeetingsSummaryWriteResult {
+  readonly summaryPath: string;
+}
+
+export interface MeetingsSummaryReadResult {
+  readonly text: string;
+  readonly summaryPath: string;
+}
+
 export interface DesktopMeetingsBridge {
   getStatus: () => Promise<MeetingsCalendarStatus>;
   connect: () => Promise<MeetingsCalendarStatus>;
@@ -507,6 +518,8 @@ export interface DesktopMeetingsBridge {
   }) => Promise<MeetingsTranscriptionState>;
   getTranscript: (input: { sessionId: string }) => Promise<MeetingsTranscriptionState>;
   pointAtTranscriptionEnvironment: () => Promise<MeetingsTranscriptionPointResult>;
+  writeSummary: (input: { sessionId: string; text: string }) => Promise<MeetingsSummaryWriteResult>;
+  getSummary: (input: { sessionId: string }) => Promise<MeetingsSummaryReadResult | null>;
 }
 
 export interface DesktopBridge {
@@ -741,6 +754,9 @@ export interface NativeApi {
     generateThreadRecap: (
       input: ServerGenerateThreadRecapInput,
     ) => Promise<ServerGenerateThreadRecapResult>;
+    generateMeetingSummary: (
+      input: ServerGenerateMeetingSummaryInput,
+    ) => Promise<ServerGenerateMeetingSummaryResult>;
     generateAutomationIntent: (
       input: ServerGenerateAutomationIntentInput,
     ) => Promise<ServerGenerateAutomationIntentResult>;

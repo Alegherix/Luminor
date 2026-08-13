@@ -23,6 +23,7 @@ import {
   type PrContentGenerationResult,
   type ThreadTitleGenerationResult,
   type ThreadRecapGenerationResult,
+  type MeetingSummaryGenerationResult,
   type TextGenerationOperation,
   type TextGenerationShape,
   TextGeneration,
@@ -34,8 +35,10 @@ import {
   buildCommitMessagePrompt,
   buildDiffSummaryPrompt,
   buildPrContentPrompt,
+  buildMeetingSummaryPrompt,
   buildThreadRecapPrompt,
   buildThreadTitlePrompt,
+  sanitizeMeetingSummary,
   sanitizeCommitSubject,
   sanitizeDiffSummary,
   sanitizeThreadRecap,
@@ -623,6 +626,31 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     );
   };
 
+  const generateMeetingSummary: TextGenerationShape["generateMeetingSummary"] = (input) => {
+    const { prompt, outputSchemaJson } = buildMeetingSummaryPrompt({
+      title: input.title,
+      transcript: input.transcript,
+    });
+
+    return runCodexJson({
+      operation: "generateMeetingSummary",
+      cwd: input.cwd,
+      prompt,
+      outputSchemaJson,
+      ...(input.codexHomePath ? { codexHomePath: input.codexHomePath } : {}),
+      ...(input.model ? { model: input.model } : {}),
+      ...(input.modelSelection ? { modelSelection: input.modelSelection } : {}),
+      ...(input.providerOptions ? { providerOptions: input.providerOptions } : {}),
+    }).pipe(
+      Effect.map(
+        (generated) =>
+          ({
+            summary: sanitizeMeetingSummary(generated.summary),
+          }) satisfies MeetingSummaryGenerationResult,
+      ),
+    );
+  };
+
   const generateAutomationIntent: TextGenerationShape["generateAutomationIntent"] = (input) => {
     const { prompt, outputSchemaJson } = buildAutomationIntentPrompt({
       message: input.message,
@@ -666,6 +694,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     generateBranchName,
     generateThreadTitle,
     generateThreadRecap,
+    generateMeetingSummary,
     generateAutomationIntent,
     evaluateAutomationCompletion,
   } satisfies TextGenerationShape;

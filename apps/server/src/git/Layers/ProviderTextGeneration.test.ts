@@ -44,6 +44,11 @@ function createTextGenerationDouble(label: string) {
       recap: `${label} recap`,
     }),
   );
+  const generateMeetingSummary = vi.fn<TextGenerationShape["generateMeetingSummary"]>(() =>
+    Effect.succeed({
+      summary: `${label} meeting summary`,
+    }),
+  );
   const generateAutomationIntent = vi.fn<TextGenerationShape["generateAutomationIntent"]>(() =>
     Effect.succeed({
       isAutomation: true,
@@ -76,6 +81,7 @@ function createTextGenerationDouble(label: string) {
       generateBranchName,
       generateThreadTitle,
       generateThreadRecap,
+      generateMeetingSummary,
       generateAutomationIntent,
       evaluateAutomationCompletion,
     } satisfies TextGenerationShape,
@@ -85,6 +91,7 @@ function createTextGenerationDouble(label: string) {
     generateBranchName,
     generateThreadTitle,
     generateThreadRecap,
+    generateMeetingSummary,
     generateAutomationIntent,
     evaluateAutomationCompletion,
   };
