@@ -15,6 +15,7 @@ const signedInWorkspace: MeetingsWorkspaceSnapshot = {
   accountEmail: "me@example.com",
   selectedSessionId: "later",
   joinedSessionId: null,
+  joinKind: null,
   embedVisible: false,
   joinError: null,
   recording: IDLE_MEETINGS_RECORDING,

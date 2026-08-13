@@ -2,9 +2,11 @@ import {
   INVALID_MEET_URL_MESSAGE,
   MISSING_MEET_URL_MESSAGE,
   isGoogleMeetJoinUrl,
-  normalizePastedMeetUrl,
   pastedMeetingSessionId,
   pastedMeetingTitle,
+  resolveMeetingJoinTarget,
+  type MeetingJoinKind,
+  type MeetingJoinTarget,
 } from "./meetUrl";
 
 export type MeetingSessionStatus = "live" | "upcoming" | "ended";
@@ -64,6 +66,7 @@ export type MeetingsWorkspaceSnapshot = {
   readonly accountEmail: string | null;
   readonly selectedSessionId: string | null;
   readonly joinedSessionId: string | null;
+  readonly joinKind: MeetingJoinKind | null;
   readonly embedVisible: boolean;
   readonly joinError: string | null;
   readonly recording: MeetingsRecordingState;
@@ -84,6 +87,10 @@ export type MeetingsEmbedHost = {
   show(): Promise<MeetingsEmbedState>;
   leave(): Promise<MeetingsEmbedState>;
   getState(): Promise<MeetingsEmbedState>;
+};
+
+export type MeetingsExternalHost = {
+  open(url: string): Promise<boolean>;
 };
 
 export type MeetingsSidebarSections = {
@@ -135,6 +142,7 @@ export function createIdleMeetingsWorkspace(): MeetingsWorkspaceSnapshot {
     accountEmail: null,
     selectedSessionId: null,
     joinedSessionId: null,
+    joinKind: null,
     embedVisible: false,
     joinError: null,
     recording: IDLE_MEETINGS_RECORDING,
@@ -320,7 +328,7 @@ export function meetingRowOffersJoin(
   if (snapshot.joinedSessionId === session.id) {
     return false;
   }
-  if (!session.meetUrl || !isGoogleMeetJoinUrl(session.meetUrl)) {
+  if (!session.meetUrl || resolveMeetingJoinTarget(session.meetUrl, "session") === null) {
     return false;
   }
   if (meetingSessionStatus(session, now) === "ended") {
@@ -379,6 +387,12 @@ const idleRecording: MeetingsRecordingHost = {
   },
 };
 
+const idleExternal: MeetingsExternalHost = {
+  async open() {
+    return false;
+  },
+};
+
 const unsignedCalendar: MeetingsCalendarHost = {
   async getStatus() {
     return { connected: false, accountEmail: null };
@@ -396,12 +410,14 @@ export function createMeetingsWorkspace(
     readonly clock?: () => Date;
     readonly calendar?: MeetingsCalendarHost;
     readonly embed?: MeetingsEmbedHost;
+    readonly external?: MeetingsExternalHost;
     readonly recording?: MeetingsRecordingHost;
   } = {},
 ): MeetingsWorkspace {
   const clock = input.clock ?? (() => new Date());
   const calendar = input.calendar ?? unsignedCalendar;
   const embed = input.embed ?? idleEmbed;
+  const external = input.external ?? idleExternal;
   const recording = input.recording ?? idleRecording;
   let snapshot = createIdleMeetingsWorkspace();
   const listeners = new Set<() => void>();
@@ -525,10 +541,11 @@ export function createMeetingsWorkspace(
 
   const restoreJoinedFromEmbed = (state: MeetingsEmbedState) => {
     if (!state.joined || !state.url || !isGoogleMeetJoinUrl(state.url)) {
-      if (snapshot.joinedSessionId !== null && !state.joined) {
+      if (snapshot.joinedSessionId !== null && !state.joined && snapshot.joinKind !== "external") {
         setSnapshot({
           ...snapshot,
           joinedSessionId: null,
+          joinKind: null,
           embedVisible: false,
         });
       }
@@ -560,6 +577,7 @@ export function createMeetingsWorkspace(
       sessions,
       selectedSessionId: session.id,
       joinedSessionId: session.id,
+      joinKind: "embed",
       embedVisible: state.visible,
       joinError: null,
     });
@@ -580,17 +598,29 @@ export function createMeetingsWorkspace(
     }
   };
 
-  const joinMeetUrl = async (input: {
+  const joinMeeting = async (input: {
     readonly session: MeetingSession;
-    readonly meetUrl: string;
+    readonly target: MeetingJoinTarget;
     readonly pastedMeetUrl?: string;
   }) => {
-    if (snapshot.joinedSessionId === input.session.id && snapshot.embedVisible) {
+    if (snapshot.joinedSessionId === input.session.id && input.target.kind === "embed") {
       const shown = await embed.show();
       applyEmbedState(shown);
       setSnapshot({
         ...snapshot,
         selectedSessionId: input.session.id,
+        joinError: null,
+        pastedMeetUrl: input.pastedMeetUrl ?? snapshot.pastedMeetUrl,
+      });
+      return;
+    }
+    if (snapshot.joinedSessionId === input.session.id && input.target.kind === "external") {
+      await external.open(input.target.url);
+      setSnapshot({
+        ...snapshot,
+        selectedSessionId: input.session.id,
+        joinKind: "external",
+        embedVisible: false,
         joinError: null,
         pastedMeetUrl: input.pastedMeetUrl ?? snapshot.pastedMeetUrl,
       });
@@ -608,13 +638,40 @@ export function createMeetingsWorkspace(
       await recording.stop();
       await embed.leave();
     }
-    const joined = await embed.join(input.meetUrl);
+    if (input.target.kind === "external") {
+      const opened = await external.open(input.target.url);
+      if (!opened) {
+        setSnapshot({
+          ...snapshot,
+          sessions,
+          selectedSessionId: input.session.id,
+          joinError: "Could not open the meeting in your browser.",
+          pastedMeetUrl: input.pastedMeetUrl ?? snapshot.pastedMeetUrl,
+        });
+        return;
+      }
+      const recordingState = await startRecordingForSession(input.session.id);
+      setSnapshot({
+        ...snapshot,
+        sessions,
+        selectedSessionId: input.session.id,
+        joinedSessionId: input.session.id,
+        joinKind: "external",
+        embedVisible: false,
+        joinError: null,
+        recording: recordingState,
+        pastedMeetUrl: input.pastedMeetUrl ?? snapshot.pastedMeetUrl,
+      });
+      return;
+    }
+    const joined = await embed.join(input.target.url);
     const recordingState = await startRecordingForSession(input.session.id);
     setSnapshot({
       ...snapshot,
       sessions,
       selectedSessionId: input.session.id,
       joinedSessionId: input.session.id,
+      joinKind: "embed",
       embedVisible: joined.visible,
       joinError: null,
       recording: recordingState,
@@ -627,7 +684,8 @@ export function createMeetingsWorkspace(
     if (!session) {
       return;
     }
-    if (!session.meetUrl || !isGoogleMeetJoinUrl(session.meetUrl)) {
+    const target = session.meetUrl ? resolveMeetingJoinTarget(session.meetUrl, "session") : null;
+    if (!target) {
       setSnapshot({
         ...snapshot,
         selectedSessionId: sessionId,
@@ -635,7 +693,7 @@ export function createMeetingsWorkspace(
       });
       return;
     }
-    await joinMeetUrl({ session, meetUrl: session.meetUrl });
+    await joinMeeting({ session, target });
   };
 
   return {
@@ -694,8 +752,8 @@ export function createMeetingsWorkspace(
       await joinSession(session.id);
     },
     joinPastedUrl: async (url) => {
-      const meetUrl = normalizePastedMeetUrl(url);
-      if (!meetUrl) {
+      const target = resolveMeetingJoinTarget(url, "pasted");
+      if (!target) {
         setSnapshot({
           ...snapshot,
           pastedMeetUrl: url,
@@ -704,27 +762,27 @@ export function createMeetingsWorkspace(
         return;
       }
       const now = clock();
-      const sessionId = pastedMeetingSessionId(meetUrl) ?? `pasted:${meetUrl}`;
+      const sessionId = pastedMeetingSessionId(target.url) ?? `pasted:${target.url}`;
       const existing =
         snapshot.sessions.find((session) => session.id === sessionId) ??
-        snapshot.sessions.find((session) => session.meetUrl === meetUrl);
+        snapshot.sessions.find((session) => session.meetUrl === target.url);
       const session: MeetingSession = existing
         ? {
             ...existing,
-            meetUrl,
+            meetUrl: target.url,
             endAt: existing.source === "pasted" ? null : existing.endAt,
           }
         : {
             id: sessionId,
-            title: pastedMeetingTitle(meetUrl),
+            title: pastedMeetingTitle(target.url),
             startAt: now.toISOString(),
             endAt: null,
-            meetUrl,
+            meetUrl: target.url,
             attendees: [],
             status: "live",
             source: "pasted",
           };
-      await joinMeetUrl({ session, meetUrl, pastedMeetUrl: url });
+      await joinMeeting({ session, target, pastedMeetUrl: url });
     },
     joinSession,
     leave: async () => {
@@ -739,13 +797,14 @@ export function createMeetingsWorkspace(
         ...snapshot,
         sessions,
         joinedSessionId: null,
+        joinKind: null,
         embedVisible: false,
         joinError: null,
         recording: IDLE_MEETINGS_RECORDING,
       });
     },
     hideEmbed: async () => {
-      if (snapshot.joinedSessionId === null) {
+      if (snapshot.joinedSessionId === null || snapshot.joinKind !== "embed") {
         return;
       }
       const hidden = await embed.hide();
@@ -755,7 +814,7 @@ export function createMeetingsWorkspace(
       });
     },
     showEmbed: async () => {
-      if (snapshot.joinedSessionId === null) {
+      if (snapshot.joinedSessionId === null || snapshot.joinKind !== "embed") {
         return;
       }
       const shown = await embed.show();

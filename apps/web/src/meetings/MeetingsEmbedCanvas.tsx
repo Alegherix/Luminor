@@ -8,13 +8,19 @@ import { readDesktopZoomFactor, subscribeDesktopZoomFactor } from "~/lib/desktop
 export function MeetingsEmbedCanvas({
   onLeave,
   recordingDegradation = null,
+  presentation = "embed",
 }: {
   readonly onLeave: () => void;
   readonly recordingDegradation?: string | null;
+  readonly presentation?: "embed" | "external";
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const isExternal = presentation === "external";
 
   useLayoutEffect(() => {
+    if (isExternal) {
+      return;
+    }
     const element = hostRef.current;
     const meetings = window.desktopBridge?.meetings;
     if (!element || !meetings?.setEmbedBounds) {
@@ -47,13 +53,20 @@ export function MeetingsEmbedCanvas({
       unsubscribeZoom();
       void meetings.setEmbedBounds(null);
     };
-  }, []);
+  }, [isExternal]);
 
   return (
-    <section className="flex h-full min-h-0 flex-col" aria-label="Google Meet">
+    <section
+      className="flex h-full min-h-0 flex-col"
+      aria-label={isExternal ? "External meeting" : "Google Meet"}
+    >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2">
         <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">Google Meet is open in this window.</p>
+          <p className="text-sm text-muted-foreground">
+            {isExternal
+              ? "This meeting is open in your browser."
+              : "Google Meet is open in this window."}
+          </p>
           {recordingDegradation ? (
             <p className="mt-1 text-sm text-destructive" role="status">
               {recordingDegradation}
@@ -64,11 +77,13 @@ export function MeetingsEmbedCanvas({
           Leave
         </Button>
       </div>
-      <div
-        ref={hostRef}
-        className="min-h-0 flex-1 bg-background"
-        data-testid="meeting-webview-host"
-      />
+      {isExternal ? null : (
+        <div
+          ref={hostRef}
+          className="min-h-0 flex-1 bg-background"
+          data-testid="meeting-webview-host"
+        />
+      )}
     </section>
   );
 }

@@ -157,6 +157,29 @@ function firstMeetUrlInText(value: string | undefined): string | null {
   return isGoogleMeetUrl(match?.[0]);
 }
 
+function isHttpJoinUrl(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = new URL(value.trim());
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function firstHttpUrlInText(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  const match = value.match(/https?:\/\/[^\s<>'"]+/i);
+  return isHttpJoinUrl(match?.[0]);
+}
+
 export function extractMeetUrl(event: MeetingsCalendarRawEvent): string | null {
   const hangout = isGoogleMeetUrl(event.hangoutLink);
   if (hangout) {
@@ -168,7 +191,20 @@ export function extractMeetUrl(event: MeetingsCalendarRawEvent): string | null {
       return uri;
     }
   }
-  return firstMeetUrlInText(event.location) ?? firstMeetUrlInText(event.description);
+  const meetInText = firstMeetUrlInText(event.location) ?? firstMeetUrlInText(event.description);
+  if (meetInText) {
+    return meetInText;
+  }
+  for (const entry of event.conferenceData?.entryPoints ?? []) {
+    if (entry.entryPointType && entry.entryPointType !== "video") {
+      continue;
+    }
+    const uri = isHttpJoinUrl(entry.uri);
+    if (uri) {
+      return uri;
+    }
+  }
+  return firstHttpUrlInText(event.location) ?? firstHttpUrlInText(event.description);
 }
 
 function mapPrimaryCalendarEvent(event: MeetingsCalendarRawEvent): MeetingsCalendarEvent | null {
