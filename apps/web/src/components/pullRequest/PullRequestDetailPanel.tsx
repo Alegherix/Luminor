@@ -12,7 +12,7 @@ import type {
   PullRequestMergeMethod,
 } from "@luminor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { lazy, Suspense, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
 import { useAppSettings } from "~/appSettings";
 import {
@@ -68,6 +68,7 @@ import { gitPreparePullRequestThreadMutationOptions } from "~/lib/gitReactQuery"
 import {
   pullRequestActionMutationOptions,
   pullRequestDetailQueryOptions,
+  pullRequestInboxMarkViewedMutationOptions,
   pullRequestQueryErrorState,
 } from "~/lib/pullRequestReactQuery";
 import { cn } from "~/lib/utils";
@@ -142,6 +143,15 @@ export function PullRequestDetailPanel({
   const pollingEnabled = pollingEnabledProp ?? true;
   const queryClient = useQueryClient();
   const { settings } = useAppSettings();
+  const markInboxViewed = useMutation(pullRequestInboxMarkViewedMutationOptions(queryClient));
+  const markInboxViewedMutate = markInboxViewed.mutate;
+  useEffect(() => {
+    markInboxViewedMutate({
+      repository: input.repository,
+      number: input.number,
+      viewedAt: new Date().toISOString(),
+    });
+  }, [input.number, input.repository, markInboxViewedMutate]);
   const { handleNewThread } = useHandleNewThread();
   // Panel state keyed to the PR it belongs to: switching PRs (or landing tab)
   // derives straight back to the defaults with no state-resetting effect.

@@ -23,6 +23,8 @@ import {
 import {
   type GitHubCliShape,
   type GitHubPullRequestDetailData,
+  type GitHubPullRequestInboxComment,
+  type GitHubPullRequestInboxNotification,
   type GitHubPullRequestListItem,
   type GitHubPullRequestSummary,
   PULL_REQUEST_SUMMARY_JSON_FIELDS,
@@ -56,6 +58,8 @@ export interface FakeGhScenario {
   pullRequestDetail?: GitHubPullRequestDetailData;
   pullRequestListItems?: GitHubPullRequestListItem[];
   reviewRequestedPullRequestNumbers?: number[];
+  inboxNotifications?: GitHubPullRequestInboxNotification[];
+  inboxComments?: Record<string, GitHubPullRequestInboxComment>;
   mergeCapabilities?: PullRequestMergeCapabilities;
   pullRequestDiff?: { patch: string; truncated: boolean };
 }
@@ -424,6 +428,24 @@ export function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
               comments: scenario.pullRequestReviewComments ?? [],
               truncated: scenario.pullRequestReviewCommentsTruncated ?? false,
             });
+      },
+      listPullRequestInboxNotifications: (input) => {
+        ghCalls.push(`api notifications participating limit=${input.limit ?? 50}`);
+        return scenario.failWith
+          ? Effect.fail(scenario.failWith)
+          : Effect.succeed(scenario.inboxNotifications ?? []);
+      },
+      getPullRequestInboxComment: (input) => {
+        ghCalls.push(`api comment ${input.commentUrl}`);
+        const comment = scenario.inboxComments?.[input.commentUrl];
+        return comment
+          ? Effect.succeed(comment)
+          : Effect.fail(
+              new GitHubCliError({
+                operation: "getPullRequestInboxComment",
+                detail: "Fake inbox comment was not configured.",
+              }),
+            );
       },
     },
     ghCalls,

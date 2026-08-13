@@ -59,8 +59,11 @@ import {
   useDesktopTopBarWindowControlsGutterClassName,
 } from "~/hooks/useDesktopTopBarGutter";
 import { RefreshCwIcon } from "~/lib/icons";
+import { pullRequestInboxIdentityKey } from "@luminor/shared/pullRequestInbox";
 import {
   prefetchPullRequestListState,
+  pullRequestInboxMarkViewedMutationOptions,
+  pullRequestInboxQueryOptions,
   pullRequestMutationKeys,
   pullRequestQueryErrorState,
   pullRequestsExactInvolvementQueryOptions,
@@ -162,6 +165,15 @@ function PullRequestsRouteView() {
     [search.projectId, search.state],
   );
   const listQuery = useQuery(pullRequestsListQueryOptions(listInput));
+  const inboxQuery = useQuery(pullRequestInboxQueryOptions());
+  const unreadByIdentity = useMemo(() => {
+    const next = new Map<string, boolean>();
+    for (const item of inboxQuery.data?.items ?? []) {
+      if (item.unread) next.set(pullRequestInboxIdentityKey(item.repository, item.number), true);
+    }
+    return next;
+  }, [inboxQuery.data]);
+  const markInboxViewed = useMutation(pullRequestInboxMarkViewedMutationOptions(queryClient));
   const refreshMutation = useMutation(pullRequestsForceRefreshMutationOptions(queryClient));
   const pinMutation = useMutation(pullRequestSetPinnedMutationOptions(queryClient));
   const mutateRefresh = refreshMutation.mutate;
@@ -337,13 +349,21 @@ function PullRequestsRouteView() {
     [paneStateIcon],
   );
   const handleSelectPullRequest = useCallback(
-    (entry: PullRequestListEntry) =>
+    (entry: PullRequestListEntry) => {
       updateSearch({
         selectedProjectId: entry.projectId,
         selectedRepo: entry.repository,
         number: entry.number,
-      }),
-    [updateSearch],
+      });
+      if (unreadByIdentity.get(pullRequestInboxIdentityKey(entry.repository, entry.number))) {
+        markInboxViewed.mutate({
+          repository: entry.repository,
+          number: entry.number,
+          viewedAt: new Date().toISOString(),
+        });
+      }
+    },
+    [markInboxViewed, unreadByIdentity, updateSearch],
   );
   const handleTogglePinned = useCallback(
     (entry: PullRequestListEntry) => {
@@ -505,6 +525,7 @@ function PullRequestsRouteView() {
                   showProjectTitle={search.projectId === undefined}
                   onSelect={handleSelectPullRequest}
                   onTogglePinned={handleTogglePinned}
+                  unreadByIdentity={unreadByIdentity}
                 />
               )}
               {!exactInvolvementPending &&

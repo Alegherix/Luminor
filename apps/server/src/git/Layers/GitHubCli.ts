@@ -17,6 +17,10 @@ import {
   isValidGitHubRepositoryNameWithOwner,
   parseGitHubRepositoryNameWithOwnerFromRemoteUrl,
 } from "@luminor/shared/githubRepository";
+import {
+  parseGitHubCommentApiPath,
+  parsePullRequestFromNotificationSubject,
+} from "@luminor/shared/pullRequestInbox";
 
 import { runProcess } from "../../processRunner";
 import { GitHubCliError } from "../Errors.ts";
@@ -26,6 +30,8 @@ import {
   type GitHubRepositoryCloneUrls,
   type GitHubCliShape,
   type GitHubPullRequestDetailData,
+  type GitHubPullRequestInboxComment,
+  type GitHubPullRequestInboxNotification,
   type GitHubPullRequestListBatch,
   type GitHubPullRequestListItem,
   type GitHubPullRequestSummary,
@@ -260,6 +266,39 @@ const RawPullRequestListItemSchema = Schema.Struct({
 
 const RawPullRequestNumberSchema = Schema.Struct({
   number: PositiveInt,
+});
+
+const RawInboxNotificationSchema = Schema.Struct({
+  id: Schema.optional(Schema.Union([Schema.String, Schema.Number])),
+  unread: Schema.optional(Schema.Boolean),
+  reason: Schema.optional(Schema.String),
+  updated_at: Schema.optional(Schema.String),
+  subject: Schema.optional(
+    Schema.Struct({
+      title: Schema.optional(Schema.String),
+      url: Schema.optional(Schema.NullOr(Schema.String)),
+      latest_comment_url: Schema.optional(Schema.NullOr(Schema.String)),
+      type: Schema.optional(Schema.String),
+    }),
+  ),
+  repository: Schema.optional(
+    Schema.Struct({
+      full_name: Schema.optional(Schema.String),
+    }),
+  ),
+});
+
+const RawInboxCommentSchema = Schema.Struct({
+  id: Schema.optional(Schema.Union([Schema.String, Schema.Number])),
+  body: Schema.optional(Schema.String),
+  html_url: Schema.optional(Schema.String),
+  created_at: Schema.optional(Schema.String),
+  user: Schema.optional(
+    Schema.Struct({
+      login: Schema.optional(Schema.String),
+      type: Schema.optional(Schema.String),
+    }),
+  ),
 });
 
 const RawPullRequestDetailSchema = Schema.Struct({
@@ -705,6 +744,48 @@ function normalizeRepositoryCloneUrls(
   };
 }
 
+function normalizeInboxNotification(
+  raw: Schema.Schema.Type<typeof RawInboxNotificationSchema>,
+): GitHubPullRequestInboxNotification | null {
+  const identity = parsePullRequestFromNotificationSubject({
+    type: raw.subject?.type,
+    url: raw.subject?.url,
+    repository: raw.repository?.full_name,
+  });
+  const id = raw.id == null ? "" : String(raw.id).trim();
+  const updatedAt = raw.updated_at?.trim() ?? "";
+  const title = raw.subject?.title?.trim() ?? "";
+  if (!identity || id.length === 0 || updatedAt.length === 0 || title.length === 0) {
+    return null;
+  }
+  return {
+    id,
+    unread: raw.unread !== false,
+    reason: raw.reason?.trim() || "comment",
+    updatedAt,
+    title,
+    repository: identity.repository,
+    number: identity.number,
+    latestCommentUrl: raw.subject?.latest_comment_url?.trim() || null,
+  };
+}
+
+function normalizeInboxComment(
+  raw: Schema.Schema.Type<typeof RawInboxCommentSchema>,
+  commentUrl: string,
+): GitHubPullRequestInboxComment | null {
+  const id = raw.id == null ? parseGitHubCommentApiPath(commentUrl) : String(raw.id).trim();
+  if (!id) return null;
+  return {
+    id,
+    body: raw.body ?? "",
+    url: raw.html_url?.trim() || null,
+    createdAt: raw.created_at?.trim() || null,
+    authorLogin: raw.user?.login?.trim() || null,
+    authorType: raw.user?.type?.trim() || null,
+  };
+}
+
 function decodeGitHubJson<S extends Schema.Top>(
   raw: string,
   schema: S,
@@ -719,7 +800,9 @@ function decodeGitHubJson<S extends Schema.Top>(
     | "getPullRequestDetail"
     | "getPullRequestListItem"
     | "listReviewRequestedPullRequestNumbers"
-    | "getRepositoryMergeCapabilities",
+    | "getRepositoryMergeCapabilities"
+    | "listPullRequestInboxNotifications"
+    | "getPullRequestInboxComment",
   invalidDetail: string,
 ): Effect.Effect<S["Type"], GitHubCliError, S["DecodingServices"]> {
   return Schema.decodeEffect(Schema.fromJsonString(schema))(raw).pipe(
@@ -1440,6 +1523,68 @@ const makeGitHubCli = Effect.sync(() => {
         cwd: input.cwd,
         args: ["pr", "checkout", input.reference, ...(input.force ? ["--force"] : [])],
       }).pipe(Effect.asVoid),
+    listPullRequestInboxNotifications: (input) =>
+      execute({
+        cwd: input.cwd,
+        args: [
+          "api",
+          `notifications?participating=true&per_page=${input.limit ?? 50}`,
+          "--hostname",
+          GITHUB_HOST,
+        ],
+      }).pipe(
+        Effect.map((result) => result.stdout.trim()),
+        Effect.flatMap((raw) =>
+          decodeGitHubJson(
+            raw,
+            Schema.Array(RawInboxNotificationSchema),
+            "listPullRequestInboxNotifications",
+            "GitHub CLI returned invalid notification JSON.",
+          ),
+        ),
+        Effect.map((entries) => entries.flatMap((entry) => {
+          const notification = normalizeInboxNotification(entry);
+          return notification ? [notification] : [];
+        })),
+      ),
+    getPullRequestInboxComment: (input) => {
+      const path = parseGitHubCommentApiPath(input.commentUrl);
+      if (!path) {
+        return Effect.fail(
+          new GitHubCliError({
+            operation: "getPullRequestInboxComment",
+            detail: "Pull request comment URL is not a GitHub comment API path.",
+            reason: "other",
+          }),
+        );
+      }
+      return execute({
+        cwd: input.cwd,
+        args: ["api", path, "--hostname", GITHUB_HOST],
+      }).pipe(
+        Effect.map((result) => result.stdout.trim()),
+        Effect.flatMap((raw) =>
+          decodeGitHubJson(
+            raw,
+            RawInboxCommentSchema,
+            "getPullRequestInboxComment",
+            "GitHub CLI returned invalid comment JSON.",
+          ),
+        ),
+        Effect.flatMap((decoded) => {
+          const comment = normalizeInboxComment(decoded, input.commentUrl);
+          return comment
+            ? Effect.succeed(comment)
+            : Effect.fail(
+                new GitHubCliError({
+                  operation: "getPullRequestInboxComment",
+                  detail: "GitHub CLI returned an unrecognized comment shape.",
+                  reason: "other",
+                }),
+              );
+        }),
+      );
+    },
   } satisfies GitHubCliShape;
 
   return service;

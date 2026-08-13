@@ -1423,6 +1423,15 @@ const makeWsRpcHandlersLayer = () =>
             pullRequests.reviewRequestCount(input),
             "Failed to count pull request review requests",
           ),
+        [WS_METHODS.pullRequestsInbox]: (input) =>
+          pullRequestsEffect(pullRequests.inbox(input), "Failed to load pull request comments"),
+        [WS_METHODS.pullRequestsMarkInboxViewed]: (input) =>
+          rpcEffect(pullRequests.markInboxViewed(input), "Failed to mark pull request as read"),
+        [WS_METHODS.pullRequestsMarkInboxNotified]: (input) =>
+          rpcEffect(
+            pullRequests.markInboxNotified(input),
+            "Failed to record pull request notification",
+          ),
         [WS_METHODS.pullRequestsDetail]: (input) =>
           pullRequestsEffect(pullRequests.detail(input), "Failed to load pull request"),
         [WS_METHODS.pullRequestsDiff]: (input) =>

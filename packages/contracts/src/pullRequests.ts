@@ -174,6 +174,53 @@ export const PullRequestReviewRequestCountResult = Schema.Struct({
 });
 export type PullRequestReviewRequestCountResult = typeof PullRequestReviewRequestCountResult.Type;
 
+export const PullRequestInboxInput = Schema.Struct({
+  projectId: Schema.optional(Schema.NullOr(ProjectId)),
+});
+export type PullRequestInboxInput = typeof PullRequestInboxInput.Type;
+
+export const PullRequestInboxComment = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  authorLogin: Schema.NullOr(TrimmedNonEmptyString),
+  bodyPreview: Schema.String,
+  createdAt: Schema.NullOr(IsoDateTime),
+  url: Schema.NullOr(Schema.String),
+});
+export type PullRequestInboxComment = typeof PullRequestInboxComment.Type;
+
+export const PullRequestInboxItem = Schema.Struct({
+  repository: TrimmedNonEmptyString,
+  number: PositiveInt,
+  title: TrimmedNonEmptyString,
+  url: TrimmedNonEmptyString,
+  updatedAt: IsoDateTime,
+  unread: Schema.Boolean,
+  notify: Schema.Boolean,
+  comment: Schema.NullOr(PullRequestInboxComment),
+});
+export type PullRequestInboxItem = typeof PullRequestInboxItem.Type;
+
+export const PullRequestInboxResult = Schema.Struct({
+  items: Schema.Array(PullRequestInboxItem),
+  unreadCount: NonNegativeInt,
+  incomplete: Schema.Boolean,
+});
+export type PullRequestInboxResult = typeof PullRequestInboxResult.Type;
+
+export const PullRequestInboxMarkViewedInput = Schema.Struct({
+  repository: TrimmedNonEmptyString,
+  number: PositiveInt,
+  viewedAt: Schema.optional(IsoDateTime),
+});
+export type PullRequestInboxMarkViewedInput = typeof PullRequestInboxMarkViewedInput.Type;
+
+export const PullRequestInboxMarkNotifiedInput = Schema.Struct({
+  repository: TrimmedNonEmptyString,
+  number: PositiveInt,
+  commentId: TrimmedNonEmptyString,
+});
+export type PullRequestInboxMarkNotifiedInput = typeof PullRequestInboxMarkNotifiedInput.Type;
+
 export const PullRequestDetailInput = Schema.Struct({
   projectId: ProjectId,
   repository: TrimmedNonEmptyString,

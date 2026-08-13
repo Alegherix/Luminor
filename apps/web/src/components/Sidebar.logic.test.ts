@@ -41,7 +41,9 @@ import {
   runExclusiveProjectAddition,
   runProjectProvisionWithCancellationRecovery,
   resolveFolderNewThreadIntent,
+  resolvePullRequestInboxBadge,
   resolvePullRequestReviewBadge,
+  resolvePullRequestSidebarBadge,
   resolveSidebarThreadListPaging,
   resolveProjectEmptyState,
   resolveSettingsBackTarget,
@@ -317,6 +319,33 @@ describe("resolvePullRequestReviewBadge", () => {
     expect(resolvePullRequestReviewBadge({ count: 1, incomplete: false })?.accessibleLabel).toBe(
       "1 pull request is waiting for your review",
     );
+  });
+});
+
+describe("resolvePullRequestSidebarBadge", () => {
+  it("prefers unread comments over review requests", () => {
+    expect(
+      resolvePullRequestInboxBadge({
+        items: [],
+        unreadCount: 2,
+        incomplete: false,
+      }),
+    ).toEqual({
+      text: "2",
+      accessibleLabel: "2 pull requests have unread comments",
+    });
+    expect(
+      resolvePullRequestSidebarBadge({
+        inbox: { items: [], unreadCount: 1, incomplete: false },
+        reviewRequests: { count: 4, incomplete: false },
+      })?.accessibleLabel,
+    ).toBe("1 pull request has unread comments");
+    expect(
+      resolvePullRequestSidebarBadge({
+        inbox: { items: [], unreadCount: 0, incomplete: false },
+        reviewRequests: { count: 4, incomplete: false },
+      })?.text,
+    ).toBe("4");
   });
 });
 

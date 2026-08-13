@@ -1689,10 +1689,12 @@ function showDesktopNotification(input: {
   silent?: boolean;
   suppressWhenForeground?: boolean;
   threadId?: string;
+  action?: string;
 }): boolean {
   const title = typeof input.title === "string" ? input.title.trim() : "";
   const body = typeof input.body === "string" ? input.body.trim() : "";
   const threadId = typeof input.threadId === "string" ? input.threadId.trim() : "";
+  const action = typeof input.action === "string" ? input.action.trim() : "";
   if (title.length === 0 || !Notification.isSupported()) {
     return false;
   }
@@ -1717,7 +1719,9 @@ function showDesktopNotification(input: {
     if (!mainWindow) {
       return;
     }
-    if (threadId.length > 0) {
+    if (action.length > 0) {
+      mainWindow.webContents.send(IPC.menuAction, action);
+    } else if (threadId.length > 0) {
       mainWindow.webContents.send(IPC.menuAction, `notification-open-thread:${threadId}`);
     }
   });

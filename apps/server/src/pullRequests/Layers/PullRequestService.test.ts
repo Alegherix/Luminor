@@ -11,6 +11,7 @@ import type {
 } from "../../git/Services/GitHubCli";
 import { createGitHubCliWithFakeGh } from "../../git/testing/fakeGitHubCli";
 import type { ProjectPullRequestPinsShape } from "../../persistence/Services/ProjectPullRequestPins";
+import { makeMemoryPullRequestInboxState } from "../pullRequestInbox";
 import {
   PULL_REQUEST_PIN_RECOVERY_LIMIT,
   isDefinitivePullRequestNotFound,
@@ -88,6 +89,7 @@ function makeDependencies(input: {
     homeDir: "/tmp",
     github: input.github,
     pins: input.pins ?? makePins(),
+    inbox: makeMemoryPullRequestInboxState(),
     listProjects: () => Effect.succeed(input.projects),
     resolveRepositories: (project: OrchestrationProject) => {
       const repository = input.repositories.get(project.id);
@@ -875,6 +877,71 @@ describe("PullRequestService", () => {
 
     expect(listCalls).toBe(2);
     expect(itemLookups).toBe(2);
+  });
+
+  it("surfaces unread human comments and baselines the first inbox poll", async () => {
+    const project = makeProject("project-inbox", "Inbox", "/tmp/inbox");
+    const commentUrl = "https://api.github.com/repos/acme/shared/issues/comments/9";
+    const github = createGitHubCliWithFakeGh({
+      viewerLogin: "viewer",
+      inboxNotifications: [
+        {
+          id: "notification-1",
+          unread: true,
+          reason: "comment",
+          updatedAt: "2026-08-13T12:00:00.000Z",
+          title: "Add inbox",
+          repository: "acme/shared",
+          number: 9,
+          latestCommentUrl: commentUrl,
+        },
+        {
+          id: "notification-bot",
+          unread: true,
+          reason: "ci_activity",
+          updatedAt: "2026-08-13T12:01:00.000Z",
+          title: "CI",
+          repository: "acme/shared",
+          number: 9,
+          latestCommentUrl: commentUrl,
+        },
+      ],
+      inboxComments: {
+        [commentUrl]: {
+          id: "comment-9",
+          body: "Please rename this helper.",
+          url: "https://github.com/acme/shared/pull/9#issuecomment-9",
+          createdAt: "2026-08-13T12:00:00.000Z",
+          authorLogin: "reviewer",
+          authorType: "User",
+        },
+      },
+    }).service;
+
+    const first = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const service = yield* makePullRequestService(
+            makeDependencies({
+              projects: [project],
+              repositories: new Map([[project.id, "acme/shared"]]),
+              github,
+            }),
+          );
+          return yield* service.inbox({ projectId: null });
+        }),
+      ),
+    );
+
+    expect(first.unreadCount).toBe(1);
+    expect(first.items).toHaveLength(1);
+    expect(first.items[0]).toMatchObject({
+      repository: "acme/shared",
+      number: 9,
+      unread: true,
+      notify: false,
+      comment: { authorLogin: "reviewer", id: "comment-9" },
+    });
   });
 });
 

@@ -207,6 +207,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords:
       "Show an OS notification when a chat or managed terminal agent finishes or needs input while the app is in the background. alerts toast",
   },
+  {
+    id: "notifications:pull-request-comments",
+    section: "notifications",
+    title: "Pull request comments",
+    keywords:
+      "Notify when a person comments on a pull request. GitHub Actions bots unread inbox review",
+  },
 
   // ── Behavior ──────────────────────────────────────────────────────────────────
   {

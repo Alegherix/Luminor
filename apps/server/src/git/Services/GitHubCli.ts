@@ -65,6 +65,26 @@ export interface GitHubPullRequestReviewCommentsResult {
   readonly truncated: boolean;
 }
 
+export interface GitHubPullRequestInboxNotification {
+  readonly id: string;
+  readonly unread: boolean;
+  readonly reason: string;
+  readonly updatedAt: string;
+  readonly title: string;
+  readonly repository: string;
+  readonly number: number;
+  readonly latestCommentUrl: string | null;
+}
+
+export interface GitHubPullRequestInboxComment {
+  readonly id: string;
+  readonly body: string;
+  readonly url: string | null;
+  readonly createdAt: string | null;
+  readonly authorLogin: string | null;
+  readonly authorType: string | null;
+}
+
 export interface GitHubPullRequestListItem {
   readonly number: number;
   readonly title: string;
@@ -263,6 +283,16 @@ export interface GitHubCliShape {
     readonly repo: string;
     readonly number: number;
   }) => Effect.Effect<GitHubPullRequestReviewCommentsResult, GitHubCliError>;
+
+  readonly listPullRequestInboxNotifications: (input: {
+    readonly cwd: string;
+    readonly limit?: number;
+  }) => Effect.Effect<ReadonlyArray<GitHubPullRequestInboxNotification>, GitHubCliError>;
+
+  readonly getPullRequestInboxComment: (input: {
+    readonly cwd: string;
+    readonly commentUrl: string;
+  }) => Effect.Effect<GitHubPullRequestInboxComment, GitHubCliError>;
 
   /**
    * Resolve clone URLs for a GitHub repository.

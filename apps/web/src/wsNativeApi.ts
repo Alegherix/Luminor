@@ -609,6 +609,10 @@ export function createWsNativeApi(): NativeApi {
       list: (input) => transport.request(WS_METHODS.pullRequestsList, input),
       reviewRequestCount: (input) =>
         transport.request(WS_METHODS.pullRequestsReviewRequestCount, input),
+      inbox: (input) => transport.request(WS_METHODS.pullRequestsInbox, input),
+      markInboxViewed: (input) => transport.request(WS_METHODS.pullRequestsMarkInboxViewed, input),
+      markInboxNotified: (input) =>
+        transport.request(WS_METHODS.pullRequestsMarkInboxNotified, input),
       detail: (input) => transport.request(WS_METHODS.pullRequestsDetail, input),
       diff: (input) => transport.request(WS_METHODS.pullRequestsDiff, input),
       action: (input) =>

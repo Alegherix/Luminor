@@ -49,6 +49,7 @@ export const PullRequestRow = function PullRequestRow({
   showDiffColors: showDiffColorsProp,
   onClick,
   onTogglePinned,
+  unread: unreadProp,
 }: {
   entry: PullRequestListEntry;
   selected: boolean;
@@ -57,9 +58,11 @@ export const PullRequestRow = function PullRequestRow({
   showDiffColors?: boolean;
   onClick: (entry: PullRequestListEntry) => void;
   onTogglePinned: (entry: PullRequestListEntry) => void;
+  unread?: boolean;
 }) {
   const showProjectTitle = showProjectTitleProp ?? false;
   const showDiffColors = showDiffColorsProp ?? true;
+  const unread = unreadProp ?? false;
   const isPinned = entry.isPinned === true;
   const projectContexts = pullRequestListProjectContexts(entry);
   const projectLabel =
@@ -91,6 +94,7 @@ export const PullRequestRow = function PullRequestRow({
         data-repository={entry.repository}
         data-pull-request-number={entry.number}
         aria-current={selected ? "true" : undefined}
+        aria-label={unread ? `${entry.title}, unread comments` : undefined}
         onClick={() => onClick(entry)}
         className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-lg py-1.5 pl-3 pr-1 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
@@ -102,6 +106,12 @@ export const PullRequestRow = function PullRequestRow({
         />
         <span className="min-w-0">
           <span className="flex min-w-0 items-center gap-2">
+            {unread ? (
+              <span
+                className="size-1.5 shrink-0 rounded-full bg-[var(--color-text-accent)]"
+                aria-hidden
+              />
+            ) : null}
             <TruncatedTitle title={entry.title} number={entry.number} />
           </span>
           {/* Fine print, set once on the line: author, repository and branch are one thought at

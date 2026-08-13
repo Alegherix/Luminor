@@ -85,6 +85,10 @@ import {
   PullRequestDetail,
   PullRequestDetailInput,
   PullRequestDiffResult,
+  PullRequestInboxInput,
+  PullRequestInboxMarkNotifiedInput,
+  PullRequestInboxMarkViewedInput,
+  PullRequestInboxResult,
   PullRequestReviewRequestCountInput,
   PullRequestReviewRequestCountResult,
   PullRequestSetPinnedInput,
@@ -573,6 +577,24 @@ export const WsPullRequestsReviewRequestCountRpc = Rpc.make(
     error: PullRequestsRpcError,
   },
 );
+
+export const WsPullRequestsInboxRpc = Rpc.make(WS_METHODS.pullRequestsInbox, {
+  payload: PullRequestInboxInput,
+  success: PullRequestInboxResult,
+  error: PullRequestsRpcError,
+});
+
+export const WsPullRequestsMarkInboxViewedRpc = Rpc.make(WS_METHODS.pullRequestsMarkInboxViewed, {
+  payload: PullRequestInboxMarkViewedInput,
+  success: Schema.Void,
+  error: WsRpcError,
+});
+
+export const WsPullRequestsMarkInboxNotifiedRpc = Rpc.make(WS_METHODS.pullRequestsMarkInboxNotified, {
+  payload: PullRequestInboxMarkNotifiedInput,
+  success: Schema.Void,
+  error: WsRpcError,
+});
 
 export const WsPullRequestsDetailRpc = Rpc.make(WS_METHODS.pullRequestsDetail, {
   payload: PullRequestDetailInput,
@@ -1108,6 +1130,9 @@ export const WsFeatureRpcGroup = RpcGroup.make(
   WsGitPreparePullRequestThreadRpc,
   WsPullRequestsListRpc,
   WsPullRequestsReviewRequestCountRpc,
+  WsPullRequestsInboxRpc,
+  WsPullRequestsMarkInboxViewedRpc,
+  WsPullRequestsMarkInboxNotifiedRpc,
   WsPullRequestsDetailRpc,
   WsPullRequestsDiffRpc,
   WsPullRequestsActionRpc,
