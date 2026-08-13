@@ -7,6 +7,7 @@
 // Exports: PullRequestList
 
 import type { ProjectId, PullRequestListEntry } from "@luminor/contracts";
+import { pullRequestInboxIdentityKey } from "@luminor/shared/pullRequestInbox";
 import { pullRequestListEntryKey, type PullRequestListGroup } from "./pullRequestList.logic";
 import { PullRequestRow } from "./PullRequestRow";
 import { PR_FINE_TEXT_CLASS_NAME, PR_QUIET_INK_CLASS_NAME } from "./pullRequestText";
@@ -22,6 +23,7 @@ export const PullRequestList = function PullRequestList({
   showDiffColors: showDiffColorsProp,
   onSelect,
   onTogglePinned,
+  unreadByIdentity,
 }: {
   entries: PullRequestListEntry[];
   grouped: PullRequestListGroup[] | null;
@@ -32,6 +34,7 @@ export const PullRequestList = function PullRequestList({
   showDiffColors?: boolean;
   onSelect: (entry: PullRequestListEntry) => void;
   onTogglePinned: (entry: PullRequestListEntry) => void;
+  unreadByIdentity?: ReadonlyMap<string, boolean>;
 }) {
   const showProjectTitle = showProjectTitleProp ?? false;
   const showDiffColors = showDiffColorsProp ?? true;
@@ -48,6 +51,9 @@ export const PullRequestList = function PullRequestList({
       }
       onClick={onSelect}
       onTogglePinned={onTogglePinned}
+      unread={
+        unreadByIdentity?.get(pullRequestInboxIdentityKey(entry.repository, entry.number)) === true
+      }
     />
   );
   if (grouped) {

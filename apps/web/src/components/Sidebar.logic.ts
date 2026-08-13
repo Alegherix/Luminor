@@ -8,6 +8,7 @@ import {
   type FolderOwner,
   type KeybindingCommand,
   type ProjectId,
+  type PullRequestInboxResult,
   type PullRequestReviewRequestCountResult,
   type SpaceId,
   type ThreadId,
@@ -184,6 +185,33 @@ export function resolveActiveSidebarView(input: {
   if (input.isOnMeetings) return "meetings";
   if (input.isOnStudio) return "studio";
   return "threads";
+}
+
+export function resolvePullRequestInboxBadge(
+  result: PullRequestInboxResult | undefined,
+): SidebarActionBadge | null {
+  if (!result || result.unreadCount <= 0) return null;
+  return {
+    text: result.incomplete ? `${result.unreadCount}+` : String(result.unreadCount),
+    accessibleLabel: result.incomplete
+      ? `At least ${result.unreadCount} ${pluralize(
+          result.unreadCount,
+          "pull request has",
+          "pull requests have",
+        )} unread comments`
+      : `${result.unreadCount} ${pluralize(
+          result.unreadCount,
+          "pull request has",
+          "pull requests have",
+        )} unread comments`,
+  };
+}
+
+export function resolvePullRequestSidebarBadge(input: {
+  inbox?: PullRequestInboxResult | undefined;
+  reviewRequests?: PullRequestReviewRequestCountResult | undefined;
+}): SidebarActionBadge | null {
+  return resolvePullRequestInboxBadge(input.inbox) ?? resolvePullRequestReviewBadge(input.reviewRequests);
 }
 
 /** Keep partial review counts visible without presenting them as exact. */

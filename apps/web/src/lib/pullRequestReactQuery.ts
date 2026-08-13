@@ -7,6 +7,7 @@ export {
   pullRequestDiffQueryOptions,
   pullRequestQueryErrorState,
   pullRequestQueryKeys,
+  pullRequestInboxQueryOptions,
   pullRequestReviewRequestCountQueryOptions,
   pullRequestsExactInvolvementQueryOptions,
   pullRequestsListQueryOptions,
@@ -20,5 +21,7 @@ export {
   pullRequestCommentMutationOptions,
   pullRequestMutationKeys,
   pullRequestsForceRefreshMutationOptions,
+  pullRequestInboxMarkNotifiedMutationOptions,
+  pullRequestInboxMarkViewedMutationOptions,
   pullRequestSetPinnedMutationOptions,
 } from "./pullRequestMutationOptions";

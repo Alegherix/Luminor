@@ -12,10 +12,12 @@ const harness = vi.hoisted(() => ({
   settings: {
     enableSystemTaskCompletionNotifications: false,
     enableTaskCompletionToasts: true,
+    enablePullRequestCommentNotifications: true,
   },
   defaults: {
     enableSystemTaskCompletionNotifications: false,
     enableTaskCompletionToasts: true,
+    enablePullRequestCommentNotifications: true,
   },
   updateSettings: vi.fn(),
   readBrowserPermission: vi.fn(() => "default"),

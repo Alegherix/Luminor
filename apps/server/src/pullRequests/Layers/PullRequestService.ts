@@ -24,6 +24,10 @@ import {
   type ProjectPullRequestPinsShape,
 } from "../../persistence/Services/ProjectPullRequestPins";
 import {
+  PullRequestInboxState,
+  type PullRequestInboxStateShape,
+} from "../../persistence/Services/PullRequestInboxState";
+import {
   buildPullRequestListEntry,
   isValidGitHubRepositoryNameWithOwner,
   isViewerReviewRequested,
@@ -43,6 +47,11 @@ import {
   resolveProjectRepositoryInventories,
 } from "../projectRepositoryInventory";
 import { makePullRequestOperations } from "../pullRequestOperations";
+import {
+  loadPullRequestInbox,
+  markPullRequestInboxNotified,
+  markPullRequestInboxViewed,
+} from "../pullRequestInbox";
 import {
   PULL_REQUEST_REVIEW_MATCH_LIMIT,
   recoverPinnedPullRequests,
@@ -69,6 +78,7 @@ export interface PullRequestServiceDependencies {
   readonly homeDir: string;
   readonly github: GitHubCliShape;
   readonly pins: ProjectPullRequestPinsShape;
+  readonly inbox: PullRequestInboxStateShape;
   /**
    * Live (non-soft-deleted) projects. Deliberately not the full read model: the PR
    * service only ever reads `snapshot.projects`, and hydrating every thread body for a
@@ -559,6 +569,46 @@ export const makePullRequestService = (
         };
       });
 
+    const inbox: PullRequestServiceShape["inbox"] = (input) =>
+      Effect.gen(function* () {
+        const projects = (yield* dependencies.listProjects()).filter(
+          (project) =>
+            project.deletedAt === null &&
+            project.kind === "project" &&
+            (input.projectId == null || project.id === input.projectId),
+        );
+        const resolved = yield* resolveProjectRepositoryInventories({
+          projects,
+          resolve: resolveProjectRepositories,
+        });
+        const { uniqueRepositories } = indexProjectRepositoryInventories(resolved);
+        const inventoryIncomplete = resolved.some(
+          (item) => item.error !== null || !item.inventory.authoritative,
+        );
+        const cwd = resolved.find((item) => item.inventory.repositories.length > 0)?.project
+          .workspaceRoot;
+        if (!cwd) {
+          return { items: [], unreadCount: 0, incomplete: inventoryIncomplete };
+        }
+        return yield* loadPullRequestInbox({
+          cwd,
+          repositories: new Set(
+            [...uniqueRepositories.values()].map((entry) => entry.repository.nameWithOwner),
+          ),
+          inventoryIncomplete,
+          github: dependencies.github,
+          inbox: dependencies.inbox,
+          now: () => new Date().toISOString(),
+          withGitHubRead,
+        });
+      });
+
+    const markInboxViewed: PullRequestServiceShape["markInboxViewed"] = (input) =>
+      markPullRequestInboxViewed(dependencies.inbox, input, () => new Date().toISOString());
+
+    const markInboxNotified: PullRequestServiceShape["markInboxNotified"] = (input) =>
+      markPullRequestInboxNotified(dependencies.inbox, input);
+
     const operations = makePullRequestOperations({
       github: dependencies.github,
       pins: dependencies.pins,
@@ -573,6 +623,9 @@ export const makePullRequestService = (
     return {
       list,
       reviewRequestCount,
+      inbox,
+      markInboxViewed,
+      markInboxNotified,
       ...operations,
     } satisfies PullRequestServiceShape;
   });
@@ -584,11 +637,13 @@ export const PullRequestServiceLive = Layer.effect(
     const git = yield* GitCore;
     const github = yield* GitHubCli;
     const pins = yield* ProjectPullRequestPins;
+    const inbox = yield* PullRequestInboxState;
     const projection = yield* ProjectionSnapshotQuery;
     return yield* makePullRequestService({
       homeDir: config.homeDir,
       github,
       pins,
+      inbox,
       listProjects: () =>
         projection
           .getShellSnapshot()

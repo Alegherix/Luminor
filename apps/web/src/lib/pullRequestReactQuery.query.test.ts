@@ -8,6 +8,7 @@ import {
   pullRequestQueryErrorState,
   pullRequestQueryKeys,
   prefetchPullRequestListState,
+  pullRequestInboxQueryOptions,
   pullRequestReviewRequestCountQueryOptions,
   pullRequestsExactInvolvementQueryOptions,
   pullRequestsListQueryOptions,
@@ -95,6 +96,13 @@ describe("pull request list query options", () => {
     expect(options.queryKey).toEqual(pullRequestQueryKeys.reviewRequestCount(null));
     expect(options.staleTime).toBe(5 * 60_000);
     expect(options.refetchInterval).toBe(5 * 60_000);
+  });
+
+  it("polls the pull request comment inbox independently of the rich list", () => {
+    const options = pullRequestInboxQueryOptions();
+    expect(options.queryKey).toEqual(pullRequestQueryKeys.inbox);
+    expect(options.staleTime).toBe(30_000);
+    expect(options.refetchInterval).toBe(60_000);
   });
 
   it("skips the known-empty reviewing fallback for closed and merged states", () => {

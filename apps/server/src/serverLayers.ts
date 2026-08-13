@@ -45,6 +45,7 @@ import { ExternalMcpGatewayLive } from "./externalMcp/Layers/ExternalMcpGateway"
 import { ServerEnvironmentLive } from "./environment/Layers/ServerEnvironment";
 import { AutomationRepositoryLive } from "./persistence/Layers/AutomationRepository";
 import { ProjectPullRequestPinsLive } from "./persistence/Layers/ProjectPullRequestPins";
+import { PullRequestInboxStateLive } from "./persistence/Layers/PullRequestInboxState";
 import { ProjectionTurnRepositoryLive } from "./persistence/Layers/ProjectionTurns";
 import { OrchestrationEventDeliveryRepositoryLive } from "./persistence/Layers/OrchestrationEventDeliveries";
 import { ProviderRuntimeEventRepositoryLive } from "./persistence/Layers/ProviderRuntimeEvents";
@@ -187,6 +188,7 @@ export function makeServerRuntimeServicesLayer(
   const pullRequestServiceLayer = PullRequestServiceLive.pipe(
     Layer.provideMerge(GitLayerLive),
     Layer.provideMerge(ProjectPullRequestPinsLive),
+    Layer.provideMerge(PullRequestInboxStateLive),
     Layer.provideMerge(OrchestrationLayerLive),
   );
 
@@ -205,6 +207,7 @@ export function makeServerRuntimeServicesLayer(
     externalMcpGatewayLayer,
     providerHealthLayer,
     ProjectPullRequestPinsLive,
+    PullRequestInboxStateLive,
     pullRequestServiceLayer,
     orchestrationReactorLayer,
     providerCommandReactorLayer,

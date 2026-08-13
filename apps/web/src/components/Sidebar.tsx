@@ -150,6 +150,7 @@ import {
   resolveNewThreadTarget,
 } from "../lib/projectShortcutTargets";
 import {
+  pullRequestInboxQueryOptions,
   pullRequestQueryKeys,
   pullRequestReviewRequestCountQueryOptions,
 } from "../lib/pullRequestReactQuery";
@@ -345,7 +346,7 @@ import {
   runExclusiveProjectAddition,
   runProjectProvisionWithCancellationRecovery,
   resolveFolderNewThreadIntent,
-  resolvePullRequestReviewBadge,
+  resolvePullRequestSidebarBadge,
   resolveSidebarThreadListPaging,
   DEBUG_FEATURE_FLAGS_MENU_STORAGE_KEY,
   resolveProjectEmptyState,
@@ -1512,7 +1513,14 @@ export default function Sidebar() {
     ...pullRequestReviewRequestCountQueryOptions({ projectId: null }),
     enabled: projects.some((project) => project.kind === "project"),
   });
-  const pullRequestsReviewBadge = resolvePullRequestReviewBadge(pullRequestsReviewingQuery.data);
+  const pullRequestsInboxQuery = useQuery({
+    ...pullRequestInboxQueryOptions(),
+    enabled: projects.some((project) => project.kind === "project"),
+  });
+  const pullRequestsReviewBadge = resolvePullRequestSidebarBadge({
+    inbox: pullRequestsInboxQuery.data,
+    reviewRequests: pullRequestsReviewingQuery.data,
+  });
   // Heartbeat automations grouped by their target thread, so each thread row can show a
   // clock chip indicating an automation is attached (mirrors the Environment panel section).
   const automationsByThreadId = useMemo(

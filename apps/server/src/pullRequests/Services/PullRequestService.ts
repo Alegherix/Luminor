@@ -5,6 +5,10 @@ import type {
   PullRequestDetail,
   PullRequestDetailInput,
   PullRequestDiffResult,
+  PullRequestInboxInput,
+  PullRequestInboxMarkNotifiedInput,
+  PullRequestInboxMarkViewedInput,
+  PullRequestInboxResult,
   PullRequestReviewRequestCountInput,
   PullRequestReviewRequestCountResult,
   PullRequestSetPinnedInput,
@@ -20,6 +24,13 @@ export interface PullRequestServiceShape {
   readonly reviewRequestCount: (
     input: PullRequestReviewRequestCountInput,
   ) => Effect.Effect<PullRequestReviewRequestCountResult, unknown>;
+  readonly inbox: (input: PullRequestInboxInput) => Effect.Effect<PullRequestInboxResult, unknown>;
+  readonly markInboxViewed: (
+    input: PullRequestInboxMarkViewedInput,
+  ) => Effect.Effect<void, unknown>;
+  readonly markInboxNotified: (
+    input: PullRequestInboxMarkNotifiedInput,
+  ) => Effect.Effect<void, unknown>;
   readonly detail: (input: PullRequestDetailInput) => Effect.Effect<PullRequestDetail, unknown>;
   readonly diff: (input: PullRequestDetailInput) => Effect.Effect<PullRequestDiffResult, unknown>;
   readonly action: (

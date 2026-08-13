@@ -75,6 +75,7 @@ import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
 import { useProjectRunStore } from "../projectRunStore";
 import { dockTerminalThreadId } from "../lib/dockTerminalScope";
 import { MeetingReminderNotifications } from "../meetings/MeetingReminderNotifications";
+import { PullRequestInboxNotifications } from "../notifications/pullRequestInbox";
 import { TaskCompletionNotifications } from "../notifications/taskCompletion";
 import { useWorkspacePathsStore } from "../workspacePathsStore";
 import {
@@ -260,6 +261,7 @@ function RootRouteView() {
           <GlobalFeedbackDialog />
           <GlobalWhatsNewSurface />
           <TaskCompletionNotifications />
+          <PullRequestInboxNotifications />
           <MeetingReminderNotifications />
           <DesktopProjectBootstrap />
           <Outlet />

@@ -94,6 +94,10 @@ import type {
   PullRequestDetail,
   PullRequestDetailInput,
   PullRequestDiffResult,
+  PullRequestInboxInput,
+  PullRequestInboxMarkNotifiedInput,
+  PullRequestInboxMarkViewedInput,
+  PullRequestInboxResult,
   PullRequestReviewRequestCountInput,
   PullRequestReviewRequestCountResult,
   PullRequestSetPinnedInput,
@@ -409,6 +413,7 @@ export interface DesktopNotificationInput {
   silent?: boolean;
   suppressWhenForeground?: boolean;
   threadId?: ThreadId;
+  action?: string;
 }
 
 export interface DesktopWindowState {
@@ -699,6 +704,9 @@ export interface NativeApi {
     reviewRequestCount: (
       input: PullRequestReviewRequestCountInput,
     ) => Promise<PullRequestReviewRequestCountResult>;
+    inbox: (input: PullRequestInboxInput) => Promise<PullRequestInboxResult>;
+    markInboxViewed: (input: PullRequestInboxMarkViewedInput) => Promise<void>;
+    markInboxNotified: (input: PullRequestInboxMarkNotifiedInput) => Promise<void>;
     detail: (input: PullRequestDetailInput) => Promise<PullRequestDetail>;
     diff: (input: PullRequestDetailInput) => Promise<PullRequestDiffResult>;
     action: (input: PullRequestActionInput) => Promise<PullRequestActionResult>;

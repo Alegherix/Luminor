@@ -24,6 +24,10 @@
       "types": "./src/githubRepository.ts",
       "import": "./src/githubRepository.ts"
     },
+    "./pullRequestInbox": {
+      "types": "./src/pullRequestInbox.ts",
+      "import": "./src/pullRequestInbox.ts"
+    },
     "./folderOwnership": {
       "types": "./src/folderOwnership.ts",
       "import": "./src/folderOwnership.ts"

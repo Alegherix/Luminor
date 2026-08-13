@@ -21,6 +21,7 @@ export const pullRequestQueryKeys = {
   reviewRequestCounts: ["pull-requests", "review-request-count"] as const,
   reviewRequestCount: (projectId: ProjectId | null) =>
     [...pullRequestQueryKeys.reviewRequestCounts, projectId] as const,
+  inbox: ["pull-requests", "inbox"] as const,
   detail: (input: PullRequestDetailInput | null) =>
     [
       "pull-requests",
@@ -117,6 +118,17 @@ export function pullRequestReviewRequestCountQueryOptions(input: { projectId: Pr
     queryFn: () => ensureNativeApi().pullRequests.reviewRequestCount(input),
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: "always",
+  });
+}
+
+export function pullRequestInboxQueryOptions() {
+  return queryOptions({
+    queryKey: pullRequestQueryKeys.inbox,
+    queryFn: () => ensureNativeApi().pullRequests.inbox({ projectId: null }),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
     refetchOnWindowFocus: true,
     refetchOnReconnect: "always",
   });

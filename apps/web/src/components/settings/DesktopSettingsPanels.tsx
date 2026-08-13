@@ -164,6 +164,34 @@ export function NotificationsSettingsPanel({
             </div>
           }
         />
+
+        <SettingsRow
+          title="Pull request comments"
+          description="Notify when a person comments on a pull request. GitHub Actions and other bots are ignored."
+          resetAction={
+            settings.enablePullRequestCommentNotifications !==
+            defaults.enablePullRequestCommentNotifications ? (
+              <SettingResetButton
+                label="pull request comment notifications"
+                onClick={() =>
+                  updateSettings({
+                    enablePullRequestCommentNotifications:
+                      defaults.enablePullRequestCommentNotifications,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.enablePullRequestCommentNotifications}
+              onCheckedChange={(checked) =>
+                updateSettings({ enablePullRequestCommentNotifications: Boolean(checked) })
+              }
+              aria-label="Pull request comment notifications"
+            />
+          }
+        />
       </SettingsSection>
     </div>
   );

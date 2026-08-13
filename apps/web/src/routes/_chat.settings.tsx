@@ -251,6 +251,10 @@ function SettingsRouteView() {
     defaults.enableSystemTaskCompletionNotifications
       ? ["Desktop notifications"]
       : []),
+    ...(settings.enablePullRequestCommentNotifications !==
+    defaults.enablePullRequestCommentNotifications
+      ? ["Pull request comments"]
+      : []),
     ...(settings.enableAssistantStreaming !== defaults.enableAssistantStreaming
       ? ["Assistant output"]
       : []),

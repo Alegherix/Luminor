@@ -2,9 +2,13 @@ import type {
   ProjectId,
   PullRequestActionInput,
   PullRequestCommentInput,
+  PullRequestInboxMarkNotifiedInput,
+  PullRequestInboxMarkViewedInput,
+  PullRequestInboxResult,
   PullRequestSetPinnedInput,
   PullRequestState,
 } from "@luminor/contracts";
+import { pullRequestInboxIdentityKey } from "@luminor/shared/pullRequestInbox";
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 
 import { ensureNativeApi } from "~/nativeApi";
@@ -54,6 +58,8 @@ export const pullRequestMutationKeys = {
   setPinned: ["pull-requests", "set-pinned"] as const,
   comment: ["pull-requests", "comment"] as const,
   forceRefresh: ["pull-requests", "force-refresh"] as const,
+  markInboxViewed: ["pull-requests", "inbox-viewed"] as const,
+  markInboxNotified: ["pull-requests", "inbox-notified"] as const,
 };
 
 function refreshPullRequestReviewRequestCounts(queryClient: QueryClient): void {
@@ -393,6 +399,59 @@ export function pullRequestsForceRefreshMutationOptions(queryClient: QueryClient
     },
     onSettled: (_result, _error, _input, context) => {
       finishPullRequestRefresh(queryClient, context);
+    },
+  });
+}
+
+function patchPullRequestInboxCache(
+  queryClient: QueryClient,
+  patch: (item: PullRequestInboxResult["items"][number]) => PullRequestInboxResult["items"][number],
+  match: (item: PullRequestInboxResult["items"][number]) => boolean,
+): void {
+  queryClient.setQueryData<PullRequestInboxResult>(pullRequestQueryKeys.inbox, (current) => {
+    if (!current) return current;
+    const items = current.items.map((item) => (match(item) ? patch(item) : item));
+    return {
+      ...current,
+      items,
+      unreadCount: items.filter((item) => item.unread).length,
+    };
+  });
+}
+
+export function pullRequestInboxMarkViewedMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationKey: pullRequestMutationKeys.markInboxViewed,
+    networkMode: "always",
+    mutationFn: (input: PullRequestInboxMarkViewedInput) =>
+      ensureNativeApi().pullRequests.markInboxViewed(input),
+    onMutate: (input) => {
+      patchPullRequestInboxCache(
+        queryClient,
+        (item) => ({ ...item, unread: false, notify: false }),
+        (item) =>
+          pullRequestInboxIdentityKey(item.repository, item.number) ===
+          pullRequestInboxIdentityKey(input.repository, input.number),
+      );
+    },
+  });
+}
+
+export function pullRequestInboxMarkNotifiedMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationKey: pullRequestMutationKeys.markInboxNotified,
+    networkMode: "always",
+    mutationFn: (input: PullRequestInboxMarkNotifiedInput) =>
+      ensureNativeApi().pullRequests.markInboxNotified(input),
+    onMutate: (input) => {
+      patchPullRequestInboxCache(
+        queryClient,
+        (item) => ({ ...item, notify: false }),
+        (item) =>
+          item.comment?.id === input.commentId &&
+          pullRequestInboxIdentityKey(item.repository, item.number) ===
+            pullRequestInboxIdentityKey(input.repository, input.number),
+      );
     },
   });
 }
