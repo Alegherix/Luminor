@@ -163,6 +163,8 @@ import {
   ServerDiagnosticsResult,
   ServerGenerateAutomationIntentInput,
   ServerGenerateAutomationIntentResult,
+  ServerGenerateMeetingSummaryInput,
+  ServerGenerateMeetingSummaryResult,
   ServerGenerateThreadRecapInput,
   ServerGenerateThreadRecapResult,
   ServerGetEnvironmentResult,
@@ -878,6 +880,12 @@ export const WsServerGenerateThreadRecapRpc = Rpc.make(WS_METHODS.serverGenerate
   error: WsRpcError,
 });
 
+export const WsServerGenerateMeetingSummaryRpc = Rpc.make(WS_METHODS.serverGenerateMeetingSummary, {
+  payload: ServerGenerateMeetingSummaryInput,
+  success: ServerGenerateMeetingSummaryResult,
+  error: WsRpcError,
+});
+
 export const WsServerGenerateAutomationIntentRpc = Rpc.make(
   WS_METHODS.serverGenerateAutomationIntent,
   {
@@ -1148,6 +1156,7 @@ export const WsFeatureRpcGroup = RpcGroup.make(
   WsServerPrewarmVoiceRpc,
   WsServerTranscribeVoiceRpc,
   WsServerGenerateThreadRecapRpc,
+  WsServerGenerateMeetingSummaryRpc,
   WsServerGenerateAutomationIntentRpc,
   WsServerUpsertKeybindingRpc,
   WsSubscribeServerLifecycleRpc,

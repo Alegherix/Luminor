@@ -134,6 +134,11 @@ import {
   shouldCheckForUpdatesOnForeground,
 } from "./updateState";
 import { registerDesktopVoiceTranscriptionHandler } from "./voiceTranscription";
+import { registerMeetingsCalendarIpc } from "./meetingsCalendarIpc";
+import { registerMeetingsRecordingIpc } from "./meetingsRecordingIpc";
+import { registerMeetingsTranscriptionIpc } from "./meetingsTranscriptionIpc";
+import { MeetingWebViewManager } from "./meetingsWebview";
+import { registerMeetingsWebviewIpc } from "./meetingsWebviewIpc";
 import {
   applyDesktopPhysicalZoomAction,
   resolveDesktopMenuAccelerator,
@@ -331,6 +336,9 @@ let restoreStdIoCapture: (() => void) | null = null;
 let unreadBackgroundNotificationCount = 0;
 let browserPerfInterval: ReturnType<typeof setInterval> | null = null;
 const annotationGuestPreload = Path.join(__dirname, "guestPreload.js");
+const meetingWebViewManager = new MeetingWebViewManager({
+  getWindow: () => mainWindow,
+});
 const browserManager = new DesktopBrowserManager({
   annotationPreloadPath: annotationGuestPreload,
   beforeInputEvent: (event, input) => {
@@ -3733,6 +3741,20 @@ function registerIpcHandlers(): void {
       }),
   );
   registerDesktopVoiceTranscriptionHandler();
+  registerMeetingsCalendarIpc({
+    homeDir: BASE_DIR,
+    getOwnerWindow: () => BrowserWindow.getFocusedWindow() ?? mainWindow,
+  });
+  registerMeetingsWebviewIpc({
+    manager: meetingWebViewManager,
+  });
+  registerMeetingsRecordingIpc({
+    homeDir: BASE_DIR,
+  });
+  registerMeetingsTranscriptionIpc({
+    homeDir: BASE_DIR,
+    getOwnerWindow: () => BrowserWindow.getFocusedWindow() ?? mainWindow,
+  });
   startBrowserPerformanceLogging();
   registerBrowserIpcHandlers(ipcMain, browserManager);
 }
@@ -3942,6 +3964,7 @@ function createWindow(): BrowserWindow {
       mainWindow = null;
     }
     browserManager.setWindow(null);
+    meetingWebViewManager.destroy();
   });
 
   return window;

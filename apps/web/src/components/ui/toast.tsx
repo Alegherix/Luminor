@@ -37,6 +37,7 @@ type ThreadToastData = {
   allowCrossThreadVisibility?: boolean;
   compactContextual?: boolean;
   copyText?: string;
+  onActivate?: () => void;
   onClose?: () => void;
   secondaryActionProps?: React.ComponentProps<typeof Button>;
   threadId?: ThreadId | null;
@@ -430,7 +431,18 @@ function ToastSurface({
             )
           : "items-start gap-2 px-3.5 py-3 pr-10 text-sm",
         hideCollapsedContent && "not-data-expanded:pointer-events-none not-data-expanded:opacity-0",
+        toast.data?.onActivate && "cursor-pointer",
       )}
+      onClick={(event) => {
+        if (
+          (event.target as HTMLElement).closest(
+            '[data-slot="toast-close"], [data-slot="toast-action"]',
+          )
+        ) {
+          return;
+        }
+        toast.data?.onActivate?.();
+      }}
     >
       {Icon ? (
         <div

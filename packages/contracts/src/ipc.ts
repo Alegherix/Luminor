@@ -142,6 +142,8 @@ import type {
   ServerDiagnosticsResult,
   ServerGenerateAutomationIntentInput,
   ServerGenerateAutomationIntentResult,
+  ServerGenerateMeetingSummaryInput,
+  ServerGenerateMeetingSummaryResult,
   ServerGenerateThreadRecapInput,
   ServerGenerateThreadRecapResult,
   ServerGetEnvironmentResult,
@@ -420,6 +422,106 @@ export interface LuminorStorageSnapshot {
   readonly entries: Readonly<Record<string, string>>;
 }
 
+export interface MeetingsCalendarStatus {
+  readonly connected: boolean;
+  readonly accountEmail: string | null;
+}
+
+export interface MeetingsCalendarEvent {
+  readonly id: string;
+  readonly title: string;
+  readonly startAt: string;
+  readonly endAt: string;
+  readonly meetUrl: string | null;
+  readonly attendees: readonly string[];
+}
+
+export interface MeetingsEmbedBounds {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface MeetingsEmbedState {
+  readonly joined: boolean;
+  readonly visible: boolean;
+  readonly url: string | null;
+  readonly partition: string;
+}
+
+export type MeetingsRecordingMode = "system+mic" | "mic";
+
+export interface MeetingsRecordingState {
+  readonly status: "idle" | "recording";
+  readonly mode: MeetingsRecordingMode | null;
+  readonly sessionId: string | null;
+  readonly filePath: string | null;
+  readonly degradation: string | null;
+}
+
+export interface MeetingsLoopbackPrepareResult {
+  readonly ok: boolean;
+  readonly sourceName?: string;
+  readonly moduleId?: string;
+  readonly error?: string;
+}
+
+export type MeetingsTranscriptionStatus =
+  | "idle"
+  | "running"
+  | "ready"
+  | "needs-environment"
+  | "failed";
+
+export interface MeetingsTranscriptionState {
+  readonly status: MeetingsTranscriptionStatus;
+  readonly sessionId: string | null;
+  readonly transcriptPath: string | null;
+  readonly text: string | null;
+  readonly error: string | null;
+}
+
+export interface MeetingsTranscriptionPointResult {
+  readonly status: "configured" | "needs-environment";
+  readonly error: string | null;
+}
+
+export interface MeetingsSummaryWriteResult {
+  readonly summaryPath: string;
+}
+
+export interface MeetingsSummaryReadResult {
+  readonly text: string;
+  readonly summaryPath: string;
+}
+
+export interface DesktopMeetingsBridge {
+  getStatus: () => Promise<MeetingsCalendarStatus>;
+  connect: () => Promise<MeetingsCalendarStatus>;
+  listToday: () => Promise<readonly MeetingsCalendarEvent[]>;
+  joinEmbed: (input: { url: string }) => Promise<MeetingsEmbedState>;
+  hideEmbed: () => Promise<MeetingsEmbedState>;
+  showEmbed: () => Promise<MeetingsEmbedState>;
+  leaveEmbed: () => Promise<MeetingsEmbedState>;
+  setEmbedBounds: (bounds: MeetingsEmbedBounds | null) => Promise<MeetingsEmbedState>;
+  getEmbedState: () => Promise<MeetingsEmbedState>;
+  startRecording: (input: { sessionId: string }) => Promise<MeetingsRecordingState>;
+  appendRecordingChunk: (chunk: Uint8Array) => Promise<void>;
+  stopRecording: () => Promise<MeetingsRecordingState>;
+  getRecordingState: () => Promise<MeetingsRecordingState>;
+  prepareLoopback: () => Promise<MeetingsLoopbackPrepareResult>;
+  releaseLoopback: () => Promise<void>;
+  transcribeRecording: (input: {
+    sessionId: string;
+    recordingPath: string;
+  }) => Promise<MeetingsTranscriptionState>;
+  getTranscript: (input: { sessionId: string }) => Promise<MeetingsTranscriptionState>;
+  pointAtTranscriptionEnvironment: () => Promise<MeetingsTranscriptionPointResult>;
+  writeSummary: (input: { sessionId: string; text: string }) => Promise<MeetingsSummaryWriteResult>;
+  getSummary: (input: { sessionId: string }) => Promise<MeetingsSummaryReadResult | null>;
+}
+
 export interface DesktopBridge {
   getWsUrl: () => string | null;
   /**
@@ -483,6 +585,7 @@ export interface DesktopBridge {
     ) => () => void;
     onBrowserCopyLink: (listener: (event: BrowserCopyLinkEvent) => void) => () => void;
   };
+  meetings?: DesktopMeetingsBridge;
 }
 
 export interface NativeApi {
@@ -651,6 +754,9 @@ export interface NativeApi {
     generateThreadRecap: (
       input: ServerGenerateThreadRecapInput,
     ) => Promise<ServerGenerateThreadRecapResult>;
+    generateMeetingSummary: (
+      input: ServerGenerateMeetingSummaryInput,
+    ) => Promise<ServerGenerateMeetingSummaryResult>;
     generateAutomationIntent: (
       input: ServerGenerateAutomationIntentInput,
     ) => Promise<ServerGenerateAutomationIntentResult>;

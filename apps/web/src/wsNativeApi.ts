@@ -698,6 +698,10 @@ export function createWsNativeApi(): NativeApi {
         transport.request(WS_METHODS.serverGenerateThreadRecap, input, {
           timeoutMs: null,
         }),
+      generateMeetingSummary: (input) =>
+        transport.request(WS_METHODS.serverGenerateMeetingSummary, input, {
+          timeoutMs: null,
+        }),
       generateAutomationIntent: (input) =>
         transport.request(WS_METHODS.serverGenerateAutomationIntent, input, {
           timeoutMs: null,

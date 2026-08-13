@@ -56,7 +56,7 @@ export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-
 export const SIDEBAR_THREAD_PREWARM_LIMIT = 10;
 export const DEBUG_FEATURE_FLAGS_MENU_STORAGE_KEY = "luminor:show-debug-feature-flags-menu";
 export type SidebarNewThreadEnvMode = "local" | "worktree";
-export type SidebarView = "threads" | "studio";
+export type SidebarView = "threads" | "studio" | "meetings";
 export type SidebarActionBadge = {
   readonly text: string;
   readonly accessibleLabel: string;
@@ -158,8 +158,32 @@ export function filterFolderNewThreadProjects<T extends FolderNewThreadProject>(
 export function isProjectsSidebarSurface(input: {
   readonly isOnSettings: boolean;
   readonly isOnStudio: boolean;
+  readonly isOnMeetings: boolean;
 }): boolean {
-  return !input.isOnSettings && !input.isOnStudio;
+  return !input.isOnSettings && !input.isOnStudio && !input.isOnMeetings;
+}
+
+export function resolveSidebarSurfacePickerViews(input: {
+  readonly isDesktop: boolean;
+  readonly showStudioSection: boolean;
+}): readonly SidebarView[] {
+  const views: SidebarView[] = ["threads"];
+  if (input.isDesktop) {
+    views.push("meetings");
+  }
+  if (input.showStudioSection) {
+    views.push("studio");
+  }
+  return views;
+}
+
+export function resolveActiveSidebarView(input: {
+  readonly isOnMeetings: boolean;
+  readonly isOnStudio: boolean;
+}): SidebarView {
+  if (input.isOnMeetings) return "meetings";
+  if (input.isOnStudio) return "studio";
+  return "threads";
 }
 
 /** Keep partial review counts visible without presenting them as exact. */

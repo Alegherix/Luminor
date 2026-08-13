@@ -74,6 +74,7 @@ import { invalidateProjectFileQueriesForCwds, projectQueryKeys } from "../lib/pr
 import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
 import { useProjectRunStore } from "../projectRunStore";
 import { dockTerminalThreadId } from "../lib/dockTerminalScope";
+import { MeetingReminderNotifications } from "../meetings/MeetingReminderNotifications";
 import { TaskCompletionNotifications } from "../notifications/taskCompletion";
 import { useWorkspacePathsStore } from "../workspacePathsStore";
 import {
@@ -259,6 +260,7 @@ function RootRouteView() {
           <GlobalFeedbackDialog />
           <GlobalWhatsNewSurface />
           <TaskCompletionNotifications />
+          <MeetingReminderNotifications />
           <DesktopProjectBootstrap />
           <Outlet />
         </AnchoredToastProvider>

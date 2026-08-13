@@ -221,4 +221,27 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       };
     },
   },
+  meetings: {
+    getStatus: () => ipcRenderer.invoke(IPC.meetings.getStatus),
+    connect: () => ipcRenderer.invoke(IPC.meetings.connect),
+    listToday: () => ipcRenderer.invoke(IPC.meetings.listToday),
+    joinEmbed: (input) => ipcRenderer.invoke(IPC.meetings.joinEmbed, input),
+    hideEmbed: () => ipcRenderer.invoke(IPC.meetings.hideEmbed),
+    showEmbed: () => ipcRenderer.invoke(IPC.meetings.showEmbed),
+    leaveEmbed: () => ipcRenderer.invoke(IPC.meetings.leaveEmbed),
+    setEmbedBounds: (bounds) => ipcRenderer.invoke(IPC.meetings.setEmbedBounds, bounds),
+    getEmbedState: () => ipcRenderer.invoke(IPC.meetings.getEmbedState),
+    startRecording: (input) => ipcRenderer.invoke(IPC.meetings.startRecording, input),
+    appendRecordingChunk: (chunk) => ipcRenderer.invoke(IPC.meetings.appendRecordingChunk, chunk),
+    stopRecording: () => ipcRenderer.invoke(IPC.meetings.stopRecording),
+    getRecordingState: () => ipcRenderer.invoke(IPC.meetings.getRecordingState),
+    prepareLoopback: () => ipcRenderer.invoke(IPC.meetings.prepareLoopback),
+    releaseLoopback: () => ipcRenderer.invoke(IPC.meetings.releaseLoopback),
+    transcribeRecording: (input) => ipcRenderer.invoke(IPC.meetings.transcribeRecording, input),
+    getTranscript: (input) => ipcRenderer.invoke(IPC.meetings.getTranscript, input),
+    pointAtTranscriptionEnvironment: () =>
+      ipcRenderer.invoke(IPC.meetings.pointAtTranscriptionEnvironment),
+    writeSummary: (input) => ipcRenderer.invoke(IPC.meetings.writeSummary, input),
+    getSummary: (input) => ipcRenderer.invoke(IPC.meetings.getSummary, input),
+  },
 } satisfies DesktopBridge);
