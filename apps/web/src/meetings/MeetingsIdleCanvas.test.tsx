@@ -49,12 +49,12 @@ describe("MeetingsIdleCanvas", () => {
       <MeetingsIdleCanvas
         workspace={{
           ...createIdleMeetingsWorkspace(),
-          joinError: "That is not a Google Meet link.",
+          joinError: "That is not a meeting link.",
         }}
       />,
     );
 
-    expect(html).toContain("That is not a Google Meet link.");
+    expect(html).toContain("That is not a meeting link.");
     expect(html).toContain('role="alert"');
   });
 });

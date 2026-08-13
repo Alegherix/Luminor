@@ -1,8 +1,15 @@
 const PASTED_MEET_HOST = "meet.google.com";
 const PASTED_MEET_CODE_PATTERN = /^\/([a-z]{3}-[a-z]{4}-[a-z]{3})(?:\/|$)/i;
 
-export const INVALID_MEET_URL_MESSAGE = "That is not a Google Meet link.";
-export const MISSING_MEET_URL_MESSAGE = "This meeting has no Google Meet link.";
+export const INVALID_MEET_URL_MESSAGE = "That is not a meeting link.";
+export const MISSING_MEET_URL_MESSAGE = "This meeting has no join link.";
+
+export type MeetingJoinKind = "embed" | "external";
+
+export type MeetingJoinTarget = {
+  readonly kind: MeetingJoinKind;
+  readonly url: string;
+};
 
 function candidateUrlFromInput(input: string): string | null {
   const trimmed = input.trim();
@@ -66,12 +73,43 @@ export function isGoogleMeetJoinUrl(input: string): boolean {
   }
 }
 
+function isHttpOrHttps(parsed: URL): boolean {
+  return parsed.protocol === "http:" || parsed.protocol === "https:";
+}
+
+export function resolveMeetingJoinTarget(
+  input: string,
+  origin: "pasted" | "session",
+): MeetingJoinTarget | null {
+  if (origin === "pasted") {
+    const meetUrl = normalizePastedMeetUrl(input);
+    if (meetUrl) {
+      return { kind: "embed", url: meetUrl };
+    }
+  } else if (isGoogleMeetJoinUrl(input)) {
+    return { kind: "embed", url: input };
+  }
+
+  const parsed = parsedCandidateUrl(input);
+  if (!parsed || !isHttpOrHttps(parsed)) {
+    return null;
+  }
+  return { kind: "external", url: parsed.toString() };
+}
+
 export function pastedMeetingSessionId(meetUrl: string): string | null {
   const code = extractMeetCode(meetUrl);
-  return code === null ? null : `pasted:${code}`;
+  if (code !== null) {
+    return `pasted:${code}`;
+  }
+  const target = resolveMeetingJoinTarget(meetUrl, "pasted");
+  return target === null ? null : `pasted:${target.url}`;
 }
 
 export function pastedMeetingTitle(meetUrl: string): string {
   const code = extractMeetCode(meetUrl);
-  return code === null ? "Pasted Meet" : `Meet ${code}`;
+  if (code !== null) {
+    return `Meet ${code}`;
+  }
+  return parsedCandidateUrl(meetUrl)?.hostname.toLowerCase() ?? "Pasted meeting";
 }

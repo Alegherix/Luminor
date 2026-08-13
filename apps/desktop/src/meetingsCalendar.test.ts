@@ -300,4 +300,31 @@ describe("mapPrimaryCalendarEvents", () => {
       },
     ]);
   });
+
+  it("keeps a non-Meet conference URL so the workspace can open it externally", () => {
+    expect(
+      mapPrimaryCalendarEvents([
+        {
+          id: "zoom",
+          summary: "Vendor call",
+          status: "confirmed",
+          start: { dateTime: "2026-08-12T11:30:00.000Z" },
+          end: { dateTime: "2026-08-12T12:30:00.000Z" },
+          conferenceData: {
+            conferenceSolution: { key: { type: "addOn" } },
+            entryPoints: [{ entryPointType: "video", uri: "https://zoom.us/j/123" }],
+          },
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "zoom",
+        title: "Vendor call",
+        startAt: "2026-08-12T11:30:00.000Z",
+        endAt: "2026-08-12T12:30:00.000Z",
+        meetUrl: "https://zoom.us/j/123",
+        attendees: [],
+      },
+    ]);
+  });
 });

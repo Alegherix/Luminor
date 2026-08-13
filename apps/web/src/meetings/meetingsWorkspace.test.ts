@@ -17,6 +17,7 @@ import {
   type MeetingsCalendarHost,
   type MeetingsEmbedHost,
   type MeetingsEmbedState,
+  type MeetingsExternalHost,
   type MeetingsRecordingHost,
   type MeetingsRecordingState,
 } from "./meetingsWorkspace";
@@ -271,17 +272,35 @@ function fakeEmbed(): MeetingsEmbedHost & {
   return host;
 }
 
+function fakeExternal(): MeetingsExternalHost & {
+  calls: string[];
+  openTabs: string[];
+} {
+  const host = {
+    calls: [] as string[],
+    openTabs: [] as string[],
+    async open(url: string) {
+      host.calls.push(`open:${url}`);
+      host.openTabs.push(url);
+      return true;
+    },
+  };
+  return host;
+}
+
 describe("meetings join and leave", () => {
   it("rejects an invalid pasted URL without joining", async () => {
     const embed = fakeEmbed();
-    const workspace = createMeetingsWorkspace({ clock: () => NOW, embed });
+    const external = fakeExternal();
+    const workspace = createMeetingsWorkspace({ clock: () => NOW, embed, external });
 
-    await workspace.joinPastedUrl("https://zoom.us/j/123");
+    await workspace.joinPastedUrl("not a url");
 
     expect(workspace.getSnapshot().joinError).toBe(INVALID_MEET_URL_MESSAGE);
     expect(workspace.getSnapshot().sessions).toEqual([]);
     expect(meetingsSurfaceJoined(workspace.getSnapshot())).toBe(false);
     expect(embed.calls).toEqual([]);
+    expect(external.calls).toEqual([]);
   });
 
   it("joins a pasted Meet URL, adds it to today's list, and keeps it across calendar refresh", async () => {
@@ -367,6 +386,155 @@ describe("meetings join and leave", () => {
     expect(meetingsSidebarSections(workspace.getSnapshot(), NOW).ended[0]?.id).toBe(
       "pasted:abc-defg-hij",
     );
+  });
+});
+
+describe("meetings external join", () => {
+  it("opens a pasted non-Meet http(s) link in the system browser and counts it as joined", async () => {
+    const embed = fakeEmbed();
+    const external = fakeExternal();
+    const tape = fakeRecording();
+    const workspace = createMeetingsWorkspace({
+      clock: () => NOW,
+      embed,
+      external,
+      recording: tape,
+    });
+
+    await workspace.joinPastedUrl("https://zoom.us/j/123");
+
+    const snapshot = workspace.getSnapshot();
+    expect(snapshot.joinError).toBeNull();
+    expect(snapshot.joinedSessionId).toBe("pasted:https://zoom.us/j/123");
+    expect(snapshot.joinKind).toBe("external");
+    expect(snapshot.embedVisible).toBe(false);
+    expect(meetingsSurfaceJoined(snapshot)).toBe(true);
+    expect(snapshot.recording).toEqual({
+      status: "recording",
+      mode: "system+mic",
+      sessionId: "pasted:https://zoom.us/j/123",
+      filePath: recordingFilePath("pasted:https://zoom.us/j/123"),
+      degradation: null,
+    });
+    expect(embed.calls).toEqual([]);
+    expect(external.calls).toEqual(["open:https://zoom.us/j/123"]);
+    expect(
+      snapshot.sessions.some(
+        (session) =>
+          session.id === "pasted:https://zoom.us/j/123" &&
+          session.meetUrl === "https://zoom.us/j/123",
+      ),
+    ).toBe(true);
+  });
+
+  it("joins a calendar event with a non-Meet URL through the same external path", async () => {
+    const embed = fakeEmbed();
+    const external = fakeExternal();
+    const tape = fakeRecording();
+    const calendar = fakeCalendar({
+      connected: true,
+      events: [
+        event({
+          id: "zoom",
+          title: "Vendor call",
+          startAt: "2026-08-12T11:30:00.000Z",
+          endAt: "2026-08-12T12:30:00.000Z",
+          meetUrl: "https://zoom.us/j/123",
+        }),
+      ],
+    });
+    const workspace = createMeetingsWorkspace({
+      clock: () => NOW,
+      calendar,
+      embed,
+      external,
+      recording: tape,
+    });
+    await workspace.hydrate();
+    workspace.selectSession("zoom");
+
+    await workspace.joinSession("zoom");
+
+    const snapshot = workspace.getSnapshot();
+    expect(snapshot.joinedSessionId).toBe("zoom");
+    expect(snapshot.joinKind).toBe("external");
+    expect(snapshot.embedVisible).toBe(false);
+    expect(meetingsSurfaceJoined(snapshot)).toBe(true);
+    expect(snapshot.recording.status).toBe("recording");
+    expect(snapshot.recording.sessionId).toBe("zoom");
+    expect(embed.calls.filter((call) => call.startsWith("join:"))).toEqual([]);
+    expect(external.calls).toEqual(["open:https://zoom.us/j/123"]);
+  });
+
+  it("leaves an external join without closing the system-browser tab", async () => {
+    const embed = fakeEmbed();
+    const external = fakeExternal();
+    const tape = fakeRecording();
+    const workspace = createMeetingsWorkspace({
+      clock: () => NOW,
+      embed,
+      external,
+      recording: tape,
+    });
+    await workspace.joinPastedUrl("https://zoom.us/j/123");
+
+    await workspace.leave();
+
+    expect(meetingsSurfaceJoined(workspace.getSnapshot())).toBe(false);
+    expect(workspace.getSnapshot().joinKind).toBeNull();
+    expect(workspace.getSnapshot().joinedSessionId).toBeNull();
+    expect(workspace.getSnapshot().recording).toEqual(IDLE_MEETINGS_RECORDING);
+    expect(tape.calls).toEqual(["start:pasted:https://zoom.us/j/123", "stop"]);
+    expect(external.openTabs).toEqual(["https://zoom.us/j/123"]);
+    expect(embed.calls).toEqual(["leave"]);
+  });
+
+  it("does not show or hide an embed for an external join", async () => {
+    const embed = fakeEmbed();
+    const external = fakeExternal();
+    const workspace = createMeetingsWorkspace({ clock: () => NOW, embed, external });
+    await workspace.joinPastedUrl("https://zoom.us/j/123");
+
+    await workspace.hideEmbed();
+    await workspace.showEmbed();
+
+    expect(meetingsSurfaceJoined(workspace.getSnapshot())).toBe(true);
+    expect(workspace.getSnapshot().embedVisible).toBe(false);
+    expect(workspace.getSnapshot().joinKind).toBe("external");
+    expect(embed.calls).toEqual([]);
+  });
+
+  it("keeps an external join across hydrate when the embed is idle", async () => {
+    const embed = fakeEmbed();
+    const external = fakeExternal();
+    const tape = fakeRecording();
+    const workspace = createMeetingsWorkspace({
+      clock: () => NOW,
+      embed,
+      external,
+      recording: tape,
+    });
+    await workspace.joinPastedUrl("https://zoom.us/j/123");
+
+    await workspace.hydrate();
+
+    expect(meetingsSurfaceJoined(workspace.getSnapshot())).toBe(true);
+    expect(workspace.getSnapshot().joinKind).toBe("external");
+    expect(workspace.getSnapshot().recording.status).toBe("recording");
+    expect(embed.calls.filter((call) => call.startsWith("join:"))).toEqual([]);
+  });
+
+  it("still embeds a Meet URL instead of opening the system browser", async () => {
+    const embed = fakeEmbed();
+    const external = fakeExternal();
+    const workspace = createMeetingsWorkspace({ clock: () => NOW, embed, external });
+
+    await workspace.joinPastedUrl("https://meet.google.com/abc-defg-hij");
+
+    expect(workspace.getSnapshot().joinKind).toBe("embed");
+    expect(workspace.getSnapshot().embedVisible).toBe(true);
+    expect(embed.calls).toEqual(["join:https://meet.google.com/abc-defg-hij"]);
+    expect(external.calls).toEqual([]);
   });
 });
 
@@ -565,6 +733,27 @@ describe("meetingRowOffersJoin", () => {
       ),
     ).toBe(false);
     expect(meetingRowOffersJoin(ended, createIdleMeetingsWorkspace(), NOW)).toBe(false);
+  });
+
+  it("offers Join on a live non-Meet http(s) row", () => {
+    const snapshot = {
+      ...createIdleMeetingsWorkspace(),
+      connection: "signed-in" as const,
+      sessions: [
+        {
+          id: "zoom",
+          title: "Vendor call",
+          startAt: "2026-08-12T11:30:00.000Z",
+          endAt: "2026-08-12T12:30:00.000Z",
+          meetUrl: "https://zoom.us/j/123",
+          attendees: [],
+          status: "live" as const,
+          source: "calendar" as const,
+        },
+      ],
+    };
+
+    expect(meetingRowOffersJoin(snapshot.sessions[0]!, snapshot, NOW)).toBe(true);
   });
 });
 

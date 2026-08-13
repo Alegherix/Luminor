@@ -23,6 +23,7 @@ function MeetingsIndexRouteView() {
     <RouteInsetSurface>
       {meetingsSurfaceJoined(snapshot) ? (
         <MeetingsEmbedCanvas
+          presentation={snapshot.joinKind === "external" ? "external" : "embed"}
           onLeave={() => void leave()}
           recordingDegradation={snapshot.recording.degradation}
         />
