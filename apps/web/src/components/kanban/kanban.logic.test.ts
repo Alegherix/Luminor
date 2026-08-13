@@ -1266,6 +1266,33 @@ describe("kanban board filters", () => {
     ]);
   });
 
+  it("matches the live worktree branch when the stored thread branch is stale", () => {
+    const thread = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-renamed"),
+      branch: "luminor/stale-slug",
+      latestTurn: makeLatestTurn(),
+    });
+    const board = overlayKanbanBoardPullRequests(
+      buildKanbanBoard(makeBoardInput({ threads: [thread] })),
+      [
+        makeListEntry({
+          number: 18 as PullRequestListEntry["number"],
+          headBranch: "feat/project-type-slice" as PullRequestListEntry["headBranch"],
+          url: "https://github.com/acme/widgets/pull/18",
+        }),
+      ],
+      new Map([
+        [
+          "thread-renamed",
+          { branch: "feat/project-type-slice", pullRequest: null },
+        ],
+      ]),
+    );
+    const card = board.projects[0]?.done[0];
+    expect(resolveKanbanPrFilterState(kanbanCardPullRequest(card!))).toBe("reviewNeeded");
+    expect(kanbanCardPullRequest(card!)?.number).toBe(18);
+  });
+
   it("scopes a shared branch name to the card's project", () => {
     const frontendId = ProjectId.makeUnsafe("project-frontend");
     const luminorId = ProjectId.makeUnsafe("project-luminor");

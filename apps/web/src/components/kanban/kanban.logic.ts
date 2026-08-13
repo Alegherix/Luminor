@@ -848,9 +848,15 @@ function pickPreferredPullRequestListEntry(
   return entries.find((entry) => entry.state === "open") ?? entries[0] ?? null;
 }
 
+export interface KanbanLivePullRequestHint {
+  readonly branch?: string | null;
+  readonly pullRequest?: OrchestrationThreadPullRequest | null;
+}
+
 export function matchPullRequestListEntryForCard(
   card: Pick<KanbanCard, "projectId" | "branch" | "thread" | "pullRequest">,
   entries: readonly PullRequestListEntry[],
+  liveBranch?: string | null,
 ): PullRequestListEntry | null {
   if (entries.length === 0) {
     return null;
@@ -877,7 +883,7 @@ export function matchPullRequestListEntryForCard(
     }
   }
 
-  const branch = kanbanCardBranch(card);
+  const branch = liveBranch?.trim() || kanbanCardBranch(card);
   if (branch === null) {
     return null;
   }
@@ -897,8 +903,16 @@ export function matchPullRequestListEntryForCard(
 function overlayKanbanCardPullRequest(
   card: KanbanCard,
   entries: readonly PullRequestListEntry[],
+  liveHint?: KanbanLivePullRequestHint,
 ): KanbanCard {
-  const matched = matchPullRequestListEntryForCard(card, entries);
+  const livePullRequest = liveHint?.pullRequest ?? null;
+  if (livePullRequest && threadPullRequestsEquivalent(card.pullRequest, livePullRequest)) {
+    return card;
+  }
+  if (livePullRequest) {
+    return { ...card, pullRequest: livePullRequest };
+  }
+  const matched = matchPullRequestListEntryForCard(card, entries, liveHint?.branch);
   if (!matched) {
     return card;
   }
@@ -912,8 +926,9 @@ function overlayKanbanCardPullRequest(
 export function overlayKanbanBoardPullRequests(
   board: KanbanBoard,
   entries: readonly PullRequestListEntry[],
+  liveByThreadId?: ReadonlyMap<string, KanbanLivePullRequestHint>,
 ): KanbanBoard {
-  if (entries.length === 0) {
+  if (entries.length === 0 && (liveByThreadId === undefined || liveByThreadId.size === 0)) {
     return board;
   }
   let changed = false;
@@ -921,7 +936,11 @@ export function overlayKanbanBoardPullRequests(
     const overlayColumn = (cards: KanbanCard[]): KanbanCard[] => {
       let columnChanged = false;
       const next = cards.map((card) => {
-        const overlaid = overlayKanbanCardPullRequest(card, entries);
+        const overlaid = overlayKanbanCardPullRequest(
+          card,
+          entries,
+          liveByThreadId?.get(card.threadId),
+        );
         if (overlaid !== card) {
           columnChanged = true;
         }

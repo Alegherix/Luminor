@@ -55,23 +55,21 @@ import { KanbanOverview } from "./KanbanOverview";
 import { KanbanProjectBoardView } from "./KanbanProjectBoardView";
 import { useKanbanBoard } from "./useKanbanBoard";
 import { useKanbanCardContextMenu } from "./useKanbanCardContextMenu";
-import { useKanbanPullRequestEntries } from "./useKanbanPullRequestEntries";
+import { useKanbanBoardPullRequests } from "./useKanbanPullRequestEntries";
 import {
   applyKanbanBoardFilters,
   areKanbanFiltersActive,
   EMPTY_KANBAN_BOARD_FILTERS,
-  overlayKanbanBoardPullRequests,
   type KanbanCard,
 } from "./kanban.logic";
 
 export default function KanbanView({ projectId }: { projectId: string | null }) {
   const navigate = useNavigate();
-  const board = useKanbanBoard();
-  const pullRequestEntries = useKanbanPullRequestEntries();
+  const derivedBoard = useKanbanBoard();
+  const board = useKanbanBoardPullRequests(derivedBoard);
   const boardFilters = useKanbanUiStore((state) => state.boardFilters);
   const setBoardFilters = useKanbanUiStore((state) => state.setBoardFilters);
-  const boardWithPullRequests = overlayKanbanBoardPullRequests(board, pullRequestEntries);
-  const visibleBoard = applyKanbanBoardFilters(boardWithPullRequests, boardFilters);
+  const visibleBoard = applyKanbanBoardFilters(board, boardFilters);
   const filtersActive = areKanbanFiltersActive(boardFilters);
   const threadsHydrated = useStore((state) => state.threadsHydrated);
   const desktopTopBarTrafficLightGutterClassName = useDesktopTopBarTrafficLightGutterClassName();
