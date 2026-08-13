@@ -162,6 +162,7 @@ function applyThemeState(state: ThemeState, suppressTransitions = false) {
   });
 
   root.classList.toggle("dark", variant === "dark");
+  root.style.colorScheme = variant;
   root.setAttribute("data-code-theme-id", activeTheme.codeThemeId);
   root.setAttribute("data-theme-mode", state.mode);
   root.setAttribute("data-theme-variant", variant);

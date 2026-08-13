@@ -28,7 +28,9 @@ import {
 } from "~/components/chat/chatHeaderControls";
 import { CHAT_BACKGROUND_CLASS_NAME } from "~/components/chat/composerPickerStyles";
 import { SidebarHeaderNavigationControls } from "~/components/SidebarHeaderNavigationControls";
+import { SettingsSelectPopup } from "~/components/settings/SettingsPanelPrimitives";
 import { Button } from "~/components/ui/button";
+import { Select, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { RouteInsetSurface } from "~/components/RouteInsetSurface";
 import {
   automationApprovalGaps,
@@ -940,7 +942,17 @@ function EditRow({
 }
 
 const INLINE_CONTROL_CLASS =
-  "cursor-pointer rounded-md bg-transparent px-2 py-1.5 text-right text-xs text-foreground outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring";
+  "scheme-light cursor-pointer rounded-md bg-transparent px-2 py-1.5 text-right text-xs text-foreground outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring dark:scheme-dark";
+
+const EMPTY_SELECT_VALUE = "__empty__";
+
+function toSelectValue(value: string): string {
+  return value === "" ? EMPTY_SELECT_VALUE : value;
+}
+
+function fromSelectValue(value: string): string {
+  return value === EMPTY_SELECT_VALUE ? "" : value;
+}
 
 function InlineSelect({
   value,
@@ -951,24 +963,30 @@ function InlineSelect({
   readonly options: readonly SelectOption[];
   readonly onChange: (value: string) => void;
 }) {
+  const selected = options.find((option) => option.value === value);
   return (
-    <div className="relative flex min-w-0 items-center">
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={cn(INLINE_CONTROL_CLASS, "max-w-[11rem] appearance-none truncate pr-5")}
+    <Select
+      value={toSelectValue(value)}
+      onValueChange={(next) => {
+        if (typeof next !== "string") return;
+        onChange(fromSelectValue(next));
+      }}
+    >
+      <SelectTrigger
+        variant="ghost"
+        size="xs"
+        className="h-auto max-w-[11rem] min-w-0 justify-end border-0 bg-transparent px-2 py-1.5 text-xs text-foreground hover:bg-transparent data-pressed:bg-transparent"
       >
+        <SelectValue className="flex-1 text-right">{selected?.label ?? value}</SelectValue>
+      </SelectTrigger>
+      <SettingsSelectPopup align="end" alignItemWithTrigger={false} className="p-1">
         {options.map((option) => (
-          <option key={option.value} value={option.value}>
+          <SelectItem key={option.value || EMPTY_SELECT_VALUE} value={toSelectValue(option.value)}>
             {option.label}
-          </option>
+          </SelectItem>
         ))}
-      </select>
-      <CentralIcon
-        name="chevron-down-small"
-        className="pointer-events-none absolute right-1 size-3 text-muted-foreground"
-      />
-    </div>
+      </SettingsSelectPopup>
+    </Select>
   );
 }
 

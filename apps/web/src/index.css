@@ -393,6 +393,10 @@
     0 0 0 1px rgba(255, 255, 255, 0.42);
 }
 
+html.dark {
+  color-scheme: dark;
+}
+
 :root {
   color-scheme: light;
   --radius: 0.625rem;
