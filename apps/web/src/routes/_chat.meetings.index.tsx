@@ -65,10 +65,9 @@ function MeetingsIndexRouteView() {
           onJoinPastedUrl={(url) => {
             void joinPastedUrl(url);
           }}
-          onJoinSelected={() => {
-            if (snapshot.selectedSessionId) {
-              void joinSession(snapshot.selectedSessionId);
-            }
+          onSelectSession={selectSession}
+          onJoinSession={(sessionId) => {
+            void joinSession(sessionId);
           }}
         />
       )}
