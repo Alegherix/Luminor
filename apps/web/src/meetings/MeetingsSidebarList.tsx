@@ -8,6 +8,7 @@ import {
   SIDEBAR_ROW_IDLE_TEXT_CLASS_NAME,
   SIDEBAR_SECTION_LABEL_CLASS_NAME,
 } from "~/sidebarRowStyles";
+import { formatMeetingClock } from "./meetingsSchedule";
 import {
   meetingRowOffersJoin,
   meetingsSidebarSections,
@@ -26,22 +27,6 @@ const SECTION_LABELS = {
   today: "Today",
   ended: "Ended",
 } as const;
-
-const SESSION_TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-function formatSessionTime(session: MeetingSession): string | null {
-  if (session.startAt === null) {
-    return null;
-  }
-  const start = new Date(session.startAt);
-  if (Number.isNaN(start.getTime())) {
-    return null;
-  }
-  return SESSION_TIME_FORMAT.format(start);
-}
 
 function MeetingsSidebarSection({
   section,
@@ -75,7 +60,7 @@ function MeetingsSidebarSection({
         <ul className="flex flex-col gap-0.5">
           {sessions.map((session) => {
             const selected = session.id === workspace.selectedSessionId;
-            const time = formatSessionTime(session);
+            const time = formatMeetingClock(session.startAt);
             const offersJoin = meetingRowOffersJoin(session, workspace, now ?? new Date());
             return (
               <li key={session.id}>
