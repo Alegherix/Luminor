@@ -7,8 +7,8 @@
  */
 import { Schema } from "effect";
 
-import { ProjectId, ThreadId, TurnId } from "./baseSchemas";
-import { ModelSelection, ProviderKind } from "./orchestration";
+import { FolderId, ProjectId, SpaceId, ThreadId, TurnId } from "./baseSchemas";
+import { FolderOwner, ModelSelection, ProviderKind } from "./orchestration";
 import { ProviderModelDescriptor } from "./providerDiscovery";
 import { ServerProviderAuthStatus } from "./server";
 
@@ -70,6 +70,7 @@ export const LuminorCreateThreadSpec = Schema.Struct({
   title: Schema.optional(Schema.String.check(Schema.isNonEmpty())),
   target: ModelSelection,
   projectId: Schema.optional(ProjectId),
+  folderId: Schema.optional(FolderId),
   environment: Schema.optional(Schema.Literals(["local", "worktree"])),
   baseRef: Schema.optional(Schema.String.check(Schema.isNonEmpty())),
   // Legacy inputs remain decodable for replay/backward compatibility, but the
@@ -147,6 +148,7 @@ export const LuminorCreatedThreadResult = Schema.Struct({
   index: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   threadId: ThreadId,
   projectId: ProjectId,
+  folderId: Schema.NullOr(FolderId),
   title: Schema.String,
   target: ModelSelection,
   provider: ProviderKind,
@@ -168,6 +170,23 @@ export const LuminorCreateThreadsResult = Schema.Struct({
   threads: Schema.Array(LuminorCreatedThreadResult),
 });
 export type LuminorCreateThreadsResult = typeof LuminorCreateThreadsResult.Type;
+
+export const LuminorFolderSummary = Schema.Struct({
+  folderId: FolderId,
+  name: Schema.String,
+  owner: FolderOwner,
+  isPinned: Schema.Boolean,
+  sortOrder: Schema.Int,
+});
+export type LuminorFolderSummary = typeof LuminorFolderSummary.Type;
+
+export const LuminorSpaceSummary = Schema.Struct({
+  spaceId: SpaceId,
+  name: Schema.String,
+  icon: Schema.String,
+  sortOrder: Schema.Int,
+});
+export type LuminorSpaceSummary = typeof LuminorSpaceSummary.Type;
 
 export const LuminorWaitForThreadsInput = Schema.Struct({
   threadIds: Schema.Array(ThreadId)

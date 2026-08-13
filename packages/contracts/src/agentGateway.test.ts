@@ -44,6 +44,14 @@ describe("agent gateway contracts", () => {
     assert.throws(() => decodeCreate({ requestId: "x".repeat(257), threads: [thread] }));
   });
 
+  it("accepts an optional folder id on a creation entry", () => {
+    const decoded = decodeCreate({
+      requestId: "folder-1",
+      threads: [{ ...thread, folderId: "folder-epic" }],
+    });
+    assert.equal(decoded.threads[0]?.folderId, "folder-epic");
+  });
+
   it("accepts an exact Git base ref for detached worktree creation", () => {
     const decoded = decodeCreate({
       requestId: "detached-ref",
@@ -143,6 +151,7 @@ describe("agent gateway contracts", () => {
             index: 0,
             threadId: "thread-1",
             projectId: "project-1",
+            folderId: "folder-epic",
             title: "Worker",
             target: thread.target,
             provider: "codex",

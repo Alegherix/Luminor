@@ -233,6 +233,10 @@ export function makeThreadReadTools(input: ThreadReadToolsInput): ReadonlyArray<
           creationSource: { type: "string", description: "Exact thread creation source." },
           updatedAfter: { type: "string", description: "ISO timestamp lower bound (inclusive)." },
           updatedBefore: { type: "string", description: "ISO timestamp upper bound (inclusive)." },
+          folderId: {
+            type: "string",
+            description: "Only threads filed in this folder.",
+          },
           includeArchived: { type: "boolean", description: "Include archived threads." },
           limit: { type: "number", description: "Max results (default 50, max 200)." },
         },
@@ -251,6 +255,7 @@ export function makeThreadReadTools(input: ThreadReadToolsInput): ReadonlyArray<
         const creationSource = readStringArg(args, "creationSource");
         const updatedAfter = readIsoTimestampArg(args, "updatedAfter");
         const updatedBefore = readIsoTimestampArg(args, "updatedBefore");
+        const folderId = readStringArg(args, "folderId");
         const includeArchived = readBooleanArg(args, "includeArchived") ?? false;
         const limit = Math.max(
           1,
@@ -274,6 +279,7 @@ export function makeThreadReadTools(input: ThreadReadToolsInput): ReadonlyArray<
           .filter((thread) =>
             creationSource ? (thread.creationSource ?? null) === creationSource : true,
           )
+          .filter((thread) => (folderId ? (thread.folderId ?? null) === folderId : true))
           .filter((thread) => (updatedAfter ? thread.updatedAt >= updatedAfter : true))
           .filter((thread) => (updatedBefore ? thread.updatedAt <= updatedBefore : true))
           .filter((thread) => (includeArchived ? true : (thread.archivedAt ?? null) === null))

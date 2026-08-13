@@ -48,6 +48,7 @@ export function deriveAgentThreadStatus(thread: {
 export interface AgentThreadListItem {
   readonly threadId: string;
   readonly projectId: string;
+  readonly folderId: string | null;
   readonly title: string;
   readonly provider: string;
   readonly model: string;
@@ -69,6 +70,7 @@ export function summarizeThreadShell(
   return {
     threadId: thread.id,
     projectId: thread.projectId,
+    folderId: thread.folderId ?? null,
     title: thread.title,
     provider: thread.modelSelection.provider,
     model: thread.modelSelection.model,
@@ -196,6 +198,7 @@ export function paginateThreadMessages(input: {
 export interface AgentThreadDetail {
   readonly threadId: string;
   readonly projectId: string;
+  readonly folderId: string | null;
   readonly title: string;
   readonly provider: string;
   readonly model: string;
@@ -232,6 +235,7 @@ export function summarizeThreadDetail(input: {
   return {
     threadId: thread.id,
     projectId: thread.projectId,
+    folderId: thread.folderId ?? null,
     title: thread.title,
     provider: thread.modelSelection.provider,
     model: thread.modelSelection.model,

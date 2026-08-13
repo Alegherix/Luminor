@@ -49,6 +49,7 @@ import {
   resolveAgentGatewayTarget,
   type AgentGatewayProviderAvailability,
 } from "./targetResolver.ts";
+import { resolveGatewayFolderPlacement } from "./folderTools.ts";
 import { ToolInputError, errorText } from "./toolInput.ts";
 import { GatewayToolError, gatewayToolErrorResult } from "./toolRuntime.ts";
 import {
@@ -605,6 +606,19 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
               ),
             );
           }
+          const folderId =
+            spec.folderId === undefined
+              ? null
+              : yield* snapshotQuery.getShellSnapshot().pipe(
+                  Effect.mapError((error) => new ToolInputError(errorText(error))),
+                  Effect.map((snapshot) =>
+                    resolveGatewayFolderPlacement({
+                      folderId: spec.folderId!,
+                      folders: snapshot.folders,
+                      project,
+                    }),
+                  ),
+                );
           const title = spec.title ?? buildPromptThreadTitleFallback(spec.prompt);
           let worktreeRef: string | null = null;
           let copyChangesFrom: string | null = null;
@@ -685,6 +699,7 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
             index,
             spec,
             projectId,
+            folderId,
             workspaceRoot: project.workspaceRoot,
             target,
             environment,
@@ -1145,6 +1160,7 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
                       commandId: entry.ids.threadCreateCommandId,
                       threadId: entry.ids.threadId,
                       projectId: entry.projectId,
+                      folderId: entry.folderId,
                       title: entry.title,
                       modelSelection: entry.target,
                       runtimeMode: entry.runtimeMode,
@@ -1205,6 +1221,7 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
                     index: entry.index,
                     threadId: entry.ids.threadId,
                     projectId: entry.projectId,
+                    folderId: entry.folderId,
                     title: entry.title,
                     target: entry.target,
                     provider: entry.target.provider,

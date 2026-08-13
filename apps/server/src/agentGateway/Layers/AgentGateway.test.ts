@@ -5,7 +5,9 @@ import type {
   AutomationUpdateInput,
   OrchestrationCommand,
   OrchestrationEvent,
+  OrchestrationFolderShell,
   OrchestrationProjectShell,
+  OrchestrationSpaceShell,
   OrchestrationThread,
   OrchestrationThreadShell,
   ProviderKind,
@@ -16,9 +18,11 @@ import {
   AutomationId,
   DEFAULT_AUTOMATION_STOP_CONFIDENCE_THRESHOLD,
   EventId,
+  FolderId,
   MessageId,
   ModelSelection,
   ProjectId,
+  SpaceId,
   ThreadId,
   TurnId,
 } from "@luminor/contracts";
@@ -265,6 +269,9 @@ function makeHarnessLayer(
     };
     readonly projectScripts?: OrchestrationProjectShell["scripts"];
     readonly extraProjects?: ReadonlyArray<OrchestrationProjectShell>;
+    readonly folders?: ReadonlyArray<OrchestrationFolderShell>;
+    readonly spaces?: ReadonlyArray<OrchestrationSpaceShell>;
+    readonly projectSpaceId?: OrchestrationProjectShell["spaceId"];
     readonly diagnosticActivities?: ReadonlyArray<DiagnosticThreadActivity>;
     readonly diagnosticEvents?: ReadonlyArray<OrchestrationEvent>;
     readonly providerRuntimeEvents?: ReadonlyArray<PersistedProviderRuntimeEvent>;
@@ -389,11 +396,17 @@ function makeHarnessLayer(
   let threadDetailReads = 0;
   let batchTurnReads = 0;
 
+  const projectShell = {
+    ...makeProjectShell(options.projectScripts),
+    ...(options.projectSpaceId !== undefined ? { spaceId: options.projectSpaceId } : {}),
+  };
   const snapshotLayer = Layer.succeed(ProjectionSnapshotQuery, {
     getShellSnapshot: () =>
       Effect.succeed({
         snapshotSequence: 1,
-        projects: [makeProjectShell(options.projectScripts), ...(options.extraProjects ?? [])],
+        projects: [projectShell, ...(options.extraProjects ?? [])],
+        folders: options.folders ?? [],
+        spaces: options.spaces ?? [],
         threads: [...threadsById.values()],
         updatedAt: NOW,
       }),
@@ -402,7 +415,7 @@ function makeHarnessLayer(
     getProjectShellById: (projectId: string) =>
       Effect.succeed(
         projectId === (PROJECT_ID as string)
-          ? Option.some(makeProjectShell(options.projectScripts))
+          ? Option.some(projectShell)
           : Option.none<OrchestrationProjectShell>(),
       ),
     getThreadDetailById: (threadId: ThreadIdType) =>
@@ -1440,6 +1453,10 @@ describe("AgentGateway", () => {
         "luminor_context",
         "luminor_capabilities",
         "luminor_list_projects",
+        "luminor_list_spaces",
+        "luminor_list_folders",
+        "luminor_create_folder",
+        "luminor_set_thread_folder",
         "luminor_list_threads",
         "luminor_read_thread",
         "luminor_read_thread_activity",
@@ -1464,6 +1481,7 @@ describe("AgentGateway", () => {
       const createThreadProperties = tools.find((tool) => tool.name === "luminor_create_thread")
         ?.inputSchema.properties;
       assert.property(createThreadProperties, "baseRef");
+      assert.property(createThreadProperties, "folderId");
       assert.notProperty(createThreadProperties, "baseBranch");
       assert.notProperty(createThreadProperties, "branchName");
       assert.deepEqual(
@@ -1480,6 +1498,7 @@ describe("AgentGateway", () => {
             }
           | undefined
       )?.items;
+      assert.property(createThreadsItems?.properties, "folderId");
       assert.deepEqual(
         (createThreadsItems?.properties?.runtimeMode as { enum?: string[] } | undefined)?.enum,
         ["approval-required", "full-access"],
@@ -1686,6 +1705,7 @@ describe("AgentGateway", () => {
       assert.isUndefined(threads.find((thread) => thread.threadId === "thread-archived"));
       const self = threads.find((thread) => thread.threadId === "thread-parent");
       assert.equal(self?.isSelf, true);
+      assert.strictEqual(self?.folderId ?? null, null);
     }).pipe(Effect.provide(gatewayLayer));
   });
 
@@ -1752,6 +1772,148 @@ describe("AgentGateway", () => {
       }).pipe(Effect.provide(gatewayLayer));
     },
   );
+
+  it.effect("lists and creates project and space folders, then files created threads", () => {
+    const spaceId = SpaceId.makeUnsafe("space-work");
+    const existingFolderId = FolderId.makeUnsafe("folder-existing");
+    const { gatewayLayer, makeHarness } = makeHarnessLayer(baseThreads, [], {
+      projectSpaceId: spaceId,
+      spaces: [
+        {
+          id: spaceId,
+          name: "Work",
+          icon: "bag",
+          sortOrder: 0,
+          createdAt: NOW,
+          updatedAt: NOW,
+        },
+      ],
+      folders: [
+        {
+          id: existingFolderId,
+          owner: { kind: "project", projectId: PROJECT_ID },
+          name: "Existing epic",
+          sortOrder: 0,
+          isPinned: false,
+          createdAt: NOW,
+          updatedAt: NOW,
+        },
+      ],
+    });
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness;
+
+      const listedSpaces = toolResultJson(
+        (yield* harness.callTool({
+          token: "token-parent",
+          name: "luminor_list_spaces",
+          args: {},
+        })).result,
+      );
+      assert.deepEqual(listedSpaces.spaces, [{ spaceId, name: "Work", icon: "bag", sortOrder: 0 }]);
+
+      const listedFolders = toolResultJson(
+        (yield* harness.callTool({
+          token: "token-parent",
+          name: "luminor_list_folders",
+          args: {},
+        })).result,
+      );
+      assert.equal((listedFolders.folders as Array<{ folderId: string }>).length, 1);
+      assert.equal(
+        (listedFolders.folders as Array<{ folderId: string }>)[0]?.folderId,
+        existingFolderId,
+      );
+
+      const reused = toolResultJson(
+        (yield* harness.callTool({
+          token: "token-parent",
+          name: "luminor_create_folder",
+          args: { name: "Existing epic" },
+        })).result,
+      );
+      assert.equal(reused.created, false);
+      assert.equal(reused.folderId, existingFolderId);
+      assert.equal(
+        harness.dispatched.filter((command) => command.type === "folder.create").length,
+        0,
+      );
+
+      const created = toolResultJson(
+        (yield* harness.callTool({
+          token: "token-parent",
+          name: "luminor_create_folder",
+          args: { name: "New epic", spaceId },
+        })).result,
+      );
+      assert.equal(created.created, true);
+      assert.equal((created.owner as { kind: string }).kind, "space");
+      const spaceFolderCreate = harness.dispatched.find(
+        (command) => command.type === "folder.create",
+      );
+      assert.equal(spaceFolderCreate?.type, "folder.create");
+      if (spaceFolderCreate?.type === "folder.create") {
+        assert.equal(spaceFolderCreate.owner.kind, "space");
+        if (spaceFolderCreate.owner.kind === "space") {
+          assert.equal(spaceFolderCreate.owner.spaceId, spaceId);
+        }
+      }
+
+      const bothOwners = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_create_folder",
+        args: { name: "Invalid", projectId: PROJECT_ID, spaceId },
+      });
+      assert.include(toolErrorText(bothOwners.result), 'Pass only one of "projectId" or "spaceId"');
+
+      const missingFolder = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_create_thread",
+        args: {
+          requestId: "missing-folder",
+          prompt: "should fail",
+          provider: "grok",
+          folderId: "folder-missing",
+        },
+      });
+      assert.include(toolErrorText(missingFolder.result), 'Folder "folder-missing" was not found');
+
+      const createdInFolder = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_create_thread",
+        args: {
+          requestId: "create-in-folder",
+          prompt: "implement ticket one",
+          provider: "grok",
+          folderId: existingFolderId,
+        },
+      });
+      assert.isFalse(isToolError(createdInFolder.result), toolErrorText(createdInFolder.result));
+      const createdPayload = toolResultJson(createdInFolder.result);
+      assert.equal(createdPayload.folderId, existingFolderId);
+      const threadCreate = harness.dispatched.find(
+        (command) => command.type === "thread.create" && command.folderId === existingFolderId,
+      );
+      assert.equal(threadCreate?.type, "thread.create");
+
+      const moved = toolResultJson(
+        (yield* harness.callTool({
+          token: "token-parent",
+          name: "luminor_set_thread_folder",
+          args: { threadId: "thread-child", folderId: existingFolderId },
+        })).result,
+      );
+      assert.equal(moved.threadId, "thread-child");
+      assert.equal(moved.folderId, existingFolderId);
+      const metaUpdate = harness.dispatched.find(
+        (command) => command.type === "thread.meta.update",
+      );
+      assert.equal(metaUpdate?.type, "thread.meta.update");
+      if (metaUpdate?.type === "thread.meta.update") {
+        assert.equal(metaUpdate.folderId, existingFolderId);
+      }
+    }).pipe(Effect.provide(gatewayLayer));
+  });
 
   it.effect("pages thread activity with an opaque stable cursor", () => {
     const activities: ReadonlyArray<DiagnosticThreadActivity> = [1, 2, 3].map((sequence) => ({
@@ -2777,6 +2939,14 @@ describe("AgentGateway", () => {
         {
           name: "luminor_set_thread_archived",
           args: { threadId: "thread-child", archived: true },
+        },
+        {
+          name: "luminor_create_folder",
+          args: { name: "Late folder" },
+        },
+        {
+          name: "luminor_set_thread_folder",
+          args: { threadId: "thread-child", folderId: "folder-late" },
         },
         {
           name: "luminor_create_automation",
@@ -4852,6 +5022,14 @@ describe("AgentGateway", () => {
       });
       assert.isTrue(isToolError(archive.result));
       assert.include(toolErrorText(archive.result), "full-access");
+
+      const move = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_set_thread_folder",
+        args: { threadId: "thread-elevated", folderId: null },
+      });
+      assert.isTrue(isToolError(move.result));
+      assert.include(toolErrorText(move.result), "full-access");
       assert.equal(harness.dispatched.length, 0);
     }).pipe(Effect.provide(gatewayLayer));
   });
