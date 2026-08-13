@@ -57,7 +57,7 @@ function MeetingsSidebarSection({
   readonly sessions: readonly MeetingSession[];
   readonly workspace: MeetingsWorkspaceSnapshot;
   readonly now?: Date | undefined;
-  readonly onSelectSession?: ((sessionId: string) => void) | undefined;
+  readonly onSelectSession?: ((sessionId: string | null) => void) | undefined;
   readonly onJoinSession?: ((sessionId: string) => void) | undefined;
 }) {
   return (
@@ -90,7 +90,7 @@ function MeetingsSidebarSection({
                     type="button"
                     aria-pressed={selected}
                     className="min-w-0 flex-1 truncate text-left"
-                    onClick={() => onSelectSession?.(session.id)}
+                    onClick={() => onSelectSession?.(selected ? null : session.id)}
                   >
                     {session.title}
                   </button>
@@ -129,7 +129,7 @@ export function MeetingsSidebarList({
 }: {
   readonly workspace: MeetingsWorkspaceSnapshot;
   readonly now?: Date;
-  readonly onSelectSession?: (sessionId: string) => void;
+  readonly onSelectSession?: (sessionId: string | null) => void;
   readonly onJoinSession?: (sessionId: string) => void;
   readonly onConnect?: () => void;
   readonly connecting?: boolean;

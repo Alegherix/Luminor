@@ -1,3 +1,6 @@
+import * as FS from "node:fs";
+import * as Path from "node:path";
+
 import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from "electron";
 import type {
   MeetingsTranscriptionPointResult,
@@ -5,7 +8,23 @@ import type {
 } from "@luminor/contracts";
 
 import { DESKTOP_IPC_CHANNELS } from "./ipcChannels";
-import { createMeetingsTranscriptionManager } from "./meetingsTranscription";
+import {
+  createMeetingsTranscriptionManager,
+  MEETING_TRANSCRIPTION_SCRIPT_NAME,
+} from "./meetingsTranscription";
+
+export function resolveBundledTranscriptionScript(
+  dirname = __dirname,
+  resourcesPath = process.resourcesPath,
+): string | null {
+  const candidates = [
+    Path.join(dirname, "../resources", MEETING_TRANSCRIPTION_SCRIPT_NAME),
+    Path.join(dirname, "../prod-resources", MEETING_TRANSCRIPTION_SCRIPT_NAME),
+    Path.join(resourcesPath, "resources", MEETING_TRANSCRIPTION_SCRIPT_NAME),
+    Path.join(resourcesPath, MEETING_TRANSCRIPTION_SCRIPT_NAME),
+  ];
+  return candidates.find((candidate) => FS.existsSync(candidate)) ?? null;
+}
 
 const PICK_TRANSCRIPTION_ENVIRONMENT_OPTIONS: OpenDialogOptions = {
   properties: ["openFile", "openDirectory"],
@@ -31,6 +50,7 @@ export function registerMeetingsTranscriptionIpc(input: {
   const IPC = DESKTOP_IPC_CHANNELS.meetings;
   const manager = createMeetingsTranscriptionManager({
     homeDir: input.homeDir,
+    bundledScriptPath: resolveBundledTranscriptionScript() ?? undefined,
     pickEnvironmentPath: async () => pickTranscriptionEnvironmentPath(input.getOwnerWindow()),
   });
 

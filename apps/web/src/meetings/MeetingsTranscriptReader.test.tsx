@@ -47,6 +47,28 @@ describe("MeetingsTranscriptReader", () => {
     expect(html).not.toContain("Transcribe");
     expect(html).not.toContain("Öppna i chatt");
     expect(html).not.toContain("Open in chat");
+    expect(html).not.toContain("Back");
+  });
+
+  it("shows a Back action that returns to the join canvas", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsTranscriptReader
+        workspace={{
+          ...endedWorkspace,
+          transcription: {
+            status: "ready",
+            sessionId: "ended",
+            transcriptPath: "/tmp/luminor-home/meetings/ended/transcripts/transcript.txt",
+            text: "We shipped the join path.",
+            error: null,
+          },
+        }}
+        onBack={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Back");
+    expect(html).toContain("Standup");
   });
 
   it("shows the summary beside the transcript and an Öppna i chatt action", () => {

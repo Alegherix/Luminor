@@ -13,6 +13,7 @@ import { isElectron } from "~/env";
 function MeetingsIndexRouteView() {
   const {
     snapshot,
+    selectSession,
     joinPastedUrl,
     joinSession,
     leave,
@@ -45,6 +46,9 @@ function MeetingsIndexRouteView() {
           workspace={snapshot}
           pointing={pointing}
           openingInChat={opening}
+          onBack={() => {
+            selectSession(null);
+          }}
           onOpenInChat={() => {
             void openInChat(snapshot);
           }}

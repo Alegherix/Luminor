@@ -7,12 +7,14 @@ import {
 
 export function MeetingsTranscriptReader({
   workspace,
+  onBack,
   onPointAtEnvironment,
   onOpenInChat,
   pointing = false,
   openingInChat = false,
 }: {
   readonly workspace: MeetingsWorkspaceSnapshot;
+  readonly onBack?: () => void;
   readonly onPointAtEnvironment?: () => void;
   readonly onOpenInChat?: () => void;
   readonly pointing?: boolean;
@@ -31,6 +33,13 @@ export function MeetingsTranscriptReader({
   return (
     <section className="flex h-full min-h-0 flex-col px-6 py-8" aria-label="Meeting transcript">
       <div className="mx-auto flex w-full max-w-2xl min-h-0 flex-1 flex-col gap-4">
+        {onBack ? (
+          <div>
+            <Button type="button" variant="ghost" size="sm" onClick={onBack}>
+              Back
+            </Button>
+          </div>
+        ) : null}
         <div className="flex flex-col gap-1">
           <p className="text-[length:var(--app-font-size-ui-sm,11px)] font-medium text-muted-foreground">
             Ended meeting

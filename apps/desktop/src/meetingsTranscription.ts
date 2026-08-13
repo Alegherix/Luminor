@@ -61,6 +61,7 @@ export type MeetingsTranscriptionManagerDeps = {
   readonly fs?: MeetingsTranscriptionFs;
   readonly spawn?: MeetingsTranscriptionSpawn;
   readonly pickEnvironmentPath?: () => Promise<string | null>;
+  readonly bundledScriptPath?: string;
 };
 
 function nodeFs(): MeetingsTranscriptionFs {
@@ -92,7 +93,9 @@ function nodeSpawn(): MeetingsTranscriptionSpawn {
         const detail = Buffer.concat(stderr).toString("utf8").trim();
         resolve({
           ok: false,
-          error: detail.length > 0 ? detail : `transcription command failed (${code ?? "unknown"})`,
+          error:
+            transcriptionFailureMessage(detail) ??
+            `transcription command failed (${code ?? "unknown"})`,
         });
       });
     });
@@ -104,6 +107,16 @@ export function defaultMissiondeckTranscribeCommand(home = OS.homedir()): string
 
 export function defaultMissiondeckTranscribeVenv(home = OS.homedir()): string {
   return Path.join(home, ".local", "share", "missiondeck", "transcription-venv");
+}
+
+export function defaultMissiondeckTranscribePython(home = OS.homedir()): string {
+  return Path.join(defaultMissiondeckTranscribeVenv(home), "bin", "python");
+}
+
+export const MEETING_TRANSCRIPTION_SCRIPT_NAME = "transcribe-meeting-recording.py";
+
+export function bundledTranscriptionArgs(scriptPath: string): string[] {
+  return [scriptPath, ...DEFAULT_TRANSCRIBE_ARGS];
 }
 
 export function meetingTranscriptionConfigPath(homeDir: string): string {
@@ -193,6 +206,33 @@ export function transcriptTextFromRaw(raw: string): string | null {
   }
 }
 
+export function transcriptionFailureMessage(stderr: string): string | null {
+  const trimmed = stderr.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const marked = [...lines].reverse().find((line) => /^error:/i.test(line));
+  if (marked) {
+    return marked.replace(/^error:\s*/i, "").trim();
+  }
+  return lines.at(-1) ?? trimmed;
+}
+
+export function isBrokenTranscriptionCommandError(error: string): boolean {
+  const normalized = error.toLowerCase();
+  if (/can't open file ['"].+\.py['"]/.test(normalized)) {
+    return true;
+  }
+  if (normalized.includes("no such file or directory") && normalized.includes(".py")) {
+    return true;
+  }
+  return /enoent/.test(normalized) && !normalized.includes("recording");
+}
+
 function parseStoredConfig(raw: string): MeetingsTranscriptionConfig | null {
   let parsed: unknown;
   try {
@@ -265,21 +305,39 @@ export function createMeetingsTranscriptionManager(deps: MeetingsTranscriptionMa
 
   const seedConfig = async (): Promise<MeetingsTranscriptionConfig | null> => {
     const configPath = meetingTranscriptionConfigPath(deps.homeDir);
+    const legacyWrapper = defaultMissiondeckTranscribeCommand(userHome());
     try {
       const existing = parseStoredConfig(await fs.readFile(configPath, "utf8"));
-      if (existing) {
+      if (existing && existing.command !== legacyWrapper) {
         return existing;
       }
     } catch {}
 
-    const command = defaultMissiondeckTranscribeCommand(userHome());
-    if (!(await pathExists(fs, command, FS.constants.X_OK))) {
+    const venv = defaultMissiondeckTranscribeVenv(userHome());
+    const venvPython = defaultMissiondeckTranscribePython(userHome());
+    const bundledScript = deps.bundledScriptPath?.trim() ?? "";
+    if (
+      bundledScript.length > 0 &&
+      (await pathExists(fs, bundledScript)) &&
+      (await pathExists(fs, venvPython, FS.constants.X_OK))
+    ) {
+      const config: MeetingsTranscriptionConfig = {
+        enabled: true,
+        command: venvPython,
+        args: bundledTranscriptionArgs(bundledScript),
+        venv,
+        updatedAt: now().toISOString(),
+      };
+      await writeConfig(config);
+      return config;
+    }
+
+    if (!(await pathExists(fs, legacyWrapper, FS.constants.X_OK))) {
       return null;
     }
-    const venv = defaultMissiondeckTranscribeVenv(userHome());
     const config: MeetingsTranscriptionConfig = {
       enabled: true,
-      command,
+      command: legacyWrapper,
       args: [...DEFAULT_TRANSCRIBE_ARGS],
       ...((await pathExists(fs, venv)) ? { venv } : {}),
       updatedAt: now().toISOString(),
@@ -364,6 +422,15 @@ export function createMeetingsTranscriptionManager(deps: MeetingsTranscriptionMa
       });
       const ran = await spawn(config.command, args);
       if (!ran.ok) {
+        if (isBrokenTranscriptionCommandError(ran.error)) {
+          return {
+            status: "needs-environment",
+            sessionId: input.sessionId,
+            transcriptPath: null,
+            text: null,
+            error: MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
+          };
+        }
         return {
           status: "failed",
           sessionId: input.sessionId,
