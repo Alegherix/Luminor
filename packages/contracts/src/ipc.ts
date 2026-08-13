@@ -465,6 +465,26 @@ export interface MeetingsLoopbackPrepareResult {
   readonly error?: string;
 }
 
+export type MeetingsTranscriptionStatus =
+  | "idle"
+  | "running"
+  | "ready"
+  | "needs-environment"
+  | "failed";
+
+export interface MeetingsTranscriptionState {
+  readonly status: MeetingsTranscriptionStatus;
+  readonly sessionId: string | null;
+  readonly transcriptPath: string | null;
+  readonly text: string | null;
+  readonly error: string | null;
+}
+
+export interface MeetingsTranscriptionPointResult {
+  readonly status: "configured" | "needs-environment";
+  readonly error: string | null;
+}
+
 export interface DesktopMeetingsBridge {
   getStatus: () => Promise<MeetingsCalendarStatus>;
   connect: () => Promise<MeetingsCalendarStatus>;
@@ -481,6 +501,12 @@ export interface DesktopMeetingsBridge {
   getRecordingState: () => Promise<MeetingsRecordingState>;
   prepareLoopback: () => Promise<MeetingsLoopbackPrepareResult>;
   releaseLoopback: () => Promise<void>;
+  transcribeRecording: (input: {
+    sessionId: string;
+    recordingPath: string;
+  }) => Promise<MeetingsTranscriptionState>;
+  getTranscript: (input: { sessionId: string }) => Promise<MeetingsTranscriptionState>;
+  pointAtTranscriptionEnvironment: () => Promise<MeetingsTranscriptionPointResult>;
 }
 
 export interface DesktopBridge {

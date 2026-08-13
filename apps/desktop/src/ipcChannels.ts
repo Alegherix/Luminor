@@ -44,6 +44,9 @@ export const DESKTOP_IPC_CHANNELS = {
     getRecordingState: "desktop:meetings-get-recording-state",
     prepareLoopback: "desktop:meetings-prepare-loopback",
     releaseLoopback: "desktop:meetings-release-loopback",
+    transcribeRecording: "desktop:meetings-transcribe-recording",
+    getTranscript: "desktop:meetings-get-transcript",
+    pointAtTranscriptionEnvironment: "desktop:meetings-point-at-transcription-environment",
   },
   storageMigration: {
     read: "desktop:storage-migration-read",

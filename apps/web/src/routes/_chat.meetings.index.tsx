@@ -1,16 +1,27 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { RouteInsetSurface } from "~/components/RouteInsetSurface";
 import { MeetingsEmbedCanvas } from "~/meetings/MeetingsEmbedCanvas";
 import { MeetingsIdleCanvas } from "~/meetings/MeetingsIdleCanvas";
-import { meetingsSurfaceJoined } from "~/meetings/meetingsWorkspace";
+import { MeetingsTranscriptReader } from "~/meetings/MeetingsTranscriptReader";
+import { meetingsSurfaceJoined, selectedMeetingSession } from "~/meetings/meetingsWorkspace";
 import { useMeetingsWorkspace } from "~/meetings/useMeetingsWorkspace";
 import { isElectron } from "~/env";
 
 function MeetingsIndexRouteView() {
-  const { snapshot, joinPastedUrl, joinSession, leave, hideEmbed, showEmbed } =
-    useMeetingsWorkspace();
+  const {
+    snapshot,
+    joinPastedUrl,
+    joinSession,
+    leave,
+    hideEmbed,
+    showEmbed,
+    pointAtTranscriptionEnvironment,
+  } = useMeetingsWorkspace();
+  const [pointing, setPointing] = useState(false);
+  const selected = selectedMeetingSession(snapshot);
+  const showTranscript = !meetingsSurfaceJoined(snapshot) && selected?.status === "ended";
 
   useEffect(() => {
     void showEmbed();
@@ -25,6 +36,17 @@ function MeetingsIndexRouteView() {
         <MeetingsEmbedCanvas
           onLeave={() => void leave()}
           recordingDegradation={snapshot.recording.degradation}
+        />
+      ) : showTranscript ? (
+        <MeetingsTranscriptReader
+          workspace={snapshot}
+          pointing={pointing}
+          onPointAtEnvironment={() => {
+            setPointing(true);
+            void pointAtTranscriptionEnvironment().finally(() => {
+              setPointing(false);
+            });
+          }}
         />
       ) : (
         <MeetingsIdleCanvas

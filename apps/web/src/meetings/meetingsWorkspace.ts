@@ -59,6 +59,44 @@ export type MeetingsRecordingHost = {
   getState(): Promise<MeetingsRecordingState>;
 };
 
+export type MeetingsTranscriptionStatus =
+  | "idle"
+  | "running"
+  | "ready"
+  | "needs-environment"
+  | "failed";
+
+export type MeetingsTranscriptionState = {
+  readonly status: MeetingsTranscriptionStatus;
+  readonly sessionId: string | null;
+  readonly transcriptPath: string | null;
+  readonly text: string | null;
+  readonly error: string | null;
+};
+
+export const IDLE_MEETINGS_TRANSCRIPTION: MeetingsTranscriptionState = {
+  status: "idle",
+  sessionId: null,
+  transcriptPath: null,
+  text: null,
+  error: null,
+};
+
+export const MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY =
+  "Point at the transcription environment. Choose the missiondeck-transcribe command or the transcription venv.";
+
+export type MeetingsTranscriptionHost = {
+  transcribe(input: {
+    sessionId: string;
+    recordingPath: string;
+  }): Promise<MeetingsTranscriptionState>;
+  getTranscript(sessionId: string): Promise<MeetingsTranscriptionState>;
+  pointAtEnvironment(): Promise<{
+    status: "configured" | "needs-environment";
+    error: string | null;
+  }>;
+};
+
 export type MeetingsWorkspaceSnapshot = {
   readonly connection: MeetingsConnectionStatus;
   readonly accountEmail: string | null;
@@ -67,6 +105,7 @@ export type MeetingsWorkspaceSnapshot = {
   readonly embedVisible: boolean;
   readonly joinError: string | null;
   readonly recording: MeetingsRecordingState;
+  readonly transcription: MeetingsTranscriptionState;
   readonly sessions: readonly MeetingSession[];
   readonly pastedMeetUrl: string;
   readonly dueReminders: readonly MeetingReminder[];
@@ -127,6 +166,7 @@ export type MeetingsWorkspace = {
   leave(): Promise<void>;
   hideEmbed(): Promise<void>;
   showEmbed(): Promise<void>;
+  pointAtTranscriptionEnvironment(): Promise<void>;
 };
 
 export function createIdleMeetingsWorkspace(): MeetingsWorkspaceSnapshot {
@@ -138,6 +178,7 @@ export function createIdleMeetingsWorkspace(): MeetingsWorkspaceSnapshot {
     embedVisible: false,
     joinError: null,
     recording: IDLE_MEETINGS_RECORDING,
+    transcription: IDLE_MEETINGS_TRANSCRIPTION,
     sessions: [],
     pastedMeetUrl: "",
     dueReminders: [],
@@ -379,6 +420,21 @@ const idleRecording: MeetingsRecordingHost = {
   },
 };
 
+const idleTranscription: MeetingsTranscriptionHost = {
+  async transcribe() {
+    return IDLE_MEETINGS_TRANSCRIPTION;
+  },
+  async getTranscript() {
+    return IDLE_MEETINGS_TRANSCRIPTION;
+  },
+  async pointAtEnvironment() {
+    return {
+      status: "needs-environment",
+      error: MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
+    };
+  },
+};
+
 const unsignedCalendar: MeetingsCalendarHost = {
   async getStatus() {
     return { connected: false, accountEmail: null };
@@ -397,15 +453,19 @@ export function createMeetingsWorkspace(
     readonly calendar?: MeetingsCalendarHost;
     readonly embed?: MeetingsEmbedHost;
     readonly recording?: MeetingsRecordingHost;
+    readonly transcription?: MeetingsTranscriptionHost;
   } = {},
 ): MeetingsWorkspace {
   const clock = input.clock ?? (() => new Date());
   const calendar = input.calendar ?? unsignedCalendar;
   const embed = input.embed ?? idleEmbed;
   const recording = input.recording ?? idleRecording;
+  const transcription = input.transcription ?? idleTranscription;
   let snapshot = createIdleMeetingsWorkspace();
   const listeners = new Set<() => void>();
   const alreadyFired = new Set<string>();
+  let leaveInFlight: Promise<void> | null = null;
+  let pendingTranscription: { sessionId: string; recordingPath: string } | null = null;
 
   const emit = () => {
     for (const listener of listeners) {
@@ -565,6 +625,64 @@ export function createMeetingsWorkspace(
     });
   };
 
+  const applyTranscription = (state: MeetingsTranscriptionState) => {
+    setSnapshot({
+      ...snapshot,
+      transcription: state,
+    });
+  };
+
+  const startTranscription = async (input: { sessionId: string; recordingPath: string | null }) => {
+    if (!input.recordingPath) {
+      applyTranscription({
+        status: "failed",
+        sessionId: input.sessionId,
+        transcriptPath: null,
+        text: null,
+        error: "Recording is missing.",
+      });
+      return;
+    }
+    pendingTranscription = { sessionId: input.sessionId, recordingPath: input.recordingPath };
+    applyTranscription({
+      status: "running",
+      sessionId: input.sessionId,
+      transcriptPath: null,
+      text: null,
+      error: null,
+    });
+    const result = await transcription.transcribe({
+      sessionId: input.sessionId,
+      recordingPath: input.recordingPath,
+    });
+    if (result.status === "ready") {
+      pendingTranscription = null;
+    }
+    applyTranscription({
+      ...result,
+      sessionId: input.sessionId,
+    });
+  };
+
+  const loadTranscriptForSession = async (sessionId: string) => {
+    if (
+      snapshot.transcription.sessionId === sessionId &&
+      (snapshot.transcription.status === "running" ||
+        snapshot.transcription.status === "ready" ||
+        snapshot.transcription.status === "needs-environment")
+    ) {
+      return;
+    }
+    const result = await transcription.getTranscript(sessionId);
+    if (snapshot.selectedSessionId !== sessionId) {
+      return;
+    }
+    applyTranscription({
+      ...result,
+      sessionId,
+    });
+  };
+
   const startRecordingForSession = async (sessionId: string): Promise<MeetingsRecordingState> => {
     if (snapshot.recording.status === "recording" && snapshot.recording.sessionId === sessionId) {
       return snapshot.recording;
@@ -578,6 +696,46 @@ export function createMeetingsWorkspace(
         degradation: error instanceof Error ? error.message : "Recording could not start.",
       };
     }
+  };
+
+  const leaveJoinedSession = async () => {
+    if (snapshot.joinedSessionId === null) {
+      return;
+    }
+    if (leaveInFlight) {
+      await leaveInFlight;
+      return;
+    }
+    leaveInFlight = (async () => {
+      const sessionId = snapshot.joinedSessionId;
+      if (sessionId === null) {
+        return;
+      }
+      const recordingPath = snapshot.recording.filePath;
+      const now = clock();
+      const sessions = markPastedSessionEnded(snapshot.sessions, sessionId, now);
+      await recording.stop();
+      await embed.leave();
+      setSnapshot({
+        ...snapshot,
+        sessions,
+        joinedSessionId: null,
+        embedVisible: false,
+        joinError: null,
+        recording: IDLE_MEETINGS_RECORDING,
+        transcription: {
+          status: "running",
+          sessionId,
+          transcriptPath: null,
+          text: null,
+          error: null,
+        },
+      });
+      await startTranscription({ sessionId, recordingPath });
+    })().finally(() => {
+      leaveInFlight = null;
+    });
+    await leaveInFlight;
   };
 
   const joinMeetUrl = async (input: {
@@ -604,9 +762,15 @@ export function createMeetingsWorkspace(
         )
       : [...snapshot.sessions, withSessionStatus(input.session, now)];
     if (snapshot.joinedSessionId !== null && snapshot.joinedSessionId !== input.session.id) {
-      sessions = markPastedSessionEnded(sessions, snapshot.joinedSessionId, now);
+      const previousSessionId = snapshot.joinedSessionId;
+      const previousRecordingPath = snapshot.recording.filePath;
+      sessions = markPastedSessionEnded(sessions, previousSessionId, now);
       await recording.stop();
       await embed.leave();
+      void startTranscription({
+        sessionId: previousSessionId,
+        recordingPath: previousRecordingPath,
+      });
     }
     const joined = await embed.join(input.meetUrl);
     const recordingState = await startRecordingForSession(input.session.id);
@@ -651,6 +815,13 @@ export function createMeetingsWorkspace(
         return;
       }
       setSnapshot({ ...snapshot, selectedSessionId: sessionId });
+      if (sessionId === null) {
+        return;
+      }
+      const session = snapshot.sessions.find((item) => item.id === sessionId);
+      if (session && meetingSessionStatus(session, clock()) === "ended") {
+        void loadTranscriptForSession(sessionId);
+      }
     },
     hydrate: async () => {
       await hydrateFromStatus(await calendar.getStatus());
@@ -666,6 +837,14 @@ export function createMeetingsWorkspace(
         ...snapshot,
         recording: await recording.getState(),
       });
+      const selectedId = snapshot.selectedSessionId;
+      if (selectedId === null) {
+        return;
+      }
+      const selected = snapshot.sessions.find((session) => session.id === selectedId);
+      if (selected && meetingSessionStatus(selected, clock()) === "ended") {
+        await loadTranscriptForSession(selectedId);
+      }
     },
     connect: async () => {
       await hydrateFromStatus(await calendar.connect());
@@ -675,6 +854,14 @@ export function createMeetingsWorkspace(
     },
     tick: () => {
       setSnapshot(snapshot);
+      const joinedSessionId = snapshot.joinedSessionId;
+      if (joinedSessionId === null) {
+        return;
+      }
+      const joined = snapshot.sessions.find((session) => session.id === joinedSessionId);
+      if (joined && meetingSessionStatus(joined, clock()) === "ended") {
+        void leaveJoinedSession();
+      }
     },
     acknowledgeReminder: (reminder) => {
       alreadyFired.add(meetingReminderFiredKey(reminder));
@@ -727,22 +914,22 @@ export function createMeetingsWorkspace(
       await joinMeetUrl({ session, meetUrl, pastedMeetUrl: url });
     },
     joinSession,
-    leave: async () => {
-      if (snapshot.joinedSessionId === null) {
+    leave: () => leaveJoinedSession(),
+    pointAtTranscriptionEnvironment: async () => {
+      const pointed = await transcription.pointAtEnvironment();
+      if (pointed.status !== "configured") {
+        applyTranscription({
+          status: "needs-environment",
+          sessionId: pendingTranscription?.sessionId ?? snapshot.transcription.sessionId,
+          transcriptPath: null,
+          text: null,
+          error: pointed.error ?? MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
+        });
         return;
       }
-      const now = clock();
-      const sessions = markPastedSessionEnded(snapshot.sessions, snapshot.joinedSessionId, now);
-      await recording.stop();
-      await embed.leave();
-      setSnapshot({
-        ...snapshot,
-        sessions,
-        joinedSessionId: null,
-        embedVisible: false,
-        joinError: null,
-        recording: IDLE_MEETINGS_RECORDING,
-      });
+      if (pendingTranscription) {
+        await startTranscription(pendingTranscription);
+      }
     },
     hideEmbed: async () => {
       if (snapshot.joinedSessionId === null) {
