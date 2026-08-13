@@ -121,6 +121,11 @@ import {
   runGrokAcpCompactionCommand,
   type GrokAcpRuntimeSettings,
 } from "../acp/GrokAcpSupport.ts";
+import {
+  grokContextOccupancyKey,
+  grokSessionSignalsPathCandidates,
+  parseGrokContextOccupancy,
+} from "../grokContextUsage.ts";
 import { GrokAdapter, type GrokAdapterShape } from "../Services/GrokAdapter.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 
@@ -401,6 +406,8 @@ interface GrokSessionContext {
   // ordering then guarantees it cannot cancel the new turn.
   compactionCancelFiber: Fiber.Fiber<void> | undefined;
   latestSessionCostUsd: number | undefined;
+  lastPublishedContextUsageKey: string | undefined;
+  grokSessionUsageUnsupported: boolean;
   stopped: boolean;
 }
 
@@ -702,6 +709,85 @@ export function makeGrokAdapter(
         runtimeEventPubSub,
         stampAcpRuntimeEventLifecycleGeneration(event, lifecycleGeneration),
       ).pipe(Effect.asVoid);
+
+    const readGrokSignalsOccupancy = (ctx: GrokSessionContext) =>
+      Effect.gen(function* () {
+        const sessionId = parseGrokResume(ctx.session.resumeCursor)?.sessionId;
+        const cwd = ctx.session.cwd;
+        if (!sessionId || !cwd) {
+          return undefined;
+        }
+        for (const signalsPath of grokSessionSignalsPathCandidates({
+          env: process.env,
+          homeDir: serverConfig.homeDir,
+          cwd,
+          sessionId,
+        })) {
+          const text = yield* fileSystem.readFileString(signalsPath).pipe(Effect.option);
+          if (Option.isNone(text)) {
+            continue;
+          }
+          try {
+            const rawPayload: unknown = JSON.parse(text.value);
+            const usage = parseGrokContextOccupancy(rawPayload);
+            if (usage) {
+              return { usage, method: "signals.json", rawPayload };
+            }
+          } catch {
+            continue;
+          }
+        }
+        return undefined;
+      });
+
+    const readGrokSessionUsageOccupancy = (ctx: GrokSessionContext) => {
+      const sessionId = parseGrokResume(ctx.session.resumeCursor)?.sessionId;
+      if (!sessionId || ctx.grokSessionUsageUnsupported) {
+        return Effect.succeed(undefined);
+      }
+      return ctx.acp.request("x.ai/session/usage", { sessionId }).pipe(
+        Effect.map((raw) => {
+          const usage = parseGrokContextOccupancy(raw);
+          return usage ? { usage, method: "x.ai/session/usage", rawPayload: raw } : undefined;
+        }),
+        Effect.catch(() =>
+          Effect.sync(() => {
+            ctx.grokSessionUsageUnsupported = true;
+            return undefined;
+          }),
+        ),
+      );
+    };
+
+    const publishGrokContextOccupancy = (
+      ctx: GrokSessionContext,
+      turnId?: TurnId,
+      options?: { readonly preferRpc?: boolean },
+    ) =>
+      Effect.gen(function* () {
+        const fromRpc = options?.preferRpc ? yield* readGrokSessionUsageOccupancy(ctx) : undefined;
+        const source = fromRpc ?? (yield* readGrokSignalsOccupancy(ctx));
+        if (!source) {
+          return;
+        }
+        const key = grokContextOccupancyKey(source.usage);
+        if (key === ctx.lastPublishedContextUsageKey) {
+          return;
+        }
+        ctx.lastPublishedContextUsageKey = key;
+        yield* offerRuntimeEvent(
+          ctx.lifecycleGeneration,
+          makeAcpTokenUsageEvent({
+            stamp: yield* makeEventStamp(),
+            provider: PROVIDER,
+            threadId: ctx.threadId,
+            turnId,
+            usage: source.usage,
+            method: source.method,
+            rawPayload: source.rawPayload,
+          }),
+        );
+      }).pipe(Effect.ignoreCause({ log: true }));
 
     const logNative = (threadId: ThreadId, method: string, payload: unknown) =>
       Effect.gen(function* () {
@@ -1359,6 +1445,8 @@ export function makeGrokAdapter(
             compactionQuietUntil: undefined,
             compactionCancelFiber: undefined,
             latestSessionCostUsd: undefined,
+            lastPublishedContextUsageKey: undefined,
+            grokSessionUsageUnsupported: false,
             stopped: false,
           };
 
@@ -1507,6 +1595,12 @@ export function makeGrokAdapter(
                             rawPayload: event.rawPayload,
                           }),
                         );
+                        if (
+                          event.toolCall.status === "completed" ||
+                          event.toolCall.status === "failed"
+                        ) {
+                          yield* publishGrokContextOccupancy(ctx, lateTurnId);
+                        }
                         return;
                       }
                       const activeTurnId = yield* activeTurnIdForGrokRuntimeEvent(ctx, event._tag);
@@ -1530,6 +1624,12 @@ export function makeGrokAdapter(
                           rawPayload: event.rawPayload,
                         }),
                       );
+                      if (
+                        event.toolCall.status === "completed" ||
+                        event.toolCall.status === "failed"
+                      ) {
+                        yield* publishGrokContextOccupancy(ctx, activeTurnId);
+                      }
                     }
                     return;
                   case "ContentDelta":
@@ -1658,6 +1758,7 @@ export function makeGrokAdapter(
               threadId: input.threadId,
               payload: { providerThreadId: started.sessionId },
             });
+            yield* publishGrokContextOccupancy(ctx, undefined, { preferRpc: true });
           }).pipe(
             Effect.onExit((exit) =>
               Exit.isSuccess(exit) ? Effect.void : Effect.ignore(stopSessionInternal(ctx)),
@@ -1710,6 +1811,7 @@ export function makeGrokAdapter(
             ...completedCost,
           },
         });
+        yield* publishGrokContextOccupancy(ctx, turnId, { preferRpc: true });
         // Best-effort: tell the child to abandon the turn, then unwind the
         // pending prompt fiber (its onInterrupt no-ops, the turn is cleared).
         // The cancel is forked, not awaited — this path only runs because the
@@ -2012,6 +2114,7 @@ export function makeGrokAdapter(
                     ...completedCost,
                   },
                 });
+                yield* publishGrokContextOccupancy(ctx, turnId, { preferRpc: true });
               }),
           }),
           Effect.onInterrupt(() =>
@@ -2040,6 +2143,7 @@ export function makeGrokAdapter(
                   ...completedCost,
                 },
               });
+              yield* publishGrokContextOccupancy(ctx, turnId, { preferRpc: true });
             }),
           ),
           Effect.ignoreCause({ log: true }),
@@ -2408,6 +2512,7 @@ export function makeGrokAdapter(
             detail: { reason: "provider.compactThread" },
           },
         });
+        yield* publishGrokContextOccupancy(ctx, undefined, { preferRpc: true });
       });
 
     const listModels: NonNullable<GrokAdapterShape["listModels"]> = (input) => {
