@@ -8,6 +8,18 @@ const CSS_WIDE_KEYWORDS = new Set(["inherit", "initial", "revert", "revert-layer
 export const DEFAULT_MONOSPACE_FONT_FAMILY_STACK =
   '"JetBrains Mono Variable", "JetBrains Mono", "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace';
 
+export const BUNDLED_UI_FONT_FAMILIES = [
+  "Aldrich",
+  "Cal Sans",
+  "DM Sans",
+  "Geist",
+  "Goldman",
+  "Inter",
+  "Michroma",
+] as const;
+
+export const BUNDLED_CODE_FONT_FAMILIES = ["Geist Mono", "JetBrains Mono"] as const;
+
 const GENERIC_FONT_FAMILIES = new Set([
   "cursive",
   "emoji",
@@ -77,6 +89,10 @@ function quoteFontFamily(family: string): string {
 function normalizeSingleFontFamily(family: string): string {
   const trimmedFamily = family.trim();
   const lowerFamily = trimmedFamily.toLowerCase();
+
+  if (lowerFamily === "ui") {
+    return "system-ui";
+  }
 
   if (
     trimmedFamily.startsWith('"') ||

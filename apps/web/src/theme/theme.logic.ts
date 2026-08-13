@@ -623,17 +623,21 @@ export function setThemeFonts(
   patch: Partial<ThemeFonts>,
 ): ThemeState {
   const previousTheme = state.chromeThemes[variant];
+  const nextTheme = normalizeChromeTheme(
+    {
+      ...previousTheme,
+      fonts: { ...previousTheme.fonts, ...patch },
+    },
+    variant,
+  );
+  const applyingCustomUiFont = patch.ui !== undefined && nextTheme.fonts.ui !== null;
+
   return {
     ...state,
+    systemUiFont: applyingCustomUiFont ? false : state.systemUiFont,
     chromeThemes: {
       ...state.chromeThemes,
-      [variant]: normalizeChromeTheme(
-        {
-          ...previousTheme,
-          fonts: { ...previousTheme.fonts, ...patch },
-        },
-        variant,
-      ),
+      [variant]: nextTheme,
     },
   };
 }

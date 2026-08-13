@@ -25,6 +25,7 @@ import { toastManager } from "./ui/toast";
 import { SettingsCard, SettingsSelectPopup } from "./settings/SettingsPanelPrimitives";
 import { copyTextToClipboard } from "../hooks/useCopyToClipboard";
 import { type ChromeTheme, type ThemeMode, type ThemeVariant, useTheme } from "../hooks/useTheme";
+import { BUNDLED_CODE_FONT_FAMILIES, BUNDLED_UI_FONT_FAMILIES } from "../lib/fontFamily";
 import { cn } from "../lib/utils";
 import {
   SETTINGS_CARD_ROW_CLASS_NAME,
@@ -499,21 +500,31 @@ function FontInput({
   onChange: (next: string) => void;
 }) {
   const mono = monoProp ?? false;
+  const listId = useId();
   const [draft, setDraft] = useState<string | null>(null);
+  const suggestions = mono ? BUNDLED_CODE_FONT_FAMILIES : BUNDLED_UI_FONT_FAMILIES;
   return (
-    <Input
-      value={draft ?? value}
-      placeholder={placeholder}
-      onChange={(event) => {
-        const next = event.target.value;
-        setDraft(next);
-        onChange(next);
-      }}
-      onBlur={() => setDraft(null)}
-      spellCheck={false}
-      aria-label={ariaLabel}
-      className={cn(SETTINGS_CONTROL_RADIUS_CLASS_NAME, "w-56", mono && "font-chat-code")}
-    />
+    <>
+      <Input
+        value={draft ?? value}
+        placeholder={placeholder}
+        list={listId}
+        onChange={(event) => {
+          const next = event.target.value;
+          setDraft(next);
+          onChange(next);
+        }}
+        onBlur={() => setDraft(null)}
+        spellCheck={false}
+        aria-label={ariaLabel}
+        className={cn(SETTINGS_CONTROL_RADIUS_CLASS_NAME, "w-56", mono && "font-chat-code")}
+      />
+      <datalist id={listId}>
+        {suggestions.map((family) => (
+          <option key={family} value={family} />
+        ))}
+      </datalist>
+    </>
   );
 }
 

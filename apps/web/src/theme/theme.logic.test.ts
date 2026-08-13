@@ -19,6 +19,7 @@ import {
   parseThemeShareStringForVariant,
   resolveThemePack,
   setThemeCodeThemeId,
+  setThemeFonts,
   updateThemePackFromShareString,
 } from "./theme.logic";
 import { DEFAULT_MONOSPACE_FONT_FAMILY_STACK } from "../lib/fontFamily";
@@ -469,5 +470,44 @@ describe("buildThemeCssVariables", () => {
     expect(cssVariables.variables["--app-chat-code-surface"]).toBe(
       cssVariables.variables["--app-user-message-background"],
     );
+  });
+
+  it("applies a custom UI font unless the system-font preference is on", () => {
+    const pack = {
+      codeThemeId: "luminor",
+      theme: {
+        ...DEFAULT_THEME_STATE.chromeThemes.dark,
+        fonts: { code: null, ui: "Goldman, Michroma, ui" },
+      },
+    };
+
+    expect(buildThemeCssVariables(pack, "dark").variables["--theme-font-ui-family"]).toBe(
+      "Goldman, Michroma, system-ui",
+    );
+    expect(
+      buildThemeCssVariables(pack, "dark", { systemUiFont: true }).variables[
+        "--theme-font-ui-family"
+      ],
+    ).toBe("");
+  });
+});
+
+describe("setThemeFonts", () => {
+  it("turns off the system UI font when a custom UI font is applied", () => {
+    const nextState = setThemeFonts(DEFAULT_THEME_STATE, "dark", {
+      ui: "Goldman, Michroma, ui",
+    });
+
+    expect(nextState.systemUiFont).toBe(false);
+    expect(nextState.chromeThemes.dark.fonts.ui).toBe("Goldman, Michroma, ui");
+  });
+
+  it("leaves the system UI font preference alone when only the code font changes", () => {
+    const nextState = setThemeFonts(DEFAULT_THEME_STATE, "dark", {
+      code: '"JetBrains Mono"',
+    });
+
+    expect(nextState.systemUiFont).toBe(true);
+    expect(nextState.chromeThemes.dark.fonts.code).toBe('"JetBrains Mono"');
   });
 });

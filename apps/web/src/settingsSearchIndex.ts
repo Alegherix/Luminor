@@ -141,7 +141,8 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     id: "appearance:theme",
     section: "appearance",
     title: "Theme",
-    keywords: "Choose how Luminor looks across the app. dark light system color",
+    keywords:
+      "Choose how Luminor looks across the app. dark light system color UI font Goldman Michroma Aldrich Inter Geist",
   },
   {
     id: "appearance:system-ui-font",
