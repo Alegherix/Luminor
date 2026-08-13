@@ -143,12 +143,7 @@ function AttendeeStack({
       </div>
       {overflow > 0 ? (
         <DisclosureRegion open={expanded}>
-          <ul
-            className={cn(
-              "flex flex-col gap-1.5",
-              compact ? "items-end" : "items-center",
-            )}
-          >
+          <ul className={cn("flex flex-col gap-1.5", compact ? "items-end" : "items-center")}>
             {hidden.map((attendee, index) => (
               <li
                 key={`${attendee}-hidden-${index}`}
@@ -362,7 +357,9 @@ function ScheduleRow({
           )}
           aria-hidden
         >
-          {featured || status === "live" ? <span className="size-1.5 rounded-full bg-success" /> : null}
+          {featured || status === "live" ? (
+            <span className="size-1.5 rounded-full bg-success" />
+          ) : null}
         </span>
       </div>
       <div className="flex flex-col items-start pt-3">
@@ -403,7 +400,12 @@ function ScheduleRow({
         </button>
         <AttendeeStack attendees={session.attendees} compact />
         {offersJoin ? (
-          <Button type="button" size="sm" variant="outline" onClick={() => onJoinSession?.(session.id)}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onJoinSession?.(session.id)}
+          >
             Join
           </Button>
         ) : null}

@@ -30,9 +30,7 @@ function session(overrides: Partial<MeetingSession>): MeetingSession {
   };
 }
 
-function workspace(
-  overrides: Partial<MeetingsWorkspaceSnapshot> = {},
-): MeetingsWorkspaceSnapshot {
+function workspace(overrides: Partial<MeetingsWorkspaceSnapshot> = {}): MeetingsWorkspaceSnapshot {
   return {
     ...createIdleMeetingsWorkspace(),
     connection: "signed-in",

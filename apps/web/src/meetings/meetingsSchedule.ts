@@ -37,7 +37,9 @@ export function formatMeetingClock(value: string | null): string | null {
   return MEETING_CLOCK_FORMAT.format(new Date(parsed));
 }
 
-export function formatMeetingTimeRange(session: Pick<MeetingSession, "startAt" | "endAt">): string | null {
+export function formatMeetingTimeRange(
+  session: Pick<MeetingSession, "startAt" | "endAt">,
+): string | null {
   const start = formatMeetingClock(session.startAt);
   if (start === null) {
     return null;
