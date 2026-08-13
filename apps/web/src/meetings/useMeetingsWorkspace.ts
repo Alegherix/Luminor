@@ -4,6 +4,7 @@ import { createDesktopMeetingsCalendarHost } from "./desktopMeetingsCalendar";
 import { createDesktopMeetingsEmbedHost } from "./desktopMeetingsEmbed";
 import { createDesktopMeetingsExternalHost } from "./desktopMeetingsExternal";
 import { createDesktopMeetingsRecordingHost } from "./desktopMeetingsRecording";
+import { createDesktopMeetingsTranscriptionHost } from "./desktopMeetingsTranscription";
 import {
   createMeetingsWorkspace,
   IDLE_MEETINGS_WORKSPACE,
@@ -24,6 +25,7 @@ function getSharedMeetingsWorkspace(): MeetingsWorkspace {
     embed: createDesktopMeetingsEmbedHost(),
     external: createDesktopMeetingsExternalHost(),
     recording: createDesktopMeetingsRecordingHost(),
+    transcription: createDesktopMeetingsTranscriptionHost(),
   });
   return sharedWorkspace;
 }
@@ -68,6 +70,7 @@ export function useMeetingsWorkspace(): {
   leave: () => Promise<void>;
   hideEmbed: () => Promise<void>;
   showEmbed: () => Promise<void>;
+  pointAtTranscriptionEnvironment: () => Promise<void>;
 } {
   const workspace = getSharedMeetingsWorkspace();
   const snapshot = useMeetingsWorkspaceSnapshot();
@@ -110,5 +113,6 @@ export function useMeetingsWorkspace(): {
     leave: workspace.leave,
     hideEmbed: workspace.hideEmbed,
     showEmbed: workspace.showEmbed,
+    pointAtTranscriptionEnvironment: workspace.pointAtTranscriptionEnvironment,
   };
 }

@@ -237,5 +237,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     getRecordingState: () => ipcRenderer.invoke(IPC.meetings.getRecordingState),
     prepareLoopback: () => ipcRenderer.invoke(IPC.meetings.prepareLoopback),
     releaseLoopback: () => ipcRenderer.invoke(IPC.meetings.releaseLoopback),
+    transcribeRecording: (input) => ipcRenderer.invoke(IPC.meetings.transcribeRecording, input),
+    getTranscript: (input) => ipcRenderer.invoke(IPC.meetings.getTranscript, input),
+    pointAtTranscriptionEnvironment: () =>
+      ipcRenderer.invoke(IPC.meetings.pointAtTranscriptionEnvironment),
   },
 } satisfies DesktopBridge);

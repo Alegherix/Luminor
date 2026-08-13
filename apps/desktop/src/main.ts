@@ -136,6 +136,7 @@ import {
 import { registerDesktopVoiceTranscriptionHandler } from "./voiceTranscription";
 import { registerMeetingsCalendarIpc } from "./meetingsCalendarIpc";
 import { registerMeetingsRecordingIpc } from "./meetingsRecordingIpc";
+import { registerMeetingsTranscriptionIpc } from "./meetingsTranscriptionIpc";
 import { MeetingWebViewManager } from "./meetingsWebview";
 import { registerMeetingsWebviewIpc } from "./meetingsWebviewIpc";
 import {
@@ -3749,6 +3750,10 @@ function registerIpcHandlers(): void {
   });
   registerMeetingsRecordingIpc({
     homeDir: BASE_DIR,
+  });
+  registerMeetingsTranscriptionIpc({
+    homeDir: BASE_DIR,
+    getOwnerWindow: () => BrowserWindow.getFocusedWindow() ?? mainWindow,
   });
   startBrowserPerformanceLogging();
   registerBrowserIpcHandlers(ipcMain, browserManager);

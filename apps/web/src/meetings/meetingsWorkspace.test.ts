@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   computeMeetingReminders,
@@ -9,7 +9,9 @@ import {
   MEETING_JOIN_AVAILABLE_WINDOW_MS,
   MEETING_STARTING_WINDOW_MS,
   IDLE_MEETINGS_RECORDING,
+  IDLE_MEETINGS_TRANSCRIPTION,
   MEETINGS_LOOPBACK_DEGRADATION,
+  MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
   meetingsSidebarSections,
   meetingsSurfaceJoined,
   selectedMeetingSession,
@@ -20,6 +22,8 @@ import {
   type MeetingsExternalHost,
   type MeetingsRecordingHost,
   type MeetingsRecordingState,
+  type MeetingsTranscriptionHost,
+  type MeetingsTranscriptionState,
 } from "./meetingsWorkspace";
 import { INVALID_MEET_URL_MESSAGE } from "./meetUrl";
 
@@ -940,5 +944,223 @@ describe("meetings recording", () => {
     expect(snapshot.recording.mode).toBe("mic");
     expect(snapshot.recording.degradation).toBe(MEETINGS_LOOPBACK_DEGRADATION);
     expect(snapshot.recording.filePath).toBe(recordingFilePath("pasted:abc-defg-hij"));
+  });
+});
+
+function transcriptFilePath(sessionId: string): string {
+  return `/tmp/luminor-home/meetings/${sessionId.replaceAll(":", "_")}/transcripts/transcript.txt`;
+}
+
+function fakeTranscription(
+  startState?: Partial<MeetingsTranscriptionState>,
+): MeetingsTranscriptionHost & {
+  calls: string[];
+  next: MeetingsTranscriptionState;
+} {
+  const host = {
+    calls: [] as string[],
+    next: {
+      status: "ready" as const,
+      sessionId: null,
+      transcriptPath: null,
+      text: "Hello from the meeting.",
+      error: null,
+      ...startState,
+    } as MeetingsTranscriptionState,
+    async transcribe(input: { sessionId: string; recordingPath: string }) {
+      host.calls.push(`transcribe:${input.sessionId}:${input.recordingPath}`);
+      return {
+        ...host.next,
+        sessionId: input.sessionId,
+        transcriptPath: host.next.transcriptPath ?? transcriptFilePath(input.sessionId),
+      };
+    },
+    async getTranscript(sessionId: string) {
+      host.calls.push(`get:${sessionId}`);
+      return {
+        ...host.next,
+        sessionId,
+        transcriptPath: host.next.transcriptPath ?? transcriptFilePath(sessionId),
+      };
+    },
+    async pointAtEnvironment() {
+      host.calls.push("point");
+      return { status: "configured" as const, error: null };
+    },
+  };
+  return host;
+}
+
+describe("meetings post-meeting transcription", () => {
+  it("starts idle with no transcript and no transcribe action on the workspace", () => {
+    const workspace = createIdleMeetingsWorkspace();
+
+    expect(workspace.transcription).toEqual(IDLE_MEETINGS_TRANSCRIPTION);
+    expect(workspace).not.toHaveProperty("transcribe");
+  });
+
+  it("stops recording on leave and starts post-meeting transcription without a manual button", async () => {
+    const embed = fakeEmbed();
+    const tape = fakeRecording();
+    const scribe = fakeTranscription();
+    const workspace = createMeetingsWorkspace({
+      clock: () => NOW,
+      embed,
+      recording: tape,
+      transcription: scribe,
+    });
+
+    await workspace.joinPastedUrl("https://meet.google.com/abc-defg-hij");
+    await workspace.leave();
+
+    await vi.waitFor(() => {
+      expect(workspace.getSnapshot().transcription.status).toBe("ready");
+    });
+    expect(workspace.getSnapshot().recording).toEqual(IDLE_MEETINGS_RECORDING);
+    expect(scribe.calls).toEqual([
+      `transcribe:pasted:abc-defg-hij:${recordingFilePath("pasted:abc-defg-hij")}`,
+    ]);
+    expect(workspace.getSnapshot().transcription).toEqual({
+      status: "ready",
+      sessionId: "pasted:abc-defg-hij",
+      transcriptPath: transcriptFilePath("pasted:abc-defg-hij"),
+      text: "Hello from the meeting.",
+      error: null,
+    });
+    expect(meetingsSidebarSections(workspace.getSnapshot(), NOW).ended[0]?.id).toBe(
+      "pasted:abc-defg-hij",
+    );
+  });
+
+  it("does not start transcription when the embed is only hidden", async () => {
+    const embed = fakeEmbed();
+    const tape = fakeRecording();
+    const scribe = fakeTranscription();
+    const workspace = createMeetingsWorkspace({
+      clock: () => NOW,
+      embed,
+      recording: tape,
+      transcription: scribe,
+    });
+    await workspace.joinPastedUrl("https://meet.google.com/abc-defg-hij");
+
+    await workspace.hideEmbed();
+    await workspace.showEmbed();
+
+    expect(scribe.calls).toEqual([]);
+    expect(workspace.getSnapshot().transcription).toEqual(IDLE_MEETINGS_TRANSCRIPTION);
+    expect(workspace.getSnapshot().recording.status).toBe("recording");
+  });
+
+  it("stops recording and starts transcription when a joined meeting reaches scheduled end", async () => {
+    let now = new Date("2026-08-12T12:00:00.000Z");
+    const embed = fakeEmbed();
+    const tape = fakeRecording();
+    const scribe = fakeTranscription();
+    const calendar = fakeCalendar({
+      connected: true,
+      events: [
+        event({
+          id: "live",
+          title: "Interview",
+          startAt: "2026-08-12T11:30:00.000Z",
+          endAt: "2026-08-12T12:30:00.000Z",
+          meetUrl: "https://meet.google.com/abc-defg-hij",
+        }),
+      ],
+    });
+    const workspace = createMeetingsWorkspace({
+      clock: () => now,
+      calendar,
+      embed,
+      recording: tape,
+      transcription: scribe,
+    });
+    await workspace.hydrate();
+    await workspace.joinSession("live");
+    expect(workspace.getSnapshot().recording.status).toBe("recording");
+
+    now = new Date("2026-08-12T12:30:00.000Z");
+    workspace.tick();
+
+    await vi.waitFor(() => {
+      expect(meetingsSurfaceJoined(workspace.getSnapshot())).toBe(false);
+      expect(workspace.getSnapshot().transcription.status).toBe("ready");
+    });
+    expect(tape.calls).toEqual(["getState", "start:live", "stop"]);
+    expect(scribe.calls).toEqual([`transcribe:live:${recordingFilePath("live")}`]);
+    expect(meetingsSidebarSections(workspace.getSnapshot(), now).ended[0]?.id).toBe("live");
+  });
+
+  it("loads the transcript when today's ended meeting is selected", async () => {
+    const scribe = fakeTranscription();
+    const calendar = fakeCalendar({
+      connected: true,
+      events: [
+        event({
+          id: "ended",
+          title: "Standup",
+          startAt: "2026-08-12T09:00:00.000Z",
+          endAt: "2026-08-12T09:30:00.000Z",
+        }),
+      ],
+    });
+    const workspace = createMeetingsWorkspace({
+      clock: () => NOW,
+      calendar,
+      transcription: scribe,
+    });
+    await workspace.hydrate();
+
+    workspace.selectSession("ended");
+
+    await vi.waitFor(() => {
+      expect(workspace.getSnapshot().transcription.status).toBe("ready");
+    });
+    expect(selectedMeetingSession(workspace.getSnapshot())?.id).toBe("ended");
+    expect(scribe.calls).toEqual(["get:ended"]);
+    expect(workspace.getSnapshot().transcription.text).toBe("Hello from the meeting.");
+  });
+
+  it("surfaces a point-at-the-environment recovery when seeding cannot find the binary", async () => {
+    const scribe = fakeTranscription({
+      status: "needs-environment",
+      text: null,
+      transcriptPath: null,
+      error: MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
+    });
+    const workspace = createMeetingsWorkspace({
+      clock: () => NOW,
+      embed: fakeEmbed(),
+      recording: fakeRecording(),
+      transcription: scribe,
+    });
+    await workspace.joinPastedUrl("https://meet.google.com/abc-defg-hij");
+    await workspace.leave();
+
+    await vi.waitFor(() => {
+      expect(workspace.getSnapshot().transcription.status).toBe("needs-environment");
+    });
+    expect(workspace.getSnapshot().transcription.error).toBe(
+      MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
+    );
+
+    scribe.next = {
+      status: "ready",
+      sessionId: "pasted:abc-defg-hij",
+      transcriptPath: transcriptFilePath("pasted:abc-defg-hij"),
+      text: "Hello from the meeting.",
+      error: null,
+    };
+    await workspace.pointAtTranscriptionEnvironment();
+
+    await vi.waitFor(() => {
+      expect(workspace.getSnapshot().transcription.status).toBe("ready");
+    });
+    expect(scribe.calls).toEqual([
+      `transcribe:pasted:abc-defg-hij:${recordingFilePath("pasted:abc-defg-hij")}`,
+      "point",
+      `transcribe:pasted:abc-defg-hij:${recordingFilePath("pasted:abc-defg-hij")}`,
+    ]);
   });
 });

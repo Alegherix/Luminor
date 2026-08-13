@@ -1,0 +1,71 @@
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+
+import { MeetingsTranscriptReader } from "./MeetingsTranscriptReader";
+import {
+  createIdleMeetingsWorkspace,
+  MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
+} from "./meetingsWorkspace";
+
+const endedWorkspace = {
+  ...createIdleMeetingsWorkspace(),
+  connection: "signed-in" as const,
+  selectedSessionId: "ended",
+  sessions: [
+    {
+      id: "ended",
+      title: "Standup",
+      startAt: "2026-08-12T09:00:00.000Z",
+      endAt: "2026-08-12T09:30:00.000Z",
+      meetUrl: null,
+      attendees: [],
+      status: "ended" as const,
+      source: "calendar" as const,
+    },
+  ],
+};
+
+describe("MeetingsTranscriptReader", () => {
+  it("shows the transcript for today's ended meeting", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsTranscriptReader
+        workspace={{
+          ...endedWorkspace,
+          transcription: {
+            status: "ready",
+            sessionId: "ended",
+            transcriptPath: "/tmp/luminor-home/meetings/ended/transcripts/transcript.txt",
+            text: "We shipped the join path.",
+            error: null,
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain("Standup");
+    expect(html).toContain("We shipped the join path.");
+    expect(html).not.toContain("Transcribe");
+    expect(html).not.toContain("Open in chat");
+  });
+
+  it("shows a point-at-the-environment recovery when config is missing", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsTranscriptReader
+        workspace={{
+          ...endedWorkspace,
+          transcription: {
+            status: "needs-environment",
+            sessionId: "ended",
+            transcriptPath: null,
+            text: null,
+            error: MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain("Point at the transcription environment");
+    expect(html).toContain("Point at the environment");
+    expect(html).toContain('role="alert"');
+  });
+});
