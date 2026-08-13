@@ -358,6 +358,41 @@ export function buildDiffSummaryPrompt(input: { readonly patch: string }) {
   };
 }
 
+export function sanitizeMeetingSummary(value: string): string {
+  return value.trim();
+}
+
+export function buildMeetingSummaryPrompt(input: {
+  readonly title: string;
+  readonly transcript: string;
+}) {
+  const title = input.title.trim() || "Meeting";
+  return {
+    prompt: [
+      "You write a silent post-meeting summary for Luminor's Möten reader.",
+      "Return a JSON object with key: summary.",
+      "Respond with only the JSON object, no prose and no code fences.",
+      "",
+      "Rules:",
+      "- summary must be markdown",
+      "- use the same language as the transcript",
+      "- start with a short overview paragraph",
+      "- then include sections for Decisions, Action items, and Discussion when those exist",
+      "- do not invent attendees, decisions, dates, or work that is not in the transcript",
+      "- keep it useful and compact; skip empty sections",
+      "",
+      `Meeting title: ${title}`,
+      "",
+      "Transcript:",
+      limitSection(input.transcript, 80_000),
+    ].join("\n"),
+    outputSchemaJson: Schema.Struct({
+      summary: Schema.String,
+    }),
+    rawTextFallback: { key: "summary" } satisfies RawTextFallback,
+  };
+}
+
 export function buildThreadRecapPrompt(input: {
   readonly previousRecap?: string;
   readonly newMaterial: string;

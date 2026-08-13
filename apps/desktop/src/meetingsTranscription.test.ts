@@ -11,6 +11,7 @@ import {
   expandTranscriptionArgs,
   MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
   meetingTranscriptionConfigPath,
+  meetingsSummaryPath,
   meetingsTranscriptDir,
   meetingsTranscriptTextPath,
 } from "./meetingsTranscription";
@@ -42,6 +43,15 @@ describe("meetings transcription paths", () => {
     );
     expect(meetingsTranscriptDir("/home/me/.luminor", "pasted:abc-defg-hij")).toBe(
       Path.join("/home/me/.luminor", "meetings", "pasted_abc-defg-hij", "transcripts"),
+    );
+    expect(meetingsSummaryPath("/home/me/.luminor", "pasted:abc-defg-hij")).toBe(
+      Path.join(
+        "/home/me/.luminor",
+        "meetings",
+        "pasted_abc-defg-hij",
+        "transcripts",
+        "summary.md",
+      ),
     );
     expect(
       expandTranscriptionArgs(DEFAULT_TRANSCRIBE_ARGS, {
@@ -198,6 +208,31 @@ describe("createMeetingsTranscriptionManager", () => {
       transcriptPath: textPath,
       text: "Yesterday's notes.",
       error: null,
+    });
+  });
+
+  it("writes and reads summary.md beside the transcript", async () => {
+    const homeDir = makeTempDir("luminor-summary-");
+    const manager = createMeetingsTranscriptionManager({
+      homeDir,
+      spawn: async () => {
+        throw new Error("should not spawn");
+      },
+    });
+
+    const written = await manager.writeSummary({
+      sessionId: "ended",
+      text: "Decision: ship the join path.",
+    });
+
+    expect(written.summaryPath).toBe(meetingsSummaryPath(homeDir, "ended"));
+    expect(written.summaryPath.startsWith(Path.join(homeDir, "meetings"))).toBe(true);
+    expect(FS.readFileSync(written.summaryPath, "utf8").trim()).toBe(
+      "Decision: ship the join path.",
+    );
+    await expect(manager.readSummary("ended")).resolves.toEqual({
+      text: "Decision: ship the join path.",
+      summaryPath: written.summaryPath,
     });
   });
 });

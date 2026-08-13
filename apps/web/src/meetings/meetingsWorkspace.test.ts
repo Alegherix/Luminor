@@ -9,6 +9,7 @@ import {
   MEETING_JOIN_AVAILABLE_WINDOW_MS,
   MEETING_STARTING_WINDOW_MS,
   IDLE_MEETINGS_RECORDING,
+  IDLE_MEETINGS_SUMMARY,
   IDLE_MEETINGS_TRANSCRIPTION,
   MEETINGS_LOOPBACK_DEGRADATION,
   MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
@@ -22,6 +23,8 @@ import {
   type MeetingsExternalHost,
   type MeetingsRecordingHost,
   type MeetingsRecordingState,
+  type MeetingsSummaryHost,
+  type MeetingsSummaryState,
   type MeetingsTranscriptionHost,
   type MeetingsTranscriptionState,
 } from "./meetingsWorkspace";
@@ -72,6 +75,7 @@ describe("createIdleMeetingsWorkspace", () => {
 
     expect(workspace.connection).toBe("signed-out");
     expect(workspace.recording).toEqual(IDLE_MEETINGS_RECORDING);
+    expect(workspace.summary).toEqual(IDLE_MEETINGS_SUMMARY);
     expect(selectedMeetingSession(workspace)).toBeNull();
     expect(meetingsSidebarSections(workspace, NOW)).toEqual({
       live: [],
@@ -951,6 +955,10 @@ function transcriptFilePath(sessionId: string): string {
   return `/tmp/luminor-home/meetings/${sessionId.replaceAll(":", "_")}/transcripts/transcript.txt`;
 }
 
+function summaryFilePath(sessionId: string): string {
+  return `/tmp/luminor-home/meetings/${sessionId.replaceAll(":", "_")}/transcripts/summary.md`;
+}
+
 function fakeTranscription(
   startState?: Partial<MeetingsTranscriptionState>,
 ): MeetingsTranscriptionHost & {
@@ -1162,5 +1170,168 @@ describe("meetings post-meeting transcription", () => {
       "point",
       `transcribe:pasted:abc-defg-hij:${recordingFilePath("pasted:abc-defg-hij")}`,
     ]);
+  });
+});
+
+function fakeSummary(startState?: Partial<MeetingsSummaryState>): MeetingsSummaryHost & {
+  calls: string[];
+  next: MeetingsSummaryState;
+} {
+  const host = {
+    calls: [] as string[],
+    next: {
+      status: "ready" as const,
+      sessionId: null,
+      summaryPath: null,
+      text: "We shipped the join path.",
+      error: null,
+      ...startState,
+    } as MeetingsSummaryState,
+    async summarize(input: {
+      sessionId: string;
+      title: string;
+      transcriptText: string;
+      transcriptPath: string | null;
+    }) {
+      host.calls.push(`summarize:${input.sessionId}:${input.title}:${input.transcriptText}`);
+      return {
+        ...host.next,
+        sessionId: input.sessionId,
+        summaryPath: host.next.summaryPath ?? summaryFilePath(input.sessionId),
+      };
+    },
+    async getSummary(sessionId: string) {
+      host.calls.push(`get:${sessionId}`);
+      return {
+        ...host.next,
+        sessionId,
+        summaryPath: host.next.summaryPath ?? summaryFilePath(sessionId),
+      };
+    },
+  };
+  return host;
+}
+
+describe("meetings silent summary", () => {
+  it("starts a silent summary after a ready transcript and does not create a thread", async () => {
+    const scribe = fakeTranscription();
+    const notes = fakeSummary();
+    const workspace = createMeetingsWorkspace({
+      clock: () => NOW,
+      embed: fakeEmbed(),
+      recording: fakeRecording(),
+      transcription: scribe,
+      summary: notes,
+    });
+
+    await workspace.joinPastedUrl("https://meet.google.com/abc-defg-hij");
+    await workspace.leave();
+
+    await vi.waitFor(() => {
+      expect(workspace.getSnapshot().summary.status).toBe("ready");
+    });
+    expect(notes.calls).toEqual([
+      "summarize:pasted:abc-defg-hij:Meet abc-defg-hij:Hello from the meeting.",
+    ]);
+    expect(workspace.getSnapshot().summary).toEqual({
+      status: "ready",
+      sessionId: "pasted:abc-defg-hij",
+      summaryPath: summaryFilePath("pasted:abc-defg-hij"),
+      text: "We shipped the join path.",
+      error: null,
+    });
+    expect(workspace).not.toHaveProperty("createThread");
+    expect(workspace).not.toHaveProperty("openInChat");
+    expect(meetingsSidebarSections(workspace.getSnapshot(), NOW).ended[0]?.id).toBe(
+      "pasted:abc-defg-hij",
+    );
+  });
+
+  it("does not start a summary when transcription fails", async () => {
+    const scribe = fakeTranscription({
+      status: "failed",
+      text: null,
+      transcriptPath: null,
+      error: "Recording is missing.",
+    });
+    const notes = fakeSummary();
+    const workspace = createMeetingsWorkspace({
+      clock: () => NOW,
+      embed: fakeEmbed(),
+      recording: fakeRecording(),
+      transcription: scribe,
+      summary: notes,
+    });
+
+    await workspace.joinPastedUrl("https://meet.google.com/abc-defg-hij");
+    await workspace.leave();
+
+    await vi.waitFor(() => {
+      expect(workspace.getSnapshot().transcription.status).toBe("failed");
+    });
+    expect(notes.calls).toEqual([]);
+    expect(workspace.getSnapshot().summary.status).toBe("idle");
+  });
+
+  it("keeps a successful transcript visible when the silent summary fails", async () => {
+    const scribe = fakeTranscription();
+    const notes = fakeSummary({
+      status: "failed",
+      text: null,
+      summaryPath: null,
+      error: "Summary failed.",
+    });
+    const workspace = createMeetingsWorkspace({
+      clock: () => NOW,
+      embed: fakeEmbed(),
+      recording: fakeRecording(),
+      transcription: scribe,
+      summary: notes,
+    });
+
+    await workspace.joinPastedUrl("https://meet.google.com/abc-defg-hij");
+    await workspace.leave();
+
+    await vi.waitFor(() => {
+      expect(workspace.getSnapshot().summary.status).toBe("failed");
+    });
+    expect(workspace.getSnapshot().transcription).toMatchObject({
+      status: "ready",
+      text: "Hello from the meeting.",
+    });
+    expect(workspace.getSnapshot().summary.error).toBe("Summary failed.");
+  });
+
+  it("loads transcript and summary when today's ended meeting is selected", async () => {
+    const scribe = fakeTranscription();
+    const notes = fakeSummary();
+    const calendar = fakeCalendar({
+      connected: true,
+      events: [
+        event({
+          id: "ended",
+          title: "Standup",
+          startAt: "2026-08-12T09:00:00.000Z",
+          endAt: "2026-08-12T09:30:00.000Z",
+        }),
+      ],
+    });
+    const workspace = createMeetingsWorkspace({
+      clock: () => NOW,
+      calendar,
+      transcription: scribe,
+      summary: notes,
+    });
+    await workspace.hydrate();
+
+    workspace.selectSession("ended");
+
+    await vi.waitFor(() => {
+      expect(workspace.getSnapshot().summary.status).toBe("ready");
+    });
+    expect(scribe.calls).toEqual(["get:ended"]);
+    expect(notes.calls).toEqual(["get:ended"]);
+    expect(workspace.getSnapshot().transcription.text).toBe("Hello from the meeting.");
+    expect(workspace.getSnapshot().summary.text).toBe("We shipped the join path.");
   });
 });

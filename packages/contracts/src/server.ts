@@ -306,6 +306,22 @@ export const ServerGenerateThreadRecapResult = Schema.Struct({
 });
 export type ServerGenerateThreadRecapResult = typeof ServerGenerateThreadRecapResult.Type;
 
+export const ServerGenerateMeetingSummaryInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+  title: TrimmedNonEmptyString.check(Schema.isMaxLength(400)),
+  transcript: Schema.String.check(Schema.isMaxLength(200_000)),
+  codexHomePath: Schema.optional(TrimmedNonEmptyString),
+  providerOptions: Schema.optional(ProviderStartOptions),
+  textGenerationModel: Schema.optional(TrimmedNonEmptyString),
+  textGenerationModelSelection: Schema.optional(ModelSelection),
+});
+export type ServerGenerateMeetingSummaryInput = typeof ServerGenerateMeetingSummaryInput.Type;
+
+export const ServerGenerateMeetingSummaryResult = Schema.Struct({
+  summary: TrimmedNonEmptyString,
+});
+export type ServerGenerateMeetingSummaryResult = typeof ServerGenerateMeetingSummaryResult.Type;
+
 // Schema-validated automation intent extraction for composer-triggered creation.
 // The UI still owns confirmation/error copy; this result only describes what the model understood.
 export const ServerAutomationIntentMissingField = Schema.Literals([

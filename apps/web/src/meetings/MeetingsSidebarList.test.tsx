@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   createIdleMeetingsWorkspace,
   IDLE_MEETINGS_RECORDING,
+  IDLE_MEETINGS_SUMMARY,
   IDLE_MEETINGS_TRANSCRIPTION,
   type MeetingsWorkspaceSnapshot,
 } from "./meetingsWorkspace";
@@ -21,6 +22,7 @@ const signedInWorkspace: MeetingsWorkspaceSnapshot = {
   joinError: null,
   recording: IDLE_MEETINGS_RECORDING,
   transcription: IDLE_MEETINGS_TRANSCRIPTION,
+  summary: IDLE_MEETINGS_SUMMARY,
   pastedMeetUrl: "",
   dueReminders: [],
   sessions: [

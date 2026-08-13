@@ -8,18 +8,25 @@ import {
 export function MeetingsTranscriptReader({
   workspace,
   onPointAtEnvironment,
+  onOpenInChat,
   pointing = false,
+  openingInChat = false,
 }: {
   readonly workspace: MeetingsWorkspaceSnapshot;
   readonly onPointAtEnvironment?: () => void;
+  readonly onOpenInChat?: () => void;
   readonly pointing?: boolean;
+  readonly openingInChat?: boolean;
 }) {
   const selected = selectedMeetingSession(workspace);
   const transcription = workspace.transcription;
+  const summary = workspace.summary;
   const showRecovery =
     transcription.status === "needs-environment" ||
     (transcription.status === "failed" &&
       transcription.error === MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY);
+  const canOpenInChat =
+    Boolean(onOpenInChat) && transcription.status === "ready" && Boolean(transcription.text);
 
   return (
     <section className="flex h-full min-h-0 flex-col px-6 py-8" aria-label="Meeting transcript">
@@ -36,6 +43,27 @@ export function MeetingsTranscriptReader({
         {transcription.status === "running" ? (
           <p className="text-sm text-muted-foreground" role="status">
             Transcribing…
+          </p>
+        ) : null}
+
+        {summary.status === "running" ? (
+          <p className="text-sm text-muted-foreground" role="status">
+            Summarizing…
+          </p>
+        ) : null}
+
+        {summary.status === "ready" && summary.text ? (
+          <article
+            className="min-h-0 overflow-auto whitespace-pre-wrap text-sm leading-6 text-foreground"
+            aria-label="Meeting summary"
+          >
+            {summary.text}
+          </article>
+        ) : null}
+
+        {summary.status === "failed" ? (
+          <p className="text-sm text-muted-foreground" role="status">
+            {summary.error ?? "Summary is unavailable."}
           </p>
         ) : null}
 
@@ -64,6 +92,18 @@ export function MeetingsTranscriptReader({
               disabled={pointing || !onPointAtEnvironment}
             >
               {pointing ? "Looking…" : "Point at the environment"}
+            </Button>
+          </div>
+        ) : null}
+
+        {canOpenInChat ? (
+          <div>
+            <Button
+              type="button"
+              onClick={() => onOpenInChat?.()}
+              disabled={openingInChat || !onOpenInChat}
+            >
+              {openingInChat ? "Opening…" : "Öppna i chatt"}
             </Button>
           </div>
         ) : null}

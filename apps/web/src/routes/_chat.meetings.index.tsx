@@ -7,6 +7,7 @@ import { MeetingsIdleCanvas } from "~/meetings/MeetingsIdleCanvas";
 import { MeetingsTranscriptReader } from "~/meetings/MeetingsTranscriptReader";
 import { meetingsSurfaceJoined, selectedMeetingSession } from "~/meetings/meetingsWorkspace";
 import { useMeetingsWorkspace } from "~/meetings/useMeetingsWorkspace";
+import { useOpenMeetingInChat } from "~/meetings/useOpenMeetingInChat";
 import { isElectron } from "~/env";
 
 function MeetingsIndexRouteView() {
@@ -19,6 +20,7 @@ function MeetingsIndexRouteView() {
     showEmbed,
     pointAtTranscriptionEnvironment,
   } = useMeetingsWorkspace();
+  const { openInChat, opening } = useOpenMeetingInChat();
   const [pointing, setPointing] = useState(false);
   const selected = selectedMeetingSession(snapshot);
   const showTranscript = !meetingsSurfaceJoined(snapshot) && selected?.status === "ended";
@@ -42,6 +44,10 @@ function MeetingsIndexRouteView() {
         <MeetingsTranscriptReader
           workspace={snapshot}
           pointing={pointing}
+          openingInChat={opening}
+          onOpenInChat={() => {
+            void openInChat(snapshot);
+          }}
           onPointAtEnvironment={() => {
             setPointing(true);
             void pointAtTranscriptionEnvironment().finally(() => {

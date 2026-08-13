@@ -84,6 +84,14 @@ interface FakeGitTextGeneration {
   generateThreadRecap: (
     input: ThreadRecapGenerationInput,
   ) => Effect.Effect<{ recap: string }, TextGenerationError>;
+  generateMeetingSummary: (input: {
+    cwd: string;
+    title: string;
+    transcript: string;
+    model?: string;
+    modelSelection?: ModelSelection;
+    providerOptions?: ProviderStartOptions;
+  }) => Effect.Effect<{ summary: string }, TextGenerationError>;
   generateAutomationIntent: (
     input: AutomationIntentGenerationInput,
   ) => Effect.Effect<AutomationIntentGenerationResult, TextGenerationError>;
@@ -180,6 +188,10 @@ function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): T
       Effect.succeed({
         recap: "Update workflow recap",
       }),
+    generateMeetingSummary: () =>
+      Effect.succeed({
+        summary: "Update workflow meeting summary",
+      }),
     generateAutomationIntent: () =>
       Effect.succeed({
         isAutomation: true,
@@ -265,6 +277,17 @@ function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): T
           (cause) =>
             new TextGenerationError({
               operation: "generateThreadRecap",
+              detail: "fake text generation failed",
+              ...(cause !== undefined ? { cause } : {}),
+            }),
+        ),
+      ),
+    generateMeetingSummary: (input) =>
+      implementation.generateMeetingSummary(input).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TextGenerationError({
+              operation: "generateMeetingSummary",
               detail: "fake text generation failed",
               ...(cause !== undefined ? { cause } : {}),
             }),

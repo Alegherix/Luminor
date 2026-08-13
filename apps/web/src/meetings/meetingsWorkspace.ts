@@ -99,6 +99,34 @@ export type MeetingsTranscriptionHost = {
   }>;
 };
 
+export type MeetingsSummaryStatus = "idle" | "running" | "ready" | "failed";
+
+export type MeetingsSummaryState = {
+  readonly status: MeetingsSummaryStatus;
+  readonly sessionId: string | null;
+  readonly summaryPath: string | null;
+  readonly text: string | null;
+  readonly error: string | null;
+};
+
+export const IDLE_MEETINGS_SUMMARY: MeetingsSummaryState = {
+  status: "idle",
+  sessionId: null,
+  summaryPath: null,
+  text: null,
+  error: null,
+};
+
+export type MeetingsSummaryHost = {
+  summarize(input: {
+    sessionId: string;
+    title: string;
+    transcriptText: string;
+    transcriptPath: string | null;
+  }): Promise<MeetingsSummaryState>;
+  getSummary(sessionId: string): Promise<MeetingsSummaryState>;
+};
+
 export type MeetingsWorkspaceSnapshot = {
   readonly connection: MeetingsConnectionStatus;
   readonly accountEmail: string | null;
@@ -109,6 +137,7 @@ export type MeetingsWorkspaceSnapshot = {
   readonly joinError: string | null;
   readonly recording: MeetingsRecordingState;
   readonly transcription: MeetingsTranscriptionState;
+  readonly summary: MeetingsSummaryState;
   readonly sessions: readonly MeetingSession[];
   readonly pastedMeetUrl: string;
   readonly dueReminders: readonly MeetingReminder[];
@@ -187,6 +216,7 @@ export function createIdleMeetingsWorkspace(): MeetingsWorkspaceSnapshot {
     joinError: null,
     recording: IDLE_MEETINGS_RECORDING,
     transcription: IDLE_MEETINGS_TRANSCRIPTION,
+    summary: IDLE_MEETINGS_SUMMARY,
     sessions: [],
     pastedMeetUrl: "",
     dueReminders: [],
@@ -449,6 +479,15 @@ const idleTranscription: MeetingsTranscriptionHost = {
   },
 };
 
+const idleSummary: MeetingsSummaryHost = {
+  async summarize() {
+    return IDLE_MEETINGS_SUMMARY;
+  },
+  async getSummary() {
+    return IDLE_MEETINGS_SUMMARY;
+  },
+};
+
 const unsignedCalendar: MeetingsCalendarHost = {
   async getStatus() {
     return { connected: false, accountEmail: null };
@@ -469,6 +508,7 @@ export function createMeetingsWorkspace(
     readonly external?: MeetingsExternalHost;
     readonly recording?: MeetingsRecordingHost;
     readonly transcription?: MeetingsTranscriptionHost;
+    readonly summary?: MeetingsSummaryHost;
   } = {},
 ): MeetingsWorkspace {
   const clock = input.clock ?? (() => new Date());
@@ -477,6 +517,7 @@ export function createMeetingsWorkspace(
   const external = input.external ?? idleExternal;
   const recording = input.recording ?? idleRecording;
   const transcription = input.transcription ?? idleTranscription;
+  const summary = input.summary ?? idleSummary;
   let snapshot = createIdleMeetingsWorkspace();
   const listeners = new Set<() => void>();
   const alreadyFired = new Set<string>();
@@ -650,6 +691,91 @@ export function createMeetingsWorkspace(
     });
   };
 
+  const applySummary = (state: MeetingsSummaryState) => {
+    setSnapshot({
+      ...snapshot,
+      summary: state,
+    });
+  };
+
+  const sessionTitle = (sessionId: string): string =>
+    snapshot.sessions.find((session) => session.id === sessionId)?.title ?? "Meeting";
+
+  const startSummary = async (input: {
+    sessionId: string;
+    transcriptText: string;
+    transcriptPath: string | null;
+  }) => {
+    const transcriptText = input.transcriptText.trim();
+    if (transcriptText.length === 0) {
+      return;
+    }
+    if (
+      snapshot.summary.sessionId === input.sessionId &&
+      (snapshot.summary.status === "running" || snapshot.summary.status === "ready")
+    ) {
+      return;
+    }
+    applySummary({
+      status: "running",
+      sessionId: input.sessionId,
+      summaryPath: null,
+      text: null,
+      error: null,
+    });
+    const result = await summary.summarize({
+      sessionId: input.sessionId,
+      title: sessionTitle(input.sessionId),
+      transcriptText,
+      transcriptPath: input.transcriptPath,
+    });
+    if (
+      snapshot.selectedSessionId !== input.sessionId &&
+      snapshot.summary.sessionId !== input.sessionId
+    ) {
+      return;
+    }
+    applySummary({
+      ...result,
+      sessionId: input.sessionId,
+    });
+  };
+
+  const loadSummaryForSession = async (
+    sessionId: string,
+    transcript: MeetingsTranscriptionState,
+  ) => {
+    if (
+      snapshot.summary.sessionId === sessionId &&
+      (snapshot.summary.status === "running" || snapshot.summary.status === "ready")
+    ) {
+      return;
+    }
+    const result = await summary.getSummary(sessionId);
+    if (snapshot.selectedSessionId !== sessionId) {
+      return;
+    }
+    if (result.status === "ready") {
+      applySummary({
+        ...result,
+        sessionId,
+      });
+      return;
+    }
+    if (transcript.status === "ready" && transcript.text && transcript.text.trim().length > 0) {
+      await startSummary({
+        sessionId,
+        transcriptText: transcript.text,
+        transcriptPath: transcript.transcriptPath,
+      });
+      return;
+    }
+    applySummary({
+      ...result,
+      sessionId,
+    });
+  };
+
   const startTranscription = async (input: { sessionId: string; recordingPath: string | null }) => {
     if (!input.recordingPath) {
       applyTranscription({
@@ -669,6 +795,13 @@ export function createMeetingsWorkspace(
       text: null,
       error: null,
     });
+    applySummary({
+      status: "idle",
+      sessionId: input.sessionId,
+      summaryPath: null,
+      text: null,
+      error: null,
+    });
     const result = await transcription.transcribe({
       sessionId: input.sessionId,
       recordingPath: input.recordingPath,
@@ -680,6 +813,13 @@ export function createMeetingsWorkspace(
       ...result,
       sessionId: input.sessionId,
     });
+    if (result.status === "ready" && result.text && result.text.trim().length > 0) {
+      await startSummary({
+        sessionId: input.sessionId,
+        transcriptText: result.text,
+        transcriptPath: result.transcriptPath,
+      });
+    }
   };
 
   const loadTranscriptForSession = async (sessionId: string) => {
@@ -689,16 +829,27 @@ export function createMeetingsWorkspace(
         snapshot.transcription.status === "ready" ||
         snapshot.transcription.status === "needs-environment")
     ) {
+      if (
+        snapshot.transcription.status === "ready" &&
+        snapshot.transcription.text &&
+        snapshot.transcription.text.trim().length > 0
+      ) {
+        await loadSummaryForSession(sessionId, snapshot.transcription);
+      }
       return;
     }
     const result = await transcription.getTranscript(sessionId);
     if (snapshot.selectedSessionId !== sessionId) {
       return;
     }
-    applyTranscription({
+    const nextTranscription = {
       ...result,
       sessionId,
-    });
+    };
+    applyTranscription(nextTranscription);
+    if (nextTranscription.status === "ready" && nextTranscription.text?.trim()) {
+      await loadSummaryForSession(sessionId, nextTranscription);
+    }
   };
 
   const startRecordingForSession = async (sessionId: string): Promise<MeetingsRecordingState> => {
@@ -746,6 +897,13 @@ export function createMeetingsWorkspace(
           status: "running",
           sessionId,
           transcriptPath: null,
+          text: null,
+          error: null,
+        },
+        summary: {
+          status: "idle",
+          sessionId,
+          summaryPath: null,
           text: null,
           error: null,
         },

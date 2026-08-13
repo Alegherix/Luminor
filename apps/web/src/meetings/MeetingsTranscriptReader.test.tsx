@@ -45,7 +45,69 @@ describe("MeetingsTranscriptReader", () => {
     expect(html).toContain("Standup");
     expect(html).toContain("We shipped the join path.");
     expect(html).not.toContain("Transcribe");
+    expect(html).not.toContain("Öppna i chatt");
     expect(html).not.toContain("Open in chat");
+  });
+
+  it("shows the summary beside the transcript and an Öppna i chatt action", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsTranscriptReader
+        workspace={{
+          ...endedWorkspace,
+          transcription: {
+            status: "ready",
+            sessionId: "ended",
+            transcriptPath: "/tmp/luminor-home/meetings/ended/transcripts/transcript.txt",
+            text: "We shipped the join path.",
+            error: null,
+          },
+          summary: {
+            status: "ready",
+            sessionId: "ended",
+            summaryPath: "/tmp/luminor-home/meetings/ended/transcripts/summary.md",
+            text: "Decision: ship the join path.",
+            error: null,
+          },
+        }}
+        onOpenInChat={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Standup");
+    expect(html).toContain("We shipped the join path.");
+    expect(html).toContain("Decision: ship the join path.");
+    expect(html).toContain("Öppna i chatt");
+    expect(html).not.toContain("Open in chat");
+    expect(html).not.toContain("Transcribe");
+  });
+
+  it("keeps the transcript when the summary fails", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsTranscriptReader
+        workspace={{
+          ...endedWorkspace,
+          transcription: {
+            status: "ready",
+            sessionId: "ended",
+            transcriptPath: "/tmp/luminor-home/meetings/ended/transcripts/transcript.txt",
+            text: "We shipped the join path.",
+            error: null,
+          },
+          summary: {
+            status: "failed",
+            sessionId: "ended",
+            summaryPath: null,
+            text: null,
+            error: "Summary failed.",
+          },
+        }}
+        onOpenInChat={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("We shipped the join path.");
+    expect(html).toContain("Summary failed.");
+    expect(html).toContain("Öppna i chatt");
   });
 
   it("shows a point-at-the-environment recovery when config is missing", () => {
