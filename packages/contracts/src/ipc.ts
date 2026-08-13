@@ -448,6 +448,23 @@ export interface MeetingsEmbedState {
   readonly partition: string;
 }
 
+export type MeetingsRecordingMode = "system+mic" | "mic";
+
+export interface MeetingsRecordingState {
+  readonly status: "idle" | "recording";
+  readonly mode: MeetingsRecordingMode | null;
+  readonly sessionId: string | null;
+  readonly filePath: string | null;
+  readonly degradation: string | null;
+}
+
+export interface MeetingsLoopbackPrepareResult {
+  readonly ok: boolean;
+  readonly sourceName?: string;
+  readonly moduleId?: string;
+  readonly error?: string;
+}
+
 export interface DesktopMeetingsBridge {
   getStatus: () => Promise<MeetingsCalendarStatus>;
   connect: () => Promise<MeetingsCalendarStatus>;
@@ -458,6 +475,12 @@ export interface DesktopMeetingsBridge {
   leaveEmbed: () => Promise<MeetingsEmbedState>;
   setEmbedBounds: (bounds: MeetingsEmbedBounds | null) => Promise<MeetingsEmbedState>;
   getEmbedState: () => Promise<MeetingsEmbedState>;
+  startRecording: (input: { sessionId: string }) => Promise<MeetingsRecordingState>;
+  appendRecordingChunk: (chunk: Uint8Array) => Promise<void>;
+  stopRecording: () => Promise<MeetingsRecordingState>;
+  getRecordingState: () => Promise<MeetingsRecordingState>;
+  prepareLoopback: () => Promise<MeetingsLoopbackPrepareResult>;
+  releaseLoopback: () => Promise<void>;
 }
 
 export interface DesktopBridge {

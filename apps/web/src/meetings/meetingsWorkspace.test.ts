@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   createIdleMeetingsWorkspace,
   createMeetingsWorkspace,
+  IDLE_MEETINGS_RECORDING,
+  MEETINGS_LOOPBACK_DEGRADATION,
   meetingsSidebarSections,
   meetingsSurfaceJoined,
   selectedMeetingSession,
@@ -10,6 +12,8 @@ import {
   type MeetingsCalendarHost,
   type MeetingsEmbedHost,
   type MeetingsEmbedState,
+  type MeetingsRecordingHost,
+  type MeetingsRecordingState,
 } from "./meetingsWorkspace";
 import { INVALID_MEET_URL_MESSAGE } from "./meetUrl";
 
@@ -57,6 +61,7 @@ describe("createIdleMeetingsWorkspace", () => {
     const workspace = createIdleMeetingsWorkspace();
 
     expect(workspace.connection).toBe("signed-out");
+    expect(workspace.recording).toEqual(IDLE_MEETINGS_RECORDING);
     expect(selectedMeetingSession(workspace)).toBeNull();
     expect(meetingsSidebarSections(workspace, NOW)).toEqual({
       live: [],
@@ -357,5 +362,105 @@ describe("meetings join and leave", () => {
     expect(meetingsSidebarSections(workspace.getSnapshot(), NOW).ended[0]?.id).toBe(
       "pasted:abc-defg-hij",
     );
+  });
+});
+
+function recordingFilePath(sessionId: string): string {
+  return `/tmp/luminor-home/meetings/${sessionId.replaceAll(":", "_")}/recordings/tape.webm`;
+}
+
+function fakeRecording(startState?: Partial<MeetingsRecordingState>): MeetingsRecordingHost & {
+  calls: string[];
+  state: MeetingsRecordingState;
+} {
+  const host = {
+    calls: [] as string[],
+    state: { ...IDLE_MEETINGS_RECORDING } as MeetingsRecordingState,
+    async start(sessionId: string) {
+      host.calls.push(`start:${sessionId}`);
+      host.state = {
+        status: "recording",
+        mode: "system+mic",
+        degradation: null,
+        ...startState,
+        sessionId,
+        filePath: startState?.filePath ?? recordingFilePath(sessionId),
+      };
+      return host.state;
+    },
+    async stop() {
+      host.calls.push("stop");
+      host.state = { ...IDLE_MEETINGS_RECORDING };
+      return host.state;
+    },
+    async getState() {
+      host.calls.push("getState");
+      return host.state;
+    },
+  };
+  return host;
+}
+
+describe("meetings recording", () => {
+  it("starts system+mic recording on embedded join without a source picker", async () => {
+    const embed = fakeEmbed();
+    const tape = fakeRecording();
+    const workspace = createMeetingsWorkspace({ clock: () => NOW, embed, recording: tape });
+
+    await workspace.joinPastedUrl("https://meet.google.com/abc-defg-hij");
+
+    const snapshot = workspace.getSnapshot();
+    expect(snapshot.joinedSessionId).toBe("pasted:abc-defg-hij");
+    expect(snapshot.recording).toEqual({
+      status: "recording",
+      mode: "system+mic",
+      sessionId: "pasted:abc-defg-hij",
+      filePath: recordingFilePath("pasted:abc-defg-hij"),
+      degradation: null,
+    });
+    expect(tape.calls).toEqual(["start:pasted:abc-defg-hij"]);
+    expect(tape.calls.join(" ")).not.toMatch(/picker|source/i);
+  });
+
+  it("stops recording on leave and keeps recording while the embed is hidden", async () => {
+    const embed = fakeEmbed();
+    const tape = fakeRecording();
+    const workspace = createMeetingsWorkspace({ clock: () => NOW, embed, recording: tape });
+    await workspace.joinPastedUrl("https://meet.google.com/abc-defg-hij");
+
+    await workspace.hideEmbed();
+    expect(meetingsSurfaceJoined(workspace.getSnapshot())).toBe(true);
+    expect(workspace.getSnapshot().recording.status).toBe("recording");
+    expect(workspace.getSnapshot().recording.filePath).toBe(
+      recordingFilePath("pasted:abc-defg-hij"),
+    );
+    expect(tape.calls).toEqual(["start:pasted:abc-defg-hij"]);
+
+    await workspace.showEmbed();
+    expect(workspace.getSnapshot().recording.status).toBe("recording");
+    expect(tape.calls).toEqual(["start:pasted:abc-defg-hij"]);
+
+    await workspace.leave();
+    expect(meetingsSurfaceJoined(workspace.getSnapshot())).toBe(false);
+    expect(workspace.getSnapshot().recording).toEqual(IDLE_MEETINGS_RECORDING);
+    expect(tape.calls).toEqual(["start:pasted:abc-defg-hij", "stop"]);
+  });
+
+  it("continues as mic-only with a visible degradation when loopback cannot start", async () => {
+    const embed = fakeEmbed();
+    const tape = fakeRecording({
+      mode: "mic",
+      degradation: MEETINGS_LOOPBACK_DEGRADATION,
+    });
+    const workspace = createMeetingsWorkspace({ clock: () => NOW, embed, recording: tape });
+
+    await workspace.joinPastedUrl("https://meet.google.com/abc-defg-hij");
+
+    const snapshot = workspace.getSnapshot();
+    expect(snapshot.joinedSessionId).toBe("pasted:abc-defg-hij");
+    expect(snapshot.recording.status).toBe("recording");
+    expect(snapshot.recording.mode).toBe("mic");
+    expect(snapshot.recording.degradation).toBe(MEETINGS_LOOPBACK_DEGRADATION);
+    expect(snapshot.recording.filePath).toBe(recordingFilePath("pasted:abc-defg-hij"));
   });
 });

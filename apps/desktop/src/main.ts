@@ -135,6 +135,7 @@ import {
 } from "./updateState";
 import { registerDesktopVoiceTranscriptionHandler } from "./voiceTranscription";
 import { registerMeetingsCalendarIpc } from "./meetingsCalendarIpc";
+import { registerMeetingsRecordingIpc } from "./meetingsRecordingIpc";
 import { MeetingWebViewManager } from "./meetingsWebview";
 import { registerMeetingsWebviewIpc } from "./meetingsWebviewIpc";
 import {
@@ -3745,6 +3746,9 @@ function registerIpcHandlers(): void {
   });
   registerMeetingsWebviewIpc({
     manager: meetingWebViewManager,
+  });
+  registerMeetingsRecordingIpc({
+    homeDir: BASE_DIR,
   });
   startBrowserPerformanceLogging();
   registerBrowserIpcHandlers(ipcMain, browserManager);

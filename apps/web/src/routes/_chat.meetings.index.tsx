@@ -22,7 +22,10 @@ function MeetingsIndexRouteView() {
   return (
     <RouteInsetSurface>
       {meetingsSurfaceJoined(snapshot) ? (
-        <MeetingsEmbedCanvas onLeave={() => void leave()} />
+        <MeetingsEmbedCanvas
+          onLeave={() => void leave()}
+          recordingDegradation={snapshot.recording.degradation}
+        />
       ) : (
         <MeetingsIdleCanvas
           workspace={snapshot}

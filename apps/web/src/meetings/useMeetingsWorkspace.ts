@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 
 import { createDesktopMeetingsCalendarHost } from "./desktopMeetingsCalendar";
 import { createDesktopMeetingsEmbedHost } from "./desktopMeetingsEmbed";
+import { createDesktopMeetingsRecordingHost } from "./desktopMeetingsRecording";
 import {
   createMeetingsWorkspace,
   IDLE_MEETINGS_WORKSPACE,
@@ -19,6 +20,7 @@ function getSharedMeetingsWorkspace(): MeetingsWorkspace {
   sharedWorkspace ??= createMeetingsWorkspace({
     calendar: createDesktopMeetingsCalendarHost(),
     embed: createDesktopMeetingsEmbedHost(),
+    recording: createDesktopMeetingsRecordingHost(),
   });
   return sharedWorkspace;
 }

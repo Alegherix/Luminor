@@ -5,7 +5,13 @@ import { resolveDesktopDipRectFromCssRect } from "@luminor/shared/desktopChrome"
 import { Button } from "~/components/ui/button";
 import { readDesktopZoomFactor, subscribeDesktopZoomFactor } from "~/lib/desktopZoom";
 
-export function MeetingsEmbedCanvas({ onLeave }: { readonly onLeave: () => void }) {
+export function MeetingsEmbedCanvas({
+  onLeave,
+  recordingDegradation = null,
+}: {
+  readonly onLeave: () => void;
+  readonly recordingDegradation?: string | null;
+}) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -46,7 +52,14 @@ export function MeetingsEmbedCanvas({ onLeave }: { readonly onLeave: () => void 
   return (
     <section className="flex h-full min-h-0 flex-col" aria-label="Google Meet">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2">
-        <p className="text-sm text-muted-foreground">Google Meet is open in this window.</p>
+        <div className="min-w-0">
+          <p className="text-sm text-muted-foreground">Google Meet is open in this window.</p>
+          {recordingDegradation ? (
+            <p className="mt-1 text-sm text-destructive" role="status">
+              {recordingDegradation}
+            </p>
+          ) : null}
+        </div>
         <Button type="button" variant="destructive" onClick={onLeave}>
           Leave
         </Button>
