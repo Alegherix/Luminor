@@ -20,6 +20,7 @@ import {
   kanbanCardPullRequest,
   kanbanDraftCardId,
   kanbanThreadCardId,
+  liveBranchByWorktreePath,
   matchPullRequestListEntryForCard,
   normalizeKanbanBoardFilters,
   orderDraftCards,
@@ -1264,6 +1265,26 @@ describe("kanban board filters", () => {
     expect(filtered.projects[0]?.done.map((card) => card.threadId)).toEqual([
       "thread-review-live",
     ]);
+  });
+
+  it("maps worktree paths to the live checkout branch and ignores remotes", () => {
+    const mapped = liveBranchByWorktreePath([
+      {
+        name: "martin/project-type",
+        worktreePath: "/tmp/worktrees/116a/luminor/",
+      },
+      {
+        name: "origin/martin/project-type",
+        isRemote: true,
+        worktreePath: "/tmp/worktrees/116a/luminor",
+      },
+      {
+        name: "master",
+        worktreePath: null,
+      },
+    ]);
+    expect(mapped.get("/tmp/worktrees/116a/luminor")).toBe("martin/project-type");
+    expect(mapped.size).toBe(1);
   });
 
   it("matches the live worktree branch when the stored thread branch is stale", () => {

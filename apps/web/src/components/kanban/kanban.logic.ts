@@ -853,6 +853,31 @@ export interface KanbanLivePullRequestHint {
   readonly pullRequest?: OrchestrationThreadPullRequest | null;
 }
 
+export function normalizeKanbanWorktreePath(path: string): string {
+  return path.trim().replace(/\/+$/, "");
+}
+
+export function liveBranchByWorktreePath(
+  branches: readonly {
+    name: string;
+    isRemote?: boolean | undefined;
+    worktreePath?: string | null | undefined;
+  }[],
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const branch of branches) {
+    if (branch.isRemote === true || !branch.worktreePath) {
+      continue;
+    }
+    const path = normalizeKanbanWorktreePath(branch.worktreePath);
+    if (path.length === 0) {
+      continue;
+    }
+    map.set(path, branch.name);
+  }
+  return map;
+}
+
 export function matchPullRequestListEntryForCard(
   card: Pick<KanbanCard, "projectId" | "branch" | "thread" | "pullRequest">,
   entries: readonly PullRequestListEntry[],
