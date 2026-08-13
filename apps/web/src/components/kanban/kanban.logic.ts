@@ -4,7 +4,13 @@
 // Layer: UI logic (no React, no stores) so the board math stays unit-testable.
 // Exports: deriveKanbanColumn, buildKanbanBoard, ordering + drop-action helpers.
 
-import type { ProjectId, ProviderKind, ThreadEnvironmentMode, ThreadId } from "@luminor/contracts";
+import type {
+  OrchestrationThreadPullRequest,
+  ProjectId,
+  ProviderKind,
+  ThreadEnvironmentMode,
+  ThreadId,
+} from "@luminor/contracts";
 import { buildPromptThreadTitleFallback } from "@luminor/shared/chatThreads";
 import { isPendingThreadWorktree } from "@luminor/shared/threadEnvironment";
 import type { ComposerThreadDraftState } from "../../composerDraftStore";
@@ -660,6 +666,186 @@ export function buildKanbanBoard(input: BuildKanbanBoardInput): KanbanBoard {
 /** Overview project columns list cards In Progress → Draft → Done. */
 export function flattenProjectBoardForOverview(board: KanbanProjectBoard): KanbanCard[] {
   return [...board.inProgress, ...board.draft, ...board.done];
+}
+
+export const KANBAN_PR_FILTER_STATES = ["draft", "reviewNeeded", "merged", "blocked"] as const;
+export type KanbanPrFilterState = (typeof KANBAN_PR_FILTER_STATES)[number];
+
+export const KANBAN_PR_FILTER_LABELS: Record<KanbanPrFilterState, string> = {
+  draft: "Draft",
+  reviewNeeded: "Review Needed",
+  merged: "Merged",
+  blocked: "Blocked",
+};
+
+export const KANBAN_WORK_FILTER_STATES = ["working", "done"] as const;
+export type KanbanWorkFilterState = (typeof KANBAN_WORK_FILTER_STATES)[number];
+
+export const KANBAN_WORK_FILTER_LABELS: Record<KanbanWorkFilterState, string> = {
+  working: "Working",
+  done: "Done",
+};
+
+export interface KanbanBoardFilters {
+  readonly prStates: readonly KanbanPrFilterState[];
+  readonly workStates: readonly KanbanWorkFilterState[];
+  readonly projectIds: readonly string[];
+}
+
+export const EMPTY_KANBAN_BOARD_FILTERS: KanbanBoardFilters = {
+  prStates: [],
+  workStates: [],
+  projectIds: [],
+};
+
+function normalizeKanbanProjectIds(projectIds: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const projectId of projectIds) {
+    if (projectId.length === 0 || seen.has(projectId)) {
+      continue;
+    }
+    seen.add(projectId);
+    normalized.push(projectId);
+  }
+  return normalized.toSorted();
+}
+
+export function normalizeKanbanBoardFilters(filters: KanbanBoardFilters): KanbanBoardFilters {
+  return {
+    prStates: KANBAN_PR_FILTER_STATES.filter((state) => filters.prStates.includes(state)),
+    workStates: KANBAN_WORK_FILTER_STATES.filter((state) => filters.workStates.includes(state)),
+    projectIds: normalizeKanbanProjectIds(filters.projectIds),
+  };
+}
+
+export function areKanbanBoardFiltersEqual(
+  left: KanbanBoardFilters,
+  right: KanbanBoardFilters,
+): boolean {
+  return (
+    left.prStates.length === right.prStates.length &&
+    right.prStates.every((state, index) => left.prStates[index] === state) &&
+    left.workStates.length === right.workStates.length &&
+    right.workStates.every((state, index) => left.workStates[index] === state) &&
+    left.projectIds.length === right.projectIds.length &&
+    right.projectIds.every((projectId, index) => left.projectIds[index] === projectId)
+  );
+}
+
+export function areKanbanFiltersActive(filters: KanbanBoardFilters): boolean {
+  return (
+    filters.prStates.length > 0 || filters.workStates.length > 0 || filters.projectIds.length > 0
+  );
+}
+
+export function countActiveKanbanFilterGroups(filters: KanbanBoardFilters): number {
+  return (
+    (filters.prStates.length > 0 ? 1 : 0) +
+    (filters.workStates.length > 0 ? 1 : 0) +
+    (filters.projectIds.length > 0 ? 1 : 0)
+  );
+}
+
+export function toggleKanbanFilterValue<T extends string>(
+  selected: readonly T[],
+  value: T,
+): T[] {
+  return selected.includes(value)
+    ? selected.filter((entry) => entry !== value)
+    : [...selected, value];
+}
+
+export function resolveKanbanPrFilterState(
+  pr:
+    | Pick<OrchestrationThreadPullRequest, "state" | "isDraft" | "mergeability">
+    | null
+    | undefined,
+): KanbanPrFilterState | null {
+  if (!pr) {
+    return null;
+  }
+  if (pr.state === "merged") {
+    return "merged";
+  }
+  if (pr.state === "open" && pr.isDraft === true) {
+    return "draft";
+  }
+  if (pr.state === "open" && pr.mergeability === "conflicting") {
+    return "blocked";
+  }
+  if (pr.state === "open") {
+    return "reviewNeeded";
+  }
+  return null;
+}
+
+export function resolveKanbanWorkFilterState(
+  card: Pick<KanbanCard, "column">,
+): KanbanWorkFilterState | null {
+  if (card.column === "inProgress") {
+    return "working";
+  }
+  if (card.column === "done") {
+    return "done";
+  }
+  return null;
+}
+
+export function kanbanCardMatchesFilters(
+  card: Pick<KanbanCard, "column" | "thread" | "projectId">,
+  filters: KanbanBoardFilters,
+): boolean {
+  if (filters.projectIds.length > 0 && !filters.projectIds.includes(card.projectId)) {
+    return false;
+  }
+  if (filters.prStates.length > 0) {
+    const prState = resolveKanbanPrFilterState(card.thread?.lastKnownPr);
+    if (prState === null || !filters.prStates.includes(prState)) {
+      return false;
+    }
+  }
+  if (filters.workStates.length > 0) {
+    const workState = resolveKanbanWorkFilterState(card);
+    if (workState === null || !filters.workStates.includes(workState)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function applyKanbanBoardFilters(
+  board: KanbanBoard,
+  filters: KanbanBoardFilters,
+): KanbanBoard {
+  if (!areKanbanFiltersActive(filters)) {
+    return board;
+  }
+  let totalCount = 0;
+  const projects = board.projects.map((project) => {
+    const draft = project.draft.filter((card) => kanbanCardMatchesFilters(card, filters));
+    const inProgress = project.inProgress.filter((card) =>
+      kanbanCardMatchesFilters(card, filters),
+    );
+    const done = project.done.filter((card) => kanbanCardMatchesFilters(card, filters));
+    const projectTotalCount = draft.length + inProgress.length + done.length;
+    totalCount += projectTotalCount;
+    if (
+      draft.length === project.draft.length &&
+      inProgress.length === project.inProgress.length &&
+      done.length === project.done.length
+    ) {
+      return project;
+    }
+    return {
+      ...project,
+      draft,
+      inProgress,
+      done,
+      totalCount: projectTotalCount,
+    };
+  });
+  return { projects, totalCount };
 }
 
 export type KanbanDraftOpenThreadReason = "not-draft" | "empty" | "worktree-pending";

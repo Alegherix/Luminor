@@ -1,21 +1,32 @@
 import { describe, expect, it } from "vitest";
 
+import type { OrchestrationThreadPullRequest } from "@luminor/contracts";
 import { ProjectId, ThreadId } from "@luminor/contracts";
 import { DEFAULT_INTERACTION_MODE } from "../../types";
 import type { SidebarThreadSummary, ThreadSession } from "../../types";
 import {
+  applyKanbanBoardFilters,
+  areKanbanBoardFiltersEqual,
   areKanbanComposerDraftSnapshotsEqual,
+  areKanbanFiltersActive,
   buildKanbanComposerDraftSnapshot,
   buildKanbanBoard,
+  countActiveKanbanFilterGroups,
   deriveKanbanColumn,
+  EMPTY_KANBAN_BOARD_FILTERS,
   flattenProjectBoardForOverview,
   isKanbanDraftOnlyCard,
+  kanbanCardMatchesFilters,
   kanbanDraftCardId,
   kanbanThreadCardId,
+  normalizeKanbanBoardFilters,
   orderDraftCards,
   reorderDraftCardIds,
   resolveDraftDropAction,
+  resolveKanbanPrFilterState,
+  resolveKanbanWorkFilterState,
   resolveOptimisticDispatchOutcome,
+  toggleKanbanFilterValue,
   type BuildKanbanBoardInput,
   type KanbanCard,
   type KanbanOptimisticDispatchSnapshot,
@@ -971,5 +982,169 @@ describe("flattenProjectBoardForOverview", () => {
     });
 
     expect(flattened.map((entry) => entry.cardId)).toEqual(["w", "d", "x"]);
+  });
+});
+
+function makePr(
+  overrides: Partial<OrchestrationThreadPullRequest> = {},
+): OrchestrationThreadPullRequest {
+  return {
+    number: 1 as OrchestrationThreadPullRequest["number"],
+    title: "PR" as OrchestrationThreadPullRequest["title"],
+    url: "https://example.com/pr/1",
+    baseBranch: "main" as OrchestrationThreadPullRequest["baseBranch"],
+    headBranch: "feat" as OrchestrationThreadPullRequest["headBranch"],
+    state: "open",
+    ...overrides,
+  };
+}
+
+describe("kanban board filters", () => {
+  it("maps PR presentation states used by the filter menu", () => {
+    expect(resolveKanbanPrFilterState(null)).toBeNull();
+    expect(resolveKanbanPrFilterState(makePr({ isDraft: true }))).toBe("draft");
+    expect(resolveKanbanPrFilterState(makePr({ mergeability: "conflicting" }))).toBe("blocked");
+    expect(resolveKanbanPrFilterState(makePr())).toBe("reviewNeeded");
+    expect(resolveKanbanPrFilterState(makePr({ state: "merged" }))).toBe("merged");
+    expect(resolveKanbanPrFilterState(makePr({ state: "closed" }))).toBeNull();
+  });
+
+  it("keeps draft ahead of conflicts on an open PR", () => {
+    expect(
+      resolveKanbanPrFilterState(makePr({ isDraft: true, mergeability: "conflicting" })),
+    ).toBe("draft");
+  });
+
+  it("maps work state from the card column", () => {
+    expect(resolveKanbanWorkFilterState({ column: "inProgress" })).toBe("working");
+    expect(resolveKanbanWorkFilterState({ column: "done" })).toBe("done");
+    expect(resolveKanbanWorkFilterState({ column: "draft" })).toBeNull();
+  });
+
+  it("treats empty selections as no filter", () => {
+    const card: Pick<KanbanCard, "column" | "thread" | "projectId"> = {
+      column: "draft",
+      projectId: ProjectId.makeUnsafe("project-1"),
+      thread: makeSidebarThreadSummary(),
+    };
+    expect(kanbanCardMatchesFilters(card, EMPTY_KANBAN_BOARD_FILTERS)).toBe(true);
+    expect(areKanbanFiltersActive(EMPTY_KANBAN_BOARD_FILTERS)).toBe(false);
+    expect(countActiveKanbanFilterGroups(EMPTY_KANBAN_BOARD_FILTERS)).toBe(0);
+  });
+
+  it("hides cards that do not match the selected PR or work states", () => {
+    const reviewNeeded = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-review"),
+      lastKnownPr: makePr(),
+      latestTurn: makeLatestTurn(),
+    });
+    const mergedWorking = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-merged-working"),
+      lastKnownPr: makePr({ state: "merged" }),
+      hasLiveTailWork: true,
+    });
+    const noPr = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-no-pr"),
+      latestTurn: makeLatestTurn(),
+    });
+
+    const board = buildKanbanBoard(
+      makeBoardInput({ threads: [reviewNeeded, mergedWorking, noPr] }),
+    );
+    const filtered = applyKanbanBoardFilters(board, {
+      prStates: ["reviewNeeded", "merged"],
+      workStates: ["working"],
+      projectIds: [],
+    });
+
+    expect(filtered.totalCount).toBe(1);
+    expect(filtered.projects[0]?.inProgress.map((card) => card.threadId)).toEqual([
+      "thread-merged-working",
+    ]);
+    expect(filtered.projects[0]?.done).toEqual([]);
+    expect(
+      countActiveKanbanFilterGroups({
+        prStates: ["merged"],
+        workStates: ["done"],
+        projectIds: [],
+      }),
+    ).toBe(2);
+  });
+
+  it("hides cards from repos that are not selected", () => {
+    const frontendId = ProjectId.makeUnsafe("project-frontend");
+    const luminorId = ProjectId.makeUnsafe("project-luminor");
+    const frontendThread = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-frontend"),
+      projectId: frontendId,
+      latestTurn: makeLatestTurn(),
+    });
+    const luminorThread = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-luminor"),
+      projectId: luminorId,
+      latestTurn: makeLatestTurn(),
+    });
+    const board = buildKanbanBoard(
+      makeBoardInput({
+        projects: [
+          { id: frontendId, kind: "project", name: "frontend" },
+          { id: luminorId, kind: "project", name: "Luminor" },
+        ],
+        threads: [frontendThread, luminorThread],
+      }),
+    );
+    const filtered = applyKanbanBoardFilters(board, {
+      prStates: [],
+      workStates: [],
+      projectIds: [frontendId],
+    });
+
+    expect(filtered.totalCount).toBe(1);
+    expect(filtered.projects.find((project) => project.projectId === frontendId)?.totalCount).toBe(
+      1,
+    );
+    expect(filtered.projects.find((project) => project.projectId === luminorId)?.totalCount).toBe(
+      0,
+    );
+    expect(
+      countActiveKanbanFilterGroups({
+        prStates: [],
+        workStates: [],
+        projectIds: [frontendId],
+      }),
+    ).toBe(1);
+  });
+
+  it("returns the same board when no filter is active", () => {
+    const board = buildKanbanBoard(
+      makeBoardInput({ threads: [makeSidebarThreadSummary({ latestTurn: makeLatestTurn() })] }),
+    );
+    expect(applyKanbanBoardFilters(board, EMPTY_KANBAN_BOARD_FILTERS)).toBe(board);
+  });
+
+  it("normalizes filter order and toggles values", () => {
+    expect(
+      normalizeKanbanBoardFilters({
+        prStates: ["merged", "draft", "merged"],
+        workStates: ["done", "working"],
+        projectIds: ["b", "a", "b"],
+      }),
+    ).toEqual({
+      prStates: ["draft", "merged"],
+      workStates: ["working", "done"],
+      projectIds: ["a", "b"],
+    });
+    expect(toggleKanbanFilterValue(["draft", "merged"], "blocked")).toEqual([
+      "draft",
+      "merged",
+      "blocked",
+    ]);
+    expect(toggleKanbanFilterValue(["draft", "merged"], "draft")).toEqual(["merged"]);
+    expect(
+      areKanbanBoardFiltersEqual(
+        { prStates: ["draft"], workStates: [], projectIds: [] },
+        { prStates: ["draft"], workStates: [], projectIds: [] },
+      ),
+    ).toBe(true);
   });
 });

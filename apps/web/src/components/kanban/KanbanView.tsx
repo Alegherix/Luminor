@@ -41,6 +41,7 @@ function isNewTaskShortcut(event: KeyboardEvent): boolean {
     ? event.metaKey && !event.ctrlKey
     : event.ctrlKey && !event.metaKey;
 }
+import { useKanbanUiStore } from "../../kanbanUiStore";
 import { useStore } from "../../store";
 import {
   CHAT_SURFACE_HEADER_DIVIDER_CLASS_NAME,
@@ -48,16 +49,26 @@ import {
   CHAT_SURFACE_HEADER_PADDING_X_CLASS,
 } from "../chat/chatHeaderControls";
 import { CHAT_BACKGROUND_CLASS_NAME } from "../chat/composerPickerStyles";
+import { KanbanFilterMenu } from "./KanbanFilterMenu";
 import { KanbanNewTaskDialog } from "./KanbanNewTaskDialog";
 import { KanbanOverview } from "./KanbanOverview";
 import { KanbanProjectBoardView } from "./KanbanProjectBoardView";
 import { useKanbanBoard } from "./useKanbanBoard";
 import { useKanbanCardContextMenu } from "./useKanbanCardContextMenu";
-import type { KanbanCard } from "./kanban.logic";
+import {
+  applyKanbanBoardFilters,
+  areKanbanFiltersActive,
+  EMPTY_KANBAN_BOARD_FILTERS,
+  type KanbanCard,
+} from "./kanban.logic";
 
 export default function KanbanView({ projectId }: { projectId: string | null }) {
   const navigate = useNavigate();
   const board = useKanbanBoard();
+  const boardFilters = useKanbanUiStore((state) => state.boardFilters);
+  const setBoardFilters = useKanbanUiStore((state) => state.setBoardFilters);
+  const visibleBoard = applyKanbanBoardFilters(board, boardFilters);
+  const filtersActive = areKanbanFiltersActive(boardFilters);
   const threadsHydrated = useStore((state) => state.threadsHydrated);
   const desktopTopBarTrafficLightGutterClassName = useDesktopTopBarTrafficLightGutterClassName();
   const desktopTopBarWindowControlsGutterClassName =
@@ -66,8 +77,8 @@ export default function KanbanView({ projectId }: { projectId: string | null }) 
   const projectBoard =
     projectId === null
       ? null
-      : (board.projects.find((candidate) => candidate.projectId === projectId) ?? null);
-  const hasActiveCardWork = board.projects.some((project) =>
+      : (visibleBoard.projects.find((candidate) => candidate.projectId === projectId) ?? null);
+  const hasActiveCardWork = visibleBoard.projects.some((project) =>
     project.inProgress.some((card) => card.activeWorkStartedAt !== null),
   );
   const nowMs = useNowMs(hasActiveCardWork);
@@ -182,8 +193,16 @@ export default function KanbanView({ projectId }: { projectId: string | null }) 
                 {projectBoard ? projectBoard.projectName : "Kanban"}
               </h2>
               <span className="shrink-0 text-xs text-muted-foreground/70">
-                {projectBoard ? projectBoard.totalCount : board.totalCount} tasks
+                {projectBoard ? projectBoard.totalCount : visibleBoard.totalCount} tasks
               </span>
+              <KanbanFilterMenu
+                filters={boardFilters}
+                onChange={setBoardFilters}
+                repos={board.projects.map((project) => ({
+                  id: project.projectId,
+                  name: project.projectName,
+                }))}
+              />
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -225,12 +244,16 @@ export default function KanbanView({ projectId }: { projectId: string | null }) 
             />
           ) : (
             <KanbanOverview
-              board={board}
+              board={visibleBoard}
               onOpenProject={handleOpenProject}
               onOpenCard={handleOpenCard}
               onCardContextMenu={onCardContextMenu}
               onNewTask={handleNewTask}
               nowMs={nowMs}
+              isFiltered={filtersActive}
+              onClearFilters={() => {
+                setBoardFilters(EMPTY_KANBAN_BOARD_FILTERS);
+              }}
             />
           )}
         </div>

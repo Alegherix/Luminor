@@ -7,13 +7,23 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-import type { KanbanOptimisticDispatchSnapshot } from "./components/kanban/kanban.logic";
+import {
+  areKanbanBoardFiltersEqual,
+  EMPTY_KANBAN_BOARD_FILTERS,
+  KANBAN_PR_FILTER_STATES,
+  KANBAN_WORK_FILTER_STATES,
+  normalizeKanbanBoardFilters,
+  type KanbanBoardFilters,
+  type KanbanOptimisticDispatchSnapshot,
+} from "./components/kanban/kanban.logic";
 
 interface KanbanUiStoreState {
   /** Manual order of draft-column card ids per project, captured after a drag. */
   draftOrderByProjectId: Record<string, string[]>;
   setDraftOrder: (projectId: string, order: readonly string[]) => void;
   clearDraftOrder: (projectId: string) => void;
+  boardFilters: KanbanBoardFilters;
+  setBoardFilters: (filters: KanbanBoardFilters) => void;
   /**
    * Ephemeral (never persisted): dispatched drops still waiting for their first
    * runtime signal. The board renders these In Progress; reconciliation clears them
@@ -65,6 +75,51 @@ function sanitizeDraftOrderByProjectId(value: unknown): Record<string, string[]>
   return result;
 }
 
+function sanitizeAllowedStrings<T extends string>(value: unknown, allowed: readonly T[]): T[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const allowedSet = new Set(allowed);
+  const seen = new Set<T>();
+  const result: T[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || !allowedSet.has(entry as T) || seen.has(entry as T)) {
+      continue;
+    }
+    seen.add(entry as T);
+    result.push(entry as T);
+  }
+  return result;
+}
+
+function sanitizeProjectIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || entry.length === 0 || seen.has(entry)) {
+      continue;
+    }
+    seen.add(entry);
+    result.push(entry);
+  }
+  return result;
+}
+
+function sanitizeBoardFilters(value: unknown): KanbanBoardFilters {
+  if (typeof value !== "object" || value === null) {
+    return EMPTY_KANBAN_BOARD_FILTERS;
+  }
+  const record = value as { prStates?: unknown; workStates?: unknown; projectIds?: unknown };
+  return normalizeKanbanBoardFilters({
+    prStates: sanitizeAllowedStrings(record.prStates, KANBAN_PR_FILTER_STATES),
+    workStates: sanitizeAllowedStrings(record.workStates, KANBAN_WORK_FILTER_STATES),
+    projectIds: sanitizeProjectIds(record.projectIds),
+  });
+}
+
 export const useKanbanUiStore = create<KanbanUiStoreState>()(
   persist(
     (set) => ({
@@ -97,6 +152,16 @@ export const useKanbanUiStore = create<KanbanUiStoreState>()(
           const next = { ...state.draftOrderByProjectId };
           delete next[projectId];
           return { draftOrderByProjectId: next };
+        });
+      },
+      boardFilters: EMPTY_KANBAN_BOARD_FILTERS,
+      setBoardFilters: (filters) => {
+        set((state) => {
+          const next = normalizeKanbanBoardFilters(filters);
+          if (areKanbanBoardFiltersEqual(state.boardFilters, next)) {
+            return state;
+          }
+          return { boardFilters: next };
         });
       },
       optimisticDispatchByThreadId: {},
@@ -140,14 +205,18 @@ export const useKanbanUiStore = create<KanbanUiStoreState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         draftOrderByProjectId: state.draftOrderByProjectId,
+        boardFilters: state.boardFilters,
       }),
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        draftOrderByProjectId: sanitizeDraftOrderByProjectId(
-          (persistedState as Partial<Pick<KanbanUiStoreState, "draftOrderByProjectId">> | undefined)
-            ?.draftOrderByProjectId,
-        ),
-      }),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as
+          | Partial<Pick<KanbanUiStoreState, "draftOrderByProjectId" | "boardFilters">>
+          | undefined;
+        return {
+          ...currentState,
+          draftOrderByProjectId: sanitizeDraftOrderByProjectId(persisted?.draftOrderByProjectId),
+          boardFilters: sanitizeBoardFilters(persisted?.boardFilters),
+        };
+      },
     },
   ),
 );

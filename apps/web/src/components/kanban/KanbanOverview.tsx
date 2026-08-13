@@ -100,6 +100,8 @@ export function KanbanOverview({
   onCardContextMenu,
   onNewTask,
   nowMs,
+  isFiltered,
+  onClearFilters,
 }: {
   board: KanbanBoard;
   onOpenProject: (projectId: ProjectId) => void;
@@ -107,12 +109,31 @@ export function KanbanOverview({
   onCardContextMenu?: ((card: KanbanCard, event: React.MouseEvent) => void) | undefined;
   onNewTask: (projectId: ProjectId) => void;
   nowMs?: number;
+  isFiltered?: boolean;
+  onClearFilters?: () => void;
 }) {
   // Projects without any cards are pure noise on the overview; their boards stay
   // reachable through /kanban/$projectId if linked directly.
   const visibleProjects = board.projects.filter((projectBoard) => projectBoard.totalCount > 0);
 
   if (visibleProjects.length === 0) {
+    if (isFiltered) {
+      return (
+        <div className="flex h-full items-center justify-center px-6">
+          <div className="max-w-sm text-center">
+            <div className="text-sm font-medium text-foreground/85">No matching tasks</div>
+            <div className="mt-1 text-sm text-muted-foreground">
+              Nothing on the board matches the current filters.
+            </div>
+            {onClearFilters ? (
+              <Button size="sm" variant="chrome-outline" className="mt-3" onClick={onClearFilters}>
+                Clear filters
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex h-full items-center justify-center px-6">
         <div className="max-w-sm text-center">
