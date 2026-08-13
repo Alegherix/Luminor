@@ -38,6 +38,12 @@ export const DESKTOP_IPC_CHANNELS = {
     leaveEmbed: "desktop:meetings-leave-embed",
     setEmbedBounds: "desktop:meetings-set-embed-bounds",
     getEmbedState: "desktop:meetings-get-embed-state",
+    startRecording: "desktop:meetings-start-recording",
+    appendRecordingChunk: "desktop:meetings-append-recording-chunk",
+    stopRecording: "desktop:meetings-stop-recording",
+    getRecordingState: "desktop:meetings-get-recording-state",
+    prepareLoopback: "desktop:meetings-prepare-loopback",
+    releaseLoopback: "desktop:meetings-release-loopback",
   },
   storageMigration: {
     read: "desktop:storage-migration-read",

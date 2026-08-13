@@ -11,4 +11,16 @@ describe("MeetingsEmbedCanvas", () => {
     expect(html).toContain("Leave");
     expect(html).toContain("meeting-webview-host");
   });
+
+  it("shows a visible loopback degradation while the call stays open", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsEmbedCanvas
+        onLeave={() => undefined}
+        recordingDegradation="System audio is unavailable. Recording microphone only."
+      />,
+    );
+
+    expect(html).toContain("System audio is unavailable. Recording microphone only.");
+    expect(html).toContain("Leave");
+  });
 });

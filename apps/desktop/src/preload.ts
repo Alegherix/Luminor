@@ -231,5 +231,11 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     leaveEmbed: () => ipcRenderer.invoke(IPC.meetings.leaveEmbed),
     setEmbedBounds: (bounds) => ipcRenderer.invoke(IPC.meetings.setEmbedBounds, bounds),
     getEmbedState: () => ipcRenderer.invoke(IPC.meetings.getEmbedState),
+    startRecording: (input) => ipcRenderer.invoke(IPC.meetings.startRecording, input),
+    appendRecordingChunk: (chunk) => ipcRenderer.invoke(IPC.meetings.appendRecordingChunk, chunk),
+    stopRecording: () => ipcRenderer.invoke(IPC.meetings.stopRecording),
+    getRecordingState: () => ipcRenderer.invoke(IPC.meetings.getRecordingState),
+    prepareLoopback: () => ipcRenderer.invoke(IPC.meetings.prepareLoopback),
+    releaseLoopback: () => ipcRenderer.invoke(IPC.meetings.releaseLoopback),
   },
 } satisfies DesktopBridge);

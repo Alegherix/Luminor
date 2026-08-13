@@ -1,7 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { createIdleMeetingsWorkspace, type MeetingsWorkspaceSnapshot } from "./meetingsWorkspace";
+import {
+  createIdleMeetingsWorkspace,
+  IDLE_MEETINGS_RECORDING,
+  type MeetingsWorkspaceSnapshot,
+} from "./meetingsWorkspace";
 import { MeetingsSidebarList } from "./MeetingsSidebarList";
 
 const NOW = new Date("2026-08-12T12:00:00.000Z");
@@ -13,6 +17,7 @@ const signedInWorkspace: MeetingsWorkspaceSnapshot = {
   joinedSessionId: null,
   embedVisible: false,
   joinError: null,
+  recording: IDLE_MEETINGS_RECORDING,
   pastedMeetUrl: "",
   dueReminders: [],
   sessions: [

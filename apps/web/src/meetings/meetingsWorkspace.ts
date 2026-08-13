@@ -31,6 +31,34 @@ export type MeetingReminder = {
   readonly meetUrl: string | null;
 };
 
+export type MeetingsRecordingMode = "system+mic" | "mic";
+export type MeetingsRecordingStatus = "idle" | "recording";
+
+export type MeetingsRecordingState = {
+  readonly status: MeetingsRecordingStatus;
+  readonly mode: MeetingsRecordingMode | null;
+  readonly sessionId: string | null;
+  readonly filePath: string | null;
+  readonly degradation: string | null;
+};
+
+export const IDLE_MEETINGS_RECORDING: MeetingsRecordingState = {
+  status: "idle",
+  mode: null,
+  sessionId: null,
+  filePath: null,
+  degradation: null,
+};
+
+export const MEETINGS_LOOPBACK_DEGRADATION =
+  "System audio is unavailable. Recording microphone only.";
+
+export type MeetingsRecordingHost = {
+  start(sessionId: string): Promise<MeetingsRecordingState>;
+  stop(): Promise<MeetingsRecordingState>;
+  getState(): Promise<MeetingsRecordingState>;
+};
+
 export type MeetingsWorkspaceSnapshot = {
   readonly connection: MeetingsConnectionStatus;
   readonly accountEmail: string | null;
@@ -38,6 +66,7 @@ export type MeetingsWorkspaceSnapshot = {
   readonly joinedSessionId: string | null;
   readonly embedVisible: boolean;
   readonly joinError: string | null;
+  readonly recording: MeetingsRecordingState;
   readonly sessions: readonly MeetingSession[];
   readonly pastedMeetUrl: string;
   readonly dueReminders: readonly MeetingReminder[];
@@ -108,6 +137,7 @@ export function createIdleMeetingsWorkspace(): MeetingsWorkspaceSnapshot {
     joinedSessionId: null,
     embedVisible: false,
     joinError: null,
+    recording: IDLE_MEETINGS_RECORDING,
     sessions: [],
     pastedMeetUrl: "",
     dueReminders: [],
@@ -337,6 +367,18 @@ const idleEmbed: MeetingsEmbedHost = {
   },
 };
 
+const idleRecording: MeetingsRecordingHost = {
+  async start() {
+    return IDLE_MEETINGS_RECORDING;
+  },
+  async stop() {
+    return IDLE_MEETINGS_RECORDING;
+  },
+  async getState() {
+    return IDLE_MEETINGS_RECORDING;
+  },
+};
+
 const unsignedCalendar: MeetingsCalendarHost = {
   async getStatus() {
     return { connected: false, accountEmail: null };
@@ -354,11 +396,13 @@ export function createMeetingsWorkspace(
     readonly clock?: () => Date;
     readonly calendar?: MeetingsCalendarHost;
     readonly embed?: MeetingsEmbedHost;
+    readonly recording?: MeetingsRecordingHost;
   } = {},
 ): MeetingsWorkspace {
   const clock = input.clock ?? (() => new Date());
   const calendar = input.calendar ?? unsignedCalendar;
   const embed = input.embed ?? idleEmbed;
+  const recording = input.recording ?? idleRecording;
   let snapshot = createIdleMeetingsWorkspace();
   const listeners = new Set<() => void>();
   const alreadyFired = new Set<string>();
@@ -521,6 +565,21 @@ export function createMeetingsWorkspace(
     });
   };
 
+  const startRecordingForSession = async (sessionId: string): Promise<MeetingsRecordingState> => {
+    if (snapshot.recording.status === "recording" && snapshot.recording.sessionId === sessionId) {
+      return snapshot.recording;
+    }
+    try {
+      return await recording.start(sessionId);
+    } catch (error) {
+      return {
+        ...IDLE_MEETINGS_RECORDING,
+        sessionId,
+        degradation: error instanceof Error ? error.message : "Recording could not start.",
+      };
+    }
+  };
+
   const joinMeetUrl = async (input: {
     readonly session: MeetingSession;
     readonly meetUrl: string;
@@ -546,9 +605,11 @@ export function createMeetingsWorkspace(
       : [...snapshot.sessions, withSessionStatus(input.session, now)];
     if (snapshot.joinedSessionId !== null && snapshot.joinedSessionId !== input.session.id) {
       sessions = markPastedSessionEnded(sessions, snapshot.joinedSessionId, now);
+      await recording.stop();
       await embed.leave();
     }
     const joined = await embed.join(input.meetUrl);
+    const recordingState = await startRecordingForSession(input.session.id);
     setSnapshot({
       ...snapshot,
       sessions,
@@ -556,6 +617,7 @@ export function createMeetingsWorkspace(
       joinedSessionId: input.session.id,
       embedVisible: joined.visible,
       joinError: null,
+      recording: recordingState,
       pastedMeetUrl: input.pastedMeetUrl ?? snapshot.pastedMeetUrl,
     });
   };
@@ -593,6 +655,17 @@ export function createMeetingsWorkspace(
     hydrate: async () => {
       await hydrateFromStatus(await calendar.getStatus());
       restoreJoinedFromEmbed(await embed.getState());
+      if (snapshot.joinedSessionId !== null) {
+        setSnapshot({
+          ...snapshot,
+          recording: await startRecordingForSession(snapshot.joinedSessionId),
+        });
+        return;
+      }
+      setSnapshot({
+        ...snapshot,
+        recording: await recording.getState(),
+      });
     },
     connect: async () => {
       await hydrateFromStatus(await calendar.connect());
@@ -660,6 +733,7 @@ export function createMeetingsWorkspace(
       }
       const now = clock();
       const sessions = markPastedSessionEnded(snapshot.sessions, snapshot.joinedSessionId, now);
+      await recording.stop();
       await embed.leave();
       setSnapshot({
         ...snapshot,
@@ -667,6 +741,7 @@ export function createMeetingsWorkspace(
         joinedSessionId: null,
         embedVisible: false,
         joinError: null,
+        recording: IDLE_MEETINGS_RECORDING,
       });
     },
     hideEmbed: async () => {
