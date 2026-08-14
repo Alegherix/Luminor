@@ -146,6 +146,7 @@ describe("pullRequestDetailInputFromPane", () => {
     pullRequestInitialTab: null,
     terminalThreadId: null,
     terminalId: null,
+    galleryImageKey: null,
   };
 
   it("builds the detail input from a fully-populated pull request pane", () => {

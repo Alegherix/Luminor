@@ -8736,10 +8736,7 @@ export default function ChatView({
         setComposerTrigger(detectComposerTrigger(promptForSend, promptForSend.length));
       }
       if (!setupCancelled) {
-        setThreadError(
-          threadIdForSend,
-          describeUserFacingError(err, "Failed to send message."),
-        );
+        setThreadError(threadIdForSend, describeUserFacingError(err, "Failed to send message."));
       }
     });
     sendInFlightRef.current = false;
@@ -9226,10 +9223,7 @@ export default function ChatView({
         return true;
       })()
         .catch((err: unknown) => {
-          setThreadError(
-            activeThread.id,
-            describeUserFacingError(err, "Failed to edit message."),
-          );
+          setThreadError(activeThread.id, describeUserFacingError(err, "Failed to edit message."));
           return false;
         })
         .finally(() => {
@@ -10812,9 +10806,22 @@ export default function ChatView({
     }
     return false;
   };
-  const onExpandTimelineImage = useCallback((preview: ExpandedImagePreview) => {
-    setExpandedImage(preview);
-  }, []);
+  // Transcript image clicks open the gallery dock pane focused on the clicked
+  // image when this ChatView hosts the right dock (the single main surface);
+  // embedded/split surfaces keep the modal overlay.
+  const openRightDockPane = useRightDockStore((store) => store.openPane);
+  const hostsRightDock = surfaceMode === "single" && Boolean(onToggleRightDock);
+  const onExpandTimelineImage = useCallback(
+    (preview: ExpandedImagePreview) => {
+      const galleryKey = preview.images[preview.index]?.galleryKey;
+      if (hostsRightDock && galleryKey) {
+        openRightDockPane(threadId, { kind: "gallery", galleryImageKey: galleryKey });
+        return;
+      }
+      setExpandedImage(preview);
+    },
+    [hostsRightDock, openRightDockPane, threadId],
+  );
   const onScrollToBottom = useCallback(() => {
     isAtEndRef.current = true;
     showScrollDebouncer.current.cancel();

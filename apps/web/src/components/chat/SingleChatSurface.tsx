@@ -134,6 +134,11 @@ const DockFilePane = lazy(() =>
     default: module.DockFilePane,
   })),
 );
+const DockGalleryPane = lazy(() =>
+  import("./DockGalleryPane").then((module) => ({
+    default: module.DockGalleryPane,
+  })),
+);
 
 const DIFF_INLINE_DEFAULT_WIDTH = "max(28rem, calc(50vw - 8rem))";
 const SINGLE_PANEL_MIN_WIDTH = 26 * 16;
@@ -941,6 +946,17 @@ export function SingleChatSurface(props: {
               onReferenceInChat={handleReferenceInChat}
               onAskWhyInChat={handleAskWhyInChat}
               onCommentInChat={handleCommentInChat}
+            />
+          </Suspense>
+        );
+      case "gallery":
+        return (
+          <Suspense fallback={<PanelStateMessage>Loading images...</PanelStateMessage>}>
+            <DockGalleryPane
+              threadId={props.threadId}
+              workspaceRoot={workspaceRoot}
+              pane={pane}
+              onSelectImage={(key) => updatePane(props.threadId, pane.id, { galleryImageKey: key })}
             />
           </Suspense>
         );

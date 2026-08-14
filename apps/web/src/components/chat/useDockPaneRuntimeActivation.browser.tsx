@@ -25,6 +25,7 @@ const BROWSER_PANE: RightDockPane = {
   pullRequestInitialTab: null,
   terminalThreadId: null,
   terminalId: null,
+  galleryImageKey: null,
 };
 
 interface RuntimeActivationProps {

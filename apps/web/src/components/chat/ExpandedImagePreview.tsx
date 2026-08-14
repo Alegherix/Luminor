@@ -1,6 +1,11 @@
+import { attachmentGalleryKey } from "./galleryPane.logic";
+
 export interface ExpandedImageItem {
   src: string;
   name: string;
+  // Present when the image also exists in the thread's gallery pane, so
+  // transcript clicks can open the gallery focused on it instead of the modal.
+  galleryKey?: string;
 }
 
 export interface ExpandedImagePreview {
@@ -26,6 +31,7 @@ export function buildExpandedImagePreview(
     images: previewableImages.map((image) => ({
       src: image.src,
       name: image.name,
+      galleryKey: attachmentGalleryKey(image.id),
     })),
     index: selectedIndex,
   };

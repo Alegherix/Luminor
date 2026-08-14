@@ -53,6 +53,7 @@ interface RightDockStore {
         | "pullRequestRepository"
         | "pullRequestNumber"
         | "pullRequestInitialTab"
+        | "galleryImageKey"
       >
     >,
   ) => void;
