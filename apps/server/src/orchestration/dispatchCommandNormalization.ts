@@ -1,7 +1,7 @@
 import type { ClientOrchestrationCommand, OrchestrationCommand } from "@luminor/contracts";
 import { isWorkspaceRootWithin, workspaceRootsEqual } from "@luminor/shared/threadWorkspace";
-import type { FileSystem, Path } from "effect";
 import { Effect, Schedule } from "effect";
+import type { FileSystem, Path } from "effect";
 
 import { createAttachmentId } from "../attachmentStore";
 

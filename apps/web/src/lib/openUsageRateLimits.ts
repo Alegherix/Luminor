@@ -4,8 +4,8 @@
 
 import type { ProviderKind } from "@luminor/contracts";
 
-import type { ProviderRateLimit, RateLimitWindow } from "~/lib/rateLimits";
 import { normalizeRateLimitLabel } from "~/lib/rateLimits";
+import type { ProviderRateLimit, RateLimitWindow } from "~/lib/rateLimits";
 
 interface OpenUsageProgressLine {
   type?: unknown;

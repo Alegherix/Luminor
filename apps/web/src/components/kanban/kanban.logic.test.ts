@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { OrchestrationThreadPullRequest, PullRequestListEntry } from "@luminor/contracts";
 import { ProjectId, ThreadId } from "@luminor/contracts";
+import type { OrchestrationThreadPullRequest, PullRequestListEntry } from "@luminor/contracts";
 import { DEFAULT_INTERACTION_MODE } from "../../types";
 import type { SidebarThreadSummary, ThreadSession } from "../../types";
 import {
@@ -25,6 +25,7 @@ import {
   normalizeKanbanBoardFilters,
   orderDraftCards,
   overlayKanbanBoardPullRequests,
+  overviewVisibleKanbanCards,
   reorderDraftCardIds,
   resolveDraftDropAction,
   resolveKanbanPrFilterState,
@@ -34,6 +35,7 @@ import {
   type BuildKanbanBoardInput,
   type KanbanCard,
   type KanbanOptimisticDispatchSnapshot,
+  type KanbanProjectBoard,
 } from "./kanban.logic";
 
 function makeLatestTurn(
@@ -954,38 +956,68 @@ describe("resolveDraftDropAction", () => {
 });
 
 describe("flattenProjectBoardForOverview", () => {
-  it("orders cards In Progress, then Draft, then Done", () => {
-    const card = (cardId: string, column: KanbanCard["column"]): KanbanCard => ({
-      cardId,
-      threadId: ThreadId.makeUnsafe(cardId),
-      projectId: ProjectId.makeUnsafe("project-1"),
-      column,
-      title: cardId,
-      provider: null,
-      isTerminal: false,
-      branch: null,
-      envMode: null,
-      worktreePath: null,
-      thread: null,
-      draftPrompt: "",
-      draftHasAttachments: false,
-      sortTimestamp: 0,
-      timestamp: null,
-      activeWorkStartedAt: null,
-      isOptimisticDispatch: false,
-    });
-
-    const flattened = flattenProjectBoardForOverview({
+  const card = (cardId: string, column: KanbanCard["column"]): KanbanCard => ({
+    cardId,
+    threadId: ThreadId.makeUnsafe(cardId),
+    projectId: ProjectId.makeUnsafe("project-1"),
+    column,
+    title: cardId,
+    provider: null,
+    isTerminal: false,
+    branch: null,
+    envMode: null,
+    worktreePath: null,
+    thread: null,
+    draftPrompt: "",
+    draftHasAttachments: false,
+    sortTimestamp: 0,
+    timestamp: null,
+    activeWorkStartedAt: null,
+    isOptimisticDispatch: false,
+  });
+  const board = (columns: Partial<Pick<KanbanProjectBoard, "draft" | "inProgress" | "done">>) => {
+    const draft = columns.draft ?? [];
+    const inProgress = columns.inProgress ?? [];
+    const done = columns.done ?? [];
+    return {
       projectId: ProjectId.makeUnsafe("project-1"),
       projectName: "Luminor",
-      projectKind: "project",
-      draft: [card("d", "draft")],
-      inProgress: [card("w", "inProgress")],
-      done: [card("x", "done")],
-      totalCount: 3,
-    });
+      projectKind: "project" as const,
+      draft,
+      inProgress,
+      done,
+      totalCount: draft.length + inProgress.length + done.length,
+    };
+  };
+
+  it("orders cards In Progress, then Draft, then Done", () => {
+    const flattened = flattenProjectBoardForOverview(
+      board({
+        draft: [card("d", "draft")],
+        inProgress: [card("w", "inProgress")],
+        done: [card("x", "done")],
+      }),
+    );
 
     expect(flattened.map((entry) => entry.cardId)).toEqual(["w", "d", "x"]);
+  });
+
+  it("caps the overview's visible cards and reports the folded remainder", () => {
+    const done = Array.from({ length: 25 }, (_, index) => card(`done-${index}`, "done"));
+    const { visibleCards, hiddenCount } = overviewVisibleKanbanCards(board({ done }));
+
+    expect(visibleCards).toHaveLength(20);
+    expect(hiddenCount).toBe(5);
+    expect(visibleCards.at(-1)?.cardId).toBe("done-19");
+  });
+
+  it("shows every card when the overview cap is not reached", () => {
+    const { visibleCards, hiddenCount } = overviewVisibleKanbanCards(
+      board({ inProgress: [card("w", "inProgress")] }),
+    );
+
+    expect(visibleCards.map((entry) => entry.cardId)).toEqual(["w"]);
+    expect(hiddenCount).toBe(0);
   });
 });
 
@@ -1063,10 +1095,12 @@ describe("kanban board filters", () => {
   });
 
   it("treats empty selections as no filter", () => {
-    const card: Pick<KanbanCard, "column" | "thread" | "projectId"> = {
+    const card: Pick<KanbanCard, "column" | "thread" | "projectId" | "branch" | "pullRequest"> = {
       column: "draft",
       projectId: ProjectId.makeUnsafe("project-1"),
       thread: makeSidebarThreadSummary(),
+      branch: null,
+      pullRequest: null,
     };
     expect(kanbanCardMatchesFilters(card, EMPTY_KANBAN_BOARD_FILTERS)).toBe(true);
     expect(areKanbanFiltersActive(EMPTY_KANBAN_BOARD_FILTERS)).toBe(false);

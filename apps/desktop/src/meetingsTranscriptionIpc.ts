@@ -48,9 +48,10 @@ export function registerMeetingsTranscriptionIpc(input: {
   readonly getOwnerWindow: () => BrowserWindow | null;
 }): void {
   const IPC = DESKTOP_IPC_CHANNELS.meetings;
+  const bundledScriptPath = resolveBundledTranscriptionScript();
   const manager = createMeetingsTranscriptionManager({
     homeDir: input.homeDir,
-    bundledScriptPath: resolveBundledTranscriptionScript() ?? undefined,
+    ...(bundledScriptPath === null ? {} : { bundledScriptPath }),
     pickEnvironmentPath: async () => pickTranscriptionEnvironmentPath(input.getOwnerWindow()),
   });
 

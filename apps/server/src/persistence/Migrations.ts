@@ -111,6 +111,13 @@ import Migration0092 from "./Migrations/092_ProjectScriptKinds.ts";
 import Migration0093 from "./Migrations/093_SpaceFolderOwnership.ts";
 import Migration0094 from "./Migrations/094_AgentGatewaySequentialCreationPlans.ts";
 import Migration0095 from "./Migrations/095_PullRequestInboxState.ts";
+import Migration0096 from "./Migrations/096_ProjectionThreadMessageTextSegments.ts";
+import Migration0097 from "./Migrations/097_AutomationFailureTolerance.ts";
+import Migration0098 from "./Migrations/098_BackfillAutomationRunThreadSource.ts";
+import Migration0099 from "./Migrations/099_BackfillMaxIterationsDisabledReason.ts";
+import Migration0100 from "./Migrations/100_ProjectionThreadsGoal.ts";
+import Migration0101 from "./Migrations/101_ProjectionThreadsGoalTiming.ts";
+import Migration0102 from "./Migrations/102_ProjectionThreadsGoalAchievements.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -221,6 +228,13 @@ export const migrationEntries = [
   [93, "SpaceFolderOwnership", Migration0093],
   [94, "AgentGatewaySequentialCreationPlans", Migration0094],
   [95, "PullRequestInboxState", Migration0095],
+  [96, "ProjectionThreadMessageTextSegments", Migration0096],
+  [97, "AutomationFailureTolerance", Migration0097],
+  [98, "BackfillAutomationRunThreadSource", Migration0098],
+  [99, "BackfillMaxIterationsDisabledReason", Migration0099],
+  [100, "ProjectionThreadsGoal", Migration0100],
+  [101, "ProjectionThreadsGoalTiming", Migration0101],
+  [102, "ProjectionThreadsGoalAchievements", Migration0102],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

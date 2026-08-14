@@ -28,11 +28,13 @@ import {
 } from "./codexProcessEnv";
 import {
   buildCodexInitializeParams,
+  buildCodexThreadOpenRequest,
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
   __codexCliVersionGateTesting,
   CodexAppServerManager,
   classifyCodexStderrLine,
+  formatCodexThreadResumeError,
   isRecoverableThreadResumeError,
   normalizeCodexModelSlug,
   readCodexAccountSnapshot,
@@ -1386,6 +1388,84 @@ describe("isRecoverableThreadResumeError", () => {
   });
 });
 
+describe("buildCodexThreadOpenRequest", () => {
+  const sessionOverrides = {
+    model: null,
+    cwd: "/tmp/project",
+    approvalPolicy: "never" as const,
+    approvalsReviewer: "user" as const,
+    sandbox: "danger-full-access" as const,
+  };
+
+  it("forks an external thread into a new provider-owned thread", () => {
+    expect(
+      buildCodexThreadOpenRequest({
+        forkSourceThreadId: "external-thread",
+        sessionOverrides,
+      }),
+    ).toEqual({
+      method: "thread/fork",
+      params: {
+        ...sessionOverrides,
+        threadId: "external-thread",
+      },
+    });
+  });
+
+  it("resumes an existing provider thread without start-only options", () => {
+    expect(
+      buildCodexThreadOpenRequest({
+        resumeThreadId: "existing-thread",
+        sessionOverrides,
+      }),
+    ).toEqual({
+      method: "thread/resume",
+      params: {
+        ...sessionOverrides,
+        threadId: "existing-thread",
+      },
+    });
+  });
+
+  it("starts a fresh thread with raw events disabled", () => {
+    expect(buildCodexThreadOpenRequest({ sessionOverrides })).toEqual({
+      method: "thread/start",
+      params: {
+        ...sessionOverrides,
+        experimentalRawEvents: false,
+      },
+    });
+  });
+
+  it("rejects conflicting resume and fork sources", () => {
+    expect(() =>
+      buildCodexThreadOpenRequest({
+        forkSourceThreadId: "fork-source",
+        resumeThreadId: "resume-source",
+        sessionOverrides,
+      }),
+    ).toThrow("cannot resume and fork at the same time");
+  });
+});
+
+describe("formatCodexThreadResumeError", () => {
+  it("explains how to resolve an active writer conflict", () => {
+    const formatted = formatCodexThreadResumeError(
+      new Error("thread/resume failed: thread external-thread already has an active writer"),
+      "external-thread",
+    );
+
+    expect(formatted.message).toBe(
+      "Codex thread external-thread is open in another Codex client. Close that client before continuing the original thread, or import it as a copy instead.",
+    );
+  });
+
+  it("preserves unrelated resume errors", () => {
+    const original = new Error("thread/resume failed: permission denied");
+    expect(formatCodexThreadResumeError(original, "external-thread")).toBe(original);
+  });
+});
+
 describe("readCodexAccountSnapshot", () => {
   it("disables spark for chatgpt plus accounts", () => {
     expect(
@@ -1795,6 +1875,57 @@ describe("sendTurn", () => {
         },
       },
     });
+  });
+
+  it("maps Debug to native default collaboration while preserving full-access overrides", async () => {
+    const { manager, context, sendRequest } = createSendTurnHarness();
+
+    await manager.sendTurn({
+      threadId: asThreadId("thread_1"),
+      input: "Investigate the crash",
+      interactionMode: "debug",
+    });
+
+    expect(sendRequest).toHaveBeenCalledWith(context, "turn/start", {
+      threadId: "thread_1",
+      ...fullAccessTurnOverrides,
+      summary: "auto",
+      input: [
+        {
+          type: "text",
+          text: "Investigate the crash",
+          text_elements: [],
+        },
+      ],
+      model: "gpt-5.3-codex",
+      collaborationMode: {
+        mode: "default",
+        settings: {
+          model: "gpt-5.3-codex",
+          reasoning_effort: "medium",
+          developer_instructions: CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
+        },
+      },
+    });
+  });
+
+  it("preserves auto-review overrides in Debug mode", async () => {
+    const { manager, context, sendRequest } = createSendTurnHarness("auto");
+
+    await manager.sendTurn({
+      threadId: asThreadId("thread_1"),
+      input: "Investigate and fix the flaky test",
+      interactionMode: "debug",
+    });
+
+    expect(sendRequest).toHaveBeenCalledWith(
+      context,
+      "turn/start",
+      expect.objectContaining({
+        ...autoTurnOverrides,
+        collaborationMode: expect.objectContaining({ mode: "default" }),
+      }),
+    );
   });
 
   it("keeps the session model when interaction mode is set without an explicit model", async () => {

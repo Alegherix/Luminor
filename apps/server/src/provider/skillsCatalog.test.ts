@@ -4,8 +4,7 @@
 // Layer: Server provider tests
 
 import { mkdtempSync, rmSync } from "node:fs";
-import { mkdir, realpath, symlink, writeFile } from "node:fs/promises";
-import { access } from "node:fs/promises";
+import { access, mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 

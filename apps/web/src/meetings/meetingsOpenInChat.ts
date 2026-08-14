@@ -1,5 +1,5 @@
-import type { ModelSelection, NativeApi, ProjectId, ThreadId } from "@luminor/contracts";
 import { DEFAULT_RUNTIME_MODE } from "@luminor/contracts";
+import type { ModelSelection, NativeApi, ProjectId, ThreadId } from "@luminor/contracts";
 
 import { promoteThreadCreate } from "../lib/threadCreatePromotion";
 import { DEFAULT_INTERACTION_MODE } from "../types";

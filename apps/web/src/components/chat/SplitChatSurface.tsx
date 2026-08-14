@@ -24,9 +24,10 @@ import {
   noopChatSurfaceAction,
 } from "./ChatThreadSurfacePrimitives";
 import { useBrowserPanelDesktopBridge } from "../../hooks/useBrowserPanelDesktopBridge";
+import { useDeviceEventBridge } from "../../hooks/useDeviceEventBridge";
 import { useHandleNewChat } from "../../hooks/useHandleNewChat";
-import type { ChatRightPanel } from "../../diffRouteSearch";
 import { stripDiffSearchParams } from "../../diffRouteSearch";
+import type { ChatRightPanel } from "../../diffRouteSearch";
 import {
   canComposerHandlePanelWidth,
   createPanelResizeOverlay,
@@ -623,7 +624,7 @@ export function SplitChatSurface(props: { splitViewId: SplitViewId; routeThreadI
       removeSplitView(activeSplitView.id);
       const fallbackThreadId = onlyThreadId ?? props.routeThreadId;
       if (!fallbackThreadId) {
-        void handleNewChat({ fresh: true });
+        void handleNewChat();
         return;
       }
       void navigate({
@@ -741,6 +742,12 @@ export function SplitChatSurface(props: { splitViewId: SplitViewId; routeThreadI
       : null,
   });
 
+  // Split view has no device panel yet: ChatRightPanel is browser|diff, so
+  // there is nowhere to open one. The bridge still runs with a null open
+  // handler because its other half keeps device state fresh, which the pane on
+  // a single-surface tab and the composer screenshot both read.
+  useDeviceEventBridge({ onOpenPaneRequested: null });
+
   const closePanePanel = (paneId: PaneId) => {
     updatePanePanelState(paneId, { panel: null });
   };
@@ -775,7 +782,7 @@ export function SplitChatSurface(props: { splitViewId: SplitViewId; routeThreadI
     }
 
     removeSplitView(activeSplitView.id);
-    void handleNewChat({ fresh: true });
+    void handleNewChat();
   };
 
   const closePaneThread = (paneId: PaneId) => {
@@ -853,7 +860,7 @@ export function SplitChatSurface(props: { splitViewId: SplitViewId; routeThreadI
       return;
     }
 
-    void handleNewChat({ fresh: true });
+    void handleNewChat();
   };
 
   const handleSetRatio = (nodeId: PaneId, ratio: number) => {

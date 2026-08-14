@@ -12,8 +12,7 @@ import {
   PanelRightCloseIcon,
 } from "~/lib/icons";
 import { cn } from "~/lib/utils";
-import type { ActiveTaskListState } from "../session-logic";
-import type { LatestProposedPlanState } from "../session-logic";
+import type { ActiveTaskListState, LatestProposedPlanState } from "../session-logic";
 import { formatTimestamp } from "../timestampFormat";
 import { proposedPlanTitle, stripDisplayedPlanMarkdown } from "../proposedPlan";
 import { ProposedPlanActions } from "./chat/ProposedPlanActions";

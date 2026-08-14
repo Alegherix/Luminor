@@ -2,6 +2,8 @@ import { assert, describe, it } from "@effect/vitest";
 
 import {
   createDesktopPlatformBuildConfig,
+  MAC_DEVICE_HELPER_RESOURCE_PATH,
+  MAC_DEVICE_HELPER_STAGE_PATH,
   MAC_ENTITLEMENTS_PATH,
   MAC_INHERITED_ENTITLEMENTS_PATH,
   MICROPHONE_USAGE_DESCRIPTION,
@@ -34,7 +36,12 @@ describe("createDesktopPlatformBuildConfig", () => {
     assert.equal(mac.binaries, undefined);
     assert.equal(mac.x64ArchFiles, undefined);
     assert.equal(config.files, undefined);
-    assert.equal("extraFiles" in config, false);
+    assert.deepStrictEqual(config.extraFiles, [
+      {
+        from: MAC_DEVICE_HELPER_STAGE_PATH,
+        to: MAC_DEVICE_HELPER_RESOURCE_PATH,
+      },
+    ]);
     assert.equal(extendInfo.NSMicrophoneUsageDescription, MICROPHONE_USAGE_DESCRIPTION);
     assert.equal(extendInfo.NSScreenCaptureUsageDescription, undefined);
   });

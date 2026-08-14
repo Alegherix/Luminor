@@ -16,7 +16,7 @@ import {
   ThreadId,
   TurnId,
 } from "@luminor/contracts";
-import { Option, ServiceMap, Schema } from "effect";
+import { Option, Schema, ServiceMap } from "effect";
 import type { Effect } from "effect";
 
 import type { ProjectionRepositoryError } from "../Errors.ts";

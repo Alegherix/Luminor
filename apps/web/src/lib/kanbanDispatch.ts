@@ -29,8 +29,8 @@ import { useKanbanUiStore } from "../kanbanUiStore";
 import { readNativeApi } from "../nativeApi";
 import { useStore } from "../store";
 import { getThreadFromState } from "../threadDerivation";
-import type { SidebarThreadSummary } from "../types";
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE } from "../types";
+import type { SidebarThreadSummary } from "../types";
 import { appendAssistantSelectionsToPrompt } from "./assistantSelections";
 import {
   appendBrowserAnnotationsToPrompt,

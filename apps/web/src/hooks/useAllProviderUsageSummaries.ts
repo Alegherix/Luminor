@@ -69,7 +69,7 @@ export function useAllProviderUsageSummaries(
   const queryClient = useQueryClient();
 
   const allProviderUsageQuery = useQuery(
-    serverAllProviderUsageQueryOptions({ enabled, provider: null }),
+    serverAllProviderUsageQueryOptions({ enabled }),
   );
   const localSnapshotQueries = useQueries({
     queries: PROVIDER_USAGE_PROVIDERS.map((provider) =>
@@ -130,7 +130,7 @@ export function useAllProviderUsageSummaries(
     .toSorted(compareUsageEntries);
 
   const refresh = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: serverQueryKeys.allProviderUsage(null) });
+    void queryClient.invalidateQueries({ queryKey: serverQueryKeys.allProviderUsage() });
     for (const provider of PROVIDER_USAGE_PROVIDERS) {
       void queryClient.invalidateQueries({
         queryKey: serverQueryKeys.providerUsage(

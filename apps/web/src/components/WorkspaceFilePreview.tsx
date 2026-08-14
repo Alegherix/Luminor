@@ -690,6 +690,11 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
     ) {
       return;
     }
+    // Capture the narrowed disk metadata in locals: the write below runs in a
+    // deferred closure where TypeScript no longer sees the null guards above.
+    const loadedVersion = current.version;
+    const loadedEncoding = current.encoding;
+    const loadedLineEnding = current.lineEnding;
     const nextContents = toggleMarkdownTaskMarker(current.contents, sourceLine, checked);
     if (nextContents === null) {
       return;
@@ -706,11 +711,14 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
     // not the opened reference, so the toggle lands on the file we read from
     // instead of creating a stray file at the workspace root.
     const writeRelativePath = current.relativePath;
+    const writeVersionOnDisk = current.version;
+    const writeEncoding = current.encoding;
+    const writeLineEnding = current.lineEnding;
     // Writes carry the full file contents, so serialize them: a slower earlier
     // checkbox write must never land after a newer toggle and erase it.
     const fileKey = `${workspaceRoot}\0${filePath}`;
     if (!taskFileDiskVersionRef.current.has(fileKey)) {
-      taskFileDiskVersionRef.current.set(fileKey, current.version);
+      taskFileDiskVersionRef.current.set(fileKey, writeVersionOnDisk);
     }
     const writeVersion = latestTaskWriteVersionRef.current.next + 1;
     latestTaskWriteVersionRef.current.next = writeVersion;
@@ -723,9 +731,9 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
           relativePath: writeRelativePath,
           contents: nextContents,
           expectedVersion:
-            taskFileDiskVersionRef.current.get(fileKey) ?? current.version ?? undefined,
-          encoding: current.encoding ?? undefined,
-          lineEnding: current.lineEnding ?? undefined,
+            taskFileDiskVersionRef.current.get(fileKey) ?? writeVersionOnDisk ?? undefined,
+          encoding: writeEncoding ?? undefined,
+          lineEnding: writeLineEnding ?? undefined,
         });
         taskFileDiskVersionRef.current.set(fileKey, result.version);
         queryClient.setQueryData<ProjectReadFileResult>(options.queryKey, (cached) =>
@@ -827,6 +835,7 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
         onMarkdownPreviewChange={handleMarkdownPreviewChange}
         onReferenceInChat={onReferenceInChat}
         onAskWhyInChat={onAskWhyInChat}
+        contentsForCopy={fileIsImage || fileQuery.data === undefined ? null : displayedFileContents}
         truncated={fileQuery.data?.truncated ?? false}
         dirty={editBufferDirty}
         readOnlyReason={readOnlyReason}

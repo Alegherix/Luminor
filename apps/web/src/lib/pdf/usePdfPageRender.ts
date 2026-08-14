@@ -12,8 +12,8 @@
 
 import { type RefObject, useEffect, useRef, useState } from "react";
 
+import { renderPageTextLayer, type PDFPageProxy } from "./pdfEngine";
 import type { PDFDocumentProxy, PageViewport, RenderedTextLayer } from "./pdfEngine";
-import { type PDFPageProxy, renderPageTextLayer } from "./pdfEngine";
 import { extractPageLinks, type PdfLink } from "./pdfLinks";
 import type { PdfPageIntrinsicSize } from "./pdfZoom";
 

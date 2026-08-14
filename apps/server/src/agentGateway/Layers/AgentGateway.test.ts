@@ -23,6 +23,7 @@ import {
   ModelSelection,
   ProjectId,
   SpaceId,
+  THREAD_GOAL_MAX_CHARS,
   ThreadId,
   TurnId,
 } from "@luminor/contracts";
@@ -206,7 +207,10 @@ function makeAutomationDefinition(
     mode: "heartbeat",
     targetThreadId: ThreadId.makeUnsafe("thread-parent"),
     maxIterations: 50,
-    stopOnError: true,
+    stopAfterConsecutiveFailures: 3,
+    consecutiveFailureCount: 0,
+    disabledReason: null,
+    disabledAt: null,
     completionPolicyVersion: 0,
     completionPolicyUpdatedAt: NOW,
     minimumIntervalSeconds: 60,
@@ -507,6 +511,24 @@ function makeHarnessLayer(
           )
           .toSorted((left, right) => right.sequence - left.sequence)
           .slice(0, input.limit),
+      ),
+    readThreadEventsFromSequence: (
+      threadId: string,
+      sequenceExclusive: number,
+      limit = 1_000,
+      throughSequenceInclusive = Number.MAX_SAFE_INTEGER,
+      eventTypes?: ReadonlyArray<string>,
+    ) =>
+      Stream.fromIterable(
+        (options.diagnosticEvents ?? [])
+          .filter(
+            (event) =>
+              event.aggregateId === threadId &&
+              event.sequence > sequenceExclusive &&
+              event.sequence <= throughSequenceInclusive &&
+              (eventTypes === undefined || eventTypes.includes(event.type)),
+          )
+          .slice(0, limit),
       ),
     readFromSequence: () => Stream.empty,
     readAll: () => Stream.empty,
@@ -1352,6 +1374,16 @@ describe("AgentGateway", () => {
         (toolResultJson(response.result).error as { code: string }).code,
         "capability_denied",
       );
+
+      const setGoal = yield* harness.callTool({
+        token: "token-parent-readonly",
+        name: "luminor_set_thread_goal",
+        args: { goal: "Must not run" },
+      });
+      assert.equal(
+        (toolResultJson(setGoal.result).error as { code: string }).code,
+        "capability_denied",
+      );
       assert.equal(harness.dispatched.length, 0);
     }).pipe(Effect.provide(gatewayLayer));
   });
@@ -1477,6 +1509,30 @@ describe("AgentGateway", () => {
         "luminor_cancel_automation",
         "luminor_update_automation_memory",
         "luminor_report_automation_result",
+        "luminor_context",
+        "luminor_capabilities",
+        "luminor_list_projects",
+        "luminor_list_threads",
+        "luminor_read_thread",
+        "luminor_read_thread_activity",
+        "luminor_read_thread_events",
+        "luminor_read_thread_runtime_events",
+        "luminor_diagnose_thread",
+        "luminor_wait_for_threads",
+        "luminor_create_threads",
+        "luminor_create_thread",
+        "luminor_send_message",
+        "luminor_interrupt_thread",
+        "luminor_set_thread_title",
+        "luminor_set_thread_archived",
+        "luminor_set_thread_goal",
+        "luminor_create_automation",
+        "luminor_list_automations",
+        "luminor_view_automation",
+        "luminor_update_automation",
+        "luminor_cancel_automation",
+        "luminor_update_automation_memory",
+        "luminor_report_automation_result",
       ]);
       const createThreadProperties = tools.find((tool) => tool.name === "luminor_create_thread")
         ?.inputSchema.properties;
@@ -1504,6 +1560,22 @@ describe("AgentGateway", () => {
         ["approval-required", "full-access"],
       );
 
+      const setThreadGoal = tools.find((tool) => tool.name === "luminor_set_thread_goal");
+      assert.include(
+        setThreadGoal?.description ?? "",
+        "Only set a goal when the user has explicitly asked for one",
+      );
+      assert.include(setThreadGoal?.description ?? "", "Do NOT infer or invent goals");
+      assert.include(setThreadGoal?.description ?? "", "Clearing requires the same explicit");
+      assert.deepEqual(
+        (setThreadGoal?.inputSchema.properties?.goal as { type?: string[] } | undefined)?.type,
+        ["string", "null"],
+      );
+      assert.property(setThreadGoal?.inputSchema.properties, "achieved");
+      assert.property(setThreadGoal?.inputSchema.properties, "blocked");
+      assert.include(setThreadGoal?.description ?? "", "achieved: true");
+      assert.include(setThreadGoal?.description ?? "", "blocked: true");
+
       const createAutomation = tools.find((tool) => tool.name === "luminor_create_automation");
       assert.include(createAutomation?.description ?? "", "self-contained brief");
       const createAutomationProperties = createAutomation?.inputSchema.properties as
@@ -1521,6 +1593,7 @@ describe("AgentGateway", () => {
         createAutomationProperties?.prompt?.description ?? "",
         "notifying the user versus staying silent",
       );
+      assert.property(createAutomationProperties, "stopAfterConsecutiveFailures");
       const updateAutomationMemory = tools.find(
         (tool) => tool.name === "luminor_update_automation_memory",
       );
@@ -1547,6 +1620,7 @@ describe("AgentGateway", () => {
         updateAutomationProperties?.prompt?.description,
         createAutomationProperties?.prompt?.description,
       );
+      assert.property(updateAutomationProperties, "stopAfterConsecutiveFailures");
     }).pipe(Effect.provide(gatewayLayer));
   });
 
@@ -2947,6 +3021,10 @@ describe("AgentGateway", () => {
         {
           name: "luminor_set_thread_folder",
           args: { threadId: "thread-child", folderId: "folder-late" },
+        },
+        {
+          name: "luminor_set_thread_goal",
+          args: { threadId: "thread-child", goal: "Late goal" },
         },
         {
           name: "luminor_create_automation",
@@ -4544,10 +4622,28 @@ describe("AgentGateway", () => {
       assert.equal(created.targetThreadId, "thread-parent");
       assert.deepEqual(created.schedule, { type: "interval", everySeconds: 300 });
       assert.equal(created.maxIterations, 50);
+      assert.equal(created.stopAfterConsecutiveFailures, 3);
       // Local-checkout targets must carry the matching environment + risk
       // acknowledgement so AutomationService policy checks stay enforced.
       assert.equal(created.worktreeMode, "local");
       assert.deepEqual(created.acknowledgedRisks, ["local-checkout"]);
+    }).pipe(Effect.provide(gatewayLayer));
+  });
+
+  it.effect("normalizes Debug callers to the default automation interaction mode", () => {
+    const { gatewayLayer, makeHarness } = makeHarnessLayer([
+      makeThreadShell("thread-parent", { interactionMode: "debug" }),
+    ]);
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness;
+      const response = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_create_automation",
+        args: { name: "monitor children", prompt: "check the child threads", everyMinutes: 5 },
+      });
+
+      assert.isFalse(isToolError(response.result), toolErrorText(response.result));
+      assert.equal(harness.automationCreates[0]?.interactionMode, "default");
     }).pipe(Effect.provide(gatewayLayer));
   });
 
@@ -4756,8 +4852,13 @@ describe("AgentGateway", () => {
     }).pipe(Effect.provide(gatewayLayer));
   });
 
-  it.effect("views run history through the automation-scoped query", () => {
-    const definition = makeAutomationDefinition();
+  it.effect("views run history and durable disable state through the automation query", () => {
+    const definition = makeAutomationDefinition({
+      enabled: false,
+      consecutiveFailureCount: 3,
+      disabledReason: "failures",
+      disabledAt: "2026-07-01T12:05:00.000Z",
+    });
     const { gatewayLayer, makeHarness } = makeHarnessLayer(baseThreads, [definition], {
       automationRuns: [
         { id: "target-newest", automationId: definition.id },
@@ -4780,6 +4881,10 @@ describe("AgentGateway", () => {
       assert.deepEqual(toolResultJson(response.result).runs, [
         { id: "target-newest", automationId: definition.id },
       ]);
+      assert.equal(
+        (toolResultJson(response.result).definition as Record<string, unknown>).disabledReason,
+        "failures",
+      );
     }).pipe(Effect.provide(gatewayLayer));
   });
 
@@ -4960,6 +5065,7 @@ describe("AgentGateway", () => {
           schedule: { type: "interval", everySeconds: 600 },
           enabled: true,
           maxIterations: null,
+          stopAfterConsecutiveFailures: 5,
           notificationPolicy: "failed-runs-only",
           completionPolicy: { type: "none" },
         },
@@ -4973,6 +5079,7 @@ describe("AgentGateway", () => {
         schedule: { type: "interval", everySeconds: 600 },
         enabled: true,
         maxIterations: null,
+        stopAfterConsecutiveFailures: 5,
         notificationPolicy: "failed-runs-only",
         completionPolicy: { type: "none" },
         acknowledgedRisks: ["local-checkout"],
@@ -4980,7 +5087,7 @@ describe("AgentGateway", () => {
     }).pipe(Effect.provide(gatewayLayer));
   });
 
-  it.effect("archives and renames threads through meta commands", () => {
+  it.effect("archives, renames, sets, and clears thread metadata", () => {
     const { gatewayLayer, makeHarness } = makeHarnessLayer(baseThreads);
     return Effect.gen(function* () {
       const harness = yield* makeHarness;
@@ -4994,8 +5101,139 @@ describe("AgentGateway", () => {
         name: "luminor_set_thread_archived",
         args: { threadId: "thread-child", archived: true },
       });
+      const setOwnGoal = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_set_thread_goal",
+        args: { goal: "Ship the complete gateway feature" },
+      });
+      const clearChildGoal = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_set_thread_goal",
+        args: { threadId: "thread-child", goal: null },
+      });
+
+      assert.isFalse(isToolError(setOwnGoal.result), toolErrorText(setOwnGoal.result));
+      assert.isFalse(isToolError(clearChildGoal.result), toolErrorText(clearChildGoal.result));
       assert.equal(harness.dispatched[0]?.type, "thread.meta.update");
       assert.equal(harness.dispatched[1]?.type, "thread.archive");
+      assert.deepInclude(harness.dispatched[2] as unknown as Record<string, unknown>, {
+        type: "thread.meta.update",
+        threadId: "thread-parent",
+        goal: "Ship the complete gateway feature",
+      });
+      assert.deepInclude(harness.dispatched[3] as unknown as Record<string, unknown>, {
+        type: "thread.meta.update",
+        threadId: "thread-child",
+        goal: "",
+      });
+    }).pipe(Effect.provide(gatewayLayer));
+  });
+
+  it.effect("rejects thread goals over the contract limit", () => {
+    const { gatewayLayer, makeHarness } = makeHarnessLayer(baseThreads);
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness;
+      const response = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_set_thread_goal",
+        args: { goal: "x".repeat(THREAD_GOAL_MAX_CHARS + 1) },
+      });
+
+      assert.isTrue(isToolError(response.result));
+      assert.include(toolErrorText(response.result), `at most ${THREAD_GOAL_MAX_CHARS} characters`);
+      assert.equal(harness.dispatched.length, 0);
+    }).pipe(Effect.provide(gatewayLayer));
+  });
+
+  it.effect("marks an active goal achieved instead of plain-clearing it", () => {
+    const { gatewayLayer, makeHarness } = makeHarnessLayer([
+      ...baseThreads.filter((thread) => thread.id !== "thread-child"),
+      makeThreadShell("thread-child", { goal: "Ship the gateway feature" }),
+    ]);
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness;
+      const response = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_set_thread_goal",
+        args: { threadId: "thread-child", achieved: true },
+      });
+
+      assert.isFalse(isToolError(response.result), toolErrorText(response.result));
+      assert.deepEqual(toolResultJson(response.result), {
+        threadId: "thread-child",
+        goal: null,
+        achieved: true,
+      });
+      const dispatched = harness.dispatched[0] as unknown as Record<string, unknown>;
+      assert.deepInclude(dispatched, {
+        type: "thread.meta.update",
+        threadId: "thread-child",
+        goalAchieved: true,
+      });
+      assert.notProperty(dispatched, "goal");
+    }).pipe(Effect.provide(gatewayLayer));
+  });
+
+  it.effect("rejects achieved intents when the thread has no active goal", () => {
+    const { gatewayLayer, makeHarness } = makeHarnessLayer(baseThreads);
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness;
+      const response = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_set_thread_goal",
+        args: { achieved: true },
+      });
+
+      assert.isTrue(isToolError(response.result));
+      assert.include(toolErrorText(response.result), "no active goal");
+      assert.equal(harness.dispatched.length, 0);
+    }).pipe(Effect.provide(gatewayLayer));
+  });
+
+  it.effect("pauses an active goal when the agent reports a repeated blocker", () => {
+    const { gatewayLayer, makeHarness } = makeHarnessLayer([
+      ...baseThreads.filter((thread) => thread.id !== "thread-child"),
+      makeThreadShell("thread-child", { goal: "Ship the gateway feature" }),
+    ]);
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness;
+      const response = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_set_thread_goal",
+        args: { threadId: "thread-child", blocked: true },
+      });
+
+      assert.isFalse(isToolError(response.result), toolErrorText(response.result));
+      assert.deepEqual(toolResultJson(response.result), {
+        threadId: "thread-child",
+        goal: "Ship the gateway feature",
+        blocked: true,
+        paused: true,
+      });
+      assert.deepInclude(harness.dispatched[0] as unknown as Record<string, unknown>, {
+        type: "thread.meta.update",
+        threadId: "thread-child",
+        goalPaused: true,
+      });
+    }).pipe(Effect.provide(gatewayLayer));
+  });
+
+  it.effect("includes the persistent goal in luminor_read_thread", () => {
+    const goal = "Keep working until every gateway check passes";
+    const { gatewayLayer, makeHarness } = makeHarnessLayer([
+      ...baseThreads.filter((thread) => thread.id !== "thread-child"),
+      makeThreadShell("thread-child", { goal }),
+    ]);
+    return Effect.gen(function* () {
+      const harness = yield* makeHarness;
+      const response = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_read_thread",
+        args: { threadId: "thread-child" },
+      });
+
+      assert.isFalse(isToolError(response.result), toolErrorText(response.result));
+      assert.equal(toolResultJson(response.result).goal, goal);
     }).pipe(Effect.provide(gatewayLayer));
   });
 
@@ -5030,6 +5268,14 @@ describe("AgentGateway", () => {
       });
       assert.isTrue(isToolError(move.result));
       assert.include(toolErrorText(move.result), "full-access");
+
+      const setGoal = yield* harness.callTool({
+        token: "token-parent",
+        name: "luminor_set_thread_goal",
+        args: { threadId: "thread-elevated", goal: "Escalated goal" },
+      });
+      assert.isTrue(isToolError(setGoal.result));
+      assert.include(toolErrorText(setGoal.result), "full-access");
       assert.equal(harness.dispatched.length, 0);
     }).pipe(Effect.provide(gatewayLayer));
   });

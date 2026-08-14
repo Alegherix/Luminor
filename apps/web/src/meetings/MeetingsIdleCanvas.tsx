@@ -165,9 +165,9 @@ function JoinByLinkForm({
   joining,
   onJoinPastedUrl,
 }: {
-  readonly workspace?: MeetingsWorkspaceSnapshot;
+  readonly workspace?: MeetingsWorkspaceSnapshot | undefined;
   readonly joining: boolean;
-  readonly onJoinPastedUrl?: (url: string) => void;
+  readonly onJoinPastedUrl?: ((url: string) => void) | undefined;
 }) {
   const [pastedMeetUrl, setPastedMeetUrl] = useState(workspace?.pastedMeetUrl ?? "");
   const joinError = workspace?.joinError ?? null;
@@ -224,7 +224,7 @@ function FeaturedMeetingPanel({
   readonly workspace: MeetingsWorkspaceSnapshot;
   readonly now: Date;
   readonly joining: boolean;
-  readonly onJoinSession?: (sessionId: string) => void;
+  readonly onJoinSession?: ((sessionId: string) => void) | undefined;
   readonly onCopyMeetUrl: (url: string) => void;
 }) {
   const countdown = meetingCountdown(session, now);
@@ -337,8 +337,8 @@ function ScheduleRow({
   readonly now: Date;
   readonly selected: boolean;
   readonly featured: boolean;
-  readonly onSelectSession?: (sessionId: string | null) => void;
-  readonly onJoinSession?: (sessionId: string) => void;
+  readonly onSelectSession?: ((sessionId: string | null) => void) | undefined;
+  readonly onJoinSession?: ((sessionId: string) => void) | undefined;
 }) {
   const clock = formatMeetingClock(session.startAt);
   const timeRange = formatMeetingTimeRange(session);

@@ -1295,6 +1295,94 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
+    it.effect("reports setup phases at the real command boundaries", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* writeTextFile(path.join(tmp, "notes.txt"), "untracked note\n");
+        const core = yield* GitCore;
+        const wtPath = path.join(tmp, "wt-phase-events");
+        const phases: string[] = [];
+        yield* core.createDetachedWorktree(
+          {
+            cwd: tmp,
+            ref: "HEAD",
+            path: wtPath,
+            newBranch: "synara/ph123456",
+            copyChangesFrom: tmp,
+          },
+          {
+            onPhase: (phase) =>
+              Effect.sync(() => {
+                phases.push(phase);
+              }),
+          },
+        );
+
+        expect(phases).toEqual(["branch", "worktree", "copy-changes"]);
+        yield* core.removeWorktree({
+          cwd: tmp,
+          path: wtPath,
+          force: true,
+          reclaimTemporaryBranch: true,
+        });
+      }),
+    );
+
+    it.effect("does not report branch creation before preliminary validation", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const core = yield* GitCore;
+        const phases: string[] = [];
+
+        const result = yield* Effect.exit(
+          core.createDetachedWorktree(
+            {
+              cwd: tmp,
+              ref: "refs/heads/missing",
+              path: path.join(tmp, "wt-invalid-ref"),
+              newBranch: "synara/notstarted",
+            },
+            {
+              onPhase: (phase) =>
+                Effect.sync(() => {
+                  phases.push(phase);
+                }),
+            },
+          ),
+        );
+
+        expect(Exit.isFailure(result)).toBe(true);
+        expect(phases).toEqual([]);
+        expect(yield* git(tmp, ["branch", "--list", "synara/notstarted"])).toBe("");
+      }),
+    );
+
+    it.effect("deletes the pre-created branch when worktree add fails", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const core = yield* GitCore;
+        const wtPath = path.join(tmp, "wt-rollback-branch");
+        // A plain file at the target path makes `git worktree add` fail after
+        // the branch has already been created.
+        yield* writeTextFile(wtPath, "occupied\n");
+
+        const result = yield* Effect.exit(
+          core.createDetachedWorktree({
+            cwd: tmp,
+            ref: "HEAD",
+            path: wtPath,
+            newBranch: "synara/rollback1",
+          }),
+        );
+
+        expect(Exit.isFailure(result)).toBe(true);
+        expect(yield* git(tmp, ["branch", "--list", "synara/rollback1"])).toBe("");
+      }),
+    );
+
     it.effect("removeWorktree reclamation never deletes user-named branches", () =>
       Effect.gen(function* () {
         const tmp = yield* makeTmpDir();
@@ -1790,6 +1878,38 @@ it.layer(TestLayer)("git integration", (it) => {
         yield* writeTextFile(path.join(tmp, "README.md"), "updated\n");
         const dirty = yield* core.statusDetails(tmp);
         expect(dirty.hasWorkingTreeChanges).toBe(true);
+      }),
+    );
+
+    it.effect("reads branch identity without requiring full status details", () =>
+      Effect.gen(function* () {
+        const remote = yield* makeTmpDir();
+        const tmp = yield* makeTmpDir();
+        const nonRepo = yield* makeTmpDir();
+        yield* git(remote, ["init", "--bare"]);
+        yield* initRepoWithCommit(tmp);
+        yield* git(tmp, ["remote", "add", "origin", remote]);
+        yield* git(tmp, ["checkout", "-b", "feature/branch-context"]);
+        yield* git(tmp, ["push", "-u", "origin", "feature/branch-context"]);
+        const core = yield* GitCore;
+
+        expect(yield* core.readBranchContext(tmp)).toEqual({
+          isRepo: true,
+          branch: "feature/branch-context",
+          upstreamRef: "origin/feature/branch-context",
+        });
+
+        yield* git(tmp, ["checkout", "--detach"]);
+        expect(yield* core.readBranchContext(tmp)).toEqual({
+          isRepo: true,
+          branch: null,
+          upstreamRef: null,
+        });
+        expect(yield* core.readBranchContext(nonRepo)).toEqual({
+          isRepo: false,
+          branch: null,
+          upstreamRef: null,
+        });
       }),
     );
 

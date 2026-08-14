@@ -11,8 +11,8 @@ import { useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ProviderModelCatalog } from "./useProviderModelCatalog";
 import { useProviderModelCatalog } from "./useProviderModelCatalog";
+import type { ProviderModelCatalog } from "./useProviderModelCatalog";
 
 const mocks = vi.hoisted(() => ({
   useAppSettings: vi.fn(),

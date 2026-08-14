@@ -1041,6 +1041,18 @@ export function applyKanbanBoardFilters(
   return { projects, totalCount };
 }
 
+const OVERVIEW_RENDER_CAP = 20;
+
+export function overviewVisibleKanbanCards(board: KanbanProjectBoard): {
+  visibleCards: KanbanCard[];
+  hiddenCount: number;
+} {
+  const cards = flattenProjectBoardForOverview(board);
+  const visibleCards =
+    cards.length > OVERVIEW_RENDER_CAP ? cards.slice(0, OVERVIEW_RENDER_CAP) : cards;
+  return { visibleCards, hiddenCount: cards.length - visibleCards.length };
+}
+
 export type KanbanDraftOpenThreadReason = "not-draft" | "empty" | "worktree-pending";
 export type KanbanDraftDropAction = "dispatch" | "open-thread";
 

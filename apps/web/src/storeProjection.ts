@@ -118,6 +118,10 @@ function toThreadShell(thread: Thread): ThreadShell {
     ...(thread.pinnedMessages !== undefined ? { pinnedMessages: thread.pinnedMessages } : {}),
     ...(thread.threadMarkers !== undefined ? { threadMarkers: thread.threadMarkers } : {}),
     ...(thread.notes !== undefined ? { notes: thread.notes } : {}),
+    ...(thread.goal !== undefined ? { goal: thread.goal } : {}),
+    ...(thread.goalStartedAt !== undefined ? { goalStartedAt: thread.goalStartedAt } : {}),
+    ...(thread.goalPausedAt !== undefined ? { goalPausedAt: thread.goalPausedAt } : {}),
+    ...(thread.goalAchievements !== undefined ? { goalAchievements: thread.goalAchievements } : {}),
     ...(thread.latestUserMessageAt !== undefined
       ? { latestUserMessageAt: thread.latestUserMessageAt }
       : {}),
@@ -374,6 +378,7 @@ function sidebarThreadSummariesEqual(
     left.latestTurn === right.latestTurn &&
     left.lastVisitedAt === right.lastVisitedAt &&
     (left.parentThreadId ?? null) === (right.parentThreadId ?? null) &&
+    (left.creationSource ?? null) === (right.creationSource ?? null) &&
     (left.subagentAgentId ?? null) === (right.subagentAgentId ?? null) &&
     (left.subagentNickname ?? null) === (right.subagentNickname ?? null) &&
     (left.subagentRole ?? null) === (right.subagentRole ?? null) &&
@@ -417,6 +422,7 @@ function buildSidebarThreadSummary(
     latestTurn: thread.latestTurn,
     lastVisitedAt: thread.lastVisitedAt,
     parentThreadId: thread.parentThreadId ?? null,
+    creationSource: thread.creationSource ?? null,
     subagentAgentId: thread.subagentAgentId ?? null,
     subagentNickname: thread.subagentNickname ?? null,
     subagentRole: thread.subagentRole ?? null,

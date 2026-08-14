@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
-import type { OrchestrationMessage } from "@luminor/contracts";
 import { MessageId, ThreadId, TurnId } from "@luminor/contracts";
+import type { OrchestrationMessage } from "@luminor/contracts";
 
 import { deriveAgentThreadStatus, paginateThreadMessages } from "./threadSummary.ts";
 

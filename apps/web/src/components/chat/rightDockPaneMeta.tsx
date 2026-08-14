@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 
 import type { LucideIcon } from "~/lib/icons";
 import {
+  DeviceMobileIcon,
   DiffIcon,
   FileIcon,
   FoldersIcon,
@@ -41,6 +42,10 @@ export interface RightDockLauncherItem extends RightDockPaneMeta {
 
 export const RIGHT_DOCK_PANE_META: Record<RightDockPaneKind, RightDockPaneMeta> = {
   browser: { label: "Browser", Icon: GlobeIcon },
+  // The contracts stay platform-neutral ("device") so Android emulators can plug
+  // in later, but the only backend today is the iOS Simulator, so that is what
+  // the label says.
+  device: { label: "iOS Simulator", Icon: DeviceMobileIcon },
   diff: { label: "Diff", Icon: DiffIcon },
   explorer: { label: "Explorer", Icon: FoldersIcon },
   file: { label: "File", Icon: FileIcon },
@@ -85,6 +90,7 @@ const RIGHT_DOCK_LAUNCHER_ORDER: readonly RightDockPaneKind[] = [
   "preview",
   "explorer",
   "sidechat",
+  "device",
   "git",
 ];
 
@@ -102,6 +108,7 @@ export function resolveRightDockLauncherItems(input: {
   hasGitRepository: boolean;
   hasReview: boolean;
   isWorktreePending: boolean;
+  hasDeviceSupport?: boolean;
 }): readonly RightDockLauncherItem[] {
   return RIGHT_DOCK_LAUNCHER_ORDER.flatMap((kind) => {
     if (kind === "diff" && !input.hasReview) {
@@ -111,6 +118,9 @@ export function resolveRightDockLauncherItems(input: {
       return [];
     }
     if (kind === "explorer" && !input.hasWorkspace) {
+      return [];
+    }
+    if (kind === "device" && input.hasDeviceSupport !== true) {
       return [];
     }
     const meta = getRightDockPaneMeta(kind);

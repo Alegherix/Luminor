@@ -7,7 +7,6 @@ import {
 const RECENT_MESSAGE_COUNT = 6;
 const EARLIER_MESSAGE_CHAR_LIMIT = 320;
 const RECENT_MESSAGE_CHAR_LIMIT = 2_400;
-const HANDOFF_BOOTSTRAP_CHAR_BUDGET = Math.floor(PROVIDER_SEND_TURN_MAX_INPUT_CHARS * 0.75);
 // Hard ceiling for any bootstrap transcript: it replays as one uncached user
 // message, so long threads must drop their oldest summaries rather than grow.
 const BOOTSTRAP_TRANSCRIPT_CHAR_BUDGET = 32_000;
@@ -71,9 +70,12 @@ export function hasNativeHandoffMessages(thread: Pick<OrchestrationThread, "mess
 
 export function hasNativeAssistantMessagesBefore(
   thread: Pick<OrchestrationThread, "messages">,
-  currentMessageId: string,
+  currentMessageId?: string,
 ): boolean {
-  const currentIndex = thread.messages.findIndex((message) => message.id === currentMessageId);
+  const currentIndex =
+    currentMessageId === undefined
+      ? thread.messages.length
+      : thread.messages.findIndex((message) => message.id === currentMessageId);
   if (currentIndex <= 0) {
     return false;
   }
@@ -86,9 +88,12 @@ export function hasNativeAssistantMessagesBefore(
 
 export function listPriorTranscriptMessages(
   thread: Pick<OrchestrationThread, "messages">,
-  currentMessageId: string,
+  currentMessageId?: string,
 ): ReadonlyArray<OrchestrationMessage> {
-  const currentIndex = thread.messages.findIndex((message) => message.id === currentMessageId);
+  const currentIndex =
+    currentMessageId === undefined
+      ? thread.messages.length
+      : thread.messages.findIndex((message) => message.id === currentMessageId);
   if (currentIndex <= 0) {
     return [];
   }
@@ -180,7 +185,7 @@ function buildImportedMessagesBootstrapText(input: {
 
 export function buildHandoffBootstrapText(
   thread: Pick<OrchestrationThread, "title" | "branch" | "worktreePath" | "handoff" | "messages">,
-  maxChars = HANDOFF_BOOTSTRAP_CHAR_BUDGET,
+  maxChars = BOOTSTRAP_TRANSCRIPT_CHAR_BUDGET,
 ): string | null {
   const importedMessages = listImportedHandoffMessages(thread);
   if (importedMessages.length === 0 || thread.handoff === null) {
@@ -197,8 +202,8 @@ export function buildHandoffBootstrapText(
 
 export function buildPriorTranscriptBootstrapText(
   thread: Pick<OrchestrationThread, "title" | "branch" | "worktreePath" | "messages">,
-  currentMessageId: string,
-  maxChars = HANDOFF_BOOTSTRAP_CHAR_BUDGET,
+  currentMessageId: string | undefined,
+  maxChars = BOOTSTRAP_TRANSCRIPT_CHAR_BUDGET,
 ): string | null {
   const priorMessages = listPriorTranscriptMessages(thread, currentMessageId);
   if (priorMessages.length === 0) {
@@ -216,7 +221,7 @@ export function buildPriorTranscriptBootstrapText(
 
 export function buildForkBootstrapText(
   thread: Pick<OrchestrationThread, "title" | "branch" | "worktreePath" | "messages">,
-  maxChars = HANDOFF_BOOTSTRAP_CHAR_BUDGET,
+  maxChars = BOOTSTRAP_TRANSCRIPT_CHAR_BUDGET,
 ): string | null {
   const importedMessages = listImportedForkMessages(thread);
   if (importedMessages.length === 0) {

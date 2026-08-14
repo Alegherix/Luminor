@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   EventId,
+  type ProviderInteractionMode,
   type ProviderKind,
   type ProviderComposerCapabilities,
   type ProviderListCommandsResult,
@@ -207,7 +208,7 @@ interface OpenCodeSessionContext {
   activeTurnSawFinalAssistant: boolean;
   activeTurnFinalAssistantMessageId: string | undefined;
   activeTurnToolCallIdleWatchdogStarted: boolean;
-  activeInteractionMode: "default" | "plan" | undefined;
+  activeInteractionMode: ProviderInteractionMode | undefined;
   appliedPermissionInteractionMode: "default" | "plan";
   activeAgent: string | undefined;
   activeVariant: string | undefined;
@@ -993,7 +994,7 @@ function isMatchingHarnessPolicyDelivery(
 function buildOpenCodeResumeCursor(input: {
   readonly openCodeSessionId: string;
   readonly cwd: string;
-  readonly harnessPolicyDelivered?: boolean;
+  readonly harnessPolicyDelivered?: boolean | undefined;
   readonly gatewayControlAvailable: boolean;
 }): OpenCodeResumeCursor {
   return {
@@ -2550,7 +2551,7 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
               rememberRelatedOpenCodeSession(context, part);
               const itemType = toToolLifecycleItemType(part.tool);
               const title =
-                part.state.status === "running" ? (part.state.title ?? part.tool) : part.tool;
+                part.state.status === "running" ? part.state.title?.trim() || part.tool : part.tool;
               const detail = detailFromToolPart(part);
               const payload = {
                 itemType,
@@ -3985,8 +3986,9 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
             ? input.modelSelection.options?.variant
             : undefined;
 
-        const interactionMode = input.interactionMode === "plan" ? "plan" : "default";
-        yield* applyPermissionInteractionMode(context, interactionMode);
+        const interactionMode = input.interactionMode ?? "default";
+        const permissionInteractionMode = interactionMode === "plan" ? "plan" : "default";
+        yield* applyPermissionInteractionMode(context, permissionInteractionMode);
 
         context.activeTurnId = turnId;
         context.pendingHarnessPolicyTurnId = harnessPolicy === null ? undefined : turnId;
@@ -4044,7 +4046,10 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
             providerActivitySerial,
             excludedMessageIds: recoveryBaselineMessageIds,
           });
-          yield* submitOpenCodePrompt(context, {
+          // Kilo's own editor client uses promptAsync so execution is owned by the
+          // server rather than by one long-lived HTTP request. Keep Synara's event
+          // and message-snapshot recovery as the authoritative completion paths.
+          yield* submitOpenCodePromptAsync(context, {
             turnId,
             promptInput: {
               sessionID: context.openCodeSessionId,
@@ -4052,7 +4057,6 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
               model: parsedModel,
               ...(context.activeAgent ? { agent: context.activeAgent } : {}),
               ...(context.activeVariant ? { variant: context.activeVariant } : {}),
-              noReply: false,
               parts: [
                 ...(providerText ? [{ type: "text" as const, text: providerText }] : []),
                 ...fileParts,
@@ -4459,6 +4463,15 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
       const forkThread: NonNullable<OpenCodeAdapterShape["forkThread"]> = (input) =>
         Effect.gen(function* () {
           const sourceContext = sessions.get(input.sourceThreadId);
+          // Forking mid-turn would branch from incomplete in-flight state, so
+          // let the retained-transcript fallback handle busy sources.
+          if (sourceContext?.activeTurnId !== undefined) {
+            return yield* new ProviderAdapterValidationError({
+              provider,
+              operation: "forkThread",
+              issue: `The source ${adapterConfig.displayName} session has a turn in flight; Synara will rebuild the fork from its retained transcript.`,
+            });
+          }
           const sourceSessionId =
             sourceContext?.openCodeSessionId ?? extractResumeSessionId(input.sourceResumeCursor);
           if (!sourceSessionId) {
@@ -4528,19 +4541,13 @@ export function makeOpenCodeAdapterLive(options?: OpenCodeAdapterLiveOptions) {
             });
           }
 
-          const session = yield* startSession({
-            threadId: input.threadId,
-            provider,
-            cwd: targetDirectory,
-            ...(input.modelSelection ? { modelSelection: input.modelSelection } : {}),
-            ...(input.providerOptions ? { providerOptions: input.providerOptions } : {}),
-            resumeCursor: { openCodeSessionId: forkedSessionId, cwd: targetDirectory },
-            runtimeMode: input.runtimeMode,
-          });
-
+          // Return only the cursor: ProviderService registers the binding under
+          // a committed lifecycle lease and the target's first turn resumes it
+          // there. Starting the runtime here would capture an undefined
+          // lifecycle generation, orphaning the fork's approval requests.
           return {
             threadId: input.threadId,
-            ...(session.resumeCursor !== undefined ? { resumeCursor: session.resumeCursor } : {}),
+            resumeCursor: { openCodeSessionId: forkedSessionId, cwd: targetDirectory },
           };
         });
 

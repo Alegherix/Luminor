@@ -4,8 +4,8 @@
 // Depends on: the same Command primitives used by ComposerCommandMenu so both pickers share chrome.
 
 import type { ProjectFileSystemEntry, ProjectLocalSearchEntry } from "@luminor/contracts";
-import type { Ref } from "react";
 import { useEffect, useImperativeHandle, useRef, useState } from "react";
+import type { Ref } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { ArrowUpIcon, FileIcon } from "~/lib/icons";

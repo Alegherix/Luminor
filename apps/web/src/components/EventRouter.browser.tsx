@@ -3,6 +3,7 @@ import "../index.css";
 import {
   EventId,
   MessageId,
+  DEVICE_WS_METHODS,
   ORCHESTRATION_WS_METHODS,
   ProjectId,
   ThreadId,
@@ -299,7 +300,8 @@ const worker = setupWorker(
         method === WS_METHODS.subscribeOrchestrationDomainEvents ||
         method === WS_METHODS.subscribeProjectDevServerEvents ||
         method === WS_METHODS.subscribePreviewEvents ||
-        method === WS_METHODS.subscribeAutomationEvents
+        method === WS_METHODS.subscribeAutomationEvents ||
+        method === DEVICE_WS_METHODS.subscribeEvents
       ) {
         return;
       }

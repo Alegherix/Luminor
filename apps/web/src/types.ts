@@ -13,6 +13,7 @@ import type {
   OrchestrationProposedPlanId,
   PinnedMessage,
   ThreadMarker,
+  ThreadGoalAchievement,
   OrchestrationSessionStatus,
   OrchestrationThreadActivity,
   ThreadHandoff,
@@ -104,10 +105,15 @@ export type ChatAttachment =
   | ChatFileAttachment
   | ChatAssistantSelectionAttachment;
 
+export type OrchestrationMessageTextSegment =
+  import("@luminor/contracts").OrchestrationMessageTextSegment;
+
 export interface ChatMessage {
   id: MessageId;
   role: "user" | "assistant" | "system";
   text: string;
+  /** Slices of streamed assistant text between row-making provider events. */
+  textSegments?: OrchestrationMessageTextSegment[];
   attachments?: ChatAttachment[];
   skills?: ProviderSkillReference[];
   mentions?: ProviderMentionReference[];
@@ -149,10 +155,12 @@ export interface TurnDiffSummary {
 }
 
 // Ephemeral client-side progress of the "New worktree" first-send setup
-// sequence (create worktree → link thread → start session). Rendered as a
-// transient transcript row; never persisted.
+// sequence (create branch → create worktree → copy changes → link thread →
+// start session). Rendered as a transient transcript row; never persisted.
 export type WorktreeSetupStepId =
+  | "create-branch"
   | "create-worktree"
+  | "copy-changes"
   | "prepare-thread"
   | "run-setup-action"
   | "start-session";
@@ -167,6 +175,12 @@ export interface WorktreeSetupStep {
 export interface WorktreeSetupSnapshot {
   steps: WorktreeSetupStep[];
 }
+
+/**
+ * User choice made from the worktree setup card while preparation is in
+ * flight: abandon the send entirely, or redirect it to the local checkout.
+ */
+export type WorktreeSetupResolutionAction = "cancel" | "work-locally";
 
 export interface Project {
   id: ProjectId;
@@ -248,6 +262,10 @@ export interface Thread extends ThreadWorkspaceState {
   pinnedMessages?: PinnedMessage[];
   threadMarkers?: ThreadMarker[];
   notes?: string;
+  goal?: string;
+  goalStartedAt?: string | null;
+  goalPausedAt?: string | null;
+  goalAchievements?: ThreadGoalAchievement[];
   latestTurn: OrchestrationLatestTurn | null;
   pendingSourceProposedPlan?: OrchestrationLatestTurn["sourceProposedPlan"];
   lastVisitedAt?: string | undefined;
@@ -292,6 +310,10 @@ export interface ThreadShell extends ThreadWorkspaceState {
   pinnedMessages?: PinnedMessage[];
   threadMarkers?: ThreadMarker[];
   notes?: string;
+  goal?: string;
+  goalStartedAt?: string | null;
+  goalPausedAt?: string | null;
+  goalAchievements?: ThreadGoalAchievement[];
   parentThreadId?: ThreadId | null;
   creationSource?: ThreadCreationSource | null;
   sourceThreadId?: ThreadId | null;
@@ -338,6 +360,7 @@ export interface SidebarThreadSummary {
   latestTurn: OrchestrationLatestTurn | null;
   lastVisitedAt?: string | undefined;
   parentThreadId?: ThreadId | null;
+  creationSource?: ThreadCreationSource | null;
   subagentAgentId?: string | null;
   subagentNickname?: string | null;
   subagentRole?: string | null;

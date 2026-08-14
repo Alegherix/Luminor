@@ -1,5 +1,5 @@
-import type { PinnedMessage } from "@luminor/contracts";
 import { MessageId, THREAD_NOTES_MAX_CHARS } from "@luminor/contracts";
+import type { PinnedMessage } from "@luminor/contracts";
 import { describe, expect, it } from "vitest";
 
 import {

@@ -218,7 +218,7 @@ export type ProviderStartOptions = typeof ProviderStartOptions.Type;
 export const RuntimeMode = Schema.Literals(["approval-required", "auto", "full-access"]);
 export type RuntimeMode = typeof RuntimeMode.Type;
 export const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
-export const ProviderInteractionMode = Schema.Literals(["default", "plan"]);
+export const ProviderInteractionMode = Schema.Literals(["default", "plan", "debug"]);
 export type ProviderInteractionMode = typeof ProviderInteractionMode.Type;
 export const DEFAULT_PROVIDER_INTERACTION_MODE: ProviderInteractionMode = "default";
 const SidechatSourceThreadId = Schema.optional(Schema.NullOr(ThreadId)).pipe(
@@ -242,10 +242,14 @@ export const DEFAULT_TURN_DISPATCH_MODE: TurnDispatchMode = "queue";
 // Absent is treated as "user"; only server-dispatched turns carry the flag.
 export const MessageDispatchOrigin = Schema.Literals(["user", "automation", "agent"]);
 export type MessageDispatchOrigin = typeof MessageDispatchOrigin.Type;
+// "automation_run" marks only the per-run throwaway threads standalone automations
+// create. Dedicated automations' own threads stay unmarked: they are persistent
+// conversations the user keeps, not run artifacts.
 export const ThreadCreationSource = Schema.Literals([
   "luminor_mcp",
   "external_mcp",
   "provider_native",
+  "automation_run",
 ]);
 export type ThreadCreationSource = typeof ThreadCreationSource.Type;
 export const ProviderReviewTarget = Schema.Union([
@@ -294,6 +298,7 @@ export const MAX_PINNED_PROJECTS = 3;
 const CHAT_ATTACHMENT_ID_MAX_CHARS = 128;
 export const CHAT_ASSISTANT_SELECTION_TEXT_MAX_CHARS = 4_000;
 export const THREAD_NOTES_MAX_CHARS = 16_384;
+export const THREAD_GOAL_MAX_CHARS = 4_096;
 export const PINNED_MESSAGES_MAX_COUNT = 100;
 export const PINNED_MESSAGE_LABEL_MAX_CHARS = 60;
 export const THREAD_MARKERS_MAX_COUNT = 200;
@@ -522,10 +527,24 @@ export type OrchestrationProjectShell = typeof OrchestrationProjectShell.Type;
 export const OrchestrationMessageRole = Schema.Literals(["user", "assistant", "system"]);
 export type OrchestrationMessageRole = typeof OrchestrationMessageRole.Type;
 
+export const OrchestrationMessageTextSegment = Schema.Struct({
+  /** Causal orchestration-event order; disambiguates equal timestamps. */
+  sequence: NonNegativeInt,
+  startedAt: IsoDateTime,
+  endedAt: IsoDateTime,
+  text: Schema.String,
+});
+export type OrchestrationMessageTextSegment = typeof OrchestrationMessageTextSegment.Type;
+
+// One contiguous run of assistant text deltas between row-making provider
+// events (tool calls, warnings, ...). The web timeline interleaves these
+// segments with tool rows so streamed reasoning renders in execution order
+// instead of one block above every tool call.
 export const OrchestrationMessage = Schema.Struct({
   id: MessageId,
   role: OrchestrationMessageRole,
   text: Schema.String,
+  textSegments: Schema.optional(Schema.Array(OrchestrationMessageTextSegment)),
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   skills: Schema.optional(Schema.Array(ProviderSkillReference)),
   mentions: Schema.optional(Schema.Array(ProviderMentionReference)),
@@ -674,6 +693,45 @@ export type OrchestrationThreadPullRequest = typeof OrchestrationThreadPullReque
  */
 export const ThreadNotes = Schema.String.check(Schema.isMaxLength(THREAD_NOTES_MAX_CHARS));
 export type ThreadNotes = typeof ThreadNotes.Type;
+export const ThreadGoal = Schema.String.check(Schema.isMaxLength(THREAD_GOAL_MAX_CHARS));
+export type ThreadGoal = typeof ThreadGoal.Type;
+export const ThreadGoalStartBehavior = Schema.Literals(["start-if-idle", "defer"]);
+export type ThreadGoalStartBehavior = typeof ThreadGoalStartBehavior.Type;
+export const ThreadGoalContinuationTrigger = Schema.Literals([
+  "goal-updated",
+  "interaction-mode-updated",
+  "turn-completed",
+  "startup-recovery",
+]);
+export type ThreadGoalContinuationTrigger = typeof ThreadGoalContinuationTrigger.Type;
+/**
+ * Goal pursuit timing. `goalStartedAt` is (re)stamped by the decider whenever a
+ * non-empty goal is set and rebased on resume so `now - goalStartedAt` is always
+ * the active pursuit duration. A non-null `goalPausedAt` means the goal is
+ * paused: injection stops and the elapsed clock freezes at `goalPausedAt`.
+ */
+export const ThreadGoalTimingFields = {
+  goalStartedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  goalPausedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+};
+/**
+ * A completed goal, recorded when the decider processes a `goalAchieved` intent.
+ * `elapsedMs` is the pause-adjusted pursuit duration (null for legacy goals with
+ * no recorded start) and `turnId` anchors the transcript "Goal achieved" badge to
+ * the turn that was live when the goal completed.
+ */
+export const ThreadGoalAchievement = Schema.Struct({
+  goal: ThreadGoal,
+  achievedAt: IsoDateTime,
+  elapsedMs: Schema.NullOr(Schema.Number),
+  turnId: Schema.NullOr(TurnId),
+});
+export type ThreadGoalAchievement = typeof ThreadGoalAchievement.Type;
+export const THREAD_GOAL_ACHIEVEMENTS_MAX_COUNT = 20;
+export const ThreadGoalAchievements = Schema.Array(ThreadGoalAchievement).check(
+  Schema.isMaxLength(THREAD_GOAL_ACHIEVEMENTS_MAX_COUNT),
+);
+export type ThreadGoalAchievements = typeof ThreadGoalAchievements.Type;
 export const PinnedMessageLabel = TrimmedNonEmptyString.check(
   Schema.isMaxLength(PINNED_MESSAGE_LABEL_MAX_CHARS),
 );
@@ -832,6 +890,9 @@ export const OrchestrationThread = Schema.Struct({
   pinnedMessages: Schema.optional(ThreadPinnedMessages),
   threadMarkers: Schema.optional(ThreadMarkers),
   notes: Schema.optional(ThreadNotes),
+  goal: Schema.optional(ThreadGoal),
+  ...ThreadGoalTimingFields,
+  goalAchievements: Schema.optional(ThreadGoalAchievements),
   messages: Schema.Array(OrchestrationMessage),
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(Schema.withDecodingDefault(() => [])),
   activities: Schema.Array(OrchestrationThreadActivity),
@@ -916,6 +977,8 @@ export const OrchestrationThreadShell = Schema.Struct({
     Schema.withDecodingDefault(() => null),
   ),
   handoff: Schema.NullOr(ThreadHandoff).pipe(Schema.withDecodingDefault(() => null)),
+  goal: Schema.optional(ThreadGoal),
+  ...ThreadGoalTimingFields,
   session: Schema.NullOr(OrchestrationSession),
 });
 export type OrchestrationThreadShell = typeof OrchestrationThreadShell.Type;
@@ -932,6 +995,7 @@ export type OrchestrationReadModel = typeof OrchestrationReadModel.Type;
 
 export const OrchestrationShellSnapshot = Schema.Struct({
   snapshotSequence: NonNegativeInt,
+  requiresEmptyProjectShellRepair: Schema.optional(Schema.Boolean),
   spaces: Schema.Array(OrchestrationSpaceShell),
   folders: Schema.Array(OrchestrationFolderShell),
   projects: Schema.Array(OrchestrationProjectShell),
@@ -1271,6 +1335,13 @@ const ThreadMetaUpdateCommand = Schema.Struct({
   pinnedMessages: Schema.optional(ThreadPinnedMessages),
   threadMarkers: Schema.optional(ThreadMarkers),
   notes: Schema.optional(ThreadNotes),
+  goal: Schema.optional(ThreadGoal),
+  goalStartBehavior: Schema.optional(ThreadGoalStartBehavior),
+  // Desired paused state; the decider stamps the authoritative goal timestamps.
+  goalPaused: Schema.optional(Schema.Boolean),
+  // Marks the active goal accomplished: the decider records a ThreadGoalAchievement
+  // (with pause-adjusted elapsed time) and clears the goal in the same event.
+  goalAchieved: Schema.optional(Schema.Boolean),
 });
 
 const ThreadPinnedMessageAddCommand = Schema.Struct({
@@ -1621,6 +1692,16 @@ const ThreadSessionSetCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ThreadGoalContinueCommand = Schema.Struct({
+  type: Schema.Literal("thread.goal.continue"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  goalStartedAt: Schema.NullOr(IsoDateTime),
+  trigger: ThreadGoalContinuationTrigger,
+  sourceTurnId: Schema.optional(TurnId),
+  createdAt: IsoDateTime,
+});
+
 const ThreadMessagesImportCommand = Schema.Struct({
   type: Schema.Literal("thread.messages.import"),
   commandId: CommandId,
@@ -1636,6 +1717,11 @@ const ThreadMessageAssistantDeltaCommand = Schema.Struct({
   messageId: MessageId,
   delta: Schema.String,
   turnId: Schema.optional(TurnId),
+  // Present only when this delta starts a NEW text segment: a row-making
+  // provider event (tool call, warning, ...) intervened since the previous
+  // assistant delta. Positions the segment in the merged timeline.
+  segmentStartedAt: Schema.optional(IsoDateTime),
+  segmentSequence: Schema.optional(NonNegativeInt),
   createdAt: IsoDateTime,
 });
 
@@ -1693,6 +1779,7 @@ const ThreadConversationRollbackCompleteCommand = Schema.Struct({
 
 const InternalOrchestrationCommand = Schema.Union([
   ThreadSessionSetCommand,
+  ThreadGoalContinueCommand,
   ThreadMessagesImportCommand,
   ThreadMessageAssistantDeltaCommand,
   ThreadMessageAssistantCompleteCommand,
@@ -1743,6 +1830,7 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.message-sent",
   "thread.turn-queued",
   "thread.turn-start-requested",
+  "thread.goal-continuation-requested",
   "thread.turn-interrupt-requested",
   "thread.task-stop-requested",
   "thread.task-background-requested",
@@ -1951,6 +2039,11 @@ export const ThreadMetaUpdatedPayload = Schema.Struct({
   pinnedMessages: Schema.optional(ThreadPinnedMessages),
   threadMarkers: Schema.optional(ThreadMarkers),
   notes: Schema.optional(ThreadNotes),
+  goal: Schema.optional(ThreadGoal),
+  goalStartBehavior: Schema.optional(ThreadGoalStartBehavior),
+  goalStartedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  goalPausedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  goalAchievements: Schema.optional(ThreadGoalAchievements),
   updatedAt: IsoDateTime,
 });
 
@@ -2014,6 +2107,7 @@ export const ThreadRuntimeModeSetPayload = Schema.Struct({
 
 export const ThreadInteractionModeSetPayload = Schema.Struct({
   threadId: ThreadId,
+  previousInteractionMode: Schema.optional(ProviderInteractionMode),
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
   ),
@@ -2025,6 +2119,11 @@ export const ThreadMessageSentPayload = Schema.Struct({
   messageId: MessageId,
   role: OrchestrationMessageRole,
   text: Schema.String,
+  // Mirrors ThreadMessageAssistantDeltaCommand.segmentStartedAt: set on the
+  // first delta of a new text segment (after a row-making event). The message
+  // projection persists segment boundaries into the message's textSegments.
+  segmentStartedAt: Schema.optional(IsoDateTime),
+  segmentSequence: Schema.optional(NonNegativeInt),
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   skills: Schema.optional(Schema.Array(ProviderSkillReference)),
   mentions: Schema.optional(Schema.Array(ProviderMentionReference)),
@@ -2055,6 +2154,14 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
 });
 
 export const ThreadTurnQueuedPayload = ThreadTurnStartRequestedPayload;
+
+export const ThreadGoalContinuationRequestedPayload = Schema.Struct({
+  threadId: ThreadId,
+  goalStartedAt: Schema.NullOr(IsoDateTime),
+  trigger: ThreadGoalContinuationTrigger,
+  sourceTurnId: Schema.optional(TurnId),
+  createdAt: IsoDateTime,
+});
 
 export const ThreadTurnInterruptRequestedPayload = Schema.Struct({
   threadId: ThreadId,
@@ -2334,6 +2441,11 @@ export const OrchestrationEvent = Schema.Union([
   }),
   Schema.Struct({
     ...EventBaseFields,
+    type: Schema.Literal("thread.goal-continuation-requested"),
+    payload: ThreadGoalContinuationRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
     type: Schema.Literal("thread.turn-interrupt-requested"),
     payload: ThreadTurnInterruptRequestedPayload,
   }),
@@ -2525,6 +2637,7 @@ export type OrchestrationGetFullThreadDiffResult = typeof OrchestrationGetFullTh
 
 export const OrchestrationReplayEventsInput = Schema.Struct({
   fromSequenceExclusive: NonNegativeInt,
+  threadId: Schema.optional(ThreadId),
 });
 export type OrchestrationReplayEventsInput = typeof OrchestrationReplayEventsInput.Type;
 

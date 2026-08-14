@@ -93,6 +93,7 @@ function createMockOpenCodeRuntime(options?: {
   const forkCalls: Array<{ sessionID: string }> = [];
   const permissionReplyCalls: Array<Record<string, unknown>> = [];
   const promptCalls: Array<Record<string, unknown>> = [];
+  const promptCallKinds: Array<"async" | "sync"> = [];
   const mcpAddCalls: Array<Record<string, unknown>> = [];
   let eventSubscribeCallCount = 0;
   const emptySubscription = {
@@ -125,6 +126,7 @@ function createMockOpenCodeRuntime(options?: {
       },
       promptAsync: async (promptInput: Record<string, unknown>) => {
         promptCalls.push(promptInput);
+        promptCallKinds.push("async");
         if (options?.promptAsync) {
           return options.promptAsync(promptInput);
         }
@@ -132,6 +134,7 @@ function createMockOpenCodeRuntime(options?: {
       },
       prompt: async (promptInput: Record<string, unknown>) => {
         promptCalls.push(promptInput);
+        promptCallKinds.push("sync");
         if (options?.prompt) {
           return options.prompt(promptInput);
         }
@@ -262,6 +265,7 @@ function createMockOpenCodeRuntime(options?: {
     forkCalls,
     permissionReplyCalls,
     promptCalls,
+    promptCallKinds,
     mcpAddCalls,
     get eventSubscribeCallCount() {
       return eventSubscribeCallCount;
@@ -1429,6 +1433,49 @@ describe("OpenCodeAdapter runtime lifecycle", () => {
     expect(gateway.revoked).toEqual(["gateway-token-1"]);
   });
 
+  it("submits Kilo turns through the asynchronous prompt endpoint", async () => {
+    const runtime = createMockOpenCodeRuntime({
+      prompt: async () => {
+        throw new Error("Kilo's blocking prompt endpoint must not be used");
+      },
+    });
+    const threadId = asThreadId("thread-kilo-async-prompt");
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const adapter = yield* KiloAdapter;
+        yield* adapter.startSession({
+          provider: "kilo",
+          threadId,
+          runtimeMode: "full-access",
+          cwd: "/repo",
+        });
+        yield* adapter.sendTurn({
+          threadId,
+          input: "perform a long-running task",
+          attachments: [],
+          modelSelection: { provider: "kilo", model: "openai/gpt-5" },
+        });
+        yield* adapter.stopSession(threadId);
+      }).pipe(
+        Effect.provide(
+          makeKiloAdapterLive({ runtime: runtime.runtime }).pipe(
+            Layer.provideMerge(
+              ServerConfig.layerTest(process.cwd(), { prefix: "kilo-adapter-test-" }),
+            ),
+            Layer.provideMerge(NodeServices.layer),
+          ),
+        ),
+      ),
+    );
+
+    expect(runtime.promptCallKinds).toEqual(["async"]);
+    expect(runtime.promptCalls[0]).toMatchObject({
+      sessionID: "opencode-session-1",
+      messageID: expect.stringMatching(/^msg_/),
+    });
+  });
+
   it("keeps shared external Kilo servers identity-only and never installs a token", async () => {
     const runtime = createMockOpenCodeRuntime();
     const gateway = makeGatewayCredentials();
@@ -1863,9 +1910,10 @@ describe("OpenCodeAdapter runtime lifecycle", () => {
     );
 
     expect(runtime.forkCalls).toEqual([{ sessionID: "source-session-1" }]);
-    expect(runtime.connectCalls).toHaveLength(2);
+    // Only the scoped fork client connects: the target session starts later
+    // under a ProviderService lifecycle lease, not inside forkThread.
+    expect(runtime.connectCalls).toHaveLength(1);
     expect(runtime.connectCalls[0]).toMatchObject({ cwd: "/repo/source" });
-    expect(runtime.connectCalls[1]).toMatchObject({ cwd: "/repo/source" });
     expect(result.resumeCursor).toMatchObject({
       openCodeSessionId: "forked-session-1",
       cwd: "/repo/source",
@@ -3313,7 +3361,7 @@ describe("OpenCodeAdapter runtime lifecycle", () => {
     });
   });
 
-  it("enforces Plan permissions under full access and restores them for the next turn", async () => {
+  it("enforces Plan permissions under full access and restores them for Debug", async () => {
     const runtime = createMockOpenCodeRuntime();
 
     await Effect.runPromise(
@@ -3333,7 +3381,7 @@ describe("OpenCodeAdapter runtime lifecycle", () => {
           threadId,
           input: "Implement the change",
           attachments: [],
-          interactionMode: "default",
+          interactionMode: "debug",
           modelSelection: { provider: "opencode", model: "openai/gpt-5.4" },
         });
       }).pipe(
@@ -4648,7 +4696,7 @@ describe("OpenCodeAdapter runtime lifecycle", () => {
               callID: "task-call-1",
               state: {
                 status: "running",
-                title: "Find changelog implementation",
+                title: "\nFind changelog implementation\n",
                 input: {
                   description: "Find changelog implementation",
                   prompt: "Explore changelog files.",

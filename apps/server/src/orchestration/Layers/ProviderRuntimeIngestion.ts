@@ -38,6 +38,7 @@ import {
 import { copyAndAttributeStudioGeneratedImage } from "../../studioGeneratedImages.ts";
 import { parseCheckpointFilesFromUnifiedDiff } from "../../checkpointing/Diffs.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
+import { activeThreadGoal } from "../../provider/goalMode.ts";
 import {
   classifyTerminalTurnApplicability,
   isStartedTurnApplicable,
@@ -52,6 +53,7 @@ import { OrchestrationCommandReceiptRepository } from "../../persistence/Service
 import {
   PROVIDER_RUNTIME_INGESTION_CONSUMER,
   ProviderRuntimeEventRepository,
+  type PersistedProviderRuntimeEvent,
 } from "../../persistence/Services/ProviderRuntimeEvents.ts";
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { isGitRepository } from "../../git/isRepo.ts";
@@ -91,7 +93,8 @@ const providerCommandId = (event: ProviderRuntimeEvent, tag: string, target = "e
 const DEFAULT_ASSISTANT_DELIVERY_MODE: AssistantDeliveryMode = "buffered";
 const PROVIDER_RUNTIME_INGESTION_CAPACITY = 1_024;
 const PROVIDER_RUNTIME_REPLAY_PAGE_SIZE = 128;
-const PROVIDER_RUNTIME_REPLAY_POLL_INTERVAL = Duration.millis(250);
+const PROVIDER_RUNTIME_REPLAY_POLL_MIN_MS = 250;
+const PROVIDER_RUNTIME_REPLAY_POLL_MAX_MS = 5_000;
 const TURN_MESSAGE_IDS_BY_TURN_CACHE_CAPACITY = 2_048;
 const TURN_MESSAGE_IDS_BY_TURN_TTL = Duration.minutes(60);
 const BUFFERED_MESSAGE_TEXT_BY_MESSAGE_ID_CACHE_CAPACITY = 1_024;
@@ -123,6 +126,22 @@ const MAX_BUFFERED_REASONING_SUMMARY_CHARS = 8_000;
 const MAX_BUFFERED_REASONING_SUMMARY_PARTS = 24;
 const BUFFERED_TEXT_TRUNCATION_MARKER = "... [truncated]";
 const STRICT_PROVIDER_LIFECYCLE_GUARD = process.env.LUMINOR_STRICT_PROVIDER_LIFECYCLE_GUARD !== "0";
+
+/**
+ * Back off the durable-journal safety poll while the live persisted-event
+ * stream is healthy and the consumer is caught up. Live events still drain
+ * immediately; this poll only recovers rows whose notification was missed.
+ */
+export function nextRuntimeJournalSafetyPollDelayMs(
+  currentDelayMs: number,
+  hadBacklog: boolean,
+): number {
+  if (hadBacklog) return PROVIDER_RUNTIME_REPLAY_POLL_MIN_MS;
+  return Math.min(
+    PROVIDER_RUNTIME_REPLAY_POLL_MAX_MS,
+    Math.max(PROVIDER_RUNTIME_REPLAY_POLL_MIN_MS, currentDelayMs * 2),
+  );
+}
 
 type RuntimeIngestionDomainEvent = Extract<
   OrchestrationEvent,
@@ -281,6 +300,38 @@ export function appendCappedBufferedText(existing: string, delta: string, limit:
     0,
     normalizedLimit - BUFFERED_TEXT_TRUNCATION_MARKER.length,
   )}${BUFFERED_TEXT_TRUNCATION_MARKER}`;
+}
+
+/**
+ * True when a provider runtime event renders as its own row in the web
+ * timeline (tool lifecycle, warnings, approvals, command output). Such an
+ * event between two assistant text deltas closes the current text segment,
+ * so the next delta starts a new interleave-positioned segment.
+ */
+function isRowMakingProviderRuntimeEvent(event: ProviderRuntimeEvent): boolean {
+  switch (event.type) {
+    case "item.started":
+    case "item.updated":
+    case "item.completed": {
+      const itemType = event.payload.itemType;
+      return itemType !== undefined && itemType !== "assistant_message" && itemType !== "reasoning";
+    }
+    case "runtime.warning":
+    case "user-input.requested":
+    case "user-input.resolved":
+      return true;
+    case "content.delta":
+      return (
+        event.payload.streamKind === "command_output" ||
+        event.payload.streamKind === "file_change_output"
+      );
+    default:
+      return false;
+  }
+}
+
+function assistantMessageSegmentKey(threadId: ThreadId, messageId: MessageId): string {
+  return JSON.stringify([threadId, messageId]);
 }
 
 function reasoningSummaryBufferKey(
@@ -544,6 +595,36 @@ const takeCached = <Key, Value>(cache: Cache.Cache<Key, Value>, key: Key) =>
   Cache.getOption(cache, key).pipe(
     Effect.flatMap((value) => Cache.invalidate(cache, key).pipe(Effect.as(value))),
   );
+
+export function selectProviderRuntimeJournalStream(input: {
+  readonly streamEvents: Stream.Stream<ProviderRuntimeEvent>;
+  readonly streamPersistedEvents?: Stream.Stream<PersistedProviderRuntimeEvent>;
+  readonly append: (
+    event: ProviderRuntimeEvent,
+  ) => Effect.Effect<PersistedProviderRuntimeEvent, unknown>;
+}) {
+  return (
+    input.streamPersistedEvents ??
+    input.streamEvents.pipe(
+      Stream.mapEffect((event) =>
+        input.append(event).pipe(
+          Effect.catchCause((cause) =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.failCause(cause)
+              : Effect.logWarning("provider runtime event journal ingestion failed", {
+                  eventId: event.eventId,
+                  eventType: event.type,
+                  cause: Cause.pretty(cause),
+                }).pipe(Effect.as(undefined)),
+          ),
+        ),
+      ),
+      Stream.filter(
+        (persisted): persisted is NonNullable<typeof persisted> => persisted !== undefined,
+      ),
+    )
+  );
+}
 
 const make = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -981,8 +1062,8 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  const takeBufferedAssistantText = (messageId: MessageId) =>
-    takeCached(bufferedAssistantTextByMessageId, messageId).pipe(
+  const getBufferedAssistantText = (messageId: MessageId) =>
+    Cache.getOption(bufferedAssistantTextByMessageId, messageId).pipe(
       Effect.map(Option.getOrElse(() => "")),
     );
 
@@ -1112,8 +1193,18 @@ const make = Effect.gen(function* () {
     );
   };
 
-  const clearAssistantMessageState = (messageId: MessageId) =>
-    Cache.invalidate(bufferedAssistantTextByMessageId, messageId);
+  const clearAssistantMessageState = (threadId: ThreadId, messageId: MessageId) =>
+    Effect.gen(function* () {
+      const segmentKey = assistantMessageSegmentKey(threadId, messageId);
+      bufferedTextSegmentsByMessageKey.delete(segmentKey);
+      bufferedTextSpilledByMessageKey.delete(segmentKey);
+      const statesForThread = segmentStateByThreadId.get(threadId);
+      statesForThread?.delete(messageId);
+      if (statesForThread?.size === 0) {
+        segmentStateByThreadId.delete(threadId);
+      }
+      yield* Cache.invalidate(bufferedAssistantTextByMessageId, messageId);
+    });
 
   const resolveAssistantCompletionMessageId = (input: {
     event: ProviderRuntimeEvent;
@@ -1175,6 +1266,68 @@ const make = Effect.gen(function* () {
       return MessageId.makeUnsafe(`assistant:${input.event.eventId}`);
     });
 
+  /**
+   * Dispatches the final buffered assistant text. When the turn buffered its
+   * streamed deltas (default delivery mode) and no spill split the buffer, each
+   * recorded text segment is fanned back out as its own delta carrying its
+   * boundary start time, so the projection keeps the interleaved timeline
+   * (reasoning next to the tool rows that interrupted it). Oversized/spilled
+   * buffers fall back to a single delta with the first segment's start.
+   */
+  const dispatchFinalAssistantTextSegments = (input: {
+    event: ProviderRuntimeEvent;
+    threadId: ThreadId;
+    messageId: MessageId;
+    turnId?: TurnId;
+    createdAt: string;
+    tagBase: string;
+    text: string;
+  }) =>
+    Effect.gen(function* () {
+      const segmentKey = assistantMessageSegmentKey(input.threadId, input.messageId);
+      const segments = bufferedTextSegmentsByMessageKey.get(segmentKey) ?? [];
+      const spilled = bufferedTextSpilledByMessageKey.has(segmentKey);
+      if (segments.length > 1 && !spilled) {
+        for (const [segmentIndex, segment] of segments.entries()) {
+          yield* orchestrationEngine.dispatch({
+            type: "thread.message.assistant.delta",
+            commandId: providerCommandId(
+              input.event,
+              `${input.tagBase}-segment-${segmentIndex}`,
+              input.messageId,
+            ),
+            threadId: input.threadId,
+            messageId: input.messageId,
+            delta: segment.text,
+            ...(input.turnId ? { turnId: input.turnId } : {}),
+            ...(segment.startedAt ? { segmentStartedAt: segment.startedAt } : {}),
+            segmentSequence: segment.sequence,
+            createdAt: input.createdAt,
+          });
+        }
+        bufferedTextSegmentsByMessageKey.delete(segmentKey);
+        bufferedTextSpilledByMessageKey.delete(segmentKey);
+        return;
+      }
+      const bufferedSegmentStartedAt = spilled ? undefined : segments[0]?.startedAt;
+      const bufferedSegmentSequence = spilled ? undefined : segments[0]?.sequence;
+      yield* orchestrationEngine.dispatch({
+        type: "thread.message.assistant.delta",
+        commandId: providerCommandId(input.event, input.tagBase, input.messageId),
+        threadId: input.threadId,
+        messageId: input.messageId,
+        delta: input.text,
+        ...(input.turnId ? { turnId: input.turnId } : {}),
+        ...(bufferedSegmentStartedAt ? { segmentStartedAt: bufferedSegmentStartedAt } : {}),
+        ...(bufferedSegmentSequence !== undefined
+          ? { segmentSequence: bufferedSegmentSequence }
+          : {}),
+        createdAt: input.createdAt,
+      });
+      bufferedTextSegmentsByMessageKey.delete(segmentKey);
+      bufferedTextSpilledByMessageKey.delete(segmentKey);
+    });
+
   const flushBufferedAssistantMessageDelta = (input: {
     event: ProviderRuntimeEvent;
     threadId: ThreadId;
@@ -1184,20 +1337,24 @@ const make = Effect.gen(function* () {
     commandTag: string;
   }) =>
     Effect.gen(function* () {
-      const bufferedText = yield* takeBufferedAssistantText(input.messageId);
+      const bufferedText = yield* getBufferedAssistantText(input.messageId);
       if (!hasRenderableAssistantText(bufferedText)) {
+        const segmentKey = assistantMessageSegmentKey(input.threadId, input.messageId);
+        bufferedTextSegmentsByMessageKey.delete(segmentKey);
+        bufferedTextSpilledByMessageKey.delete(segmentKey);
         return false;
       }
 
-      yield* orchestrationEngine.dispatch({
-        type: "thread.message.assistant.delta",
-        commandId: providerCommandId(input.event, input.commandTag, input.messageId),
+      yield* dispatchFinalAssistantTextSegments({
+        event: input.event,
         threadId: input.threadId,
         messageId: input.messageId,
-        delta: bufferedText,
         ...(input.turnId ? { turnId: input.turnId } : {}),
         createdAt: input.createdAt,
+        tagBase: input.commandTag,
+        text: bufferedText,
       });
+      yield* Cache.invalidate(bufferedAssistantTextByMessageId, input.messageId);
       return true;
     });
 
@@ -1263,7 +1420,7 @@ const make = Effect.gen(function* () {
     fallbackText?: string;
   }) =>
     Effect.gen(function* () {
-      const bufferedText = yield* takeBufferedAssistantText(input.messageId);
+      const bufferedText = yield* getBufferedAssistantText(input.messageId);
       const text =
         bufferedText.length > 0
           ? bufferedText
@@ -1272,15 +1429,19 @@ const make = Effect.gen(function* () {
             : "";
 
       if (hasRenderableAssistantText(text)) {
-        yield* orchestrationEngine.dispatch({
-          type: "thread.message.assistant.delta",
-          commandId: providerCommandId(input.event, input.finalDeltaCommandTag, input.messageId),
+        yield* dispatchFinalAssistantTextSegments({
+          event: input.event,
           threadId: input.threadId,
           messageId: input.messageId,
-          delta: text,
           ...(input.turnId ? { turnId: input.turnId } : {}),
           createdAt: input.createdAt,
+          tagBase: input.finalDeltaCommandTag,
+          text,
         });
+      } else {
+        const segmentKey = assistantMessageSegmentKey(input.threadId, input.messageId);
+        bufferedTextSegmentsByMessageKey.delete(segmentKey);
+        bufferedTextSpilledByMessageKey.delete(segmentKey);
       }
 
       yield* orchestrationEngine.dispatch({
@@ -1291,7 +1452,7 @@ const make = Effect.gen(function* () {
         ...(input.turnId ? { turnId: input.turnId } : {}),
         createdAt: input.createdAt,
       });
-      yield* clearAssistantMessageState(input.messageId);
+      yield* clearAssistantMessageState(input.threadId, input.messageId);
     });
 
   /**
@@ -1574,7 +1735,9 @@ const make = Effect.gen(function* () {
 
           const messageIds = yield* Cache.getOption(turnMessageIdsByTurnKey, key);
           if (Option.isSome(messageIds)) {
-            yield* Effect.forEach(messageIds.value, clearAssistantMessageState);
+            yield* Effect.forEach(messageIds.value, (messageId) =>
+              clearAssistantMessageState(threadId, messageId),
+            );
           }
 
           yield* Cache.invalidate(turnMessageIdsByTurnKey, key);
@@ -1709,7 +1872,24 @@ const make = Effect.gen(function* () {
       }
     });
 
-  const processRuntimeEvent = (event: ProviderRuntimeEvent) =>
+  // Text-segment tracking for streamed assistant text is scoped by target
+  // thread and message. A row event marks only that thread's active messages,
+  // so the next delta starts a new segment even when timestamps are equal. In
+  // buffered delivery, bufferedTextSegmentsByMessageKey
+  // accumulates one text slice per segment so the final flush can fan the
+  // segments back out as separate deltas (bufferedTextSpilledByMessageKey marks
+  // turns whose spill boundary invalidated that fan-out).
+  const segmentStateByThreadId = new Map<
+    ThreadId,
+    Map<MessageId, { hasText: boolean; splitPending: boolean }>
+  >();
+  const bufferedTextSegmentsByMessageKey = new Map<
+    string,
+    ReadonlyArray<{ readonly sequence: number; readonly startedAt: string; readonly text: string }>
+  >();
+  const bufferedTextSpilledByMessageKey = new Set<string>();
+
+  const processRuntimeEvent = (event: ProviderRuntimeEvent, runtimeSequence: number) =>
     Effect.gen(function* () {
       const now = event.createdAt;
       // Load the full (heavy) detail only when this event's handlers actually read
@@ -1936,6 +2116,13 @@ const make = Effect.gen(function* () {
         return;
       }
       const thread = targetThreadResolution.thread;
+      if (isRowMakingProviderRuntimeEvent(event)) {
+        for (const state of segmentStateByThreadId.get(thread.id)?.values() ?? []) {
+          if (state.hasText) {
+            state.splitPending = true;
+          }
+        }
+      }
       const activeTurnId = thread.session?.activeTurnId ?? null;
       const isTerminalTurnEvent = event.type === "turn.completed" || event.type === "turn.aborted";
       const rawEventTurnId = toTurnId(event.turnId);
@@ -2087,6 +2274,44 @@ const make = Effect.gen(function* () {
             },
             createdAt: now,
           });
+
+          if (isTerminalTurnEvent) {
+            // The command read model advances synchronously with goal tools.
+            // Reading it here prevents a fast terminal provider event from
+            // overtaking the projection of achieved/blocked/pause metadata.
+            const settledThread = (yield* orchestrationEngine.getReadModel()).threads.find(
+              (candidate) => candidate.id === thread.id,
+            );
+            if (
+              settledThread &&
+              settledThread.deletedAt == null &&
+              settledThread.archivedAt == null &&
+              settledThread.parentThreadId == null &&
+              Boolean(activeThreadGoal(settledThread)?.trim()) &&
+              settledThread.goalPausedAt == null
+            ) {
+              if (event.type === "turn.completed" && runtimeTurnState(event) === "completed") {
+                yield* orchestrationEngine.dispatch({
+                  type: "thread.goal.continue",
+                  commandId: providerCommandId(event, "goal-continue", thread.id),
+                  threadId: thread.id,
+                  goalStartedAt: settledThread.goalStartedAt ?? null,
+                  trigger: "turn-completed",
+                  ...(eventTurnId !== undefined ? { sourceTurnId: eventTurnId } : {}),
+                  createdAt: now,
+                });
+              } else {
+                // A failed, aborted, cancelled, or interrupted turn must stop
+                // autonomous resurrection until the user explicitly resumes.
+                yield* orchestrationEngine.dispatch({
+                  type: "thread.meta.update",
+                  commandId: providerCommandId(event, "goal-auto-pause", thread.id),
+                  threadId: thread.id,
+                  goalPaused: true,
+                });
+              }
+            }
+          }
         }
       }
 
@@ -2151,9 +2376,56 @@ const make = Effect.gen(function* () {
           thread.id,
           turnId ?? activeTurnId ?? undefined,
         );
+        // First delta of a message, or a row-making event since the last
+        // delta, starts a new segment positioned at this event's time.
+        const statesForThread = segmentStateByThreadId.get(thread.id) ?? new Map();
+        segmentStateByThreadId.set(thread.id, statesForThread);
+        const segmentState = statesForThread.get(assistantMessageId) ?? {
+          hasText: false,
+          splitPending: false,
+        };
+        statesForThread.set(assistantMessageId, segmentState);
+        const startsNewSegment = !segmentState.hasText || segmentState.splitPending;
+        const segmentStartedAt = startsNewSegment ? now : undefined;
+        segmentState.hasText = true;
+        segmentState.splitPending = false;
+        const bufferedSegmentKey = assistantMessageSegmentKey(thread.id, assistantMessageId);
         if (assistantDeliveryMode === "buffered") {
+          // Buffer the delta as part of the current segment: a row-making
+          // provider event between deltas closes the current segment and the
+          // next delta starts a new one at its own time. On final flush the
+          // segments fan out as separate deltas so the projection keeps the
+          // interleaved boundaries instead of one whole-text blob.
+          if (!bufferedTextSpilledByMessageKey.has(bufferedSegmentKey)) {
+            const existingSegments = bufferedTextSegmentsByMessageKey.get(bufferedSegmentKey);
+            const tail = existingSegments?.[existingSegments.length - 1];
+            if (segmentStartedAt === undefined && tail !== undefined) {
+              bufferedTextSegmentsByMessageKey.set(bufferedSegmentKey, [
+                ...existingSegments!.slice(0, -1),
+                {
+                  sequence: tail.sequence,
+                  startedAt: tail.startedAt,
+                  text: `${tail.text}${assistantDelta}`,
+                },
+              ]);
+            } else {
+              bufferedTextSegmentsByMessageKey.set(bufferedSegmentKey, [
+                ...(existingSegments ?? []),
+                {
+                  sequence: runtimeSequence,
+                  startedAt: segmentStartedAt ?? now,
+                  text: assistantDelta,
+                },
+              ]);
+            }
+          }
           const spillChunk = yield* appendBufferedAssistantText(assistantMessageId, assistantDelta);
           if (spillChunk.length > 0) {
+            // Oversized turn: the spill boundary splits the buffered text, so
+            // per-segment fan-out can no longer reproduce the cache's
+            // truncation. Fall back to the single-delta flush at completion.
+            bufferedTextSegmentsByMessageKey.delete(bufferedSegmentKey);
+            bufferedTextSpilledByMessageKey.add(bufferedSegmentKey);
             yield* orchestrationEngine.dispatch({
               type: "thread.message.assistant.delta",
               commandId: providerCommandId(
@@ -2176,6 +2448,8 @@ const make = Effect.gen(function* () {
             messageId: assistantMessageId,
             delta: assistantDelta,
             ...(turnId ? { turnId } : {}),
+            ...(segmentStartedAt ? { segmentStartedAt } : {}),
+            ...(segmentStartedAt ? { segmentSequence: runtimeSequence } : {}),
             createdAt: now,
           });
         }
@@ -2498,8 +2772,9 @@ const make = Effect.gen(function* () {
             : event.type === "item.updated" && toolOutputKey
               ? withBufferedToolOutputData(event, yield* getBufferedToolOutput(toolOutputKey))
               : event;
-      yield* Effect.forEach(projectProviderRuntimeActivities(activityEvent), (activity) =>
-        dispatchActivityUpdate(activityEvent, thread.id, activity),
+      yield* Effect.forEach(
+        projectProviderRuntimeActivities(activityEvent, runtimeSequence),
+        (activity) => dispatchActivityUpdate(activityEvent, thread.id, activity),
       );
 
       if (isTerminalTurnEvent) {
@@ -2592,7 +2867,7 @@ const make = Effect.gen(function* () {
 
   const processInput = (input: RuntimeIngestionInput) =>
     input.source === "runtime"
-      ? processRuntimeEvent(input.event).pipe(
+      ? processRuntimeEvent(input.event, input.sequence).pipe(
           Effect.andThen(
             runtimeEvents.advanceConsumerCursor({
               consumerName: PROVIDER_RUNTIME_INGESTION_CONSUMER,
@@ -2755,11 +3030,13 @@ const make = Effect.gen(function* () {
     runtimeJournalDrainLock.withPermits(1)(
       Effect.gen(function* () {
         const replayFence = throughSequenceInclusive ?? (yield* runtimeEvents.getHighWaterSequence);
+        let hadBacklog = false;
         while (true) {
           const cursor = yield* runtimeEvents.getConsumerCursor(
             PROVIDER_RUNTIME_INGESTION_CONSUMER,
           );
-          if (cursor >= replayFence) return;
+          if (cursor >= replayFence) return hadBacklog;
+          hadBacklog = true;
 
           const page = yield* runtimeEvents.readAfter({
             sequenceExclusive: cursor,
@@ -2786,7 +3063,7 @@ const make = Effect.gen(function* () {
             // skipped (loop again from the fresh cursor), or the drain yields
             // to the durable poller, which retries from the exact cursor.
             if (yield* deadLetterPoisonHeadRow) continue;
-            return;
+            return hadBacklog;
           }
 
           const advancedCursor = yield* runtimeEvents.getConsumerCursor(
@@ -2808,9 +3085,21 @@ const make = Effect.gen(function* () {
       if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
       return Effect.logWarning("provider runtime journal drain failed", {
         cause: Cause.pretty(cause),
-      });
+      }).pipe(Effect.as(true));
     }),
   );
+
+  const pollRuntimeJournalSafely = Effect.gen(function* () {
+    // Keep the long-lived loop inside one generator fiber. Recursively chaining
+    // a fresh Effect for every tick retains work in Bun's Effect interpreter
+    // and grows CPU/RSS over time even though each individual poll is tiny.
+    let delayMs = PROVIDER_RUNTIME_REPLAY_POLL_MIN_MS;
+    while (true) {
+      yield* Effect.sleep(Duration.millis(delayMs));
+      const hadBacklog = yield* drainRuntimeJournalSafely;
+      delayMs = nextRuntimeJournalSafetyPollDelayMs(delayMs, hadBacklog);
+    }
+  });
 
   const reconcileSettledOpenTurns: ProviderRuntimeIngestionShape["reconcileSettledOpenTurns"] =
     runtimeEvents.pruneSettledOpenTurns.pipe(
@@ -2854,9 +3143,9 @@ const make = Effect.gen(function* () {
   // rejection, a decode failure) must degrade this thread's caches rather than
   // make the backend unbootable: the state is rebuildable, the boot loop is not
   // recoverable without deleting user data.
-  const rebuildAcceptedOpenTurnStateForEvent = (event: ProviderRuntimeEvent) =>
+  const rebuildAcceptedOpenTurnStateForEvent = (event: ProviderRuntimeEvent, sequence: number) =>
     prepareAcceptedRuntimeEventReplay(event).pipe(
-      Effect.andThen(processRuntimeEvent(event)),
+      Effect.andThen(processRuntimeEvent(event, sequence)),
       Effect.catchCause((cause) =>
         Cause.hasInterruptsOnly(cause)
           ? Effect.failCause(cause)
@@ -2882,7 +3171,7 @@ const make = Effect.gen(function* () {
       });
       if (page.length === 0) return;
       for (const entry of page) {
-        yield* rebuildAcceptedOpenTurnStateForEvent(entry.event);
+        yield* rebuildAcceptedOpenTurnStateForEvent(entry.event, entry.sequence);
         sequence = entry.sequence;
       }
       if (page.length < PROVIDER_RUNTIME_REPLAY_PAGE_SIZE) return;
@@ -2893,20 +3182,22 @@ const make = Effect.gen(function* () {
   const start: ProviderRuntimeIngestionShape["start"] = startDrainableWorkerProducers(
     worker,
     Effect.gen(function* () {
+      const streamPersistedEvents = providerService.streamPersistedEvents;
+      const persistedRuntimeEvents = selectProviderRuntimeJournalStream({
+        streamEvents: providerService.streamEvents,
+        ...(streamPersistedEvents === undefined ? {} : { streamPersistedEvents }),
+        append: (event) => runtimeEvents.append(event),
+      });
       yield* Effect.forkScoped(
-        Stream.runForEach(providerService.streamEvents, (event) =>
-          runtimeEvents.append(event).pipe(
-            Effect.flatMap((persisted) =>
-              Deferred.await(startupRuntimeReplayComplete).pipe(
-                Effect.andThen(drainRuntimeJournalThrough(persisted.sequence)),
-              ),
-            ),
+        Stream.runForEach(persistedRuntimeEvents, (persisted) =>
+          Deferred.await(startupRuntimeReplayComplete).pipe(
+            Effect.andThen(drainRuntimeJournalThrough(persisted.sequence)),
             Effect.catchCause((cause) =>
               Cause.hasInterruptsOnly(cause)
                 ? Effect.failCause(cause)
                 : Effect.logWarning("provider runtime event journal ingestion failed", {
-                    eventId: event.eventId,
-                    eventType: event.type,
+                    eventId: persisted.event.eventId,
+                    eventType: persisted.event.type,
                     cause: Cause.pretty(cause),
                   }),
             ),
@@ -2936,12 +3227,7 @@ const make = Effect.gen(function* () {
       yield* rebuildAcceptedOpenTurnState;
       yield* drainRuntimeJournal;
       yield* Deferred.succeed(startupRuntimeReplayComplete, undefined);
-      yield* Effect.forkScoped(
-        Effect.sleep(PROVIDER_RUNTIME_REPLAY_POLL_INTERVAL).pipe(
-          Effect.andThen(drainRuntimeJournalSafely),
-          Effect.forever,
-        ),
-      );
+      yield* Effect.forkScoped(pollRuntimeJournalSafely);
     }),
   ).pipe(Effect.orDie);
 

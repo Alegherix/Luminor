@@ -3,11 +3,14 @@ import { randomUUID } from "node:crypto";
 import { Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { DEFAULT_GIT_TEXT_GENERATION_MODEL } from "@luminor/contracts";
 import { sanitizeGeneratedThreadTitle } from "@luminor/shared/chatThreads";
 import { resolveCodexHome } from "@luminor/shared/codexConfig";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@luminor/shared/git";
 import { prepareWindowsSafeProcess } from "@luminor/shared/windowsProcess";
+import {
+  DEFAULT_GIT_TEXT_GENERATION_MODEL,
+  DEFAULT_GIT_TEXT_GENERATION_REASONING_EFFORT,
+} from "@luminor/contracts";
 
 import { resolveProviderAttachmentPath } from "../../provider/providerAttachmentPaths.ts";
 import { buildCodexProcessEnv } from "../../codexProcessEnv.ts";
@@ -46,7 +49,6 @@ import {
   toJsonSchemaObject,
 } from "../textGenerationShared.ts";
 
-const CODEX_REASONING_EFFORT = "low";
 const CODEX_TIMEOUT_MS = 180_000;
 
 function normalizeCodexError(
@@ -335,7 +337,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
           "--model",
           resolveCodexModel(model, modelSelection) ?? DEFAULT_GIT_TEXT_GENERATION_MODEL,
           "--config",
-          `model_reasoning_effort="${CODEX_REASONING_EFFORT}"`,
+          `model_reasoning_effort="${DEFAULT_GIT_TEXT_GENERATION_REASONING_EFFORT}"`,
           "--output-schema",
           schemaPath,
           "--output-last-message",

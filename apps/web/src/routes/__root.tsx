@@ -10,6 +10,7 @@ import {
   type WsCompatibilityError,
 } from "@luminor/contracts";
 import { defaultTerminalTitleForCliKind } from "@luminor/shared/terminalThreads";
+import { isThreadDetailEventFor } from "@luminor/shared/threadDetailEvents";
 import {
   Outlet,
   createRootRouteWithContext,
@@ -54,6 +55,7 @@ import {
   useComposerDraftStore,
 } from "../composerDraftStore";
 import { useStore } from "../store";
+import { EMPTY_THREAD_IDS } from "../storeState";
 import { createAllThreadsSelector } from "../storeSelectors";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { terminalActivityFromEvent } from "../terminalActivity";
@@ -96,6 +98,8 @@ import { hasPendingTurnDispatch } from "../pendingTurnDispatch";
 import { canApplyThreadSnapshot, selectOrphanedThreadDetailIds } from "./-threadDetailOwnership";
 import { getThreadFromState, getThreadsFromState } from "../threadDerivation";
 import { useAppDensity } from "../hooks/useAppDensity";
+import { useChatWidth } from "../hooks/useChatWidth";
+import { useDesktopAppIcon } from "../hooks/useDesktopAppIcon";
 import { useAppTypography } from "../hooks/useAppTypography";
 import { useBaseFontSizeWheelZoom } from "../hooks/useBaseFontSizeWheelZoom";
 import { usePreloadRouteChunks } from "../hooks/usePreloadRouteChunks";
@@ -103,7 +107,7 @@ import { useSyncDesktopTopBarTrafficLightGutterZoom } from "../hooks/useDesktopT
 import { useTheme } from "../hooks/useTheme";
 import { useNativeFontSmoothing } from "../hooks/useNativeFontSmoothing";
 import { invalidateGitQueries, invalidateGitQueriesForCwds } from "../lib/gitReactQuery";
-import { hasLiveThreadsWithMissingProjects } from "../lib/desktopProjectRecovery";
+import { shouldRepairDesktopProjectSnapshot } from "../lib/desktopProjectRecovery";
 import { useDiffRouteSearch } from "../hooks/useDiffRouteSearch";
 import {
   PROVIDER_AUTH_REFRESH_MIN_INTERVAL_MS,
@@ -117,6 +121,7 @@ import { arraysShallowEqual } from "../storeNormalization";
 import { providerModelDiscoveryInvalidationFingerprint } from "../lib/providerDiscoveryInvalidation";
 import { providerDiscoveryQueryKeys } from "../lib/providerDiscoveryReactQuery";
 import { useAppSettings } from "../appSettings";
+import { getNavigatorPlatform } from "../lib/utils";
 import {
   getNotifiableProviderUpdateStatuses,
   isProviderUpdateActive,
@@ -133,6 +138,7 @@ import {
   shouldInvalidateGitQueriesForEvent,
   shouldInvalidateProviderQueriesForEvent,
 } from "./-rootEventInvalidation";
+import { createDesktopProjectRecoveryAttemptGate } from "./-desktopProjectRecoveryAttempt";
 
 const SHELL_SNAPSHOT_BOOTSTRAP_FALLBACK_DELAY_MS = 1_500;
 const THREAD_DETAIL_CATCHUP_INTERVAL_MS = 1_500;
@@ -194,6 +200,8 @@ function RootRouteView() {
   useAppTypography();
   useAppDensity();
   useBaseFontSizeWheelZoom();
+  useChatWidth();
+  useDesktopAppIcon();
   usePreloadRouteChunks();
   useNativeFontSmoothing();
   useSyncDesktopTopBarTrafficLightGutterZoom();
@@ -660,7 +668,7 @@ function GlobalShortcutsDialog() {
   const { focusedThreadId, activeProject } = useFocusedChatContext();
   const serverConfigQuery = useQuery(serverConfigQueryOptions());
   const keybindings = serverConfigQuery.data?.keybindings ?? [];
-  const platform = typeof navigator === "undefined" ? "" : navigator.platform;
+  const platform = getNavigatorPlatform();
   const activeThreadTerminalState = useTerminalStateStore((state) =>
     focusedThreadId
       ? selectThreadTerminalState(state.terminalStateByThreadId, focusedThreadId)
@@ -928,29 +936,7 @@ function shouldFlushDomainEventImmediately(
 }
 
 function isThreadDetailEventForThread(event: OrchestrationEvent, threadId: ThreadId): boolean {
-  if (event.aggregateKind !== "thread" || event.aggregateId !== threadId) {
-    return false;
-  }
-  return (
-    event.type === "thread.message-sent" ||
-    event.type === "thread.proposed-plan-upserted" ||
-    event.type === "thread.activity-appended" ||
-    event.type === "thread.turn-diff-completed" ||
-    event.type === "thread.reverted" ||
-    event.type === "thread.conversation-rolled-back" ||
-    event.type === "thread.session-set" ||
-    event.type === "thread.meta-updated" ||
-    event.type === "thread.pinned-message-added" ||
-    event.type === "thread.pinned-message-removed" ||
-    event.type === "thread.pinned-message-done-set" ||
-    event.type === "thread.pinned-message-label-set" ||
-    event.type === "thread.marker-added" ||
-    event.type === "thread.marker-removed" ||
-    event.type === "thread.marker-done-set" ||
-    event.type === "thread.marker-label-set" ||
-    event.type === "thread.archived" ||
-    event.type === "thread.unarchived"
-  );
+  return isThreadDetailEventFor(event, threadId);
 }
 
 // Both catch-up predicates also honor the composer's pending-dispatch signal:
@@ -1024,7 +1010,7 @@ function EventRouter() {
     (store) => store.removeOrphanedTerminalStates,
   );
   const setServerWorkspacePaths = useWorkspacePathsStore((store) => store.setServerWorkspacePaths);
-  const serverThreads = useStore(selectAllThreads);
+  const serverThreadIds = useStore((store) => store.threadIds ?? EMPTY_THREAD_IDS);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -1061,14 +1047,14 @@ function EventRouter() {
     [dockStateByThreadId, hostThreadIds, routeSearch.view],
   );
   const retainedThreadIds = useRetainedThreadDetailIds();
-  const serverThreadIds = new Set(serverThreads.map((thread) => thread.id));
+  const serverThreadIdSet = useMemo(() => new Set(serverThreadIds), [serverThreadIds]);
   // Stabilize the lease array by content: `serverThreads` re-emits on every
   // streaming update, and an identity-changing lease list would enqueue a no-op
   // subscription reconcile per render onto the serialized subscribe chain.
   const nextSubscribedThreadIds = resolveThreadDetailSubscriptionLeaseIds({
     visibleThreadIds,
     retainedThreadIds,
-    serverThreadIds,
+    serverThreadIds: serverThreadIdSet,
   });
   const subscribedThreadIdsRef = useRef(nextSubscribedThreadIds);
   const subscribedThreadIds = arraysShallowEqual(
@@ -1335,7 +1321,9 @@ function EventRouter() {
     }
 
     const loadShellSnapshotOnce = async () => {
+      if (disposed) return;
       const snapshot = await api.orchestration.getShellSnapshot();
+      if (disposed) return;
       if (!shouldApplyBootstrapShellSnapshot(snapshot)) {
         return;
       }
@@ -1525,7 +1513,7 @@ function EventRouter() {
       // Promise chain keeps the run-always cleanup (finally) and lets a replay
       // rejection propagate to callers exactly as the try/finally did.
       await api.orchestration
-        .replayEvents(fromSequence)
+        .replayEvents(fromSequence, threadId)
         .then((replayedEvents) => {
           for (const event of replayedEvents
             .filter((candidate) => isThreadDetailEventForThread(candidate, threadId))
@@ -2087,11 +2075,18 @@ function DesktopProjectBootstrap() {
   const projects = useStore((store) => store.projects);
   const threads = useStore(selectAllThreads);
   const threadsHydrated = useStore((store) => store.threadsHydrated);
-  const attemptedRecoveryRef = useRef(false);
+  const recoveryAttemptGateRef = useRef<ReturnType<
+    typeof createDesktopProjectRecoveryAttemptGate
+  > | null>(null);
+  if (recoveryAttemptGateRef.current === null) {
+    recoveryAttemptGateRef.current = createDesktopProjectRecoveryAttemptGate();
+  }
+  const recoveryAttemptGate = recoveryAttemptGateRef.current;
 
   useEffect(() => {
+    let disposed = false;
     const api = readNativeApi();
-    if (!api || attemptedRecoveryRef.current || !threadsHydrated) {
+    if (!api || !threadsHydrated) {
       return;
     }
 
@@ -2101,29 +2096,36 @@ function DesktopProjectBootstrap() {
       return;
     }
 
-    attemptedRecoveryRef.current = true;
+    const attempt = recoveryAttemptGate.begin();
+    if (!attempt) return;
+    const ownsAttempt = () => !disposed && attempt.isCurrent();
 
     // Shell subscriptions should normally hydrate the sidebar. If project rows
     // are missing while live threads exist, repair before accepting the snapshot.
     void api.orchestration
       .getShellSnapshot()
       .then((snapshot) => {
-        const needsRepair =
-          (snapshot.projects.length === 0 && snapshot.threads.length === 0) ||
-          hasLiveThreadsWithMissingProjects(snapshot);
+        if (!ownsAttempt()) return;
+        const needsRepair = shouldRepairDesktopProjectSnapshot(snapshot);
         if (!needsRepair) {
+          if (!ownsAttempt() || !attempt.complete()) return;
           useStore.getState().syncServerShellSnapshot(snapshot);
-          return snapshot;
+          return;
         }
         return api.orchestration.repairState().then((repairedSnapshot) => {
+          if (!ownsAttempt() || !attempt.complete()) return;
           syncServerReadModel(repairedSnapshot);
-          return repairedSnapshot;
         });
       })
       .catch(() => {
-        attemptedRecoveryRef.current = false;
+        attempt.release();
       });
-  }, [projects, syncServerReadModel, threads, threadsHydrated]);
+
+    return () => {
+      disposed = true;
+      attempt.release();
+    };
+  }, [projects, recoveryAttemptGate, syncServerReadModel, threads, threadsHydrated]);
 
   // Desktop hydration normally runs through EventRouter project + orchestration sync.
   return null;

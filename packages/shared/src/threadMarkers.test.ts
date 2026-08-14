@@ -1,5 +1,5 @@
-import type { ThreadMarker } from "@luminor/contracts";
 import { MessageId, ThreadMarkerId } from "@luminor/contracts";
+import type { ThreadMarker } from "@luminor/contracts";
 import { describe, expect, it } from "vitest";
 
 import {

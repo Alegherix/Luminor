@@ -15,16 +15,16 @@ import { NetService, type NetServiceShape } from "@luminor/shared/Net";
 import { Effect, Fiber, Layer, Option, Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
-import type { ProjectionSnapshotQueryShape } from "./orchestration/Services/ProjectionSnapshotQuery";
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery";
-import type { TerminalManagerShape } from "./terminal/Services/Manager";
+import type { ProjectionSnapshotQueryShape } from "./orchestration/Services/ProjectionSnapshotQuery";
 import { TerminalError, TerminalManager } from "./terminal/Services/Manager";
+import type { TerminalManagerShape } from "./terminal/Services/Manager";
 import {
   PREVIEW_REQUIRES_SCRIPT_MESSAGE,
   PREVIEW_WORKTREE_PENDING_MESSAGE,
 } from "./preview/previewLaunchPlan";
-import type { ThreadPreviewManagerShape } from "./threadPreviewManager";
 import { ThreadPreviewManager, ThreadPreviewManagerLive } from "./threadPreviewManager";
+import type { ThreadPreviewManagerShape } from "./threadPreviewManager";
 
 const THREAD_ID = "thread-1";
 const WORKSPACE_ROOT = "/repo";

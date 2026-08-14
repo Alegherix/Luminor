@@ -53,6 +53,7 @@ function makeItem(number: number, repository = "acme/shared"): GitHubPullRequest
     reviewRequestLogins: [],
     labels: [],
     mergeability: "unknown",
+    stack: null,
   };
 }
 
@@ -114,7 +115,12 @@ describe("PullRequestService", () => {
       listRepositoryPullRequests: () =>
         Effect.sync(() => {
           listReads += 1;
-          return makeBatch([makeItem(1)]);
+          return makeBatch([
+            {
+              ...makeItem(1),
+              stack: { number: 2, size: 3, position: 1, baseBranch: "main" },
+            },
+          ]);
         }),
     };
 
@@ -140,6 +146,12 @@ describe("PullRequestService", () => {
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]?.projectId).toBe(projectB.id);
     expect(result.entries[0]?.projectContexts).toHaveLength(2);
+    expect(result.entries[0]?.stack).toEqual({
+      number: 2,
+      size: 3,
+      position: 1,
+      baseBranch: "main",
+    });
     expect(result.repositoryBatches).toHaveLength(1);
   });
 

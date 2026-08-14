@@ -12,8 +12,8 @@ import {
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 
 import type { DraftThreadState } from "../composerDraftStore";
-import type { RepoDiffScope } from "../repoDiffScopeStore";
 import { REPO_DIFF_SCOPE_LABELS } from "../repoDiffScopeStore";
+import type { RepoDiffScope } from "../repoDiffScopeStore";
 import { hasLiveTurnTailWork, isLatestTurnSettled } from "../session-logic";
 import { buildLocalDraftThread } from "./ChatView.logic";
 import { buildFileDiffRenderKey, resolveFileDiffPath } from "../lib/diffRendering";

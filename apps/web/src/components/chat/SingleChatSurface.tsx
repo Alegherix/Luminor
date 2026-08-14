@@ -18,13 +18,15 @@ import {
 
 import { useAppSettings } from "../../appSettings";
 import { useComposerDraftStore } from "../../composerDraftStore";
-import type { DiffRouteSearch } from "../../diffRouteSearch";
 import { stripDiffSearchParams } from "../../diffRouteSearch";
+import type { DiffRouteSearch } from "../../diffRouteSearch";
 import { readEditorViewState, storeEditorViewState } from "../../editorViewState";
 import { basenameOfPath } from "../../file-icons";
 import { useBrowserPanelDesktopBridge } from "../../hooks/useBrowserPanelDesktopBridge";
 import { useDockPaneRuntimeActivation } from "../../hooks/useDockPaneRuntimeActivation";
 import { useHandleNewThread } from "../../hooks/useHandleNewThread";
+import { useDeviceEventBridge } from "../../hooks/useDeviceEventBridge";
+import { useDeviceSupport } from "../../hooks/useDeviceSupport";
 import { useRepoDiffTotals } from "../../hooks/useRepoDiffTotals";
 import {
   addChatFileComment,
@@ -43,7 +45,7 @@ import type { FileCommentSelection } from "../../lib/fileComments";
 import { gitBranchesQueryOptions } from "../../lib/gitReactQuery";
 import { canComposerHandlePanelWidth } from "../../lib/panelResize";
 import { projectListDirectoriesQueryOptions } from "../../lib/projectReactQuery";
-import { getSidechatCreator } from "../../lib/sidechatCreatorRegistry";
+import { waitForSidechatCreator } from "../../lib/sidechatCreatorRegistry";
 import {
   clearSidechatPaneRetention,
   getSidechatPaneRetentionVersion,
@@ -82,6 +84,7 @@ import {
   ChatMountLoader,
   DeferredChatView,
   LazyBrowserPanel,
+  LazyDevicePanel,
   LazyDiffPanel,
   noopChatSurfaceAction,
 } from "./ChatThreadSurfacePrimitives";
@@ -94,6 +97,7 @@ import {
   CHAT_MAIN_VIEWPORT_SHELL_CLASS_NAME,
 } from "./composerPickerStyles";
 import { routeSingleBrowserPanelOpenRequest } from "./browserPanelOpenRequest";
+import { routeSingleDevicePaneOpenRequest } from "./devicePaneOpenRequest";
 import {
   pullRequestDetailInputFromPane,
   pullRequestPaneTabLabel,
@@ -102,6 +106,7 @@ import { usePullRequestPaneStateIcon } from "../pullRequest/usePullRequestPaneSt
 import { RouteInsetSurface } from "../RouteInsetSurface";
 import { SidebarInset } from "../ui/sidebar";
 import { toastManager } from "../ui/toast";
+import { WorkspaceSearchPalette, type WorkspaceSearchPaletteMode } from "../WorkspaceSearchPalette";
 import {
   collectParentDirectoryPaths,
   resolveFilePreviewWorkspaceRoot,
@@ -229,11 +234,13 @@ export function SingleChatSurface(props: {
     envMode: threadWorkspaceMetadata.envMode ?? draftThread?.envMode ?? null,
     worktreePath: threadWorktreePath,
   });
+  const hasDeviceSupport = useDeviceSupport();
   const dockLauncherItems = resolveRightDockLauncherItems({
     hasWorkspace: workspaceRoot !== null,
     hasGitRepository,
     hasReview: dockDiffTotals.fileCount > 0,
     isWorktreePending: threadWorkspaceState === "worktree-pending",
+    hasDeviceSupport,
   });
   // Gated tools stay visible in the launcher but must not be openable from the
   // "+" menu until their prerequisite exists.
@@ -292,6 +299,8 @@ export function SingleChatSurface(props: {
   const [editorDiffFiles, setEditorDiffFiles] = useState<ReadonlyArray<FileDiffMetadata>>([]);
   const [editorDiffFilesLoading, setEditorDiffFilesLoading] = useState(false);
   const [editorDiffOptionsControl, setEditorDiffOptionsControl] = useState<ReactNode | null>(null);
+  const [searchPaletteOpen, setSearchPaletteOpen] = useState(false);
+  const [searchPaletteMode, setSearchPaletteMode] = useState<WorkspaceSearchPaletteMode>("files");
 
   const activePane = resolveActivePane(dockState);
   const {
@@ -324,6 +333,10 @@ export function SingleChatSurface(props: {
     requestImmediateDockHydration("browser");
     toggleSingletonPane(props.threadId, { kind: "browser" });
   };
+  const handleToggleDevice = () => {
+    requestImmediateDockHydration("device");
+    toggleSingletonPane(props.threadId, { kind: "device" });
+  };
   const handleToggleRightDock = () => {
     setDockOpen(props.threadId, !dockState.open);
   };
@@ -339,6 +352,36 @@ export function SingleChatSurface(props: {
       diffFilePath: filePath ?? null,
     });
   };
+
+  const handleOpenWorkspaceSearchFile = (relativePath: string) => {
+    requestImmediateDockHydration("file");
+    openPane(props.threadId, { kind: "file", filePath: relativePath });
+  };
+
+  // Ctrl/Cmd+P opens the file-name search palette; Ctrl/Cmd+Shift+F opens the
+  // snippet (content) search. Registered with capture so it wins over page-level
+  // defaults (print, browser find) while the chat surface is mounted.
+  useEffect(() => {
+    // Editor view returns before rendering the palette, so leave its shortcuts
+    // available to the editor instead of swallowing them invisibly.
+    if (editorViewActive) return;
+
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.repeat || event.altKey) return;
+      const isPrimaryModifier = event.ctrlKey || event.metaKey;
+      if (!isPrimaryModifier) return;
+      const key = event.key.toLowerCase();
+      if (key !== "p" && key !== "f") return;
+      if (key === "f" && !event.shiftKey) return;
+      if (key === "p" && event.shiftKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setSearchPaletteMode(key === "p" ? "files" : "snippets");
+      setSearchPaletteOpen(true);
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, [editorViewActive]);
 
   const handleOpenEditorView = () => {
     void navigate({
@@ -580,6 +623,26 @@ export function SingleChatSurface(props: {
     },
   });
 
+  useDeviceEventBridge({
+    onOpenPaneRequested: hasDeviceSupport
+      ? (event) => {
+          routeSingleDevicePaneOpenRequest({
+            currentThreadId: props.threadId,
+            requestedThreadId: event.threadId,
+            requestImmediateDeviceHydration: () => requestImmediateDockHydration("device"),
+            openDevicePane: (threadId) => openPane(threadId, { kind: "device" }),
+            navigateToThread: (threadId) => {
+              void navigate({
+                to: "/$threadId",
+                params: { threadId },
+                replace: true,
+              });
+            },
+          });
+        }
+      : null,
+  });
+
   const excludedThreadIds = new Set<ThreadId>([props.threadId]);
 
   // Sidechat tab labels only need thread titles, so subscribe to the coarse
@@ -722,23 +785,28 @@ export function SingleChatSurface(props: {
     if (kind === "sidechat") {
       // Sidechat spawns a thread; reuse the composer's /side flow (correct model
       // selection) published via the registry instead of opening an empty pane.
-      const createSidechat = getSidechatCreator(props.threadId);
-      if (!createSidechat) {
-        toastManager.add({
-          type: "warning",
-          title: "Side is unavailable",
-          description: "Open a server-backed main thread before starting Side.",
+      void waitForSidechatCreator(props.threadId)
+        .then((createSidechat) => {
+          if (!createSidechat) {
+            toastManager.add({
+              type: "warning",
+              title: "Side chat is unavailable",
+              description: "Open a server-backed main thread before starting a Side chat.",
+            });
+            return;
+          }
+          return createSidechat();
+        })
+        .catch((error) => {
+          toastManager.add({
+            type: "error",
+            title: "Could not start Side chat",
+            description:
+              error instanceof Error
+                ? error.message
+                : "An error occurred while creating Side chat.",
+          });
         });
-        return;
-      }
-      void createSidechat().catch((error) => {
-        toastManager.add({
-          type: "error",
-          title: "Could not start Side",
-          description:
-            error instanceof Error ? error.message : "An error occurred while creating Side.",
-        });
-      });
       return;
     }
     openPane(props.threadId, { kind });
@@ -761,6 +829,19 @@ export function SingleChatSurface(props: {
             />
           </Suspense>
         );
+      case "device":
+        return (
+          <Suspense fallback={<PanelStateMessage>Loading simulator...</PanelStateMessage>}>
+            <LazyDevicePanel
+              mode="sidebar"
+              threadId={props.threadId}
+              onClosePanel={() => closePane(props.threadId, pane.id)}
+              runtimeMode={context.runtimeMode}
+              isVisible={context.isVisible}
+              onRequestLive={requestActiveDockPaneLive}
+            />
+          </Suspense>
+        );
       case "pullRequest":
         return (
           <Suspense fallback={<PanelStateMessage>Loading pull request...</PanelStateMessage>}>
@@ -768,6 +849,12 @@ export function SingleChatSurface(props: {
               pane={pane}
               pollingEnabled={context.isVisible}
               onClose={() => closePane(props.threadId, pane.id)}
+              onSelectPullRequest={(number) =>
+                updatePane(props.threadId, pane.id, {
+                  pullRequestNumber: number,
+                  pullRequestInitialTab: "summary",
+                })
+              }
             />
           </Suspense>
         );
@@ -809,6 +896,7 @@ export function SingleChatSurface(props: {
               terminalThreadId={pane.terminalThreadId}
               terminalId={pane.terminalId}
               isActive={context.isActive && dockState.open}
+              onClosePanel={() => closePane(props.threadId, pane.id)}
             />
           </Suspense>
         );
@@ -1042,6 +1130,7 @@ export function SingleChatSurface(props: {
               onToggleDiff={handleToggleDiff}
               onToggleRightDock={handleToggleRightDock}
               onToggleBrowser={handleToggleBrowser}
+              {...(hasDeviceSupport ? { onToggleDevice: handleToggleDevice } : {})}
               onOpenBrowserUrl={handleOpenBrowserUrl}
               onOpenTurnDiff={handleOpenTurnDiff}
               onSplitSurface={handleSplitSurface}
@@ -1070,6 +1159,13 @@ export function SingleChatSurface(props: {
           onOpenChange={(open) => setDockOpen(props.threadId, open)}
           onAddPane={handleAddDockPane}
           renderPane={renderDockPane}
+        />
+        <WorkspaceSearchPalette
+          open={searchPaletteOpen}
+          mode={searchPaletteMode}
+          onOpenChange={setSearchPaletteOpen}
+          cwd={workspaceRoot}
+          onOpenFile={handleOpenWorkspaceSearchFile}
         />
       </div>
     </WorkspaceFileOpenerContext.Provider>

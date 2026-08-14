@@ -41,8 +41,7 @@ import type {
   ProviderTurnStartResult,
   TurnId,
 } from "@luminor/contracts";
-import type { Effect } from "effect";
-import type { Stream } from "effect";
+import type { Effect, Stream } from "effect";
 
 export type ProviderSessionModelSwitchMode = "in-session" | "restart-session" | "unsupported";
 

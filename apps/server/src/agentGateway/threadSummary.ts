@@ -200,6 +200,7 @@ export interface AgentThreadDetail {
   readonly projectId: string;
   readonly folderId: string | null;
   readonly title: string;
+  readonly goal: string | null;
   readonly provider: string;
   readonly model: string;
   readonly status: AgentThreadStatus;
@@ -237,6 +238,7 @@ export function summarizeThreadDetail(input: {
     projectId: thread.projectId,
     folderId: thread.folderId ?? null,
     title: thread.title,
+    goal: thread.goal?.trim() || null,
     provider: thread.modelSelection.provider,
     model: thread.modelSelection.model,
     status: deriveAgentThreadStatus(thread),

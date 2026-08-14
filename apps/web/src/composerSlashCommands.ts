@@ -1,4 +1,9 @@
-import type { GitBranch, ProviderKind } from "@luminor/contracts";
+import {
+  THREAD_GOAL_MAX_CHARS,
+  type GitBranch,
+  type ProviderInteractionMode,
+  type ProviderKind,
+} from "@luminor/contracts";
 import {
   BUILT_IN_COMPOSER_SLASH_COMMANDS,
   isBuiltInComposerSlashCommandName,
@@ -25,6 +30,14 @@ export interface ComposerSlashInvocation {
 
 export type FastSlashCommandAction = "toggle" | "on" | "off" | "status" | "invalid";
 export type ForkSlashCommandTarget = "local" | "worktree";
+export type GoalSlashCommandAction =
+  | { readonly action: "show" }
+  | { readonly action: "clear" }
+  | { readonly action: "pause" }
+  | { readonly action: "resume" }
+  | { readonly action: "edit" }
+  | { readonly action: "set"; readonly goal: string }
+  | { readonly action: "too-long" };
 
 const CLAUDE_NATIVE_COMMAND_ALIASES: Record<string, readonly string[]> = {
   clear: ["reset", "new"],
@@ -82,9 +95,12 @@ function shouldKeepBuiltInSlashCommandDespiteNativeCollision(
   command: ComposerSlashCommand,
 ): boolean {
   return (
+    command === "debug" ||
+    command === "default" ||
     command === "automation" ||
     command === "export" ||
     command === "feedback" ||
+    command === "goal" ||
     (providerUsesAppOwnedReviewSlashCommand(provider) && command === "review")
   );
 }
@@ -98,8 +114,11 @@ export function shouldHideProviderNativeCommandFromComposerMenu(
   const appCommandIsAvailable = options.availableAppCommands?.has(normalizedCommand) ?? true;
   return (
     normalizedCommand === "automation" ||
+    normalizedCommand === "debug" ||
+    normalizedCommand === "default" ||
     (normalizedCommand === "export" && appCommandIsAvailable) ||
     (normalizedCommand === "feedback" && appCommandIsAvailable) ||
+    (normalizedCommand === "goal" && appCommandIsAvailable) ||
     (providerUsesAppOwnedReviewSlashCommand(provider) && normalizedCommand === "review")
   );
 }
@@ -157,6 +176,12 @@ const COMPOSER_SLASH_COMMAND_DEFINITIONS: Record<
     description: "Switch this thread into plan mode",
     source: "app",
   },
+  debug: {
+    command: "debug",
+    label: "/debug",
+    description: "Switch this thread into evidence-first debug mode",
+    source: "app",
+  },
   default: {
     command: "default",
     label: "/default",
@@ -205,6 +230,12 @@ const COMPOSER_SLASH_COMMAND_DEFINITIONS: Record<
     description: "Download this thread as a ZIP archive (thread.json + transcript.md)",
     source: "app",
   },
+  goal: {
+    command: "goal",
+    label: "/goal",
+    description: "Set, edit, pause, resume, or clear this thread's persistent goal",
+    source: "app",
+  },
   feedback: {
     command: "feedback",
     label: "/feedback",
@@ -231,7 +262,7 @@ export function parseComposerSlashInvocationForCommands(
   text: string,
   commands: ReadonlyArray<ComposerSlashCommand>,
 ): ComposerSlashInvocation | null {
-  const match = /^\/([a-z-]+)(?:\s+(.*))?$/i.exec(text.trim());
+  const match = /^\/([a-z-]+)(?:\s+([\s\S]*))?$/i.exec(text.trim());
   if (!match) {
     return null;
   }
@@ -271,7 +302,7 @@ export function canOfferForkSlashCommand(input: {
   terminalContextCount: number;
   selectedSkillCount: number;
   selectedMentionCount: number;
-  interactionMode: "default" | "plan";
+  interactionMode: ProviderInteractionMode;
 }): boolean {
   return (
     !hasMeaningfulComposerText(input.prompt) &&
@@ -289,7 +320,7 @@ export function canOfferSideSlashCommand(input: {
   terminalContextCount: number;
   selectedSkillCount: number;
   selectedMentionCount: number;
-  interactionMode: "default" | "plan";
+  interactionMode: ProviderInteractionMode;
   isSidechat: boolean;
 }): boolean {
   return (
@@ -356,6 +387,24 @@ export function parseFastSlashCommandAction(text: string): FastSlashCommandActio
   return "invalid";
 }
 
+export function parseGoalSlashCommandArgs(args: string): GoalSlashCommandAction {
+  const goal = args.trim();
+  if (!goal) {
+    return { action: "show" };
+  }
+  const control = goal.toLowerCase();
+  if (control === "clear") {
+    return { action: "clear" };
+  }
+  if (control === "pause" || control === "resume" || control === "edit") {
+    return { action: control };
+  }
+  if (goal.length > THREAD_GOAL_MAX_CHARS) {
+    return { action: "too-long" };
+  }
+  return { action: "set", goal };
+}
+
 export function resolveComposerSlashRootBranch(input: {
   branches: ReadonlyArray<GitBranch> | null | undefined;
   activeProjectCwd: string | null | undefined;
@@ -404,6 +453,7 @@ export function getAvailableComposerSlashCommands(input: {
           "model",
           ...(input.supportsFastSlashCommand ? (["fast"] as const) : []),
           "plan",
+          "debug",
           "default",
           ...(input.canOfferReviewCommand ? (["review"] as const) : []),
           ...(input.canOfferForkCommand ? (["fork"] as const) : []),
@@ -411,6 +461,7 @@ export function getAvailableComposerSlashCommands(input: {
           "status",
           "subagents",
           ...(input.canOfferExportCommand ? (["export"] as const) : []),
+          "goal",
           "feedback",
           "automation",
         ]
@@ -421,6 +472,9 @@ export function getAvailableComposerSlashCommands(input: {
           // happens in the app rather than being forwarded to Claude's native /export.
           ...(input.canOfferSideCommand ? (["side"] as const) : []),
           ...(input.canOfferExportCommand ? (["export"] as const) : []),
+          "goal",
+          "debug",
+          "default",
           "feedback",
           "automation",
         ];

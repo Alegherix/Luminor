@@ -1,5 +1,5 @@
-import type { NativeApi, OrchestrationShellSnapshot } from "@luminor/contracts";
 import { ProjectId, ThreadId } from "@luminor/contracts";
+import type { NativeApi, OrchestrationShellSnapshot } from "@luminor/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Project, Thread } from "../types";

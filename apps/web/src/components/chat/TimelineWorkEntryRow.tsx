@@ -350,6 +350,9 @@ function capitalizePhrase(value: string): string {
 }
 
 function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
+  if (workEntry.activityKind === "turn.tasks.updated") {
+    return capitalizePhrase(workEntry.label);
+  }
   const luminorTitle = deriveLuminorMcpToolTitle({
     toolName: workEntry.toolName,
     title: workEntry.toolTitle,

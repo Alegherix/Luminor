@@ -3,8 +3,8 @@
 // Layer: Settings UI logic
 // Exports: origin metadata, canonical skill grouping, and section ordering helpers.
 
-import type { ProviderKind, ProviderSkillDescriptor } from "@luminor/contracts";
 import { PROVIDER_DISPLAY_NAMES } from "@luminor/contracts";
+import type { ProviderKind, ProviderSkillDescriptor } from "@luminor/contracts";
 import { DEFAULT_PROVIDER_ORDER } from "~/providerOrdering";
 
 export interface SkillOriginInfo {

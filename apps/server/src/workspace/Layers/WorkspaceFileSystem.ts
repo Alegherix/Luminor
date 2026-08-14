@@ -15,8 +15,7 @@ import {
   type WorkspaceFileSystemShape,
 } from "../Services/WorkspaceFileSystem";
 import { WorkspaceEntries } from "../Services/WorkspaceEntries";
-import { WorkspacePathOutsideRootError } from "../Services/WorkspacePaths";
-import { WorkspacePaths } from "../Services/WorkspacePaths";
+import { WorkspacePathOutsideRootError, WorkspacePaths } from "../Services/WorkspacePaths";
 import {
   prepareRealPathForWriteWithinRoot,
   resolveRealPathForCreateWithinRoot,
@@ -57,9 +56,7 @@ function encodeWorkspaceText(
       : normalizedContents.replaceAll("\n", lineEnding === "crlf" ? "\r\n" : "\r"),
     "utf8",
   );
-  return encoding === "utf8-bom"
-    ? Buffer.concat([UTF8_BOM, encodedContents])
-    : encodedContents;
+  return encoding === "utf8-bom" ? Buffer.concat([UTF8_BOM, encodedContents]) : encodedContents;
 }
 
 function isBinaryLike(bytes: Uint8Array): boolean {

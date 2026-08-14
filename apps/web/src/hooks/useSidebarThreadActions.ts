@@ -507,7 +507,7 @@ export function useSidebarThreadActions(input: {
                 replace: true,
               });
             } else if (prepared.shouldNavigateToFallback) {
-              void handleNewChat({ fresh: true });
+              void handleNewChat();
             }
           } else if (prepared?.shouldNavigateToFallback) {
             if (prepared.fallbackThreadId) {
@@ -517,7 +517,7 @@ export function useSidebarThreadActions(input: {
                 replace: true,
               });
             } else {
-              void handleNewChat({ fresh: true });
+              void handleNewChat();
             }
           }
         },
@@ -601,7 +601,7 @@ export function useSidebarThreadActions(input: {
               replace: true,
             });
           } else {
-            await handleNewChat({ fresh: true });
+            await handleNewChat();
           }
         }
         return true;

@@ -1,6 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import type { ServerProviderStatus } from "@luminor/contracts";
 import { DEFAULT_SERVER_SETTINGS, ServerProviderUpdateError } from "@luminor/contracts";
+import type { ServerProviderStatus } from "@luminor/contracts";
 import { describe, it, assert } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Sink, Stream } from "effect";
 import { TestClock } from "effect/testing";

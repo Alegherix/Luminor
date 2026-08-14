@@ -31,8 +31,8 @@ import {
 } from "~/surfaceStyles";
 import type { TimestampFormat } from "~/appSettings";
 import type { TurnDiffSummary } from "~/types";
-import type { RepoDiffScope } from "~/repoDiffScopeStore";
 import { REPO_DIFF_SCOPE_LABELS } from "~/repoDiffScopeStore";
+import type { RepoDiffScope } from "~/repoDiffScopeStore";
 import { formatShortTimestamp } from "~/timestampFormat";
 import {
   DIFF_PANEL_PICKER_SCOPE_OPTIONS,
