@@ -1,126 +1,115 @@
 # AGENTS.md
 
-## Task Completion Requirements
+This file is for things an agent cannot reliably infer from the repo.
+Do not add architecture catalogs, file inventories, or generated maps here.
+Those go stale. Use CodeGraph for structure. Map a single request path when you need a story.
+
+Scoped landmines live next to the code they constrain:
+
+- `apps/web/AGENTS.md`
+- `apps/server/AGENTS.md`
+
+Do not copy those rules back into this file.
+
+## How to understand this repo
+
+| Layer | Owns | Do not use it for |
+| --- | --- | --- |
+| CodeGraph (`.codegraph/`) | Symbols, callers, callees, traces, impact, "where is X" | Product intent, taste, landmines, verify policy |
+| This file and scoped `AGENTS.md` | Policy, taste, landmines, package ownership, verify commands | Listing files or restating types |
+| On-demand map | One request or event path for the current task, with `file:line` | A durable `CODEBASE_OVERVIEW.md` unless the user asked for one |
+
+If CodeGraph tools are available, scout with them first. Do not start with a grep/read loop when the graph can answer. If they are not available, treat `.codegraph/` as the map and do not invent a parallel overview file.
+
+When you need a story, map this first — not the whole repo:
+
+1. The entry point for the surface you are changing.
+2. One real path end to end (command → persistence → event → UI, or the inverse).
+3. The package boundary you must not leak across.
+4. Existing tests that already pin the behavior.
+5. Cite `file:line` for every claim. If you cannot, the map is a guess.
+
+Canonical traces. Start at the matching one, then stop:
+
+- Chat turn: `apps/web` composer → `wsNativeApi` / `wsTransport` → `apps/server` `wsRpc` → `orchestration` engine → provider runtime → projected `orchestration.domainEvent` → `ChatView`
+- Protocol change: `packages/contracts` schemas first, then server handlers, then the web client
+
+Do not write the map back into this file.
+
+## Verify
 
 - Do not run `bun fmt`, `bun lint`, or `bun typecheck` unless the user explicitly asks for them in the current conversation.
-- All of `bun fmt`, `bun lint`, and `bun typecheck` must pass before considering tasks completed.
-- Treat `bun fmt`, `bun lint`, and `bun typecheck` as heavyweight workspace checks: bundle them into one final verification pass per task whenever possible, and avoid rerunning the full set repeatedly during iteration.
-- If a user asks for a small follow-up right after a recent full verification pass, prefer no rerun or the smallest reasonable re-check unless the user explicitly asks for full validation again.
-- If the user asks to focus on code only, do not run `bun fmt`, `bun lint`, or `bun typecheck` automatically. In that mode, make the code changes first and only run verification if the user explicitly asks for it.
-- NEVER run `bun test`. Always use `bun run test` (runs Vitest).
+- All of `bun fmt`, `bun lint`, and `bun typecheck` must pass before considering a task completed.
+- Treat those three as one heavyweight final pass. Do not rerun the set during iteration.
+- After a recent full pass, a small follow-up should not rerun them unless the user asks.
+- If the user asks to focus on code only, change the code first and verify only when asked.
+- Never run `bun test`. Always `bun run test` (Vitest). `bun test` is a different runner.
 
-## Project Snapshot
-
-Luminor is a minimal web GUI for using coding agents like Codex and Claude.
-
-This repository is a VERY EARLY WIP. Proposing sweeping changes that improve long-term maintainability is encouraged.
-
-## Core Priorities
+## Priorities
 
 1. Performance first.
 2. Reliability first.
-3. Keep behavior predictable under load and during failures (session restarts, reconnects, partial streams).
+3. Predictable behavior under load and during failures (session restarts, reconnects, partial streams).
 
 If a tradeoff is required, choose correctness and robustness over short-term convenience.
 
-## Model Selection
+This repo is early WIP. Sweeping maintainability changes are welcome when they earn their keep.
 
-Rankings, higher = better. Cost reflects what I actually pay (OpenAI is near-free for me due to a deal), not list price. Intelligence is how hard a problem you can hand the model unsupervised. Taste covers UI/UX, code quality, API design, and copy.
+## Model selection
 
-| model       | cost | intelligence | taste |
-| ----------- | ---- | ------------ | ----- |
-| gpt-5.6-sol | 9    | 8            | 5     |
-| sonnet-5    | 5    | 5            | 7     |
-| opus-4.8    | 4    | 7            | 8     |
-| fable-5     | 2    | 9            | 9     |
+Rankings, higher = better. Cost is what I actually pay (OpenAI is near-free for me due to a deal), not list price. Intelligence is how hard a problem you can hand the model unsupervised. Taste covers UI/UX, code quality, API design, and copy.
 
-How to apply:
+| model | cost | intelligence | taste |
+| --- | --- | --- | --- |
+| gpt-5.6-sol | 9 | 8 | 5 |
+| sonnet-5 | 5 | 5 | 7 |
+| opus-4.8 | 4 | 7 | 8 |
+| fable-5 | 2 | 9 | 9 |
 
-- These are defaults, not limits. You have standing permission to override them: if a cheaper model's output doesn't meet the bar, rerun or redo the work with a smarter model without asking. Judge the output, not the price tag. Escalating costs less than shipping mediocre work.
-- Cost is a tie-breaker only; when axes conflict for anything that ships, intelligence > taste > cost.
-- Don't let cost prevent you from using the right model for the job. Instead, take advantage of cheaper options to get more information and try things before moving the work to a more expensive option.
-- Bulk/mechanical work (clear-spec implementation, data analysis, migrations): gpt-5.6-sol — it's effectively free.
-- Anything user-facing (UI, copy, API design) needs taste ≥ 7.
-- Reviews of plans/implementations: fable-5 or opus-4.8, optionally gpt-5.6-sol as an extra independent perspective.
+- These are defaults, not limits. If a cheaper model's output misses the bar, rerun with a smarter model without asking. Judge the output, not the price tag.
+- Cost is a tie-breaker only. When axes conflict for anything that ships: intelligence > taste > cost.
+- Bulk or mechanical work: gpt-5.6-sol.
+- Anything user-facing needs taste ≥ 7.
+- Reviews: fable-5 or opus-4.8, optionally gpt-5.6-sol as an extra independent perspective.
 - Never use Haiku.
-- Mechanics: gpt-5.6-sol is only reachable through the Codex CLI — `codex exec` / `codex review` (my `~/.codex/config.toml` defaults to gpt-5.6-sol). Use the codex-implementation, codex-review, and codex-computer-use skills; for work they don't cover (investigation, data analysis), run `codex exec -s read-only` directly with a self-contained prompt.
-- Claude models (sonnet-5, opus-4.8, fable-5) run via the Agent/Workflow model parameter.
+- gpt-5.6-sol is only reachable through the Codex CLI (`codex exec` / `codex review`). Use the codex-implementation, codex-review, and codex-computer-use skills; otherwise `codex exec -s read-only` with a self-contained prompt.
+- Claude models run via the Agent/Workflow model parameter.
 
-Using gpt-5.5 inside workflows and subagents (the model parameter only takes Claude models, so use a wrapper):
+Using gpt-5.6-sol inside workflows and subagents (those parameters only take Claude models):
 
-- Spawn a thin Claude wrapper agent with `model: 'sonnet', effort: 'low'` whose prompt instructs it to write a self-contained codex prompt, run `codex exec` via Bash, and return the report (use `schema` on the wrapper to get structured output back).
-- Always label these agents with a `gpt-5.6-sol:` prefix, e.g. `{label: 'gpt-5.6-sol:review-auth'}` — the workflow UI shows the wrapper's Claude model, so the label is the only indication the real worker is gpt-5.6-sol.
-- Codex runs can exceed Bash's 10-minute timeout: pass an explicit timeout, or run in the background and poll for the report file.
-- Parallel gpt-5.6-sol implementation agents must use `isolation: 'worktree'` so codex edits don't collide in the shared checkout.
-- Workflow token budgets only count Claude tokens; codex work is free and invisible to `budget.spent()`.
+- Spawn a thin Claude wrapper with `model: 'sonnet', effort: 'low'` that writes a self-contained Codex prompt, runs `codex exec` via Bash, and returns the report.
+- Label those agents `gpt-5.6-sol:…` so the UI does not hide who actually did the work.
+- Codex can exceed a 10-minute Bash timeout: pass an explicit timeout, or run in the background and poll a report file.
+- Parallel gpt-5.6-sol implementation agents must use `isolation: 'worktree'`.
+- Workflow token budgets count Claude tokens only. Codex work is free to the budget.
 
-## Long-running Codex Work
+Give gpt-5.6-sol substantial multi-step work when it is the right model. Do not split a task merely because it is large. The brief must be self-contained: goal, constraints, scope, deliverables, and how to verify.
 
-gpt-5.6-sol is exceptionally capable on long-running tasks. Give it substantial, multi-step work when it is the right model for the job; do not split work up merely because it is large.
+## Package ownership
 
-- The quality of the result depends on the prompt. Provide a detailed, self-contained brief: goal, relevant context, constraints, files or systems in scope, expected deliverables, and how to verify completion.
-- State important decisions and non-negotiable requirements explicitly. Do not assume the model will infer project-specific conventions or the desired tradeoffs from a short prompt.
-- For long tasks, ask it to inspect the current state first, execute the work end to end, and report the changes, verification, and any remaining risks.
-- If the work can safely run in parallel, keep each task's ownership and worktree boundaries explicit so agents do not overlap.
+These constraints are not optional style. They are the reason the packages exist.
 
-## Transcript Performance Guardrails
+- `apps/server`: Node runtime. Orchestration, provider sessions, WebSocket RPC, persistence. Owns process lifecycle.
+- `apps/web`: React/Vite UI. Session UX, rendering, client state. Talks to the server over WebSocket. Does not own protocol schemas.
+- `apps/desktop`: Electron shell. Windowing, updater, native integration. Does not reimplement server domain logic.
+- `packages/contracts`: Schema-only. No runtime logic.
+- `packages/shared`: Cross-runtime helpers. Explicit subpath exports (for example `@luminor/shared/git`). No barrel `index`.
 
-- Treat transcript auto-scroll as a live-output feature, not a generic "working" feature. Buffering, reconnecting, pending approvals, and tool-only activity must not be wired as if assistant text is actively streaming.
-- When wiring scroll-follow logic, count real transcript messages only. Tool/work rows must not retrigger the same "new content arrived" auto-stick path.
-- Prefer the simpler fork-style transcript path for the common case. Small and medium transcripts should avoid virtualization churn unless there is a clear measured need.
-- If virtualization is used, never couple `rowVirtualizer.measure()` directly to another bottom-stick or height-follow cycle. Height-follow for live output should stay one-way to avoid measure/scroll feedback loops.
-- Preserve these behaviors with focused transcript tests when changing chat scrolling, timeline measurement, or sidebar-driven transcript updates.
+Provider kinds and model options live in `packages/contracts` and are resolved in `packages/shared/src/model.ts`. Do not hardcode a provider list here.
+
+## Landmines
+
+- Do not start default `bun run dev` while another Luminor instance is running unless the user wants shared ports and state. Use an isolated home dir and non-default ports. Dry-run first. Unset `LUMINOR_AUTH_TOKEN` for browser-dev instances unless the web app is configured to send that token.
+- A desktop app can bind `127.0.0.1:<port>` while the dev server binds IPv6 `*:<port>`. Check both with `lsof` before assuming the port is free.
+- If the UI shows no threads, probe `orchestration.getSnapshot` over WebSocket before changing SQL. A healthy snapshot means the client never connected, not that history is empty.
+- Do not add local copies of logic that already exists in `packages/shared` or a sibling module. Extract or reuse.
 
 ## Maintainability
 
-Long term maintainability is a core priority. If you add new functionality, first check if there is shared logic that can be extracted to a separate module. Duplicate logic across multiple files is a code smell and should be avoided. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
+If you add behavior, first check whether shared logic already exists. Duplicate logic across files is a smell. Change existing code when that is the cleaner fix. Do not paper over a problem with a local special case.
 
-## UI Conventions
+## Reference implementations
 
-### Open/close (toggle) animations — single source
-
-Any UI element with an open/close toggle (expand/collapse, show/hide, disclosure) MUST reuse the shared disclosure motion in `apps/web/src/lib/disclosureMotion.ts`. Never write bespoke height/opacity transitions or one-off `@keyframes` for a toggle — use the same logic and the same functions everywhere so every toggle feels identical (220ms `ease-out`, with `motion-reduce` fallbacks).
-
-- Shell + content (used by open/close project, sidebar sections, composer suggestions): `disclosureShellClassName(open)` on the grid shell, `DISCLOSURE_INNER_CLASS` on the inner wrapper, `disclosureContentClassName(open)` on the content — or the ready-made `DisclosureRegion` component (`apps/web/src/components/ui/DisclosureRegion.tsx`).
-- Base UI `<Collapsible>` panels: wrap with `CollapsiblePanel` (`apps/web/src/components/ui/collapsible.tsx`), which applies `DISCLOSURE_COLLAPSIBLE_PANEL_CLASS`.
-- Rotating chevron affordance: `DisclosureChevron` / `disclosureChevronClassName(open)`.
-
-Reference usage: opening/closing a project and the sidebar sections in `apps/web/src/components/Sidebar.tsx`. If you find a toggle that animates differently, migrate it to this module rather than duplicating logic.
-
-## Package Roles
-
-- `apps/server`: Node.js WebSocket server. Wraps Codex app-server (JSON-RPC over stdio), serves the React web app, and manages provider sessions.
-- `apps/web`: React/Vite UI. Owns session UX, conversation/event rendering, and client-side state. Connects to the server via WebSocket.
-- `packages/contracts`: Shared effect/Schema schemas and TypeScript contracts for provider events, WebSocket protocol, and model/session types. Keep this package schema-only — no runtime logic.
-- `packages/shared`: Shared runtime utilities consumed by both server and web. Uses explicit subpath exports (e.g. `@luminor/shared/git`) — no barrel index.
-
-## Local Dev Instance Isolation
-
-- Never start the default `bun run dev` while another Luminor instance is running unless the user explicitly wants shared ports/state.
-- Use an isolated home dir and non-default ports when running alongside the user's own Luminor instance, for example: `env -u LUMINOR_AUTH_TOKEN LUMINOR_PORT_OFFSET=3158 LUMINOR_NO_BROWSER=1 bun run dev -- --home-dir ./.luminor-pr84 --port 58090`.
-- Always dry-run first when avoiding conflicts: `env -u LUMINOR_AUTH_TOKEN LUMINOR_PORT_OFFSET=3158 bun run dev -- --home-dir ./.luminor-pr84 --port 58090 --dry-run`.
-- Unset `LUMINOR_AUTH_TOKEN` for browser dev instances unless the web app is also configured to connect with that token. If auth is accidentally inherited, the browser WebSocket can be rejected and the UI will show no threads even though SQLite has projects/threads.
-- Check both server and web ports with `lsof -nP -iTCP:<port> -sTCP:LISTEN`. A desktop app can bind `127.0.0.1:<port>` while the dev server binds IPv6 `*:<port>`, and `localhost` may still hit the wrong process.
-- If the UI shows no threads, verify the server path before changing SQL: inspect the isolated `state.sqlite`, then probe `orchestration.getSnapshot` over WebSocket. A healthy snapshot with projects/threads means the issue is client connection/hydration, not empty history.
-
-## Codex App Server (Important)
-
-Luminor is currently Codex-first. The server starts `codex app-server` (JSON-RPC over stdio) per provider session, then streams structured events to the browser through WebSocket push messages.
-
-How we use it in this codebase:
-
-- Session startup/resume and turn lifecycle are brokered in `apps/server/src/codexAppServerManager.ts`.
-- Provider dispatch and thread event logging are coordinated in `apps/server/src/providerManager.ts`.
-- WebSocket server routes NativeApi methods in `apps/server/src/wsServer.ts`.
-- Web app consumes orchestration domain events via WebSocket push on channel `orchestration.domainEvent` (provider runtime activity is projected into orchestration events server-side).
-
-Docs:
-
-- Codex App Server docs: https://developers.openai.com/codex/sdk/#app-server
-
-## Reference Repos
-
-- Open-source Codex repo: https://github.com/openai/codex
-- Codex-Monitor (Tauri, feature-complete, strong reference implementation): https://github.com/Dimillian/CodexMonitor
-
-Use these as implementation references when designing protocol handling, UX flows, and operational safeguards.
+- Codex app-server: https://developers.openai.com/codex/sdk/#app-server
+- Open-source Codex: https://github.com/openai/codex
+- CodexMonitor: https://github.com/Dimillian/CodexMonitor
