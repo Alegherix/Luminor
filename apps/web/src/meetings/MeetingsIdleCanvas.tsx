@@ -37,6 +37,9 @@ const ATTENDEE_TONES = [
   "border-foreground/20 text-muted-foreground",
 ] as const;
 
+const MEETING_PANEL_SHELL_CLASS =
+  "flex flex-col items-center gap-6 rounded-2xl border px-6 py-8 text-center";
+const IDLE_PANEL_CLASS = "border-border bg-card";
 const FEATURED_PANEL_CLASS =
   "border-success/35 bg-[radial-gradient(ellipse_80%_65%_at_50%_-10%,color-mix(in_srgb,var(--success)_22%,transparent),transparent_58%),var(--background)]";
 const FEATURED_ROW_CLASS =
@@ -235,8 +238,8 @@ function FeaturedMeetingPanel({
   return (
     <section
       className={cn(
-        "flex flex-col items-center gap-6 rounded-2xl border px-6 py-8 text-center",
-        status === "ended" ? "border-border bg-card" : FEATURED_PANEL_CLASS,
+        MEETING_PANEL_SHELL_CLASS,
+        status === "ended" ? IDLE_PANEL_CLASS : FEATURED_PANEL_CLASS,
       )}
       aria-label={session.title}
     >
@@ -477,7 +480,10 @@ export function MeetingsIdleCanvas({
             onCopyMeetUrl={(url) => copyToClipboard(url, undefined)}
           />
         ) : (
-          <div className="flex flex-col items-center gap-3 pt-6 text-center">
+          <section
+            className={cn(MEETING_PANEL_SHELL_CLASS, IDLE_PANEL_CLASS)}
+            aria-label="No meeting to join yet"
+          >
             <MeetPlaceholderIcon />
             <div className="flex flex-col gap-1">
               <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">
@@ -488,7 +494,7 @@ export function MeetingsIdleCanvas({
                 start.
               </p>
             </div>
-          </div>
+          </section>
         )}
 
         {workspace && remaining.length > 0 ? (

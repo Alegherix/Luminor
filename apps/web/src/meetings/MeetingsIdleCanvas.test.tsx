@@ -11,6 +11,8 @@ describe("MeetingsIdleCanvas", () => {
     const html = renderToStaticMarkup(<MeetingsIdleCanvas now={NOW} />);
 
     expect(html).toContain("No meeting to join yet");
+    expect(html).toContain("rounded-2xl border");
+    expect(html).toContain("border-border bg-card");
     expect(html).toContain("Google Meet link");
     expect(html).toContain("https://meet.google.com/abc-defg-hij");
     expect(html).toContain("Join");
@@ -62,6 +64,45 @@ describe("MeetingsIdleCanvas", () => {
     expect(html).toContain("+1");
     expect(html).not.toContain("Select a meeting to get started");
     expect(html).not.toContain("Open planner");
+  });
+
+  it("shows the selected meeting's details and Join action when meetings overlap", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsIdleCanvas
+        now={NOW}
+        workspace={{
+          ...createIdleMeetingsWorkspace(),
+          connection: "signed-in",
+          selectedSessionId: "feedback-management",
+          sessions: [
+            {
+              id: "friday-feedback",
+              title: "Friday feedback",
+              startAt: "2026-08-13T08:00:00.000Z",
+              endAt: "2026-08-13T08:25:00.000Z",
+              meetUrl: "https://meet.google.com/abc-defg-hij",
+              attendees: [],
+              status: "upcoming",
+              source: "calendar",
+            },
+            {
+              id: "feedback-management",
+              title: "Feedback management",
+              startAt: "2026-08-13T08:00:00.000Z",
+              endAt: "2026-08-13T08:50:00.000Z",
+              meetUrl: "https://meet.google.com/klm-nopq-rst",
+              attendees: [],
+              status: "upcoming",
+              source: "calendar",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(html).toContain('aria-label="Feedback management"');
+    expect(html).toContain("meet.google.com/klm-nopq-rst");
+    expect(html).toContain("Join now");
   });
 
   it("shows a clear error when a pasted Meet link is rejected", () => {
