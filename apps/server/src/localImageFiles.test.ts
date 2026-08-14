@@ -161,6 +161,39 @@ describe("resolveAllowedLocalPreviewFile", () => {
     assert.equal(result, null);
   });
 
+  it("allows Grok session-relative images/N.jpg for the encoded workspace cwd", async () => {
+    const grokHome = makeTempDir("luminor-grok-preview-home-");
+    const workspace = makeTempDir("luminor-grok-preview-workspace-");
+    const previousGrokHome = process.env.GROK_HOME;
+    process.env.GROK_HOME = grokHome;
+    try {
+      const imageDir = path.join(
+        grokHome,
+        "sessions",
+        encodeURIComponent(workspace),
+        "019ffc89-b84e-7dd2-8cdf-795ca77e4b76",
+        "images",
+      );
+      const imagePath = path.join(imageDir, "5.jpg");
+      mkdirSync(imageDir, { recursive: true });
+      writeFileSync(imagePath, Buffer.from([0xff, 0xd8, 0xff]));
+
+      const result = await resolveAllowedLocalPreviewFile({
+        requestedPath: "images/5.jpg",
+        cwd: workspace,
+      });
+
+      assert.equal(result?.path, realpathSync(imagePath));
+      assert.equal(result?.fileName, "5.jpg");
+    } finally {
+      if (previousGrokHome === undefined) {
+        delete process.env.GROK_HOME;
+      } else {
+        process.env.GROK_HOME = previousGrokHome;
+      }
+    }
+  });
+
   it("still allows images under the temp-dir roots without a workspace", async () => {
     const tempDir = makeTempDir("luminor-image-tmp-root-");
     const imagePath = path.join(tempDir, "clip.png");

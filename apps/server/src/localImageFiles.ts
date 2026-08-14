@@ -2,7 +2,7 @@
 // Purpose: Resolves local preview-file (image/PDF) requests without exposing arbitrary files.
 // Layer: Server HTTP utility
 // Exports: local image route constants and allowlisted path resolver
-// Depends on: fs realpath/stat, Codex generated image roots, safe preview extensions
+// Depends on: fs realpath/stat, Codex and Grok generated-image roots, safe preview extensions
 
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
@@ -17,6 +17,10 @@ import {
 import { SCRATCH_WORKSPACES_DIRNAME } from "@luminor/shared/threadWorkspace";
 
 import { resolveCodexGeneratedImagesRoots } from "./codexGeneratedImages.ts";
+import {
+  resolveGrokSessionRelativeImage,
+  resolveGrokSessionsRoot,
+} from "./grokSessionImages.ts";
 
 export { LOCAL_IMAGE_ROUTE_PATH };
 
@@ -137,10 +141,16 @@ export async function resolveAllowedLocalPreviewFile(input: {
     return null;
   }
 
-  const resolvedRequestedPath = path.isAbsolute(requestedPath)
+  const workspaceResolvedPath = path.isAbsolute(requestedPath)
     ? path.resolve(requestedPath)
     : path.resolve(input.cwd ?? process.cwd(), requestedPath);
-  const realFilePath = await realpathOrNull(resolvedRequestedPath);
+  const grokSessionPath = await resolveGrokSessionRelativeImage({
+    requestedPath,
+    cwd: input.cwd,
+  });
+  const realFilePath =
+    (await realpathOrNull(workspaceResolvedPath)) ??
+    (await realpathOrNull(grokSessionPath ?? undefined));
   if (!realFilePath || !isSupportedLocalPreviewFilePath(realFilePath)) {
     return null;
   }
@@ -190,7 +200,9 @@ export async function resolveAllowedLocalPreviewFile(input: {
     return null;
   }
   const generatedImagesRoots = await Promise.all(
-    resolveCodexGeneratedImagesRoots(input.codexHomePath).map(realpathOrNull),
+    [...resolveCodexGeneratedImagesRoots(input.codexHomePath), resolveGrokSessionsRoot()].map(
+      realpathOrNull,
+    ),
   ).then((roots) => roots.filter((root): root is string => root !== null));
   const allowed =
     generatedImagesRoots.some((root) => isPathInside(realFilePath, root)) ||
