@@ -211,7 +211,9 @@ export function resolvePullRequestSidebarBadge(input: {
   inbox?: PullRequestInboxResult | undefined;
   reviewRequests?: PullRequestReviewRequestCountResult | undefined;
 }): SidebarActionBadge | null {
-  return resolvePullRequestInboxBadge(input.inbox) ?? resolvePullRequestReviewBadge(input.reviewRequests);
+  return (
+    resolvePullRequestInboxBadge(input.inbox) ?? resolvePullRequestReviewBadge(input.reviewRequests)
+  );
 }
 
 /** Keep partial review counts visible without presenting them as exact. */
@@ -592,6 +594,30 @@ export function partitionProjectThreadsByFolders(input: {
       input.pinnedThreadIds,
     ),
   };
+}
+
+export function deriveActiveSpaceFolderGroups(input: {
+  readonly activeSpaceId: SpaceId | null;
+  readonly foldersByOwner: ReadonlyMap<FolderOwnerKey, Folder[]>;
+  readonly threads: readonly SidebarThreadSummary[];
+  readonly activeThreadId: ThreadId | undefined;
+  readonly resolveThreadStatus?: (
+    thread: SidebarThreadSummary,
+  ) => ReturnType<typeof resolveThreadStatusPill>;
+}): readonly SidebarProjectFolderGroup[] {
+  const spaceFolders = getActiveSpaceFolders({
+    activeSpaceId: input.activeSpaceId,
+    foldersByOwner: input.foldersByOwner,
+  });
+  if (spaceFolders.length === 0) return [];
+  const { pinnedFolderGroups, unpinnedFolderGroups } = partitionProjectThreadsByFolders({
+    threads: input.threads.filter((thread) => thread.archivedAt == null),
+    folders: spaceFolders,
+    pinnedThreadIds: [],
+    activeThreadId: input.activeThreadId,
+    resolveThreadStatus: input.resolveThreadStatus,
+  });
+  return [...pinnedFolderGroups, ...unpinnedFolderGroups];
 }
 
 const THREAD_JUMP_COMMANDS = [

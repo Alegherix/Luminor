@@ -4,6 +4,7 @@ import {
   buildProjectThreadTree,
   collectSpaceFolderIds,
   createSidebarThreadHoverAnchorId,
+  deriveActiveSpaceFolderGroups,
   derivePinnedProjectIdsForSidebar,
   derivePinnedThreadIdsForSidebar,
   deriveSidebarProjectData,
@@ -2159,6 +2160,44 @@ function makeSidebarThreadSummary(
     ...overrides,
   };
 }
+
+describe("deriveActiveSpaceFolderGroups", () => {
+  it("hides archived threads from space folders while keeping live members", () => {
+    const spaceId = SpaceId.makeUnsafe("space-feature-work");
+    const spaceFolder = {
+      id: FolderId.makeUnsafe("folder-space"),
+      owner: spaceFolderOwner(spaceId),
+      name: "Feature work",
+      sortOrder: 0,
+      isPinned: false,
+      createdAt: "2026-08-11T10:00:00.000Z",
+      updatedAt: "2026-08-11T10:00:00.000Z",
+    };
+    const live = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-live"),
+      folderId: spaceFolder.id,
+      title: "Live",
+    });
+    const archived = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-archived"),
+      folderId: spaceFolder.id,
+      title: "Archived",
+      archivedAt: "2026-08-14T10:00:00.000Z",
+    });
+
+    const groups = deriveActiveSpaceFolderGroups({
+      activeSpaceId: spaceId,
+      foldersByOwner: new Map([[spaceFolderOwnerKey(spaceId), [spaceFolder]]]),
+      threads: [live, archived],
+      activeThreadId: undefined,
+    });
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.folder.id).toBe(spaceFolder.id);
+    expect(groups[0]?.entries.map((entry) => entry.rowId)).toEqual([live.id]);
+    expect(groups[0]?.memberThreadCount).toBe(1);
+  });
+});
 
 describe("partitionSidebarThreadsByProjectIds", () => {
   it("splits Studio threads from the regular Threads surface by project id", () => {

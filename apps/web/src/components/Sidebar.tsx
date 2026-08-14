@@ -328,11 +328,11 @@ import { useThreadSelectionStore } from "../threadSelectionStore";
 import {
   buildProjectThreadTree,
   derivePinnedProjectIdsForSidebar,
+  deriveActiveSpaceFolderGroups,
   deriveSidebarProjectData,
   createSidebarThreadHoverAnchorId,
   findWorkspaceRootMatch,
   type FolderNewThreadProject,
-  getActiveSpaceFolders,
   getPinnedThreadsForSidebar,
   getUnpinnedThreadsForSidebar,
   orderPinnedProjectsForSidebar,
@@ -342,7 +342,6 @@ import {
   getVisibleSidebarEntriesForPreview,
   groupSidebarThreadsByProjectId,
   partitionSidebarThreadsByProjectIds,
-  partitionProjectThreadsByFolders,
   isLatestPinnedProjectMutation,
   isProjectsSidebarSurface,
   resolveActiveSidebarView,
@@ -1897,17 +1896,16 @@ export default function Sidebar() {
     }
     return grouped;
   }, [folders]);
-  const activeSpaceFolderGroups = useMemo(() => {
-    const spaceFolders = getActiveSpaceFolders({ activeSpaceId, foldersByOwner });
-    if (spaceFolders.length === 0) return [];
-    const { pinnedFolderGroups, unpinnedFolderGroups } = partitionProjectThreadsByFolders({
-      threads: sidebarThreads,
-      folders: spaceFolders,
-      pinnedThreadIds: [],
-      activeThreadId: visualActiveSidebarThreadId ?? undefined,
-    });
-    return [...pinnedFolderGroups, ...unpinnedFolderGroups];
-  }, [activeSpaceId, foldersByOwner, sidebarThreads, visualActiveSidebarThreadId]);
+  const activeSpaceFolderGroups = useMemo(
+    () =>
+      deriveActiveSpaceFolderGroups({
+        activeSpaceId,
+        foldersByOwner,
+        threads: sidebarTreeThreads,
+        activeThreadId: visualActiveSidebarThreadId ?? undefined,
+      }),
+    [activeSpaceId, foldersByOwner, sidebarTreeThreads, visualActiveSidebarThreadId],
+  );
   const editedFolder =
     folderEditorState?.mode === "rename"
       ? (folders.find((folder) => folder.id === folderEditorState.folderId) ?? null)
