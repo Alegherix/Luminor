@@ -27,7 +27,6 @@ import {
 } from "../appSettings";
 import { APP_VERSION } from "../branding";
 import { AdvancedSettingsPanel } from "~/components/settings/AdvancedSettingsPanel";
-import { AppIconPicker } from "~/components/settings/AppIconPicker";
 import {
   ArchivedSettingsPanel,
   WorktreesSettingsPanel,
@@ -83,7 +82,6 @@ import { useDesktopTopBarTrafficLightGutterClassName } from "../hooks/useDesktop
 import { useTheme } from "../hooks/useTheme";
 import { isUiDensity } from "../lib/appDensity";
 import { isChatWidthMode, type ChatWidthMode } from "../lib/chatWidth";
-import { isElectron } from "../env";
 import { RotateCcwIcon } from "../lib/icons";
 import { cn, getNavigatorPlatform, isMacPlatform } from "../lib/utils";
 import { ensureNativeApi, readNativeApi } from "../nativeApi";
@@ -245,7 +243,6 @@ function SettingsRouteView() {
       : []),
     ...(settings.uiDensity !== defaults.uiDensity ? ["UI density"] : []),
     ...(settings.chatWidth !== defaults.chatWidth ? ["Chat width"] : []),
-    ...(settings.desktopAppIcon !== defaults.desktopAppIcon ? ["App icon"] : []),
     ...(settings.chatFontSizePx !== defaults.chatFontSizePx ? ["Base font size"] : []),
     ...(settings.terminalFontSizePx !== defaults.terminalFontSizePx ? ["Terminal font size"] : []),
     ...(settings.terminalFontFamily !== defaults.terminalFontFamily ? ["Terminal font"] : []),
@@ -668,30 +665,6 @@ function SettingsRouteView() {
           ))}
         </div>
       </SettingsSectionShell>
-
-      {isElectron ? (
-        <SettingsSection title="App">
-          <SettingsRow
-            title="App icon"
-            description="Choose the icon Synara uses in the dock or taskbar."
-            resetAction={
-              settings.desktopAppIcon !== defaults.desktopAppIcon ? (
-                <SettingResetButton
-                  label="app icon"
-                  onClick={() => updateSettings({ desktopAppIcon: defaults.desktopAppIcon })}
-                />
-              ) : null
-            }
-            control={
-              <AppIconPicker
-                platform={platform}
-                value={settings.desktopAppIcon}
-                onValueChange={(desktopAppIcon) => updateSettings({ desktopAppIcon })}
-              />
-            }
-          />
-        </SettingsSection>
-      ) : null}
 
       <SettingsSection title="Typography and spacing">
         <SettingsRow

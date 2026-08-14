@@ -36,7 +36,6 @@ import type {
 } from "electron";
 import * as Effect from "effect/Effect";
 import type {
-  DesktopAppIcon,
   DesktopTheme,
   DesktopUpdateActionResult,
   DesktopUpdateState,
@@ -80,11 +79,7 @@ import {
 } from "./bundleSwapDetection";
 import { waitForBackendStartupReady } from "./backendStartupReadiness";
 import { showDesktopConfirmDialog } from "./confirmDialog";
-import {
-  desktopAppIconResourceName,
-  isDesktopAppIcon,
-  shouldUpdateDesktopAppIcon,
-} from "./desktopAppIcon";
+import { desktopAppIconResourceName } from "./desktopAppIcon";
 import { refreshWindowsTaskbarIcon } from "./windowsTaskbarIcon";
 import {
   makeUpdateInstallPreparationCoordinator,
@@ -260,7 +255,6 @@ const BASE_DIR =
   Path.join(OS.homedir(), desktopIdentity.defaultHomeDirectoryName);
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_WINDOW_STATE_PATH = Path.join(STATE_DIR, "desktop-window-state.json");
-const DESKTOP_APP_ICON_PATH = Path.join(STATE_DIR, "desktop-app-icon");
 const DESKTOP_SCHEME = desktopIdentity.scheme;
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const APP_DISPLAY_NAME = desktopIdentity.displayName;
@@ -1836,21 +1830,7 @@ function usesLegacyMacDockIcon(): boolean {
   return Number.isFinite(darwinMajor) && darwinMajor < 25;
 }
 
-function readDesktopAppIcon(): DesktopAppIcon {
-  try {
-    const storedIcon = FS.readFileSync(DESKTOP_APP_ICON_PATH, "utf8").trim();
-    return isDesktopAppIcon(storedIcon) ? storedIcon : "default";
-  } catch {
-    return "default";
-  }
-}
-
-function persistDesktopAppIcon(icon: DesktopAppIcon): void {
-  FS.mkdirSync(Path.dirname(DESKTOP_APP_ICON_PATH), { recursive: true });
-  FS.writeFileSync(DESKTOP_APP_ICON_PATH, icon, "utf8");
-}
-
-function applyDesktopAppIcon(icon: DesktopAppIcon): void {
+function applyDesktopAppIcon(): void {
   if (
     process.platform !== "darwin" &&
     process.platform !== "linux" &&
@@ -1859,7 +1839,6 @@ function applyDesktopAppIcon(icon: DesktopAppIcon): void {
     return;
   }
   const resourceName = desktopAppIconResourceName({
-    icon,
     platform: process.platform,
     isDarkAppearance: process.platform === "darwin" && nativeTheme.shouldUseDarkColors,
   });
@@ -1886,11 +1865,10 @@ function applyInitialMacDockIcon(): void {
   if (process.platform !== "darwin" || !app.dock) {
     return;
   }
-  const icon = readDesktopAppIcon();
-  if (icon === "default" && !usesLegacyMacDockIcon() && !nativeTheme.shouldUseDarkColors) {
+  if (!usesLegacyMacDockIcon() && !nativeTheme.shouldUseDarkColors) {
     return;
   }
-  applyDesktopAppIcon(icon);
+  applyDesktopAppIcon();
 }
 
 function registerMacAppearanceIconSync(): void {
@@ -1898,10 +1876,10 @@ function registerMacAppearanceIconSync(): void {
     return;
   }
   // The bundled ICNS is the light artwork; macOS does not swap third-party dock
-  // icons when the system appearance changes, so re-apply the persisted
-  // preference so the default icon follows light/dark mode at runtime.
+  // icons when the system appearance changes, so re-apply the default icon so it
+  // follows light/dark mode at runtime.
   nativeTheme.on("updated", () => {
-    applyDesktopAppIcon(readDesktopAppIcon());
+    applyDesktopAppIcon();
   });
 }
 
@@ -3633,19 +3611,6 @@ function registerIpcHandlers(): void {
     nativeTheme.themeSource = theme;
   });
 
-  ipcMain.removeHandler(IPC.getAppIcon);
-  ipcMain.handle(IPC.getAppIcon, () => readDesktopAppIcon());
-
-  ipcMain.removeHandler(IPC.setAppIcon);
-  ipcMain.handle(IPC.setAppIcon, async (_event, rawIcon: unknown) => {
-    if (!isDesktopAppIcon(rawIcon)) return;
-    // Renderer hydration mirrors this native preference. Avoid reapplying the icon selected
-    // during boot, especially the bundled default that modern macOS renders itself.
-    if (!shouldUpdateDesktopAppIcon(readDesktopAppIcon(), rawIcon)) return;
-    persistDesktopAppIcon(rawIcon);
-    applyDesktopAppIcon(rawIcon);
-  });
-
   ipcMain.removeHandler(IPC.contextMenu);
   ipcMain.handle(
     IPC.contextMenu,
@@ -3896,7 +3861,6 @@ function getIconOption(): { icon: string } | Record<string, never> {
   if (process.platform === "darwin") return {}; // macOS uses .icns from app bundle
   if (process.platform !== "linux" && process.platform !== "win32") return {};
   const resourceName = desktopAppIconResourceName({
-    icon: readDesktopAppIcon(),
     platform: process.platform,
     isDarkAppearance: false,
   });

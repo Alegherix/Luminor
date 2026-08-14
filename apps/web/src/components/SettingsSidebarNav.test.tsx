@@ -51,6 +51,11 @@ describe("rankSettingsSearchEntries", () => {
     );
   });
 
+  it("does not index the removed desktop app icon preference", () => {
+    expect(SETTINGS_SEARCH_ENTRIES.some((entry) => entry.id === "appearance:app-icon")).toBe(false);
+    expect(rankSettingsSearchEntries("app icon", 12)).toEqual([]);
+  });
+
   it("surfaces every row in a section when searching the section label", () => {
     const results = rankSettingsSearchEntries("appearance", SETTINGS_SEARCH_ENTRIES.length);
     expect(results.some((entry) => entry.section === "appearance")).toBe(true);

@@ -99,7 +99,6 @@ import { canApplyThreadSnapshot, selectOrphanedThreadDetailIds } from "./-thread
 import { getThreadFromState, getThreadsFromState } from "../threadDerivation";
 import { useAppDensity } from "../hooks/useAppDensity";
 import { useChatWidth } from "../hooks/useChatWidth";
-import { useDesktopAppIcon } from "../hooks/useDesktopAppIcon";
 import { useAppTypography } from "../hooks/useAppTypography";
 import { useBaseFontSizeWheelZoom } from "../hooks/useBaseFontSizeWheelZoom";
 import { usePreloadRouteChunks } from "../hooks/usePreloadRouteChunks";
@@ -201,7 +200,6 @@ function RootRouteView() {
   useAppDensity();
   useBaseFontSizeWheelZoom();
   useChatWidth();
-  useDesktopAppIcon();
   usePreloadRouteChunks();
   useNativeFontSmoothing();
   useSyncDesktopTopBarTrafficLightGutterZoom();

@@ -152,13 +152,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
       "Choose how Luminor looks across the app. dark light system color UI font Goldman Michroma Aldrich Inter Geist",
   },
   {
-    id: "appearance:app-icon",
-    section: "appearance",
-    title: "App icon",
-    keywords: "Choose the icon Synara uses in the dock or taskbar desktop application logo.",
-    target: null,
-  },
-  {
     id: "appearance:system-ui-font",
     section: "appearance",
     title: "Use system UI font",
