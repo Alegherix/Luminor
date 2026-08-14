@@ -1089,7 +1089,11 @@ function SettingsRouteView() {
             <div
               className={cn(
                 "mx-auto w-full px-6 py-8",
-                activeSection === "profile" ? "max-w-3xl" : "max-w-2xl",
+                activeSection === "archived"
+                  ? "max-w-[1200px]"
+                  : activeSection === "profile"
+                    ? "max-w-3xl"
+                    : "max-w-2xl",
               )}
             >
               {activeSection !== "profile" ? (

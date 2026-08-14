@@ -4,6 +4,7 @@
 
 import "../../index.css";
 
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
@@ -148,5 +149,56 @@ describe("ConversationStorageSettingsPanels", () => {
     expect(text).toContain("Recoverable archived child");
     expect(text).toContain("Archived parent");
     expect(text).not.toContain("Represented archived child");
+  });
+
+  it("lays archived threads out in three columns and toggles a group with a chevron", async () => {
+    harness.threadShells = [
+      thread({
+        id: "one",
+        title: "First archived",
+        archivedAt: "2026-01-03T00:00:00.000Z",
+      }),
+      thread({
+        id: "two",
+        title: "Second archived",
+        archivedAt: "2026-01-02T00:00:00.000Z",
+      }),
+      thread({
+        id: "three",
+        title: "Third archived",
+        archivedAt: "2026-01-01T00:00:00.000Z",
+      }),
+      thread({
+        id: "four",
+        title: "Fourth archived",
+        archivedAt: "2025-12-28T00:00:00.000Z",
+      }),
+      thread({
+        id: "five",
+        title: "Fifth archived",
+        archivedAt: "2025-12-20T00:00:00.000Z",
+      }),
+      thread({
+        id: "six",
+        title: "Sixth archived",
+        archivedAt: "2025-12-12T00:00:00.000Z",
+      }),
+    ];
+
+    await render(<ArchivedSettingsPanel active />);
+
+    const grid = document.body.querySelector('[class*="grid-cols-3"]');
+    expect(grid).not.toBeNull();
+
+    const toggle = page.getByRole("button", { name: "Project One" });
+    expect(toggle.element().getAttribute("aria-expanded")).toBe("true");
+    expect(document.body.querySelector("div[inert]")).toBeNull();
+
+    await toggle.click();
+    await vi.waitFor(() => expect(toggle.element().getAttribute("aria-expanded")).toBe("false"));
+
+    const disclosureShell = document.body.querySelector("div[inert]");
+    expect(disclosureShell).not.toBeNull();
+    expect(disclosureShell?.className).toContain("duration-220");
   });
 });

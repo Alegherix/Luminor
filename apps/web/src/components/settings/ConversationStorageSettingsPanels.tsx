@@ -7,9 +7,11 @@ import type { ThreadId } from "@luminor/contracts";
 import { pluralize } from "@luminor/shared/text";
 import { collectSubagentDescendants } from "@luminor/shared/threadHierarchy";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { Button } from "~/components/ui/button";
+import { DisclosureChevron } from "~/components/ui/DisclosureChevron";
+import { DisclosureRegion } from "~/components/ui/DisclosureRegion";
 import { gitRemoveWorktreeMutationOptions } from "~/lib/gitReactQuery";
 import { ArchiveIcon } from "~/lib/icons";
 import { deleteArchivedThreadsFromClient } from "~/lib/archivedThreadDelete";
@@ -18,12 +20,22 @@ import { serverQueryKeys, serverWorktreesQueryOptions } from "~/lib/serverReactQ
 import { unarchiveThreadFromClient } from "~/lib/threadArchive";
 import { cn } from "~/lib/utils";
 import { ensureNativeApi, readNativeApi } from "~/nativeApi";
-import { SETTINGS_CARD_ROW_DESCRIPTION_CLASS_NAME } from "~/settingsPanelStyles";
+import {
+  SETTINGS_CARD_ROW_DESCRIPTION_CLASS_NAME,
+  SETTINGS_CARD_ROW_TITLE_CLASS_NAME,
+  SETTINGS_PANEL_SECTION_CLASS_NAME,
+  SETTINGS_SECTION_LABEL_CLASS_NAME,
+} from "~/settingsPanelStyles";
 import { useStore } from "~/store";
 import { createThreadShellsSelector } from "~/storeSelectors";
 import { formatWorktreePathForDisplay } from "~/worktreeCleanup";
 import { toastManager } from "../ui/toast";
-import { SettingsEmptyState, SettingsListRow, SettingsSection } from "./SettingsPanelPrimitives";
+import {
+  SettingsCard,
+  SettingsEmptyState,
+  SettingsListRow,
+  SettingsSection,
+} from "./SettingsPanelPrimitives";
 
 type WorktreeAssociation = {
   worktreePath?: string | null | undefined;
@@ -51,6 +63,86 @@ function compareArchivedThreads(left: ArchivedSortableThread, right: ArchivedSor
   const leftKey = left.archivedAt ?? left.updatedAt ?? left.createdAt;
   const rightKey = right.archivedAt ?? right.updatedAt ?? right.createdAt;
   return rightKey.localeCompare(leftKey) || right.id.localeCompare(left.id);
+}
+
+type ArchivedThreadCard = {
+  id: ThreadId;
+  title: string;
+  archivedAt?: string | null | undefined;
+  createdAt: string;
+};
+
+function ArchivedThreadGroup(props: {
+  title: string;
+  threads: ReadonlyArray<ArchivedThreadCard>;
+  open: boolean;
+  onToggle: () => void;
+  onRestore: (threadId: ThreadId) => void;
+  onDelete: (threadId: ThreadId, title: string) => void;
+  onContextMenu: (threadId: ThreadId, title: string, position: { x: number; y: number }) => void;
+}) {
+  return (
+    <section className={SETTINGS_PANEL_SECTION_CLASS_NAME}>
+      <button
+        type="button"
+        aria-expanded={props.open}
+        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left"
+        onClick={props.onToggle}
+      >
+        <DisclosureChevron open={props.open} />
+        <span className={cn(SETTINGS_SECTION_LABEL_CLASS_NAME, "min-w-0 flex-1 truncate px-0 py-0")}>
+          {props.title}
+        </span>
+        <span
+          aria-hidden="true"
+          className="text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/58"
+        >
+          {props.threads.length}
+        </span>
+      </button>
+      <DisclosureRegion open={props.open}>
+        <div className="@container">
+          <div className="grid grid-cols-1 gap-3 @min-[640px]:grid-cols-2 @min-[960px]:grid-cols-3">
+            {props.threads.map((thread) => (
+              <div
+                key={thread.id}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  props.onContextMenu(thread.id, thread.title, {
+                    x: event.clientX,
+                    y: event.clientY,
+                  });
+                }}
+              >
+                <SettingsCard divided={false} className="flex h-full flex-col gap-3 p-3">
+                  <div className="min-w-0 space-y-0.5">
+                    <div className={cn(SETTINGS_CARD_ROW_TITLE_CLASS_NAME, "truncate")}>
+                      {thread.title}
+                    </div>
+                    <div className={SETTINGS_CARD_ROW_DESCRIPTION_CLASS_NAME}>
+                      {`Archived ${formatRelativeTime(thread.archivedAt ?? thread.createdAt)}`}
+                    </div>
+                  </div>
+                  <div className="mt-auto flex items-center gap-2">
+                    <Button size="xs" variant="outline" onClick={() => props.onRestore(thread.id)}>
+                      Restore
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="destructive"
+                      onClick={() => props.onDelete(thread.id, thread.title)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </SettingsCard>
+              </div>
+            ))}
+          </div>
+        </div>
+      </DisclosureRegion>
+    </section>
+  );
 }
 
 function WorktreesStatus(props: { children: string; error?: boolean }) {
@@ -361,6 +453,22 @@ export function ArchivedSettingsPanel({ active }: { readonly active: boolean }) 
     [removeDeletedThreadFromClientState, threadShells],
   );
 
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+
+  const toggleGroup = useCallback((groupId: string) => {
+    setCollapsedGroupIds((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }, []);
+
   const handleContextMenu = useCallback(
     async (threadId: ThreadId, threadTitle: string, position: { x: number; y: number }) => {
       const api = readNativeApi();
@@ -399,45 +507,23 @@ export function ArchivedSettingsPanel({ active }: { readonly active: boolean }) 
 
   return (
     <div className="space-y-6">
-      {archivedGroups.map(({ project, threads }) => (
-        <SettingsSection
-          key={project?.id ?? "unknown-project"}
-          title={project?.name ?? "Unknown project"}
-        >
-          {threads.map((thread) => (
-            <SettingsListRow
-              key={thread.id}
-              title={thread.title}
-              description={`Archived ${formatRelativeTime(thread.archivedAt ?? thread.createdAt)}`}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                void handleContextMenu(thread.id, thread.title, {
-                  x: event.clientX,
-                  y: event.clientY,
-                });
-              }}
-              actions={
-                <>
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={() => void unarchiveThread(thread.id)}
-                  >
-                    Restore
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant="destructive"
-                    onClick={() => void deleteArchivedThread(thread.id, thread.title)}
-                  >
-                    Delete
-                  </Button>
-                </>
-              }
-            />
-          ))}
-        </SettingsSection>
-      ))}
+      {archivedGroups.map(({ project, threads }) => {
+        const groupId = project?.id ?? "unknown-project";
+        return (
+          <ArchivedThreadGroup
+            key={groupId}
+            title={project?.name ?? "Unknown project"}
+            threads={threads}
+            open={!collapsedGroupIds.has(groupId)}
+            onToggle={() => toggleGroup(groupId)}
+            onRestore={(threadId) => void unarchiveThread(threadId)}
+            onDelete={(threadId, threadTitle) => void deleteArchivedThread(threadId, threadTitle)}
+            onContextMenu={(threadId, threadTitle, position) => {
+              void handleContextMenu(threadId, threadTitle, position);
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
