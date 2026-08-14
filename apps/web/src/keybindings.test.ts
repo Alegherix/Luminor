@@ -324,6 +324,11 @@ const DEFAULT_BINDINGS = compile([
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
   {
+    shortcut: modShortcut("s"),
+    command: "settings.open",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
     shortcut: modShortcut("u", { shiftKey: true }),
     command: "settings.usage",
     whenAst: whenNot(whenIdentifier("terminalFocus")),
@@ -634,6 +639,38 @@ describe("split/new/close terminal shortcuts", () => {
 });
 
 describe("settings shortcuts", () => {
+  it("opens settings with Ctrl+S outside terminal focus", () => {
+    assert.equal(
+      resolveShortcutCommand(event({ key: "s", ctrlKey: true }), DEFAULT_BINDINGS, {
+        platform: "Linux",
+        context: { terminalFocus: false },
+      }),
+      "settings.open",
+    );
+    assert.isNull(
+      resolveShortcutCommand(event({ key: "s", ctrlKey: true }), DEFAULT_BINDINGS, {
+        platform: "Linux",
+        context: { terminalFocus: true },
+      }),
+    );
+  });
+
+  it("opens settings with Cmd+S outside terminal focus", () => {
+    assert.equal(
+      resolveShortcutCommand(event({ key: "s", metaKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: false },
+      }),
+      "settings.open",
+    );
+    assert.isNull(
+      resolveShortcutCommand(event({ key: "s", metaKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: true },
+      }),
+    );
+  });
+
   it("opens usage settings with Cmd+Shift+U outside terminal focus", () => {
     assert.equal(
       resolveShortcutCommand(event({ key: "u", metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {

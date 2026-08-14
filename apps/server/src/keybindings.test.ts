@@ -103,6 +103,19 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
     }),
   );
 
+  it.effect("defaults settings.open to mod+S outside terminal focus", () =>
+    Effect.sync(() => {
+      assert.deepEqual(
+        DEFAULT_KEYBINDINGS.find((rule) => rule.command === "settings.open"),
+        {
+          key: "mod+s",
+          command: "settings.open",
+          when: "!terminalFocus",
+        },
+      );
+    }),
+  );
+
   it.effect("persists both platform variants of the commit-and-push binding", () =>
     Effect.sync(() => {
       assert.deepEqual(

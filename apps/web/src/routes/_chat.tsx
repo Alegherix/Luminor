@@ -203,6 +203,10 @@ function isRecentViewSwitcherCommitKey(event: KeyboardEvent): boolean {
   return event.key === "Enter" || event.key === " " || event.key === "Spacebar";
 }
 
+function isWorkspaceFileEditorSaveTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest("textarea.editor-file-editor") !== null;
+}
+
 function ChatRouteGlobalShortcuts() {
   const navigate = useNavigate();
   const isStudioRoute = useLocation({
@@ -386,6 +390,14 @@ function ChatRouteGlobalShortcuts() {
         return;
       }
 
+      if (command === "settings.open") {
+        if (isWorkspaceFileEditorSaveTarget(event.target)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void navigate({ to: "/settings" });
+        return;
+      }
+
       if (!command) return;
 
       if (command === "view.recent.next" || command === "view.recent.previous") {
@@ -496,6 +508,7 @@ function ChatRouteGlobalShortcuts() {
     handleNewThread,
     keybindings,
     latestUsableProjectId,
+    navigate,
     openOrAdvanceRecentSwitcher,
     platform,
     providerStatuses,

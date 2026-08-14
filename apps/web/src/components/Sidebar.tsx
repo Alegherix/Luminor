@@ -1628,6 +1628,7 @@ export default function Sidebar() {
   const addProjectShortcutLabel =
     shortcutLabelForCommand(keybindings, "sidebar.addProject") ??
     (isMacNavigatorPlatform() ? "⇧⌘O" : "Ctrl+Shift+O");
+  const openSettingsShortcutLabel = shortcutLabelForCommand(keybindings, "settings.open");
   const usageSettingsShortcutLabel = shortcutLabelForCommand(keybindings, "settings.usage");
   const { activeProjectId: focusedProjectId } = useFocusedChatContext();
   const latestProjectId = useLatestProjectStore((state) => state.latestProjectId);
@@ -6199,6 +6200,7 @@ export default function Sidebar() {
         label: "Settings",
         description: "Open app settings.",
         keywords: ["preferences", "config"],
+        shortcutLabel: openSettingsShortcutLabel,
       },
       {
         id: "usage-settings",
@@ -6256,6 +6258,7 @@ export default function Sidebar() {
       importThreadShortcutLabel,
       newChatShortcutLabel,
       newThreadShortcutLabel,
+      openSettingsShortcutLabel,
       openSpaceCreator,
       spaces,
       usageSettingsShortcutLabel,
