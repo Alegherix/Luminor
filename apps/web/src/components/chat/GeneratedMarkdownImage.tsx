@@ -18,6 +18,7 @@ import {
   useLocalImagePreview,
 } from "../LocalImagePreview";
 import type { ExpandedImagePreview } from "./ExpandedImagePreview";
+import { localImageGalleryKey } from "./galleryPane.logic";
 
 export interface GeneratedMarkdownImageProps {
   src: string;
@@ -47,7 +48,13 @@ export function GeneratedMarkdownImage(props: GeneratedMarkdownImageProps) {
       return;
     }
     onImageExpand?.({
-      images: [{ src: previewUrl, name: fileName || accessibleName }],
+      images: [
+        {
+          src: previewUrl,
+          name: fileName || accessibleName,
+          galleryKey: localImageGalleryKey(src),
+        },
+      ],
       index: 0,
     });
   };

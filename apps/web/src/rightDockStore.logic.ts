@@ -20,6 +20,7 @@ export const RIGHT_DOCK_PANE_KINDS = [
   "sidechat",
   "git",
   "pullRequest",
+  "gallery",
 ] as const;
 
 export type RightDockPaneKind = (typeof RIGHT_DOCK_PANE_KINDS)[number];
@@ -43,6 +44,8 @@ export interface RightDockPane {
   pullRequestRepository: string | null;
   pullRequestNumber: number | null;
   pullRequestInitialTab: PullRequestInitialTab | null;
+  // gallery panes remember which thread image is focused.
+  galleryImageKey: string | null;
 }
 
 export interface RightDockThreadState {
@@ -119,6 +122,8 @@ function sanitizePersistedPane(value: unknown): RightDockPane | null {
       candidate.pullRequestInitialTab === "code"
         ? candidate.pullRequestInitialTab
         : null,
+    galleryImageKey:
+      typeof candidate.galleryImageKey === "string" ? candidate.galleryImageKey : null,
   };
 }
 
@@ -179,6 +184,7 @@ export interface OpenPaneInput {
   pullRequestRepository?: string | null;
   pullRequestNumber?: number | null;
   pullRequestInitialTab?: PullRequestInitialTab | null;
+  galleryImageKey?: string | null;
 }
 
 function createPane(input: OpenPaneInput): RightDockPane {
@@ -195,6 +201,7 @@ function createPane(input: OpenPaneInput): RightDockPane {
     pullRequestRepository: input.pullRequestRepository ?? null,
     pullRequestNumber: input.pullRequestNumber ?? null,
     pullRequestInitialTab: input.pullRequestInitialTab ?? null,
+    galleryImageKey: input.galleryImageKey ?? null,
   };
 }
 
@@ -233,6 +240,9 @@ function singletonPaneReopenPatch(input: OpenPaneInput): Partial<RightDockPane> 
       pullRequestNumber: input.pullRequestNumber ?? null,
       pullRequestInitialTab: input.pullRequestInitialTab ?? null,
     };
+  }
+  if (input.kind === "gallery" && input.galleryImageKey !== undefined) {
+    return { galleryImageKey: input.galleryImageKey ?? null };
   }
   return null;
 }
@@ -362,6 +372,7 @@ export function updatePaneInState(
       | "pullRequestRepository"
       | "pullRequestNumber"
       | "pullRequestInitialTab"
+      | "galleryImageKey"
     >
   >,
 ): RightDockThreadState {
@@ -379,7 +390,8 @@ export function updatePaneInState(
       nextPane.pullRequestProjectId !== pane.pullRequestProjectId ||
       nextPane.pullRequestRepository !== pane.pullRequestRepository ||
       nextPane.pullRequestNumber !== pane.pullRequestNumber ||
-      nextPane.pullRequestInitialTab !== pane.pullRequestInitialTab
+      nextPane.pullRequestInitialTab !== pane.pullRequestInitialTab ||
+      nextPane.galleryImageKey !== pane.galleryImageKey
     ) {
       changed = true;
       return nextPane;

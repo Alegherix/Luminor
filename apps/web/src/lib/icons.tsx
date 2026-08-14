@@ -38,6 +38,7 @@ import {
   IconHistory,
   IconInfoCircle,
   IconLayoutDistributeHorizontal,
+  IconLayoutGrid,
   IconListCheck,
   IconListDetails,
   IconLoader2,
@@ -51,6 +52,7 @@ import {
   IconMessageCircle,
   IconMoon,
   IconPaperclip,
+  IconPhoto,
   IconPlus,
   IconRefresh,
   IconRotate2,
@@ -266,6 +268,8 @@ export const PlusIcon = adaptIcon(IconPlus);
 export const RefreshCwIcon = adaptIcon(IconRefresh);
 export const RotateCcwIcon = adaptIcon(IconRotate2);
 export const Rows3Icon = adaptIcon(IconLayoutDistributeHorizontal);
+export const LayoutGridIcon = adaptIcon(IconLayoutGrid);
+export const PhotoIcon = adaptIcon(IconPhoto);
 export const SearchIcon: LucideIcon = centralIconWrapper("magnifying-glass");
 // Single source for the settings gear. Every settings affordance renders this
 // one Central glyph so gears stay identical across the chrome.
