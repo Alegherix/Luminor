@@ -87,6 +87,7 @@ function toThreadShell(thread: Thread): ThreadShell {
     id: thread.id,
     codexThreadId: thread.codexThreadId,
     projectId: thread.projectId,
+    folderId: thread.folderId ?? null,
     title: thread.title,
     modelSelection: thread.modelSelection,
     runtimeMode: thread.runtimeMode,

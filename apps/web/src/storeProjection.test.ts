@@ -89,6 +89,30 @@ describe("store projection", () => {
     ).toEqual([]);
   });
 
+  it("keeps folder membership when a read-model sync rewrites the thread shell", () => {
+    const folderId = FolderId.makeUnsafe("folder-space");
+    const thread = makeReadModelThread({ folderId });
+    const hydrated = syncServerShellSnapshot(makeState(makeThread({ folderId })), {
+      ...makeShellSnapshot({
+        ...thread,
+        latestUserMessageAt: null,
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
+        hasActionableProposedPlan: false,
+      }),
+      snapshotSequence: 3,
+    });
+    expect(getThreadFromState(hydrated, thread.id)?.folderId).toBe(folderId);
+    expect(hydrated.sidebarThreadSummaryById[thread.id]?.folderId).toBe(folderId);
+
+    const synced = syncServerReadModel(hydrated, {
+      ...makeReadModel(thread),
+      snapshotSequence: 4,
+    });
+    expect(getThreadFromState(synced, thread.id)?.folderId).toBe(folderId);
+    expect(synced.sidebarThreadSummaryById[thread.id]?.folderId).toBe(folderId);
+  });
+
   it("preserves a semantic branch when a temp worktree branch arrives from the read model", () => {
     const initialThread = makeThread({
       branch: "feature/semantic-branch",

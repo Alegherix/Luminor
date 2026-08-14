@@ -657,6 +657,24 @@ describe("store event reducer", () => {
     ]);
   });
 
+  it("keeps folder membership when a live thread.meta-updated event omits folderId", () => {
+    const folderId = FolderId.makeUnsafe("folder-space");
+    const threadId = ThreadId.makeUnsafe("thread-1");
+    const next = applyOrchestrationEvents(makeState(makeThread({ folderId, title: "Filed" })), [
+      makeDomainEvent("thread.meta-updated", {
+        threadId,
+        title: "Still filed",
+        updatedAt: "2026-02-27T00:01:00.000Z",
+      }),
+    ]);
+
+    expect(threadsOf(next)[0]).toMatchObject({
+      title: "Still filed",
+      folderId,
+    });
+    expect(next.sidebarThreadSummaryById[threadId]?.folderId).toBe(folderId);
+  });
+
   it("applies thread.meta-updated branch metadata immediately during live updates", () => {
     const initialState = makeState(
       makeThread({
