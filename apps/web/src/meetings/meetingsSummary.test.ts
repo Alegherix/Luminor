@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createMeetingsSummaryHost } from "./meetingsSummary";
+import { compactMeetingsSummaryError, createMeetingsSummaryHost } from "./meetingsSummary";
 
 describe("createMeetingsSummaryHost", () => {
   it("summarizes with the resolved new-thread model and persists summary.md", async () => {
@@ -70,5 +70,34 @@ describe("createMeetingsSummaryHost", () => {
       text: null,
       error: "Model unavailable.",
     });
+  });
+
+  it("strips dumped CLI transcripts from a failed summary error", async () => {
+    const dumped =
+      "Text generation failed in generateMeetingSummary: Codex CLI command failed: OpenAI Codex v0.147.0 -------- workdir: /tmp user You write a silent post-meeting summary";
+    const host = createMeetingsSummaryHost({
+      resolveModelSelection: () => ({ provider: "claudeAgent", model: "claude-sonnet-4-6" }),
+      generate: async () => {
+        throw new Error(dumped);
+      },
+      persist: {
+        writeSummary: async () => {
+          throw new Error("should not write");
+        },
+        readSummary: async () => null,
+      },
+    });
+
+    const result = await host.summarize({
+      sessionId: "ended",
+      title: "Standup",
+      transcriptText: "We shipped the join path.",
+      transcriptPath: null,
+    });
+
+    expect(result.error).toBe(compactMeetingsSummaryError(dumped));
+    expect(result.error).toContain("Codex CLI command failed");
+    expect(result.error).not.toContain("workdir");
+    expect(result.error).not.toContain("You write a silent");
   });
 });

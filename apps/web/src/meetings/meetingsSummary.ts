@@ -2,6 +2,20 @@ import type { ModelSelection } from "@luminor/contracts";
 
 import { IDLE_MEETINGS_SUMMARY, type MeetingsSummaryHost } from "./meetingsWorkspace";
 
+const MEETINGS_SUMMARY_ERROR_MAX_LENGTH = 240;
+
+export function compactMeetingsSummaryError(error: string): string {
+  const firstLine = error.split(/\r?\n/, 1)[0]?.trim() ?? "";
+  const withoutDump = firstLine.split(/\s+--------/, 1)[0]?.trim() ?? firstLine;
+  if (withoutDump.length === 0) {
+    return "Summary is unavailable.";
+  }
+  if (withoutDump.length <= MEETINGS_SUMMARY_ERROR_MAX_LENGTH) {
+    return withoutDump;
+  }
+  return `${withoutDump.slice(0, MEETINGS_SUMMARY_ERROR_MAX_LENGTH - 3)}...`;
+}
+
 export type MeetingsSummaryPersist = {
   writeSummary(input: { sessionId: string; text: string }): Promise<{
     readonly summaryPath: string;
@@ -58,7 +72,8 @@ export function createMeetingsSummaryHost(input: {
           sessionId: request.sessionId,
           summaryPath: null,
           text: null,
-          error: error instanceof Error ? error.message : "Summary failed.",
+          error:
+            error instanceof Error ? compactMeetingsSummaryError(error.message) : "Summary failed.",
         };
       }
     },

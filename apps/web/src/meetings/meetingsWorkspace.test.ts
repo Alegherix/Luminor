@@ -1060,7 +1060,7 @@ describe("meetings post-meeting transcription", () => {
     expect(workspace.getSnapshot().recording.status).toBe("recording");
   });
 
-  it("stops recording and starts transcription when a joined meeting reaches scheduled end", async () => {
+  it("keeps recording through scheduled end and starts transcription only after leave", async () => {
     let now = new Date("2026-08-12T12:00:00.000Z");
     const embed = fakeEmbed();
     const tape = fakeRecording();
@@ -1090,6 +1090,14 @@ describe("meetings post-meeting transcription", () => {
 
     now = new Date("2026-08-12T12:30:00.000Z");
     workspace.tick();
+
+    expect(meetingsSurfaceJoined(workspace.getSnapshot())).toBe(true);
+    expect(workspace.getSnapshot().recording.status).toBe("recording");
+    expect(workspace.getSnapshot().transcription).toEqual(IDLE_MEETINGS_TRANSCRIPTION);
+    expect(tape.calls).toEqual(["getState", "start:live"]);
+    expect(scribe.calls).toEqual([]);
+
+    await workspace.leave();
 
     await vi.waitFor(() => {
       expect(meetingsSurfaceJoined(workspace.getSnapshot())).toBe(false);

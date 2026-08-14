@@ -1,4 +1,5 @@
 import { Button } from "~/components/ui/button";
+import { compactMeetingsSummaryError } from "./meetingsSummary";
 import {
   MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
   selectedMeetingSession,
@@ -31,8 +32,11 @@ export function MeetingsTranscriptReader({
     Boolean(onOpenInChat) && transcription.status === "ready" && Boolean(transcription.text);
 
   return (
-    <section className="flex h-full min-h-0 flex-col px-6 py-8" aria-label="Meeting transcript">
-      <div className="mx-auto flex w-full max-w-2xl min-h-0 flex-1 flex-col gap-4">
+    <section
+      className="flex h-full min-h-0 flex-1 justify-center overflow-y-auto px-6 py-8"
+      aria-label="Meeting transcript"
+    >
+      <div className="flex w-full max-w-2xl flex-col gap-4">
         {onBack ? (
           <div>
             <Button type="button" variant="ghost" size="sm" onClick={onBack}>
@@ -63,7 +67,7 @@ export function MeetingsTranscriptReader({
 
         {summary.status === "ready" && summary.text ? (
           <article
-            className="min-h-0 overflow-auto whitespace-pre-wrap text-sm leading-6 text-foreground"
+            className="whitespace-pre-wrap text-sm leading-6 text-foreground"
             aria-label="Meeting summary"
           >
             {summary.text}
@@ -72,12 +76,12 @@ export function MeetingsTranscriptReader({
 
         {summary.status === "failed" ? (
           <p className="text-sm text-muted-foreground" role="status">
-            {summary.error ?? "Summary is unavailable."}
+            {summary.error ? compactMeetingsSummaryError(summary.error) : "Summary is unavailable."}
           </p>
         ) : null}
 
         {transcription.status === "ready" && transcription.text ? (
-          <article className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap text-sm leading-6 text-foreground">
+          <article className="whitespace-pre-wrap text-sm leading-6 text-foreground">
             {transcription.text}
           </article>
         ) : null}

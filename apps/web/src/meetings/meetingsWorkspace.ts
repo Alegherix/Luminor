@@ -1071,14 +1071,6 @@ export function createMeetingsWorkspace(
     },
     tick: () => {
       setSnapshot(snapshot);
-      const joinedSessionId = snapshot.joinedSessionId;
-      if (joinedSessionId === null) {
-        return;
-      }
-      const joined = snapshot.sessions.find((session) => session.id === joinedSessionId);
-      if (joined && meetingSessionStatus(joined, clock()) === "ended") {
-        void leaveJoinedSession();
-      }
     },
     acknowledgeReminder: (reminder) => {
       alreadyFired.add(meetingReminderFiredKey(reminder));

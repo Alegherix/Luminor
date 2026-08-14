@@ -44,6 +44,7 @@ describe("MeetingsTranscriptReader", () => {
 
     expect(html).toContain("Standup");
     expect(html).toContain("We shipped the join path.");
+    expect(html).toContain("overflow-y-auto");
     expect(html).not.toContain("Transcribe");
     expect(html).not.toContain("Öppna i chatt");
     expect(html).not.toContain("Open in chat");
@@ -120,7 +121,8 @@ describe("MeetingsTranscriptReader", () => {
             sessionId: "ended",
             summaryPath: null,
             text: null,
-            error: "Summary failed.",
+            error:
+              "Text generation failed in generateMeetingSummary: Codex CLI command failed: OpenAI Codex v0.147.0 -------- workdir: /tmp user You write a silent post-meeting summary",
           },
         }}
         onOpenInChat={() => undefined}
@@ -128,8 +130,11 @@ describe("MeetingsTranscriptReader", () => {
     );
 
     expect(html).toContain("We shipped the join path.");
-    expect(html).toContain("Summary failed.");
+    expect(html).toContain("Codex CLI command failed");
+    expect(html).not.toContain("workdir");
+    expect(html).not.toContain("You write a silent");
     expect(html).toContain("Öppna i chatt");
+    expect(html).toContain("overflow-y-auto");
   });
 
   it("shows a point-at-the-environment recovery when config is missing", () => {
