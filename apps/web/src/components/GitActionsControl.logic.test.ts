@@ -471,7 +471,7 @@ describe("when: branch is behind upstream", () => {
     );
   });
 
-  it("shouldShowHeaderPullAction surfaces Pull next to Hand off while behind", () => {
+  it("shouldShowHeaderPullAction surfaces Pull in the header cluster while behind", () => {
     const quick = resolveQuickAction(status({ behindCount: 2 }), false);
     assert.equal(shouldShowHeaderPullAction({ quickAction: quick, isPullRunning: false }), true);
     assert.equal(shouldPromotePullAction({ quickAction: quick, isPullRunning: false }), true);

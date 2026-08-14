@@ -489,6 +489,7 @@ import {
   ProviderModelPicker,
   resolveProviderModelLabel,
 } from "./chat/ProviderModelPicker";
+import { ComposerHandoffPicker } from "./chat/ComposerHandoffPicker";
 import { ComposerModelEffortPicker } from "./chat/ComposerModelEffortPicker";
 import { resolveTraitsTriggerSummary, TraitsPicker } from "./chat/TraitsPicker";
 import { ComposerCommandItem, ComposerCommandMenu } from "./chat/ComposerCommandMenu";
@@ -11752,6 +11753,17 @@ export default function ChatView({
                             : {})}
                         />
                       ) : null}
+                      {!isVoiceRecording &&
+                      !isVoiceTranscribing &&
+                      !terminalWorkspaceTerminalTabActive ? (
+                        <ComposerHandoffPicker
+                          targetProviders={handoffTargetProviders}
+                          disabled={handoffDisabled}
+                          actionLabel={handoffActionLabel}
+                          hideLabel={!composerFooterControlsPlan.showTraitsLabel}
+                          onCreateHandoff={onCreateHandoffThread}
+                        />
+                      ) : null}
                       {!isVoiceRecording && !isVoiceTranscribing ? composerPickerControls : null}
                       {showVoiceNotesControl && (isVoiceRecording || isVoiceTranscribing) ? (
                         <ComposerVoiceRecorderBar
@@ -11996,9 +12008,6 @@ export default function ChatView({
           diffToggleShortcutLabel={diffPanelShortcutLabel}
           rightDockToggleShortcutLabel={rightDockToggleShortcutLabel}
           handoffBadgeLabel={handoffBadgeLabel}
-          handoffActionLabel={handoffActionLabel}
-          handoffDisabled={handoffDisabled}
-          handoffActionTargetProviders={handoffTargetProviders}
           handoffBadgeSourceProvider={handoffBadgeSourceProvider}
           handoffBadgeTargetProvider={handoffBadgeTargetProvider}
           gitCwd={threadWorkspaceCwd}
@@ -12057,7 +12066,6 @@ export default function ChatView({
           onDeleteProjectScript={deleteProjectScript}
           onToggleDiff={onToggleDiff}
           onRegisterCommitAndPushTrigger={onRegisterCommitAndPushTrigger}
-          onCreateHandoff={onCreateHandoffThread}
           onNavigateToThread={onNavigateToThread}
           onRenameThread={() => setRenameDialogOpen(true)}
           {...(onCloseThreadPane ? { onCloseThreadPane } : {})}

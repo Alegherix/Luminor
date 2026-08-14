@@ -880,7 +880,7 @@ export function shouldShowEnvironmentPanelPullRow(input: {
   return shouldPromotePullAction(input);
 }
 
-/** Header Environment mode should surface Pull next to Hand off / Add action. */
+/** Header Environment mode should surface Pull in the header action cluster. */
 export function shouldShowHeaderPullAction(input: {
   quickAction: GitQuickAction;
   isPullRunning: boolean;
