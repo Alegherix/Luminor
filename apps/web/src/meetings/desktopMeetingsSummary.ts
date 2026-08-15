@@ -6,7 +6,10 @@ import { useStore } from "../store";
 import { useWorkspacePathsStore } from "../workspacePathsStore";
 import { desktopMeetingsNotesPersist } from "./desktopMeetingsNotes";
 import { createMeetingsSummaryHost, type MeetingsSummaryPersist } from "./meetingsSummary";
-import { resolveNewThreadDefaultModelSelection } from "./meetingsSummaryModel";
+import {
+  isDedicatedTextGenerationSelection,
+  resolveNewThreadDefaultModelSelection,
+} from "./meetingsSummaryModel";
 import type { MeetingsSummaryHost } from "./meetingsWorkspace";
 
 const MEETING_SUMMARY_CONTEXT_MAX_CHARS = 200_000;
@@ -87,7 +90,9 @@ export function createDesktopMeetingsSummaryHost(): MeetingsSummaryHost {
         transcript: buildMeetingSummaryContext(
           notesText === undefined ? { transcriptText } : { transcriptText, notesText },
         ),
-        textGenerationModelSelection: modelSelection,
+        ...(isDedicatedTextGenerationSelection(modelSelection)
+          ? { textGenerationModelSelection: modelSelection }
+          : {}),
       });
       return result.summary;
     },

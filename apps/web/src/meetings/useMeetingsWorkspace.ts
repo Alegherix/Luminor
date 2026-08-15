@@ -73,6 +73,7 @@ export function useMeetingsWorkspace(): {
   hideEmbed: () => Promise<void>;
   showEmbed: () => Promise<void>;
   pointAtTranscriptionEnvironment: () => Promise<void>;
+  retrySummary: () => Promise<void>;
 } {
   const workspace = getSharedMeetingsWorkspace();
   const snapshot = useMeetingsWorkspaceSnapshot();
@@ -116,5 +117,6 @@ export function useMeetingsWorkspace(): {
     hideEmbed: workspace.hideEmbed,
     showEmbed: workspace.showEmbed,
     pointAtTranscriptionEnvironment: workspace.pointAtTranscriptionEnvironment,
+    retrySummary: workspace.retrySummary,
   };
 }

@@ -6,6 +6,16 @@ export interface TextGenerationProviderInput {
   readonly codexHomePath?: string;
 }
 
+export function resolveDedicatedTextGenerationModelSelection(
+  requested: ModelSelection | undefined,
+  fallback: ModelSelection,
+): ModelSelection {
+  if (requested && hasDedicatedTextGenerationProvider(requested.provider)) {
+    return requested;
+  }
+  return fallback;
+}
+
 export function hasDedicatedTextGenerationProvider(provider: ProviderKind | undefined): boolean {
   return (
     provider === "codex" || provider === "cursor" || provider === "kilo" || provider === "opencode"

@@ -362,6 +362,27 @@ export function sanitizeMeetingSummary(value: string): string {
   return value.trim();
 }
 
+export function compactCodexCliFailure(stdout: string, stderr: string, exitCode: number): string {
+  const lines = `${stderr}\n${stdout}`
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const useful = lines.find(
+    (line) =>
+      !/^OpenAI Codex v/i.test(line) &&
+      !/^-+$/.test(line) &&
+      !/^workdir:/i.test(line) &&
+      !/^user\b/i.test(line),
+  );
+  if (useful) {
+    return useful;
+  }
+  if (lines[0]) {
+    return lines[0];
+  }
+  return `Codex CLI command failed with code ${exitCode}.`;
+}
+
 export type MeetingReviewGeneration = {
   readonly overview?: string;
   readonly summary?: string;

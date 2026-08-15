@@ -204,6 +204,7 @@ export type MeetingsWorkspace = {
   hideEmbed(): Promise<void>;
   showEmbed(): Promise<void>;
   pointAtTranscriptionEnvironment(): Promise<void>;
+  retrySummary(): Promise<void>;
 };
 
 export function createIdleMeetingsWorkspace(): MeetingsWorkspaceSnapshot {
@@ -1178,6 +1179,30 @@ export function createMeetingsWorkspace(
     },
     joinSession,
     leave: () => leaveJoinedSession(),
+    retrySummary: async () => {
+      const sessionId = snapshot.selectedSessionId;
+      const transcript = snapshot.transcription;
+      if (
+        sessionId === null ||
+        transcript.sessionId !== sessionId ||
+        transcript.status !== "ready" ||
+        !transcript.text?.trim()
+      ) {
+        return;
+      }
+      applySummary({
+        status: "idle",
+        sessionId,
+        summaryPath: null,
+        text: null,
+        error: null,
+      });
+      await startSummary({
+        sessionId,
+        transcriptText: transcript.text,
+        transcriptPath: transcript.transcriptPath,
+      });
+    },
     pointAtTranscriptionEnvironment: async () => {
       const pointed = await transcription.pointAtEnvironment();
       if (pointed.status !== "configured") {

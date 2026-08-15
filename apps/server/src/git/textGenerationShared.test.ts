@@ -11,6 +11,7 @@ import {
   buildAutomationIntentPrompt,
   buildMeetingSummaryPrompt,
   buildPrContentPrompt,
+  compactCodexCliFailure,
   decodeStructuredTextGenerationOutput,
   formatMeetingReviewSummary,
 } from "./textGenerationShared.ts";
@@ -128,6 +129,16 @@ describe("textGenerationShared", () => {
     expect(prompt).toContain("keys: overview, decisions, actionItems");
     expect(prompt).toContain("do not include or rewrite the raw transcript");
     expect(prompt).toContain("Meeting title: Standup");
+  });
+
+  it("skips the Codex version banner when reporting a CLI failure", () => {
+    expect(
+      compactCodexCliFailure(
+        "OpenAI Codex v0.147.0\n--------\nworkdir: /tmp\nmodel gpt-5.6-sol is not supported",
+        "",
+        1,
+      ),
+    ).toBe("model gpt-5.6-sol is not supported");
   });
 
   it("formats a structured meeting review as markdown", () => {

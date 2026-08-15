@@ -41,6 +41,7 @@ function MeetingsWorkspaceRouteView() {
     hideEmbed,
     showEmbed,
     pointAtTranscriptionEnvironment,
+    retrySummary,
   } = useMeetingsWorkspace();
   const { openInChat, opening } = useOpenMeetingInChat();
   const [pointing, setPointing] = useState(false);
@@ -79,6 +80,9 @@ function MeetingsWorkspaceRouteView() {
             void pointAtTranscriptionEnvironment().finally(() => {
               setPointing(false);
             });
+          }}
+          onRetrySummary={() => {
+            void retrySummary();
           }}
         />
       ) : (

@@ -84,6 +84,7 @@ import { GitManager } from "./git/Services/GitManager";
 import { GitHubCliError } from "./git/Errors";
 import { GitStatusBroadcaster } from "./git/Services/GitStatusBroadcaster";
 import { TextGeneration } from "./git/Services/TextGeneration";
+import { resolveDedicatedTextGenerationModelSelection } from "./git/textGenerationSelection";
 import {
   beginGitHandoff,
   completeGitHandoff,
@@ -1864,14 +1865,16 @@ const makeWsRpcHandlersLayer = () =>
           rpcEffect(
             Effect.gen(function* () {
               const settings = yield* serverSettings.getSettings;
-              const modelSelection =
-                input.textGenerationModelSelection ?? settings.textGenerationModelSelection;
+              const modelSelection = resolveDedicatedTextGenerationModelSelection(
+                input.textGenerationModelSelection,
+                settings.textGenerationModelSelection,
+              );
               return yield* textGeneration.generateMeetingSummary({
                 cwd: input.cwd,
                 title: input.title,
                 transcript: input.transcript,
                 ...(input.codexHomePath ? { codexHomePath: input.codexHomePath } : {}),
-                model: input.textGenerationModel ?? modelSelection.model,
+                model: modelSelection.model,
                 modelSelection,
                 ...(input.providerOptions ? { providerOptions: input.providerOptions } : {}),
               });

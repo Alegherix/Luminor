@@ -1,7 +1,10 @@
 import { getDefaultModel } from "@luminor/shared/model";
 import { describe, expect, it } from "vitest";
 
-import { resolveNewThreadDefaultModelSelection } from "./meetingsSummaryModel";
+import {
+  isDedicatedTextGenerationSelection,
+  resolveNewThreadDefaultModelSelection,
+} from "./meetingsSummaryModel";
 
 describe("resolveNewThreadDefaultModelSelection", () => {
   it("uses the project default model instead of a hardcoded slug", () => {
@@ -29,5 +32,15 @@ describe("resolveNewThreadDefaultModelSelection", () => {
       provider: "claudeAgent",
       model: getDefaultModel("claudeAgent"),
     });
+  });
+});
+
+describe("isDedicatedTextGenerationSelection", () => {
+  it("accepts Codex and rejects Grok or Claude Agent", () => {
+    expect(isDedicatedTextGenerationSelection({ provider: "codex", model: "gpt-5.4" })).toBe(true);
+    expect(isDedicatedTextGenerationSelection({ provider: "grok", model: "grok-4" })).toBe(false);
+    expect(
+      isDedicatedTextGenerationSelection({ provider: "claudeAgent", model: "claude-sonnet-4-6" }),
+    ).toBe(false);
   });
 });

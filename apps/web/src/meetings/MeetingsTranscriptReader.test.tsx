@@ -44,7 +44,7 @@ describe("MeetingsTranscriptReader", () => {
 
     expect(html).toContain("Standup");
     expect(html).toContain("We shipped the join path.");
-    expect(html).toContain("Rå transkription");
+    expect(html).not.toContain("Rå transkription");
     expect(html).toContain("Översikt");
     expect(html).toContain("Transkription");
     expect(html).toContain("Anteckningar");
@@ -106,7 +106,7 @@ describe("MeetingsTranscriptReader", () => {
     expect(html).toContain("Decision: ship the join path.");
     expect(html).toContain("Åtgärdspunkter");
     expect(html).toContain("File the follow-up.");
-    expect(html).toContain("Rå transkription");
+    expect(html).not.toContain("Rå transkription");
     expect(html).toContain("Öppna i chatt");
     expect(html).not.toContain("Open in chat");
     expect(html).not.toContain("Transcribe");
@@ -134,10 +134,12 @@ describe("MeetingsTranscriptReader", () => {
           },
         }}
         onOpenInChat={() => undefined}
+        onRetrySummary={() => undefined}
       />,
     );
 
     expect(html).toContain("We shipped the join path.");
+    expect(html).toContain("Generate summary");
     expect(html).toContain("Codex CLI command failed");
     expect(html).not.toContain("workdir");
     expect(html).not.toContain("You write a silent");

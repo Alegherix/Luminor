@@ -22,16 +22,18 @@ const REVIEW_CARD_CLASS =
 
 function OverviewPanel({
   summary,
-  transcriptText,
   canOpenInChat,
   openingInChat,
+  retrying = false,
   onOpenInChat,
+  onRetrySummary,
 }: {
   readonly summary: MeetingsSummaryState;
-  readonly transcriptText: string | null;
   readonly canOpenInChat: boolean;
   readonly openingInChat: boolean;
+  readonly retrying?: boolean;
   readonly onOpenInChat?: () => void;
+  readonly onRetrySummary?: () => void;
 }) {
   const review = summary.status === "ready" && summary.text ? parseMeetingsReviewMarkdown(summary.text) : null;
   const hasReviewContent = Boolean(
@@ -74,18 +76,21 @@ function OverviewPanel({
         </section>
       ) : null}
       {summary.status === "failed" ? (
-        <p className="text-sm text-muted-foreground" role="status">
-          {summary.error ? compactMeetingsSummaryError(summary.error) : "Summary is unavailable."}
-        </p>
+        <div className="flex flex-col gap-2" role="status">
+          <p className="text-sm text-muted-foreground">
+            {summary.error ? compactMeetingsSummaryError(summary.error) : "Summary is unavailable."}
+          </p>
+          {onRetrySummary ? (
+            <div>
+              <Button type="button" variant="outline" size="sm" onClick={onRetrySummary} disabled={retrying}>
+                {retrying ? "Generating…" : "Generate summary"}
+              </Button>
+            </div>
+          ) : null}
+        </div>
       ) : null}
       {summary.status === "idle" || (summary.status === "ready" && !hasReviewContent) ? (
         <p className="text-sm text-muted-foreground">Ingen sammanfattning finns för det här mötet än.</p>
-      ) : null}
-      {transcriptText ? (
-        <section className={`${REVIEW_CARD_CLASS} flex flex-col gap-2 p-5`} aria-label="Rå transkription">
-          <h2 className="text-sm font-semibold text-foreground">Rå transkription</h2>
-          <article className="whitespace-pre-wrap text-sm leading-6 text-foreground">{transcriptText}</article>
-        </section>
       ) : null}
       {canOpenInChat ? (
         <div>
@@ -118,6 +123,7 @@ export function MeetingsTranscriptReader({
   onBack,
   onPointAtEnvironment,
   onOpenInChat,
+  onRetrySummary,
   pointing = false,
   openingInChat = false,
 }: {
@@ -125,6 +131,7 @@ export function MeetingsTranscriptReader({
   readonly onBack?: () => void;
   readonly onPointAtEnvironment?: () => void;
   readonly onOpenInChat?: () => void;
+  readonly onRetrySummary?: () => void;
   readonly pointing?: boolean;
   readonly openingInChat?: boolean;
 }) {
@@ -170,12 +177,11 @@ export function MeetingsTranscriptReader({
         <div hidden={meetingsReviewPanelHidden(tab, "overview")}>
           <OverviewPanel
             summary={summary}
-            transcriptText={
-              transcription.status === "ready" && transcription.text ? transcription.text : null
-            }
             canOpenInChat={canOpenInChat}
             openingInChat={openingInChat}
+            retrying={summary.status === "running"}
             onOpenInChat={onOpenInChat}
+            onRetrySummary={onRetrySummary}
           />
         </div>
 
