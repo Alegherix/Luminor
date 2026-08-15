@@ -17,7 +17,10 @@ import {
   UsersIcon,
 } from "~/lib/icons";
 import { cn } from "~/lib/utils";
+import { MeetingNotesEditor } from "../MeetingNotesEditor";
+import { type MeetingsNotesStatus } from "../meetingsNotes";
 import { attendeeInitials } from "../meetingsSchedule";
+import { useMeetingNotes } from "../useMeetingNotes";
 import { useMeetingReviewPrototypeStore } from "./prototypeStore";
 import {
   actionPointClipboardText,
@@ -749,18 +752,47 @@ function MeetingTranscriptTab({
   );
 }
 
-function MeetingNotesTab({ meeting }: { readonly meeting: PrototypeMeeting }) {
-  if (!meeting.notes) {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Inga anteckningar gjordes under mötet.
-      </p>
-    );
-  }
+export function prototypeNotesSessionId(meetingId: string): string {
+  return `prototype:${meetingId}`;
+}
+
+export function resolvePrototypeNotesDraft({
+  status,
+  notes,
+  scenarioNotes,
+  edited,
+}: {
+  readonly status: MeetingsNotesStatus;
+  readonly notes: string;
+  readonly scenarioNotes: string | null;
+  readonly edited: boolean;
+}): string {
+  const useScenarioNotes = !edited && status === "idle" && notes.length === 0;
+  return useScenarioNotes ? (scenarioNotes ?? "") : notes;
+}
+
+export function MeetingNotesTab({ meeting }: { readonly meeting: PrototypeMeeting }) {
+  const { notes, setNotes, status } = useMeetingNotes(prototypeNotesSessionId(meeting.id));
+  const [edited, setEdited] = useState(false);
+  const draft = resolvePrototypeNotesDraft({
+    status,
+    notes,
+    scenarioNotes: meeting.notes,
+    edited,
+  });
+
   return (
-    <article className="whitespace-pre-wrap text-sm leading-6 text-foreground">
-      {meeting.notes}
-    </article>
+    <section className="flex flex-col gap-3" aria-label="Anteckningar">
+      <MeetingNotesEditor
+        notes={draft}
+        status={status}
+        onNotesChange={(next) => {
+          setEdited(true);
+          setNotes(next);
+        }}
+        placeholder="Inga anteckningar än — skriv här så sparas de till mötet."
+      />
+    </section>
   );
 }
 
