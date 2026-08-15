@@ -37,6 +37,36 @@ import type { GitHubCliError } from "../Errors.ts";
 export const PULL_REQUEST_SUMMARY_JSON_FIELDS =
   "number,title,url,baseRefName,headRefName,state,mergedAt,isDraft,mergeable,additions,deletions,changedFiles,isCrossRepository,headRepository,headRepositoryOwner,updatedAt";
 
+export const ISSUE_LIST_JSON_FIELDS =
+  "id,number,title,body,state,labels,author,assignees,comments,updatedAt,url";
+
+export interface GitHubIssueComment {
+  readonly id: string;
+  readonly author: string;
+  readonly body: string;
+  readonly createdAt: string;
+}
+
+export interface GitHubIssueListItem {
+  readonly id: string;
+  readonly number: number;
+  readonly title: string;
+  readonly body: string;
+  readonly url: string;
+  readonly state: "open" | "closed";
+  readonly author: string;
+  readonly assignee: string | null;
+  readonly labels: ReadonlyArray<string>;
+  readonly commentCount: number;
+  readonly comments: ReadonlyArray<GitHubIssueComment>;
+  readonly updatedAt: string;
+}
+
+export interface GitHubIssueListBatch {
+  readonly entries: ReadonlyArray<GitHubIssueListItem>;
+  readonly rawCount: number;
+}
+
 export interface GitHubPullRequestSummary {
   readonly number: number;
   readonly title: string;
@@ -175,6 +205,19 @@ export interface GitHubCliShape {
     readonly viewer: string;
     readonly limit?: number;
   }) => Effect.Effect<GitHubPullRequestListBatch, GitHubCliError>;
+
+  readonly listRepositoryIssues: (input: {
+    readonly cwd: string;
+    readonly repository: string;
+    readonly state: "open" | "closed" | "all";
+    readonly limit?: number;
+  }) => Effect.Effect<GitHubIssueListBatch, GitHubCliError>;
+
+  readonly getRepositoryIssue: (input: {
+    readonly cwd: string;
+    readonly repository: string;
+    readonly number: number;
+  }) => Effect.Effect<GitHubIssueListItem, GitHubCliError>;
 
   /**
    * Fetch one pull request in the list-item shape (`gh pr view --json <list fields>`).

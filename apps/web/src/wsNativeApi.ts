@@ -625,6 +625,10 @@ export function createWsNativeApi(): NativeApi {
       onActionProgress: gitActionProgressListeners.subscribe,
       onWorktreeSetupProgress: gitWorktreeSetupProgressListeners.subscribe,
     },
+    issues: {
+      list: (input) => transport.request(WS_METHODS.issuesList, input),
+      view: (input) => transport.request(WS_METHODS.issuesView, input),
+    },
     pullRequests: {
       list: (input) => transport.request(WS_METHODS.pullRequestsList, input),
       reviewRequestCount: (input) =>

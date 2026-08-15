@@ -8,6 +8,8 @@ import {
   WsFeatureRpcGroup,
   WsProjectsDiscoverScriptsRpc,
   WsProjectsProvisionFromGitHubRpc,
+  WsIssuesListRpc,
+  WsIssuesViewRpc,
   WsPullRequestsReviewRequestCountRpc,
   WsRpcError,
   WsRpcGroup,
@@ -45,5 +47,12 @@ describe("WS RPC contracts", () => {
 
   it("exports the count-only pull request review RPC", () => {
     expect(WsPullRequestsReviewRequestCountRpc).toBeDefined();
+  });
+
+  it("exports the GitHub issues list and view RPCs", () => {
+    expect(WsIssuesListRpc).toBeDefined();
+    expect(WsIssuesViewRpc).toBeDefined();
+    expect(WsFeatureRpcGroup.requests.has("issues.list")).toBe(true);
+    expect(WsFeatureRpcGroup.requests.has("issues.view")).toBe(true);
   });
 });

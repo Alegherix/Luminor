@@ -130,6 +130,7 @@ import {
   PullRequestsListResult,
   PullRequestsUnavailableError,
 } from "./pullRequests";
+import { IssuesListInput, IssuesListResult, IssuesViewInput, IssuesViewResult } from "./issues";
 import {
   ClientOrchestrationCommand,
   ORCHESTRATION_WS_METHODS,
@@ -814,6 +815,18 @@ export const WsPullRequestsCommentRpc = Rpc.make(WS_METHODS.pullRequestsComment,
   error: PullRequestsRpcError,
 });
 
+export const WsIssuesListRpc = Rpc.make(WS_METHODS.issuesList, {
+  payload: IssuesListInput,
+  success: IssuesListResult,
+  error: WsRpcError,
+});
+
+export const WsIssuesViewRpc = Rpc.make(WS_METHODS.issuesView, {
+  payload: IssuesViewInput,
+  success: IssuesViewResult,
+  error: WsRpcError,
+});
+
 export const WsPullRequestsSetPinnedRpc = Rpc.make(WS_METHODS.pullRequestsSetPinned, {
   payload: PullRequestSetPinnedInput,
   success: PullRequestSetPinnedResult,
@@ -1324,6 +1337,8 @@ export const WsFeatureRpcGroup = RpcGroup.make(
   WsGitResolvePullRequestRpc,
   WsGitPullRequestSnapshotRpc,
   WsGitPreparePullRequestThreadRpc,
+  WsIssuesListRpc,
+  WsIssuesViewRpc,
   WsPullRequestsListRpc,
   WsPullRequestsReviewRequestCountRpc,
   WsPullRequestsInboxRpc,

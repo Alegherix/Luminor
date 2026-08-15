@@ -6,6 +6,9 @@ import {
   buildIssueDraftPrompt,
   countActivePrototypeIssueFilterGroups,
   filterPrototypeIssues,
+  issueKindFromLabels,
+  issuesListStateFromFilters,
+  prototypeIssueFromListEntry,
   removeAutopopulatedDrafts,
   togglePrototypeFilterValue,
 } from "./issue-sync.logic";
@@ -156,6 +159,40 @@ describe("togglePrototypeFilterValue", () => {
   it("adds and removes a value", () => {
     expect(togglePrototypeFilterValue(["open"], "closed")).toEqual(["open", "closed"]);
     expect(togglePrototypeFilterValue(["open", "closed"], "open")).toEqual(["closed"]);
+  });
+});
+
+describe("issuesListStateFromFilters", () => {
+  it("fetches open issues unless closed is selected", () => {
+    expect(issuesListStateFromFilters([])).toBe("open");
+    expect(issuesListStateFromFilters(["open"])).toBe("open");
+    expect(issuesListStateFromFilters(["closed"])).toBe("closed");
+    expect(issuesListStateFromFilters(["open", "closed"])).toBe("all");
+  });
+});
+
+describe("prototypeIssueFromListEntry", () => {
+  it("maps a GitHub list entry onto the inbox row shape", () => {
+    const issue = prototypeIssueFromListEntry({
+      id: "acme/app#6",
+      number: 6,
+      title: "GitHub issue sync",
+      body: "Connect the inbox.",
+      repository: "acme/app",
+      repositoryName: "app",
+      state: "open",
+      labels: ["bug"],
+      author: "octocat",
+      assignee: null,
+      commentCount: 0,
+      updatedAt: new Date().toISOString(),
+      url: "https://github.com/acme/app/issues/6",
+      projectIds: [],
+    });
+    expect(issue.repo).toBe("app");
+    expect(issue.repoId).toBe("acme/app");
+    expect(issue.kind).toBe(issueKindFromLabels(["bug"]));
+    expect(issue.kind).toBe("bug");
   });
 });
 

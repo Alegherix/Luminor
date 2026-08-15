@@ -107,6 +107,12 @@ import type {
   PullRequestsListResult,
 } from "./pullRequests";
 import type {
+  IssuesListInput,
+  IssuesListResult,
+  IssuesViewInput,
+  IssuesViewResult,
+} from "./issues";
+import type {
   ProjectCreateLocalFilePreviewGrantInput,
   ProjectCreateLocalFilePreviewGrantResult,
   ProjectDevServerEvent,
@@ -737,6 +743,10 @@ export interface NativeApi {
     onWorktreeSetupProgress: (
       callback: (event: GitWorktreeSetupProgressEvent) => void,
     ) => () => void;
+  };
+  issues: {
+    list: (input: IssuesListInput) => Promise<IssuesListResult>;
+    view: (input: IssuesViewInput) => Promise<IssuesViewResult>;
   };
   pullRequests: {
     list: (input: PullRequestsListInput) => Promise<PullRequestsListResult>;

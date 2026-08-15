@@ -2,12 +2,17 @@
 // Purpose: Pure filter/accept/import/autopopulate math for the issues prototype.
 // Layer: Kanban prototype logic (no React)
 
+import type { IssueComment, IssueListEntry, IssuesListState } from "@luminor/contracts";
+
+import { formatRelativeTime } from "~/lib/relativeTime";
 import type {
   PrototypeBoardCard,
   PrototypeIssue,
+  PrototypeIssueComment,
   PrototypeIssueFilters,
   PrototypeIssueKind,
   PrototypeIssueState,
+  PrototypeRepo,
 } from "./issue-sync.types";
 
 export function togglePrototypeFilterValue<T extends string>(values: readonly T[], value: T): T[] {
@@ -138,9 +143,74 @@ export function buildIssueDraftPrompt(issue: PrototypeIssue): string {
   return `${title}\n\n${body}`;
 }
 
+export function collectPrototypeRepos(issues: readonly PrototypeIssue[]): PrototypeRepo[] {
+  const seen = new Map<string, string>();
+  for (const issue of issues) {
+    if (!seen.has(issue.repoId)) {
+      seen.set(issue.repoId, issue.repo);
+    }
+  }
+  return [...seen.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
 export function collectPrototypeLabels(issues: readonly PrototypeIssue[]): string[] {
   const kindSet = new Set<string>(PROTOTYPE_ISSUE_KINDS);
   return [...new Set(issues.flatMap((issue) => issue.labels))]
     .filter((label) => !kindSet.has(label))
     .sort();
+}
+
+export function issueKindFromLabels(labels: readonly string[]): PrototypeIssueKind {
+  const lower = labels.map((label) => label.toLowerCase());
+  if (lower.some((label) => label === "bug" || label === "type: bug")) {
+    return "bug";
+  }
+  if (lower.some((label) => label === "docs" || label === "documentation")) {
+    return "docs";
+  }
+  return "enhancement";
+}
+
+export function issuesListStateFromFilters(
+  states: readonly PrototypeIssueState[],
+): IssuesListState {
+  const wantsOpen = states.length === 0 || states.includes("open");
+  const wantsClosed = states.includes("closed");
+  if (wantsOpen && wantsClosed) return "all";
+  if (wantsClosed && !wantsOpen) return "closed";
+  return "open";
+}
+
+export function prototypeCommentsFromIssueComments(
+  comments: readonly IssueComment[],
+): PrototypeIssueComment[] {
+  return comments.map((comment) => ({
+    id: comment.id,
+    author: comment.author,
+    body: comment.body,
+    updatedAt: formatRelativeTime(comment.createdAt),
+  }));
+}
+
+export function prototypeIssueFromListEntry(
+  entry: IssueListEntry,
+  comments: readonly PrototypeIssueComment[] = [],
+): PrototypeIssue {
+  return {
+    id: entry.id,
+    number: entry.number,
+    title: entry.title,
+    body: entry.body,
+    repo: entry.repositoryName,
+    repoId: entry.repository,
+    state: entry.state,
+    kind: issueKindFromLabels(entry.labels),
+    labels: entry.labels,
+    author: entry.author,
+    assignee: entry.assignee,
+    comments,
+    updatedAt: formatRelativeTime(entry.updatedAt),
+  };
 }

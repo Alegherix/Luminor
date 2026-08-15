@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { afterEach, expect, vi } from "vitest";
+import { afterEach, describe, expect, vi } from "vitest";
 
 vi.mock("../../processRunner", () => ({
   runProcess: vi.fn(),
@@ -9,7 +9,7 @@ vi.mock("../../processRunner", () => ({
 
 import { runProcess } from "../../processRunner";
 import { GitHubCli, PULL_REQUEST_SUMMARY_JSON_FIELDS } from "../Services/GitHubCli.ts";
-import { GitHubCliLive } from "./GitHubCli.ts";
+import { decodeRepositoryIssueListJson, GitHubCliLive } from "./GitHubCli.ts";
 
 const mockedRunProcess = vi.mocked(runProcess);
 const layer = it.layer(GitHubCliLive);
@@ -1002,6 +1002,63 @@ layer("GitHubCliLive", (it) => {
     }),
   );
 
+  it.effect("lists repository issues and drops malformed entries", () =>
+    Effect.gen(function* () {
+      mockedRunProcess.mockResolvedValueOnce({
+        stdout: JSON.stringify([
+          {
+            id: "I_1",
+            number: 6,
+            title: "GitHub issue sync",
+            body: "Connect the inbox.",
+            state: "OPEN",
+            url: "https://github.com/acme/app/issues/6",
+            updatedAt: "2026-08-15T16:59:55Z",
+            author: { login: "octocat" },
+            assignees: [{ login: "octocat" }],
+            labels: [{ name: "enhancement" }],
+            comments: [
+              {
+                id: "C_1",
+                body: "Start with list.",
+                createdAt: "2026-08-15T17:10:00Z",
+                author: { login: "hubot" },
+              },
+            ],
+          },
+          { number: "nope" },
+        ]),
+        stderr: "",
+        code: 0,
+        signal: null,
+        timedOut: false,
+      });
+      const gh = yield* GitHubCli;
+      const result = yield* gh.listRepositoryIssues({
+        cwd: "/repo",
+        repository: "acme/app",
+        state: "open",
+      });
+      assert.equal(result.rawCount, 2);
+      assert.equal(result.entries.length, 1);
+      assert.equal(result.entries[0]?.title, "GitHub issue sync");
+      assert.equal(result.entries[0]?.assignee, "octocat");
+      assert.equal(result.entries[0]?.commentCount, 1);
+      expect(mockedRunProcess.mock.calls[0]?.[1]).toEqual([
+        "issue",
+        "list",
+        "--repo",
+        "github.com/acme/app",
+        "--state",
+        "open",
+        "--limit",
+        "50",
+        "--json",
+        expect.any(String),
+      ]);
+    }),
+  );
+
   it.effect("accepts commits with empty or missing headlines and omits the files field", () =>
     Effect.gen(function* () {
       mockedRunProcess.mockResolvedValueOnce({
@@ -1716,4 +1773,13 @@ layer("GitHubCliLive", (it) => {
       expect(mockedRunProcess).not.toHaveBeenCalled();
     }),
   );
+});
+
+describe("decodeRepositoryIssueListJson", () => {
+  it("decodes ANSI-colored gh JSON", async () => {
+    const colored = `\u001b[1;37m[\u001b[m{"id":"I_1","number":6,"title":"GitHub issue sync","body":"","state":"OPEN","url":"https://github.com/acme/app/issues/6","updatedAt":"2026-08-15T16:59:55Z","author":{"login":"octocat"},"assignees":[],"labels":[],"comments":[]}\u001b[1;37m]\u001b[m`;
+    const batch = await Effect.runPromise(decodeRepositoryIssueListJson(colored));
+    expect(batch.rawCount).toBe(1);
+    expect(batch.entries[0]?.title).toBe("GitHub issue sync");
+  });
 });

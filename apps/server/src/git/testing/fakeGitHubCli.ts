@@ -18,6 +18,8 @@ import type {
 import { GitHubCliError } from "../Errors.ts";
 import {
   decodePullRequestListJson,
+  decodeRepositoryIssueJson,
+  decodeRepositoryIssueListJson,
   decodeRepositoryPullRequestListJson,
   PULL_REQUEST_LIST_JSON_FIELDS,
 } from "../Layers/GitHubCli.ts";
@@ -28,6 +30,7 @@ import {
   type GitHubPullRequestInboxNotification,
   type GitHubPullRequestListItem,
   type GitHubPullRequestSummary,
+  ISSUE_LIST_JSON_FIELDS,
   PULL_REQUEST_SUMMARY_JSON_FIELDS,
 } from "../Services/GitHubCli.ts";
 
@@ -56,6 +59,8 @@ export interface FakeGhScenario {
   createPullRequestError?: GitHubCliError;
   viewerLogin?: string;
   repositoryPullRequestListJson?: string;
+  repositoryIssueListJson?: string;
+  repositoryIssueJson?: string;
   pullRequestDetail?: GitHubPullRequestDetailData;
   pullRequestStack?: PullRequestStack | null;
   pullRequestListItems?: GitHubPullRequestListItem[];
@@ -300,6 +305,31 @@ export function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
         return scenario.failWith
           ? Effect.fail(scenario.failWith)
           : decodeRepositoryPullRequestListJson(scenario.repositoryPullRequestListJson ?? "[]");
+      },
+      listRepositoryIssues: (input) => {
+        ghCalls.push(
+          `issue list --repo ${input.repository} --state ${input.state} --limit ${input.limit ?? 50} --json ${ISSUE_LIST_JSON_FIELDS}`,
+        );
+        return scenario.failWith
+          ? Effect.fail(scenario.failWith)
+          : decodeRepositoryIssueListJson(scenario.repositoryIssueListJson ?? "[]");
+      },
+      getRepositoryIssue: (input) => {
+        ghCalls.push(
+          `issue view ${input.number} --repo ${input.repository} --json ${ISSUE_LIST_JSON_FIELDS}`,
+        );
+        if (scenario.failWith) {
+          return Effect.fail(scenario.failWith);
+        }
+        if (scenario.repositoryIssueJson) {
+          return decodeRepositoryIssueJson(scenario.repositoryIssueJson);
+        }
+        return Effect.fail(
+          new GitHubCliError({
+            operation: "getRepositoryIssue",
+            detail: "Fake issue view was not configured.",
+          }),
+        );
       },
       getPullRequestDetail: (input) => {
         ghCalls.push(`pr view ${input.number} --repo ${input.repository}`);

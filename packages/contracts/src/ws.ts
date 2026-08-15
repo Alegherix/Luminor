@@ -158,6 +158,7 @@ import {
   PullRequestSetPinnedInput,
   PullRequestsListInput,
 } from "./pullRequests";
+import { IssuesListInput, IssuesViewInput } from "./issues";
 import {
   ExternalMcpCreateIntegrationInput,
   ExternalMcpRefreshPairingInput,
@@ -230,6 +231,8 @@ export const WS_METHODS = {
   gitPreparePullRequestThread: "git.preparePullRequestThread",
 
   // Global pull request methods
+  issuesList: "issues.list",
+  issuesView: "issues.view",
   pullRequestsList: "pullRequests.list",
   pullRequestsReviewRequestCount: "pullRequests.reviewRequestCount",
   pullRequestsInbox: "pullRequests.inbox",
@@ -445,6 +448,9 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(WS_METHODS.gitResolvePullRequest, GitPullRequestRefInput),
   tagRequestBody(WS_METHODS.gitPullRequestSnapshot, GitPullRequestSnapshotInput),
   tagRequestBody(WS_METHODS.gitPreparePullRequestThread, GitPreparePullRequestThreadInput),
+
+  tagRequestBody(WS_METHODS.issuesList, IssuesListInput),
+  tagRequestBody(WS_METHODS.issuesView, IssuesViewInput),
 
   // Global pull requests
   tagRequestBody(WS_METHODS.pullRequestsList, PullRequestsListInput),

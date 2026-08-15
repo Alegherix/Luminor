@@ -28,7 +28,11 @@ import { runProcess } from "../../processRunner";
 import { GitHubCliError } from "../Errors.ts";
 import {
   GitHubCli,
+  ISSUE_LIST_JSON_FIELDS,
   PULL_REQUEST_SUMMARY_JSON_FIELDS,
+  type GitHubIssueComment,
+  type GitHubIssueListBatch,
+  type GitHubIssueListItem,
   type GitHubRepositoryCloneUrls,
   type GitHubCliShape,
   type GitHubPullRequestDetailData,
@@ -228,6 +232,20 @@ const RawIssueCommentSchema = Schema.Struct({
   updatedAt: Schema.optional(Schema.NullOr(Schema.String)),
   url: Schema.optional(Schema.NullOr(Schema.String)),
   author: Schema.optional(Schema.NullOr(RawActorSchema)),
+});
+
+const RawIssueListItemSchema = Schema.Struct({
+  id: Schema.optional(Schema.NullOr(Schema.String)),
+  number: PositiveInt,
+  title: TrimmedNonEmptyString,
+  body: Schema.optional(Schema.NullOr(Schema.String)),
+  state: Schema.optional(Schema.NullOr(Schema.String)),
+  url: TrimmedNonEmptyString,
+  updatedAt: TrimmedNonEmptyString,
+  author: Schema.optional(Schema.NullOr(RawActorSchema)),
+  assignees: Schema.optional(Schema.NullOr(Schema.Array(RawActorSchema))),
+  labels: Schema.optional(Schema.NullOr(Schema.Array(RawLabelSchema))),
+  comments: Schema.optional(Schema.Union([Schema.Number, Schema.Array(RawIssueCommentSchema)])),
 });
 
 const RawCommitSchema = Schema.Struct({
@@ -826,6 +844,98 @@ function normalizePullRequestDetail(
 }
 
 const decodeRawPullRequestListItem = Schema.decodeUnknownSync(RawPullRequestListItemSchema);
+const decodeRawIssueListItem = Schema.decodeUnknownSync(RawIssueListItemSchema);
+
+function normalizeIssueState(raw: string | null | undefined): "open" | "closed" {
+  return raw?.trim().toLowerCase() === "closed" ? "closed" : "open";
+}
+
+function normalizeIssueComments(
+  raw: ReadonlyArray<Schema.Schema.Type<typeof RawIssueCommentSchema>> | null | undefined,
+): GitHubIssueComment[] {
+  return (raw ?? []).flatMap((comment, index) => {
+    const createdAt = comment.createdAt?.trim() || comment.updatedAt?.trim() || "";
+    const body = comment.body ?? "";
+    if (!createdAt && body.length === 0) return [];
+    return [
+      {
+        id: comment.id?.trim() || `comment-${index}-${createdAt || index}`,
+        author: comment.author?.login?.trim() || "unknown",
+        body,
+        createdAt: createdAt || "1970-01-01T00:00:00.000Z",
+      },
+    ];
+  });
+}
+
+function normalizeIssueListItem(
+  raw: Schema.Schema.Type<typeof RawIssueListItemSchema>,
+): GitHubIssueListItem {
+  const comments = Array.isArray(raw.comments) ? normalizeIssueComments(raw.comments) : [];
+  const commentCount =
+    typeof raw.comments === "number" ? Math.max(0, raw.comments) : comments.length;
+  return {
+    id: raw.id?.trim() || `issue-${raw.number}`,
+    number: raw.number,
+    title: raw.title,
+    body: raw.body ?? "",
+    url: raw.url,
+    state: normalizeIssueState(raw.state),
+    author: raw.author?.login?.trim() || "unknown",
+    assignee: raw.assignees?.find((actor) => actor.login?.trim())?.login?.trim() || null,
+    labels: (raw.labels ?? []).map((label) => label.name),
+    commentCount,
+    comments,
+    updatedAt: raw.updatedAt,
+  };
+}
+
+export function decodeRepositoryIssueListJson(
+  raw: string,
+): Effect.Effect<GitHubIssueListBatch, GitHubCliError> {
+  const trimmed = raw.trim();
+  if (!trimmed) return Effect.succeed({ entries: [], rawCount: 0 });
+  return decodeGitHubJson(
+    trimmed,
+    Schema.Array(Schema.Unknown),
+    "listRepositoryIssues",
+    "GitHub CLI returned invalid repository issue list JSON.",
+  ).pipe(
+    Effect.map((rawEntries) => ({
+      rawCount: rawEntries.length,
+      entries: rawEntries.flatMap((entry) => {
+        try {
+          return [normalizeIssueListItem(decodeRawIssueListItem(entry))];
+        } catch {
+          return [];
+        }
+      }),
+    })),
+  );
+}
+
+export function decodeRepositoryIssueJson(
+  raw: string,
+): Effect.Effect<GitHubIssueListItem, GitHubCliError> {
+  return decodeGitHubJson(
+    raw.trim(),
+    Schema.Unknown,
+    "getRepositoryIssue",
+    "GitHub CLI returned invalid issue JSON.",
+  ).pipe(
+    Effect.flatMap((entry) =>
+      Effect.try({
+        try: () => normalizeIssueListItem(decodeRawIssueListItem(entry)),
+        catch: () =>
+          new GitHubCliError({
+            operation: "getRepositoryIssue",
+            detail: "GitHub CLI returned an unrecognized issue shape.",
+            reason: "other",
+          }),
+      }),
+    ),
+  );
+}
 
 export function decodeRepositoryPullRequestListJson(
   raw: string,
@@ -1095,6 +1205,8 @@ function decodeGitHubJson<S extends Schema.Top>(
     | "getPullRequestReviewComments"
     | "getPullRequestStack"
     | "listRepositoryPullRequests"
+    | "listRepositoryIssues"
+    | "getRepositoryIssue"
     | "getPullRequestDetail"
     | "getPullRequestListItem"
     | "listReviewRequestedPullRequestNumbers"
@@ -1104,7 +1216,9 @@ function decodeGitHubJson<S extends Schema.Top>(
     | "getPullRequestInboxComment",
   invalidDetail: string,
 ): Effect.Effect<S["Type"], GitHubCliError, S["DecodingServices"]> {
-  return Schema.decodeEffect(Schema.fromJsonString(schema))(raw).pipe(
+  return Schema.decodeEffect(Schema.fromJsonString(schema))(
+    raw.replace(/\u001B\[[0-9;]*m/g, ""),
+  ).pipe(
     Effect.mapError(
       (error) =>
         new GitHubCliError({
@@ -1161,7 +1275,15 @@ const makeGitHubCli = Effect.sync(() => {
           signal,
           // Repository discovery accepts GitHub.com remotes only. Pin the CLI host as well so a
           // caller-level GH_HOST override cannot redirect commands that lack a --hostname flag.
-          env: { ...process.env, ...input.env, GH_HOST: GITHUB_HOST },
+          env: {
+            ...process.env,
+            ...input.env,
+            GH_HOST: GITHUB_HOST,
+            NO_COLOR: "1",
+            FORCE_COLOR: "0",
+            CLICOLOR: "0",
+            CLICOLOR_FORCE: "0",
+          },
           ...(input.maxBufferBytes !== undefined ? { maxBufferBytes: input.maxBufferBytes } : {}),
           ...(input.outputMode !== undefined ? { outputMode: input.outputMode } : {}),
           ...(input.allowNonZeroExit !== undefined
@@ -1599,6 +1721,43 @@ const makeGitHubCli = Effect.sync(() => {
         ),
       );
     },
+    listRepositoryIssues: (input) =>
+      validateRepository(input.repository, "listRepositoryIssues").pipe(
+        Effect.flatMap((repository) =>
+          execute({
+            cwd: input.cwd,
+            args: [
+              "issue",
+              "list",
+              "--repo",
+              repositorySelector(repository),
+              "--state",
+              input.state,
+              "--limit",
+              String(input.limit ?? 50),
+              "--json",
+              ISSUE_LIST_JSON_FIELDS,
+            ],
+          }).pipe(Effect.flatMap((result) => decodeRepositoryIssueListJson(result.stdout))),
+        ),
+      ),
+    getRepositoryIssue: (input) =>
+      validateRepository(input.repository, "getRepositoryIssue").pipe(
+        Effect.flatMap((repository) =>
+          execute({
+            cwd: input.cwd,
+            args: [
+              "issue",
+              "view",
+              String(input.number),
+              "--repo",
+              repositorySelector(repository),
+              "--json",
+              ISSUE_LIST_JSON_FIELDS,
+            ],
+          }).pipe(Effect.flatMap((result) => decodeRepositoryIssueJson(result.stdout))),
+        ),
+      ),
     getPullRequestListItem: (input) =>
       validateRepository(input.repository, "getPullRequestListItem").pipe(
         Effect.flatMap((repository) =>

@@ -169,6 +169,7 @@ import {
   makeCursorSafeSnapshotLiveStream,
   makeResnapshotEscalationTracker,
 } from "./wsSnapshotLiveStream";
+import { IssuesService } from "./issues/Services/IssuesService";
 import { PullRequestService } from "./pullRequests/Services/PullRequestService";
 import { resolveGitHubRepository } from "./pullRequests/repositoryResolution";
 import {
@@ -373,6 +374,7 @@ const makeWsRpcHandlersLayer = () =>
       const orchestrationEngine = yield* OrchestrationEngineService;
       const providerCommandReactor = yield* ProviderCommandReactor;
       const path = yield* Path.Path;
+      const issues = yield* IssuesService;
       const pullRequests = yield* PullRequestService;
       const profileStatsQuery = yield* ProfileStatsQuery;
       const projectionReadModelQuery = yield* ProjectionSnapshotQuery;
@@ -1477,6 +1479,10 @@ const makeWsRpcHandlersLayer = () =>
             refreshGitStatusAfter(input.cwd, gitManager.preparePullRequestThread(input)),
             "Failed to prepare pull request thread",
           ),
+        [WS_METHODS.issuesList]: (input) =>
+          rpcEffect(issues.list(input), "Failed to list GitHub issues"),
+        [WS_METHODS.issuesView]: (input) =>
+          rpcEffect(issues.view(input), "Failed to load GitHub issue"),
         [WS_METHODS.pullRequestsList]: (input) =>
           pullRequestsEffect(pullRequests.list(input), "Failed to list pull requests"),
         [WS_METHODS.pullRequestsReviewRequestCount]: (input) =>

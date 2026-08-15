@@ -2,6 +2,7 @@
 // Purpose: Triage inbox for GitHub issues — read one, Accept as a real Kanban draft.
 // Layer: Kanban prototype surface
 
+import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -21,6 +22,7 @@ import {
   useDesktopTopBarTrafficLightGutterClassName,
   useDesktopTopBarWindowControlsGutterClassName,
 } from "~/hooks/useDesktopTopBarGutter";
+import { issuesListQueryOptions, issuesViewQueryOptions } from "~/lib/issueQueryOptions";
 import { ArrowLeftIcon } from "~/lib/icons";
 import { cn } from "~/lib/utils";
 import { useStore } from "~/store";
@@ -28,7 +30,14 @@ import { useWorkspacePathsStore } from "~/workspacePathsStore";
 import { PrototypeIssueDetail } from "./PrototypeIssueDetail";
 import { PrototypeIssueFilterMenu } from "./PrototypeIssueFilterMenu";
 import { PrototypeIssueRow } from "./PrototypeIssueRow";
-import { collectPrototypeLabels, filterPrototypeIssues } from "./issue-sync.logic";
+import {
+  collectPrototypeLabels,
+  collectPrototypeRepos,
+  filterPrototypeIssues,
+  issuesListStateFromFilters,
+  prototypeCommentsFromIssueComments,
+  prototypeIssueFromListEntry,
+} from "./issue-sync.logic";
 import type { PrototypeIssue, PrototypeIssueFilters } from "./issue-sync.types";
 import {
   acceptIssueAsKanbanDraft,
@@ -36,7 +45,7 @@ import {
   readHiddenIssueIds,
   resetSkippedIssues,
 } from "./prototype-api";
-import { EMPTY_PROTOTYPE_ISSUE_FILTERS, PROTOTYPE_ISSUES, PROTOTYPE_REPOS } from "./scenarios";
+import { EMPTY_PROTOTYPE_ISSUE_FILTERS } from "./scenarios";
 
 export function IssueSyncPrototype() {
   const navigate = useNavigate();
@@ -53,15 +62,41 @@ export function IssueSyncPrototype() {
   const [hiddenIds, setHiddenIds] = useState<string[]>(() => readHiddenIssueIds());
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const labels = useMemo(() => collectPrototypeLabels(PROTOTYPE_ISSUES), []);
+  const listState = issuesListStateFromFilters(filters.states);
+  const listQuery = useQuery(issuesListQueryOptions(listState));
+  const loadedIssues = useMemo(
+    () => (listQuery.data?.entries ?? []).map((entry) => prototypeIssueFromListEntry(entry)),
+    [listQuery.data?.entries],
+  );
+  const labels = useMemo(() => collectPrototypeLabels(loadedIssues), [loadedIssues]);
+  const repos = useMemo(() => collectPrototypeRepos(loadedIssues), [loadedIssues]);
   const inboxIssues = useMemo(
-    () => filterPrototypeIssues(PROTOTYPE_ISSUES, filters, new Set(hiddenIds)),
-    [filters, hiddenIds],
+    () => filterPrototypeIssues(loadedIssues, filters, new Set(hiddenIds)),
+    [filters, hiddenIds, loadedIssues],
   );
   const selectedIssue = useMemo(
     () => inboxIssues.find((issue) => issue.id === selectedId) ?? inboxIssues[0] ?? null,
     [inboxIssues, selectedId],
   );
+  const viewQuery = useQuery(
+    issuesViewQueryOptions(
+      selectedIssue ? { repository: selectedIssue.repoId, number: selectedIssue.number } : null,
+    ),
+  );
+  const selectedIssueWithComments = useMemo(() => {
+    if (!selectedIssue) return null;
+    if (!viewQuery.data) return selectedIssue;
+    return prototypeIssueFromListEntry(
+      viewQuery.data.entry,
+      prototypeCommentsFromIssueComments(viewQuery.data.comments),
+    );
+  }, [selectedIssue, viewQuery.data]);
+  const listError =
+    listQuery.error instanceof Error
+      ? listQuery.error.message
+      : listQuery.error
+        ? "Failed to load GitHub issues."
+        : null;
 
   const handleAccept = (issue: PrototypeIssue) => {
     const result = acceptIssueAsKanbanDraft({
@@ -129,7 +164,7 @@ export function IssueSyncPrototype() {
               <PrototypeIssueFilterMenu
                 filters={filters}
                 onChange={setFilters}
-                repos={PROTOTYPE_REPOS}
+                repos={repos}
                 labels={labels}
               />
               <div className="min-w-40 max-w-64 flex-1">
@@ -159,16 +194,25 @@ export function IssueSyncPrototype() {
                   />
                 </li>
               ))}
-              {inboxIssues.length === 0 ? (
+              {listQuery.isPending ? (
+                <li className="list-none px-3 py-8 text-center text-xs text-muted-foreground/60">
+                  Loading GitHub issues…
+                </li>
+              ) : listError ? (
+                <li className="list-none rounded-lg border border-dashed border-destructive/40 px-3 py-8 text-center text-xs text-destructive/80">
+                  {listError}
+                </li>
+              ) : inboxIssues.length === 0 ? (
                 <li className="list-none rounded-lg border border-dashed border-border/60 px-3 py-8 text-center text-xs text-muted-foreground/60">
-                  Inbox zero. Accepted issues are Drafts on the Kanban board.
+                  {listQuery.data?.errors[0]?.message ??
+                    "Inbox zero. Accepted issues are Drafts on the Kanban board."}
                 </li>
               ) : null}
             </ul>
           </aside>
           <div className="min-h-0 min-w-0 flex-1">
             <PrototypeIssueDetail
-              issue={selectedIssue}
+              issue={selectedIssueWithComments}
               onAccept={handleAccept}
               onSkip={handleSkip}
             />
