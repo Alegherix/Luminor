@@ -20,7 +20,7 @@ import {
 import { useNowMs } from "~/hooks/useNowMs";
 import { useThreadPullRequests } from "~/hooks/useThreadPullRequests";
 import { splitShortcutLabel } from "~/keybindings";
-import { ArrowLeftIcon, PlusIcon } from "~/lib/icons";
+import { ArrowLeftIcon, GitHubIcon, PlusIcon } from "~/lib/icons";
 import { cn, isMacNavigatorPlatform } from "~/lib/utils";
 
 // Kanban-scoped "Create task" shortcut: ⌘⌥T on macOS, Ctrl+Alt+T elsewhere —
@@ -222,6 +222,17 @@ export default function KanbanView({ projectId }: { projectId: string | null }) 
                   name: project.projectName,
                 }))}
               />
+              <Button
+                size="xs"
+                variant="chrome-outline"
+                className="gap-1"
+                onClick={() => {
+                  void navigate({ to: "/kanban", search: { prototype: "issues" } });
+                }}
+              >
+                <GitHubIcon className="size-3.5" />
+                Issues
+              </Button>
               <Tooltip>
                 <TooltipTrigger
                   render={
