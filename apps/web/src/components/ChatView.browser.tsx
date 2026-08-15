@@ -71,6 +71,11 @@ import { resetWsNativeApiForTest } from "../wsNativeApi";
 // The router's auto-split route otherwise requests this module on first mount.
 import "./ChatView";
 import { estimateTimelineMessageHeight } from "./timelineHeight";
+import {
+  DISCLOSURE_CLEANUP_BUFFER_MS,
+  DISCLOSURE_TRANSITION_MS,
+} from "~/lib/disclosureMotion";
+import { COMPOSER_OVERLAY_TUCK_PX } from "./chat/composerOverlay";
 
 const THREAD_ID = "thread-browser-test" as ThreadId;
 const OTHER_THREAD_ID = "thread-browser-test-other" as ThreadId;
@@ -7903,7 +7908,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
         const taskListCard = document.querySelector<HTMLElement>(
           '[data-testid="active-task-list-card"]',
         );
-        const stackedPanels = taskListCard?.parentElement ?? null;
+        const stackedPanels = document.querySelector<HTMLElement>(
+          "[data-composer-stacked-panels]",
+        );
 
         expect(
           finalTranscriptRow,
@@ -7960,9 +7967,15 @@ describe("ChatView timeline estimator parity (full app)", () => {
           document.querySelector<HTMLButtonElement>('button[aria-label="Expand task banner"]'),
         ).not.toBeNull();
       });
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, DISCLOSURE_TRANSITION_MS + DISCLOSURE_CLEANUP_BUFFER_MS);
+      });
+      await waitForLayout();
       const collapsed = await waitForBoundedGap("collapsed");
       expect(collapsed.taskCardHeightPx).toBeLessThan(expanded.taskCardHeightPx - 20);
-      expect(Math.abs(collapsed.gapPx - expanded.gapPx)).toBeLessThanOrEqual(8);
+      expect(Math.abs(collapsed.gapPx - expanded.gapPx)).toBeLessThanOrEqual(
+        COMPOSER_OVERLAY_TUCK_PX + 16,
+      );
 
       const expandButton = await waitForElement(
         () => document.querySelector<HTMLButtonElement>('button[aria-label="Expand task banner"]'),
@@ -7974,9 +7987,15 @@ describe("ChatView timeline estimator parity (full app)", () => {
           document.querySelector<HTMLButtonElement>('button[aria-label="Collapse task banner"]'),
         ).not.toBeNull();
       });
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, DISCLOSURE_TRANSITION_MS + DISCLOSURE_CLEANUP_BUFFER_MS);
+      });
+      await waitForLayout();
       const reexpanded = await waitForBoundedGap("re-expanded");
       expect(reexpanded.taskCardHeightPx).toBeGreaterThan(collapsed.taskCardHeightPx + 20);
-      expect(Math.abs(reexpanded.gapPx - expanded.gapPx)).toBeLessThanOrEqual(8);
+      expect(Math.abs(reexpanded.gapPx - expanded.gapPx)).toBeLessThanOrEqual(
+        COMPOSER_OVERLAY_TUCK_PX + 16,
+      );
 
       const finalCollapseButton = await waitForElement(
         () =>

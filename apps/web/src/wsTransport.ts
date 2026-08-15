@@ -1947,10 +1947,9 @@ export class WsTransport {
       await runtime.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
-            const value = yield* (response as Effect.Effect<
-              | GitCreateDetachedWorktreeResult
-              | Queue.Dequeue<GitWorktreeSetupProgressEvent>
-            >);
+            const value = yield* response as Effect.Effect<
+              GitCreateDetachedWorktreeResult | Queue.Dequeue<GitWorktreeSetupProgressEvent>
+            >;
             if (Queue.isQueue(value)) {
               yield* Stream.runForEach(Stream.fromQueue(value), (event) =>
                 Effect.sync(() => {

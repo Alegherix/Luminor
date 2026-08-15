@@ -90,7 +90,9 @@ function ArchivedThreadGroup(props: {
         onClick={props.onToggle}
       >
         <DisclosureChevron open={props.open} />
-        <span className={cn(SETTINGS_SECTION_LABEL_CLASS_NAME, "min-w-0 flex-1 truncate px-0 py-0")}>
+        <span
+          className={cn(SETTINGS_SECTION_LABEL_CLASS_NAME, "min-w-0 flex-1 truncate px-0 py-0")}
+        >
           {props.title}
         </span>
         <span
@@ -453,9 +455,7 @@ export function ArchivedSettingsPanel({ active }: { readonly active: boolean }) 
     [removeDeletedThreadFromClientState, threadShells],
   );
 
-  const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(() => new Set());
 
   const toggleGroup = useCallback((groupId: string) => {
     setCollapsedGroupIds((current) => {

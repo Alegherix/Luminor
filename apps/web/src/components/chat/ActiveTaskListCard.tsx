@@ -15,6 +15,7 @@ import type { ActiveTaskListState } from "../../session-logic";
 import { BotIcon, CheckIcon, LoaderIcon } from "~/lib/icons";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
+import { DisclosureRegion } from "../ui/DisclosureRegion";
 import {
   ComposerStackedPanelHeaderRow,
   ComposerStackedPanelRowLabel,
@@ -105,66 +106,64 @@ export function ActiveTaskListCard({
         </div>
       </ComposerStackedPanelHeaderRow>
 
-      {compact ? null : (
-        <>
-          <ol
+      <DisclosureRegion open={!compact}>
+        <ol
+          className={cn(
+            "space-y-0",
+            COMPOSER_STACKED_PANEL_BODY_PADDING_CLASS_NAME,
+            COMPOSER_STACKED_PANEL_SCROLL_REGION_CLASS_NAME,
+          )}
+        >
+          {activeTaskList.tasks.map((task, index) => {
+            const occurrence = (taskOccurrenceCount.get(task.task) ?? 0) + 1;
+            taskOccurrenceCount.set(task.task, occurrence);
+
+            return (
+              <li key={`${task.task}:${occurrence}`} className="flex items-start gap-2 py-1">
+                <div
+                  className={cn(
+                    "mt-[3px] flex min-w-0 shrink-0 items-center gap-1.5 text-[12px]",
+                    task.status === "completed"
+                      ? "text-muted-foreground/45"
+                      : task.status === "inProgress"
+                        ? "text-foreground/80"
+                        : "text-muted-foreground/60",
+                  )}
+                >
+                  <span className="flex size-3.5 items-center justify-center">
+                    {taskStatusIcon(task.status)}
+                  </span>
+                  <span className="tabular-nums">{index + 1}.</span>
+                </div>
+                <p
+                  className={cn(
+                    "min-w-0 flex-1 text-[13px] leading-5 text-foreground/85",
+                    task.status === "completed" && "text-muted-foreground/50 line-through",
+                  )}
+                >
+                  {task.task}
+                </p>
+              </li>
+            );
+          })}
+        </ol>
+
+        {backgroundTaskCount > 0 ? (
+          <div
             className={cn(
-              "space-y-0",
-              COMPOSER_STACKED_PANEL_BODY_PADDING_CLASS_NAME,
-              COMPOSER_STACKED_PANEL_SCROLL_REGION_CLASS_NAME,
+              COMPOSER_STACKED_PANEL_FOOTER_ROW_CLASS_NAME,
+              COMPOSER_STACKED_PANEL_DIVIDER_CLASS_NAME,
             )}
           >
-            {activeTaskList.tasks.map((task, index) => {
-              const occurrence = (taskOccurrenceCount.get(task.task) ?? 0) + 1;
-              taskOccurrenceCount.set(task.task, occurrence);
-
-              return (
-                <li key={`${task.task}:${occurrence}`} className="flex items-start gap-2 py-1">
-                  <div
-                    className={cn(
-                      "mt-[3px] flex min-w-0 shrink-0 items-center gap-1.5 text-[12px]",
-                      task.status === "completed"
-                        ? "text-muted-foreground/45"
-                        : task.status === "inProgress"
-                          ? "text-foreground/80"
-                          : "text-muted-foreground/60",
-                    )}
-                  >
-                    <span className="flex size-3.5 items-center justify-center">
-                      {taskStatusIcon(task.status)}
-                    </span>
-                    <span className="tabular-nums">{index + 1}.</span>
-                  </div>
-                  <p
-                    className={cn(
-                      "min-w-0 flex-1 text-[13px] leading-5 text-foreground/85",
-                      task.status === "completed" && "text-muted-foreground/50 line-through",
-                    )}
-                  >
-                    {task.task}
-                  </p>
-                </li>
-              );
-            })}
-          </ol>
-
-          {backgroundTaskCount > 0 ? (
-            <div
-              className={cn(
-                COMPOSER_STACKED_PANEL_FOOTER_ROW_CLASS_NAME,
-                COMPOSER_STACKED_PANEL_DIVIDER_CLASS_NAME,
-              )}
-            >
-              <div className="flex min-w-0 items-center gap-1.5">
-                <BotIcon className="size-3 shrink-0" />
-                <span className="truncate">
-                  {backgroundTaskCount} background {pluralize(backgroundTaskCount, "agent")}
-                </span>
-              </div>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <BotIcon className="size-3 shrink-0" />
+              <span className="truncate">
+                {backgroundTaskCount} background {pluralize(backgroundTaskCount, "agent")}
+              </span>
             </div>
-          ) : null}
-        </>
-      )}
+          </div>
+        ) : null}
+      </DisclosureRegion>
     </>
   );
 }

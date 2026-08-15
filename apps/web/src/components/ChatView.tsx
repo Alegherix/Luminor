@@ -330,6 +330,7 @@ import { ComposerLiveChangesHeader } from "./chat/ComposerLiveChangesHeader";
 import { ComposerGoalHeader } from "./chat/ComposerGoalHeader";
 import { ComposerPickerMenuPopup } from "./chat/ComposerPickerMenuPopup";
 import { Button } from "./ui/button";
+import { PresenceDisclosure } from "./ui/DisclosureRegion";
 import { Skeleton } from "./ui/skeleton";
 import { Menu, MenuItem, MenuTrigger } from "./ui/menu";
 import { randomTerminalId } from "./terminal/terminalIds";
@@ -11384,10 +11385,8 @@ export default function ChatView({
           data-chat-pane-scope={paneScopeId}
         >
           <ComposerColumnFrame>
-            {/* A bare wrapper keeps the normal-flow panels' -mb-px seam onto the input shell
-                via margin collapse. */}
-            <div>
-              {showComposerLiveChangesHeader ? (
+            <div data-composer-stacked-panels="true">
+              <PresenceDisclosure open={showComposerLiveChangesHeader} className="-mb-px">
                 <ComposerLiveChangesHeader
                   fileCount={activeTurnLiveDiffState.fileCount}
                   additions={activeTurnLiveDiffState.additions}
@@ -11396,25 +11395,32 @@ export default function ChatView({
                     activeTurnLiveDiffState.turnId ? onReviewComposerLiveChanges : undefined
                   }
                 />
-              ) : null}
-              {renderActiveTaskListCard(showComposerLiveChangesHeader)}
-              {workflowRunState ? (
-                <WorkflowRunCard
-                  workflowRun={workflowRunState}
-                  nowMs={workflowNowMs}
-                  compact={workflowRunCardCompact}
-                  onCompactChange={setWorkflowRunCardCompact}
-                  onOpenThread={onNavigateToThread}
-                  onStop={onStopWorkflowRun}
-                  onPause={onPauseWorkflowRun}
-                  onResume={onResumeWorkflowRun}
-                  onDismiss={onDismissWorkflowRun}
-                  attachedToPrevious={
-                    showComposerLiveChangesHeader || showComposerActiveTaskListCard
-                  }
-                />
-              ) : null}
-              {showComposerSubagentStrip ? (
+              </PresenceDisclosure>
+              <PresenceDisclosure
+                open={Boolean(activeTaskList && showComposerActiveTaskListCard)}
+                className="-mb-px"
+              >
+                {renderActiveTaskListCard(showComposerLiveChangesHeader)}
+              </PresenceDisclosure>
+              <PresenceDisclosure open={showComposerWorkflowRunCard} className="-mb-px">
+                {workflowRunState ? (
+                  <WorkflowRunCard
+                    workflowRun={workflowRunState}
+                    nowMs={workflowNowMs}
+                    compact={workflowRunCardCompact}
+                    onCompactChange={setWorkflowRunCardCompact}
+                    onOpenThread={onNavigateToThread}
+                    onStop={onStopWorkflowRun}
+                    onPause={onPauseWorkflowRun}
+                    onResume={onResumeWorkflowRun}
+                    onDismiss={onDismissWorkflowRun}
+                    attachedToPrevious={
+                      showComposerLiveChangesHeader || showComposerActiveTaskListCard
+                    }
+                  />
+                ) : null}
+              </PresenceDisclosure>
+              <PresenceDisclosure open={showComposerSubagentStrip} className="-mb-px">
                 <ComposerSubagentStrip
                   items={composerSubagentStripItems}
                   compact={subagentStripCompact}
@@ -11429,77 +11435,89 @@ export default function ChatView({
                     showComposerWorkflowRunCard
                   }
                 />
-              ) : null}
-              <ComposerQueuedHeader
-                queuedTurns={queuedComposerTurns}
-                onSteer={onSteerQueuedComposerTurn}
-                onRemove={removeQueuedComposerTurn}
-                onEdit={onEditQueuedComposerTurn}
-                cwd={threadWorkspaceCwd ?? undefined}
-                attachedToPrevious={
-                  showComposerLiveChangesHeader ||
-                  showComposerActiveTaskListCard ||
-                  showComposerWorkflowRunCard ||
-                  showComposerSubagentStrip
-                }
-              />
-              {showComposerGoalHeader && activeThread ? (
-                <ComposerGoalHeader
-                  goal={activeThreadGoalText}
-                  goalStartedAt={activeThread.goalStartedAt}
-                  goalPausedAt={activeThread.goalPausedAt}
-                  canPause={isServerThread}
-                  onEdit={editThreadGoalInComposer}
-                  onSetPaused={async (paused) => {
-                    await setThreadGoalPaused(paused);
-                  }}
-                  onClear={clearThreadGoal}
+              </PresenceDisclosure>
+              <PresenceDisclosure open={queuedComposerTurns.length > 0} className="-mb-px">
+                <ComposerQueuedHeader
+                  queuedTurns={queuedComposerTurns}
+                  onSteer={onSteerQueuedComposerTurn}
+                  onRemove={removeQueuedComposerTurn}
+                  onEdit={onEditQueuedComposerTurn}
+                  cwd={threadWorkspaceCwd ?? undefined}
                   attachedToPrevious={
                     showComposerLiveChangesHeader ||
                     showComposerActiveTaskListCard ||
                     showComposerWorkflowRunCard ||
-                    showComposerSubagentStrip ||
-                    queuedComposerTurns.length > 0
+                    showComposerSubagentStrip
                   }
                 />
-              ) : null}
-              {settledThreadBranchMismatch ? (
-                <div className="pb-2">
-                  <ComposerBranchMismatchBanner {...settledThreadBranchMismatch} />
-                </div>
-              ) : null}
-              {/* Pending approvals and AskUserQuestion prompts both render as a detached
-                  card floating just above the composer (padding gives the measured gap),
-                  instead of a banner fused into the composer surface. An approval takes
-                  precedence and suppresses the question card while one is active. */}
-              {activePendingApproval ? (
-                <div className="pb-2">
-                  <ComposerPendingApprovalPanel
-                    approval={activePendingApproval}
-                    pendingCount={pendingApprovals.length}
-                    isResponding={respondingRequestKeys.includes(
-                      pendingRequestInstanceKey(
-                        activePendingApproval.requestId,
-                        activePendingApproval.lifecycleGeneration,
-                      ),
-                    )}
-                    onRespond={onRespondToApproval}
+              </PresenceDisclosure>
+              <PresenceDisclosure
+                open={Boolean(showComposerGoalHeader && activeThread)}
+                className="-mb-px"
+              >
+                {activeThread ? (
+                  <ComposerGoalHeader
+                    goal={activeThreadGoalText}
+                    goalStartedAt={activeThread.goalStartedAt}
+                    goalPausedAt={activeThread.goalPausedAt}
+                    canPause={isServerThread}
+                    onEdit={editThreadGoalInComposer}
+                    onSetPaused={async (paused) => {
+                      await setThreadGoalPaused(paused);
+                    }}
+                    onClear={clearThreadGoal}
+                    attachedToPrevious={
+                      showComposerLiveChangesHeader ||
+                      showComposerActiveTaskListCard ||
+                      showComposerWorkflowRunCard ||
+                      showComposerSubagentStrip ||
+                      queuedComposerTurns.length > 0
+                    }
                   />
-                </div>
-              ) : pendingUserInputs.length > 0 ? (
-                <div className="pb-2">
-                  <ComposerPendingUserInputPanel
-                    pendingUserInputs={pendingUserInputs}
-                    isResponding={activePendingIsResponding}
-                    answers={activePendingDraftAnswers}
-                    questionIndex={activePendingQuestionIndex}
-                    onToggleOption={onToggleActivePendingUserInputOption}
-                    onAdvance={onAdvanceActivePendingUserInput}
-                    onPrevious={onPreviousActivePendingUserInputQuestion}
-                    onCancel={onCancelActivePendingUserInput}
-                  />
-                </div>
-              ) : null}
+                ) : null}
+              </PresenceDisclosure>
+              <PresenceDisclosure open={Boolean(settledThreadBranchMismatch)}>
+                {settledThreadBranchMismatch ? (
+                  <div className="pb-2">
+                    <ComposerBranchMismatchBanner {...settledThreadBranchMismatch} />
+                  </div>
+                ) : null}
+              </PresenceDisclosure>
+              <PresenceDisclosure open={Boolean(activePendingApproval)}>
+                {activePendingApproval ? (
+                  <div className="pb-2">
+                    <ComposerPendingApprovalPanel
+                      approval={activePendingApproval}
+                      pendingCount={pendingApprovals.length}
+                      isResponding={respondingRequestKeys.includes(
+                        pendingRequestInstanceKey(
+                          activePendingApproval.requestId,
+                          activePendingApproval.lifecycleGeneration,
+                        ),
+                      )}
+                      onRespond={onRespondToApproval}
+                    />
+                  </div>
+                ) : null}
+              </PresenceDisclosure>
+              <PresenceDisclosure
+                open={!activePendingApproval && pendingUserInputs.length > 0}
+              >
+                {pendingUserInputs.length > 0 ? (
+                  <div className="pb-2">
+                    <ComposerPendingUserInputPanel
+                      pendingUserInputs={pendingUserInputs}
+                      isResponding={activePendingIsResponding}
+                      answers={activePendingDraftAnswers}
+                      questionIndex={activePendingQuestionIndex}
+                      onToggleOption={onToggleActivePendingUserInputOption}
+                      onAdvance={onAdvanceActivePendingUserInput}
+                      onPrevious={onPreviousActivePendingUserInputQuestion}
+                      onCancel={onCancelActivePendingUserInput}
+                    />
+                  </div>
+                ) : null}
+              </PresenceDisclosure>
             </div>
             <div
               className={cn(
