@@ -3,9 +3,28 @@ import type { DesktopBridge, ModelSelection } from "@luminor/contracts";
 import { readPersistedDefaultProvider } from "../appSettings";
 import { readNativeApi } from "../nativeApi";
 import { useStore } from "../store";
+import { desktopMeetingsNotesPersist } from "./desktopMeetingsNotes";
 import { createMeetingsSummaryHost, type MeetingsSummaryPersist } from "./meetingsSummary";
 import { resolveNewThreadDefaultModelSelection } from "./meetingsSummaryModel";
 import type { MeetingsSummaryHost } from "./meetingsWorkspace";
+
+const MEETING_SUMMARY_CONTEXT_MAX_CHARS = 200_000;
+
+export function buildMeetingSummaryContext(input: {
+  readonly transcriptText: string;
+  readonly notesText?: string;
+}): string {
+  const notes = input.notesText?.trim() ?? "";
+  if (notes.length === 0) {
+    return input.transcriptText.slice(0, MEETING_SUMMARY_CONTEXT_MAX_CHARS);
+  }
+  const notesSection = `\n\n## Meeting notes\n\n${notes}`;
+  const transcriptLimit = Math.max(0, MEETING_SUMMARY_CONTEXT_MAX_CHARS - notesSection.length);
+  return `${input.transcriptText.slice(0, transcriptLimit)}${notesSection}`.slice(
+    0,
+    MEETING_SUMMARY_CONTEXT_MAX_CHARS,
+  );
+}
 
 function desktopMeetings() {
   const desktopBridge = (globalThis as typeof globalThis & { desktopBridge?: DesktopBridge })
@@ -46,7 +65,7 @@ const desktopPersist: MeetingsSummaryPersist = {
 export function createDesktopMeetingsSummaryHost(): MeetingsSummaryHost {
   return createMeetingsSummaryHost({
     resolveModelSelection: resolveSummaryModelSelection,
-    generate: async ({ title, transcriptText, modelSelection }) => {
+    generate: async ({ title, transcriptText, notesText, modelSelection }) => {
       const api = readNativeApi();
       if (!api) {
         throw new Error("Luminor is not connected.");
@@ -54,11 +73,12 @@ export function createDesktopMeetingsSummaryHost(): MeetingsSummaryHost {
       const result = await api.server.generateMeetingSummary({
         cwd: resolveSummaryCwd(),
         title: title.trim() || "Meeting",
-        transcript: transcriptText.slice(0, 200_000),
+        transcript: buildMeetingSummaryContext({ transcriptText, notesText }),
         textGenerationModelSelection: modelSelection,
       });
       return result.summary;
     },
     persist: desktopPersist,
+    notesPersist: desktopMeetingsNotesPersist,
   });
 }
