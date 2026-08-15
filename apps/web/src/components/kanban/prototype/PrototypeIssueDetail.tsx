@@ -32,19 +32,18 @@ export function PrototypeIssueDetail({
 }) {
   if (!issue) {
     return (
-      <aside className="flex h-full min-h-0 w-[26rem] shrink-0 flex-col border-l border-border/60 px-4 py-4">
+      <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col px-6 py-4">
         <p className="text-[13px] font-medium text-foreground/90">Issue</p>
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground/75">
-          Click an inbox row to read it. Accept parks it on the board as a Draft. GitHub is
-          unchanged, and nothing starts working.
+          Click an inbox row to read the issue and its comments.
         </p>
       </aside>
     );
   }
 
   return (
-    <aside className="flex h-full min-h-0 w-[26rem] shrink-0 flex-col border-l border-border/60">
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
+    <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4">
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/75">
           <IssueGlyph state={issue.state} />
           <span>
@@ -99,27 +98,13 @@ export function PrototypeIssueDetail({
             ))}
           </div>
         ) : null}
-        <div
-          className={cn(
-            "mt-5 rounded-lg px-3 py-2.5",
-            RAISED_SURFACE_CHROME_CLASS_NAME,
-            "dark:border dark:border-white/[0.05]",
-          )}
-        >
-          <p className="text-[13px] font-medium text-foreground/90">Accept as draft</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground/75">
-            Creates a Kanban card in Draft, still linked to this GitHub issue. Does not start a
-            thread, does not change GitHub, and does not move it to In Progress. You send it later
-            like any other draft.
-          </p>
-        </div>
       </div>
       <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border/60 px-4 py-3">
         <Button size="sm" variant="ghost" onClick={() => onSkip(issue)}>
           Skip
         </Button>
         <Button size="sm" onClick={() => onAccept(issue)}>
-          Accept as draft
+          Accept
         </Button>
       </div>
     </aside>

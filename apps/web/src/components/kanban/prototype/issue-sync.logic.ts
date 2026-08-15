@@ -129,6 +129,15 @@ export const PROTOTYPE_ISSUE_STATES: readonly PrototypeIssueState[] = ["open", "
 
 export const PROTOTYPE_ISSUE_KINDS: readonly PrototypeIssueKind[] = ["bug", "enhancement", "docs"];
 
+export function buildIssueDraftPrompt(issue: PrototypeIssue): string {
+  const title = issue.title.trim();
+  const body = issue.body.trim();
+  if (body.length === 0) {
+    return title;
+  }
+  return `${title}\n\n${body}`;
+}
+
 export function collectPrototypeLabels(issues: readonly PrototypeIssue[]): string[] {
   const kindSet = new Set<string>(PROTOTYPE_ISSUE_KINDS);
   return [...new Set(issues.flatMap((issue) => issue.labels))]

@@ -1,10 +1,11 @@
 // FILE: IssueSyncPrototype.tsx
-// Purpose: Triage inbox for GitHub issues — read one, Accept as a Kanban draft.
+// Purpose: Triage inbox for GitHub issues — read one, Accept as a real Kanban draft.
 // Layer: Kanban prototype surface
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
+import { useAppSettings } from "~/appSettings";
 import { SidebarHeaderNavigationControls } from "~/components/SidebarHeaderNavigationControls";
 import { RouteInsetSurface } from "~/components/RouteInsetSurface";
 import {
@@ -22,40 +23,40 @@ import {
 } from "~/hooks/useDesktopTopBarGutter";
 import { ArrowLeftIcon } from "~/lib/icons";
 import { cn } from "~/lib/utils";
-import { PrototypeBoard } from "./PrototypeBoard";
+import { useStore } from "~/store";
+import { useWorkspacePathsStore } from "~/workspacePathsStore";
 import { PrototypeIssueDetail } from "./PrototypeIssueDetail";
 import { PrototypeIssueFilterMenu } from "./PrototypeIssueFilterMenu";
 import { PrototypeIssueRow } from "./PrototypeIssueRow";
+import { collectPrototypeLabels, filterPrototypeIssues } from "./issue-sync.logic";
+import type { PrototypeIssue, PrototypeIssueFilters } from "./issue-sync.types";
 import {
-  addIssuesAsDrafts,
-  collectPrototypeLabels,
-  filterPrototypeIssues,
-  issueIdsOnBoard,
-} from "./issue-sync.logic";
-import type { PrototypeBoardCard, PrototypeIssue, PrototypeIssueFilters } from "./issue-sync.types";
-import {
-  EMPTY_PROTOTYPE_ISSUE_FILTERS,
-  PROTOTYPE_ISSUES,
-  PROTOTYPE_REPOS,
-  SEED_PROTOTYPE_BOARD_CARDS,
-} from "./scenarios";
+  acceptIssueAsKanbanDraft,
+  markIssueSkipped,
+  readHiddenIssueIds,
+  resetSkippedIssues,
+} from "./prototype-api";
+import { EMPTY_PROTOTYPE_ISSUE_FILTERS, PROTOTYPE_ISSUES, PROTOTYPE_REPOS } from "./scenarios";
 
 export function IssueSyncPrototype() {
   const navigate = useNavigate();
+  const { settings } = useAppSettings();
+  const projects = useStore((state) => state.projects);
+  const homeDir = useWorkspacePathsStore((state) => state.homeDir);
+  const chatWorkspaceRoot = useWorkspacePathsStore((state) => state.chatWorkspaceRoot);
+  const studioWorkspaceRoot = useWorkspacePathsStore((state) => state.studioWorkspaceRoot);
   const desktopTopBarTrafficLightGutterClassName = useDesktopTopBarTrafficLightGutterClassName();
   const desktopTopBarWindowControlsGutterClassName =
     useDesktopTopBarWindowControlsGutterClassName();
 
   const [filters, setFilters] = useState<PrototypeIssueFilters>(EMPTY_PROTOTYPE_ISSUE_FILTERS);
-  const [cards, setCards] = useState<PrototypeBoardCard[]>(() => [...SEED_PROTOTYPE_BOARD_CARDS]);
-  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  const [hiddenIds, setHiddenIds] = useState<string[]>(() => readHiddenIssueIds());
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const labels = useMemo(() => collectPrototypeLabels(PROTOTYPE_ISSUES), []);
-  const onBoardIds = useMemo(() => issueIdsOnBoard(cards), [cards]);
   const inboxIssues = useMemo(
-    () => filterPrototypeIssues(PROTOTYPE_ISSUES, filters, new Set([...hiddenIds, ...onBoardIds])),
-    [filters, hiddenIds, onBoardIds],
+    () => filterPrototypeIssues(PROTOTYPE_ISSUES, filters, new Set(hiddenIds)),
+    [filters, hiddenIds],
   );
   const selectedIssue = useMemo(
     () => inboxIssues.find((issue) => issue.id === selectedId) ?? inboxIssues[0] ?? null,
@@ -63,26 +64,30 @@ export function IssueSyncPrototype() {
   );
 
   const handleAccept = (issue: PrototypeIssue) => {
-    const remaining = inboxIssues.filter((candidate) => candidate.id !== issue.id);
-    setCards(addIssuesAsDrafts(cards, [issue], "accepted"));
-    setHiddenIds((current) => current.filter((id) => id !== issue.id));
-    setSelectedId(remaining[0]?.id ?? null);
-    toastManager.add({
-      type: "success",
-      title: "Parked in Draft",
-      description: `${issue.repo} #${issue.number} — still linked, not started.`,
+    const result = acceptIssueAsKanbanDraft({
+      issue,
+      projects,
+      defaultProvider: settings.defaultProvider,
+      workspacePaths: { homeDir, chatWorkspaceRoot, studioWorkspaceRoot },
     });
+    if (!result.ok) {
+      toastManager.add({ type: "error", title: result.reason });
+      return;
+    }
+    setHiddenIds(readHiddenIssueIds());
+    void navigate({ to: "/$threadId", params: { threadId: result.threadId } });
   };
 
   const handleSkip = (issue: PrototypeIssue) => {
     const remaining = inboxIssues.filter((candidate) => candidate.id !== issue.id);
-    setHiddenIds((current) => (current.includes(issue.id) ? current : [...current, issue.id]));
+    markIssueSkipped(issue.id);
+    setHiddenIds(readHiddenIssueIds());
     setSelectedId(remaining[0]?.id ?? null);
   };
 
   const handleReset = () => {
-    setCards([...SEED_PROTOTYPE_BOARD_CARDS]);
-    setHiddenIds([]);
+    resetSkippedIssues();
+    setHiddenIds(readHiddenIssueIds());
     setFilters(EMPTY_PROTOTYPE_ISSUE_FILTERS);
     setSelectedId(null);
   };
@@ -136,7 +141,7 @@ export function IssueSyncPrototype() {
                 />
               </div>
               <Button size="xs" variant="ghost" className="ml-auto" onClick={handleReset}>
-                Reset
+                Reset skips
               </Button>
             </div>
           </div>
@@ -156,20 +161,18 @@ export function IssueSyncPrototype() {
               ))}
               {inboxIssues.length === 0 ? (
                 <li className="list-none rounded-lg border border-dashed border-border/60 px-3 py-8 text-center text-xs text-muted-foreground/60">
-                  Inbox zero. Accepted issues are Drafts on the board.
+                  Inbox zero. Accepted issues are Drafts on the Kanban board.
                 </li>
               ) : null}
             </ul>
           </aside>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col pt-3">
-            <p className="px-4 pb-2 text-[11px] text-muted-foreground/70">
-              Columns are Kanban work states. GitHub stays a source on the card.
-            </p>
-            <div className="min-h-0 min-w-0 flex-1">
-              <PrototypeBoard cards={cards} />
-            </div>
+          <div className="min-h-0 min-w-0 flex-1">
+            <PrototypeIssueDetail
+              issue={selectedIssue}
+              onAccept={handleAccept}
+              onSkip={handleSkip}
+            />
           </div>
-          <PrototypeIssueDetail issue={selectedIssue} onAccept={handleAccept} onSkip={handleSkip} />
         </div>
       </div>
     </RouteInsetSurface>

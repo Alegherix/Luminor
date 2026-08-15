@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   addIssuesAsDrafts,
   applyAutopopulatedDrafts,
+  buildIssueDraftPrompt,
   countActivePrototypeIssueFilterGroups,
   filterPrototypeIssues,
   removeAutopopulatedDrafts,
@@ -155,6 +156,16 @@ describe("togglePrototypeFilterValue", () => {
   it("adds and removes a value", () => {
     expect(togglePrototypeFilterValue(["open"], "closed")).toEqual(["open", "closed"]);
     expect(togglePrototypeFilterValue(["open", "closed"], "open")).toEqual(["closed"]);
+  });
+});
+
+describe("buildIssueDraftPrompt", () => {
+  it("uses only the title and body", () => {
+    const prompt = buildIssueDraftPrompt(first);
+    expect(prompt.startsWith("Sync GitHub issues onto the Kanban board as drafts")).toBe(true);
+    expect(prompt).toContain("PRs already land on the board");
+    expect(prompt).not.toContain("#1842");
+    expect(prompt).not.toContain("nara:");
   });
 });
 
