@@ -44,6 +44,9 @@ describe("MeetingsTranscriptReader", () => {
 
     expect(html).toContain("Standup");
     expect(html).toContain("We shipped the join path.");
+    expect(html).toContain("Översikt");
+    expect(html).toContain("Transkription");
+    expect(html).toContain("Anteckningar");
     expect(html).toContain("overflow-y-auto");
     expect(html).not.toContain("Transcribe");
     expect(html).not.toContain("Öppna i chatt");
@@ -98,6 +101,7 @@ describe("MeetingsTranscriptReader", () => {
 
     expect(html).toContain("Standup");
     expect(html).toContain("We shipped the join path.");
+    expect(html).toContain("Sammanfattning");
     expect(html).toContain("Decision: ship the join path.");
     expect(html).toContain("Öppna i chatt");
     expect(html).not.toContain("Open in chat");
@@ -156,8 +160,7 @@ describe("MeetingsTranscriptReader", () => {
     expect(html).toContain("Anteckningar");
     expect(html).toContain("<textarea");
     expect(html).toContain("Inga anteckningar än");
-    expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain("grid-rows-[1fr]");
+    expect(html).toContain('aria-label="Mötesvyer"');
   });
 
   it("leaves out the notes section when no meeting is selected", () => {
@@ -170,7 +173,7 @@ describe("MeetingsTranscriptReader", () => {
       />,
     );
 
-    expect(html).not.toContain("Anteckningar");
+    expect(html).toContain("Anteckningar");
     expect(html).not.toContain("<textarea");
   });
 

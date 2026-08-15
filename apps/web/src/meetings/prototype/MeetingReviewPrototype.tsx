@@ -18,6 +18,7 @@ import {
 } from "~/lib/icons";
 import { cn } from "~/lib/utils";
 import { MeetingNotesEditor } from "../MeetingNotesEditor";
+import { MeetingsReviewTabs, type MeetingsReviewTab } from "../MeetingsReviewTabs";
 import { type MeetingsNotesStatus } from "../meetingsNotes";
 import { attendeeInitials } from "../meetingsSchedule";
 import { useMeetingNotes } from "../useMeetingNotes";
@@ -32,18 +33,14 @@ import {
   type PrototypeMeeting,
 } from "./scenarios";
 
-type MeetingDetailTab = "overview" | "transcript" | "notes";
+
 
 type RowFeedback = {
   readonly key: string;
   readonly kind: "copied" | "thread";
 };
 
-const TAB_LABELS: Record<MeetingDetailTab, string> = {
-  overview: "Översikt",
-  transcript: "Transkription",
-  notes: "Anteckningar",
-};
+
 
 const COLLAPSED_ACTION_POINT_COUNT = 6;
 const FEEDBACK_DURATION_MS = 1_600;
@@ -797,7 +794,7 @@ export function MeetingNotesTab({ meeting }: { readonly meeting: PrototypeMeetin
 }
 
 function MeetingReviewDetail({ meeting }: { readonly meeting: PrototypeMeeting }) {
-  const [tab, setTab] = useState<MeetingDetailTab>("overview");
+  const [tab, setTab] = useState<MeetingsReviewTab>("overview");
   const [highlightedTime, setHighlightedTime] = useState<string | null>(null);
 
   const jumpToMention = (time: string) => {
@@ -814,27 +811,7 @@ function MeetingReviewDetail({ meeting }: { readonly meeting: PrototypeMeeting }
         <MeetingHeaderMeta meeting={meeting} />
       </header>
 
-      <nav
-        className="flex items-center gap-1 border-b border-[color:var(--color-border)]"
-        aria-label="Mötesvyer"
-      >
-        {(Object.keys(TAB_LABELS) as MeetingDetailTab[]).map((key) => (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={tab === key}
-            onClick={() => setTab(key)}
-            className={cn(
-              "-mb-px border-b-2 px-3 py-2 text-sm transition-colors",
-              tab === key
-                ? "border-foreground font-medium text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {TAB_LABELS[key]}
-          </button>
-        ))}
-      </nav>
+      <MeetingsReviewTabs tab={tab} onTabChange={setTab} />
 
       {tab === "overview" ? (
         <MeetingOverviewTab meeting={meeting} onJumpToMention={jumpToMention} />
