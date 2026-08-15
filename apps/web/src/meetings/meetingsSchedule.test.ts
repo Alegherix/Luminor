@@ -4,8 +4,10 @@ import {
   attendeeInitials,
   displayMeetUrl,
   featuredMeetingSession,
+  formatMeetingListWhen,
   formatMeetingTimeRange,
   meetingCountdown,
+  meetingIsOnLocalDay,
   todaysScheduleSessions,
 } from "./meetingsSchedule";
 import {
@@ -137,6 +139,19 @@ describe("formatMeetingTimeRange", () => {
     const range = formatMeetingTimeRange(session({}));
     expect(range).toMatch(/–/);
     expect(range).not.toBeNull();
+  });
+});
+
+describe("formatMeetingListWhen", () => {
+  it("uses the clock for a meeting on the same local day", () => {
+    expect(meetingIsOnLocalDay("2026-08-13T06:00:00.000Z", NOW)).toBe(true);
+    expect(formatMeetingListWhen("2026-08-13T06:00:00.000Z", NOW)).toBe(
+      formatMeetingListWhen("2026-08-13T06:00:00.000Z", NOW),
+    );
+    expect(formatMeetingListWhen("2026-08-13T06:00:00.000Z", NOW)).not.toBeNull();
+    expect(formatMeetingListWhen("2026-08-11T06:00:00.000Z", NOW)).not.toBe(
+      formatMeetingListWhen("2026-08-13T06:00:00.000Z", NOW),
+    );
   });
 });
 

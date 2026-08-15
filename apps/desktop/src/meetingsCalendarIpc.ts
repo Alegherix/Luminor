@@ -1,6 +1,7 @@
 import { BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from "electron";
 
 import { createMeetingsCalendarService } from "./meetingsCalendar";
+import { listMeetingsHistory } from "./meetingsHistory";
 import { DESKTOP_IPC_CHANNELS } from "./ipcChannels";
 
 const PICK_CLIENT_JSON_OPTIONS: OpenDialogOptions = {
@@ -39,4 +40,6 @@ export function registerMeetingsCalendarIpc(input: {
   ipcMain.handle(IPC.connect, async () => service.connect());
   ipcMain.removeHandler(IPC.listToday);
   ipcMain.handle(IPC.listToday, async () => service.listToday());
+  ipcMain.removeHandler(IPC.listHistory);
+  ipcMain.handle(IPC.listHistory, async () => listMeetingsHistory({ homeDir: input.homeDir }));
 }

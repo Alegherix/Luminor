@@ -69,10 +69,10 @@ describe("MeetingsSidebarList", () => {
 
     expect(html).toContain("Live");
     expect(html).toContain("Today");
-    expect(html).toContain("Ended");
+    expect(html).toContain("Previous");
     expect(html).toContain("No live meeting");
     expect(html).toContain("No other meetings today");
-    expect(html).toContain("No ended meetings today");
+    expect(html).toContain("No previous meetings");
   });
 
   it("explains how to connect Google Calendar when signed out", () => {

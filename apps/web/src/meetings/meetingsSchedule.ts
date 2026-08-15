@@ -10,6 +10,13 @@ const MEETING_CLOCK_FORMAT = new Intl.DateTimeFormat(undefined, {
   minute: "2-digit",
 });
 
+const MEETING_DAY_CLOCK_FORMAT = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 
@@ -35,6 +42,30 @@ export function formatMeetingClock(value: string | null): string | null {
     return null;
   }
   return MEETING_CLOCK_FORMAT.format(new Date(parsed));
+}
+
+export function meetingIsOnLocalDay(value: string | null, now: Date): boolean {
+  const parsed = parseMeetingInstant(value);
+  if (parsed === null) {
+    return false;
+  }
+  const date = new Date(parsed);
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
+
+export function formatMeetingListWhen(value: string | null, now: Date = new Date()): string | null {
+  const parsed = parseMeetingInstant(value);
+  if (parsed === null) {
+    return null;
+  }
+  const date = new Date(parsed);
+  return meetingIsOnLocalDay(value, now)
+    ? MEETING_CLOCK_FORMAT.format(date)
+    : MEETING_DAY_CLOCK_FORMAT.format(date);
 }
 
 export function formatMeetingTimeRange(

@@ -376,4 +376,41 @@ describe("createMeetingsTranscriptionManager", () => {
       notesPath: written.notesPath,
     });
   });
+
+  it("reads a MissionDeck-style transcript from a history session folder", async () => {
+    const homeDir = makeTempDir("luminor-history-transcript-");
+    const sessionId = "gcal-standup_20260812T060000Z";
+    const transcriptPath = Path.join(
+      homeDir,
+      "meetings",
+      sessionId,
+      "transcripts",
+      "live-recording-stream.json",
+    );
+    FS.mkdirSync(Path.dirname(transcriptPath), { recursive: true });
+    FS.writeFileSync(
+      transcriptPath,
+      `${JSON.stringify({
+        segments: [
+          { startMs: 0, endMs: 1200, text: "God morgon!" },
+          { startMs: 1400, endMs: 2600, text: "Godmorgon!" },
+        ],
+      })}\n`,
+    );
+
+    const manager = createMeetingsTranscriptionManager({
+      homeDir,
+      spawn: async () => {
+        throw new Error("should not spawn");
+      },
+    });
+
+    await expect(manager.getTranscript(sessionId)).resolves.toEqual({
+      status: "ready",
+      sessionId,
+      transcriptPath,
+      text: "God morgon!\nGodmorgon!",
+      error: null,
+    });
+  });
 });

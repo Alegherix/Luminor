@@ -8,6 +8,12 @@ import type {
   MeetingsTranscriptionState,
 } from "@luminor/contracts";
 
+import {
+  findHistoryNotesPath,
+  findHistorySummaryPath,
+  findHistoryTranscriptPath,
+  resolveMeetingSessionDir,
+} from "./meetingsHistory";
 import { sanitizeMeetingSessionId } from "./meetingsRecording";
 
 const PRIVATE_DIRECTORY_MODE = 0o700;
@@ -479,6 +485,10 @@ export function createMeetingsTranscriptionManager(deps: MeetingsTranscriptionMa
           raw: await fs.readFile(jsonPath, "utf8"),
         });
       } catch {}
+      const historyTranscript = await readHistoryTranscript(deps.homeDir, sessionId, fs);
+      if (historyTranscript) {
+        return historyTranscript;
+      }
       if (!(await seedConfig())) {
         return {
           status: "needs-environment",
@@ -538,6 +548,14 @@ export function createMeetingsTranscriptionManager(deps: MeetingsTranscriptionMa
           return null;
         }
         return { text, summaryPath };
+      } catch {}
+      const historyPath = historyArtifactPath(deps.homeDir, sessionId, findHistorySummaryPath);
+      if (historyPath === null) {
+        return null;
+      }
+      try {
+        const text = (await fs.readFile(historyPath, "utf8")).trim();
+        return text.length > 0 ? { text, summaryPath: historyPath } : null;
       } catch {
         return null;
       }
@@ -558,9 +576,69 @@ export function createMeetingsTranscriptionManager(deps: MeetingsTranscriptionMa
       try {
         const markdown = await fs.readFile(notesPath, "utf8");
         return { markdown, notesPath };
+      } catch {}
+      const historyPath = historyArtifactPath(deps.homeDir, sessionId, findHistoryNotesPath);
+      if (historyPath === null) {
+        return null;
+      }
+      try {
+        const markdown = await fs.readFile(historyPath, "utf8");
+        return { markdown, notesPath: historyPath };
       } catch {
         return null;
       }
     },
   };
+}
+
+function historyArtifactPath(
+  homeDir: string,
+  sessionId: string,
+  findPath: (sessionDir: string) => string | null,
+): string | null {
+  const sessionDir = resolveMeetingSessionDir({ homeDir, sessionId });
+  return sessionDir === null ? null : findPath(sessionDir);
+}
+
+async function readHistoryTranscript(
+  homeDir: string,
+  sessionId: string,
+  fs: MeetingsTranscriptionFs,
+): Promise<MeetingsTranscriptionState | null> {
+  const sessionDir = resolveMeetingSessionDir({ homeDir, sessionId });
+  if (sessionDir === null) {
+    return null;
+  }
+  const transcriptPath = findHistoryTranscriptPath(sessionDir);
+  if (transcriptPath === null) {
+    return null;
+  }
+  try {
+    const text = transcriptTextFromHistoryFile(
+      await fs.readFile(transcriptPath, "utf8"),
+      transcriptPath,
+    );
+    if (text === null || text.length === 0) {
+      return null;
+    }
+    return {
+      status: "ready",
+      sessionId,
+      transcriptPath,
+      text,
+      error: null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function transcriptTextFromHistoryFile(raw: string, path: string): string | null {
+  if (path.endsWith(".md")) {
+    const marker = "## Transcript";
+    const index = raw.indexOf(marker);
+    const body = (index === -1 ? raw : raw.slice(index + marker.length)).trim();
+    return body.length > 0 ? body : null;
+  }
+  return transcriptTextFromRaw(raw);
 }

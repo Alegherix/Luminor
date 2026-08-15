@@ -17,6 +17,7 @@ import {
   formatMeetingClock,
   formatMeetingTimeRange,
   meetingCountdown,
+  meetingIsOnLocalDay,
   todaysScheduleSessions,
 } from "./meetingsSchedule";
 import {
@@ -461,7 +462,11 @@ export function MeetingsIdleCanvas({
 
   const featured = workspace ? featuredMeetingSession(workspace, now) : null;
   const remaining = workspace ? todaysScheduleSessions(workspace, now) : [];
-  const ended = workspace ? meetingsSidebarSections(workspace, now).ended : [];
+  const ended = workspace
+    ? meetingsSidebarSections(workspace, now).ended.filter((session) =>
+        meetingIsOnLocalDay(session.startAt, now),
+      )
+    : [];
   const linkExpanded = linkOpen || Boolean(workspace?.joinError);
 
   return (

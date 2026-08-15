@@ -11,7 +11,7 @@ import {
 
 export type MeetingSessionStatus = "live" | "upcoming" | "ended";
 export type MeetingsConnectionStatus = "signed-out" | "signed-in";
-export type MeetingSessionSource = "calendar" | "pasted";
+export type MeetingSessionSource = "calendar" | "pasted" | "history";
 
 export type MeetingSession = {
   readonly id: string;
@@ -185,6 +185,7 @@ export type MeetingsCalendarHost = {
   getStatus(): Promise<MeetingsCalendarStatus>;
   connect(): Promise<MeetingsCalendarStatus>;
   listToday(): Promise<readonly MeetingsCalendarEvent[]>;
+  listHistory(): Promise<readonly MeetingsCalendarEvent[]>;
 };
 
 export type MeetingsWorkspace = {
@@ -296,7 +297,7 @@ export function meetingsSidebarSections(
 
   live.sort(compareSessionsByStart);
   upcoming.sort(compareSessionsByStart);
-  ended.sort(compareSessionsByStart);
+  ended.sort((left, right) => sessionStartMs(right) - sessionStartMs(left));
 
   if (live.length > 0) {
     return { live, today: upcoming, ended };
@@ -411,7 +412,11 @@ export function meetingRowOffersJoin(
   return meetingsSidebarSections(snapshot, now).live.some((item) => item.id === session.id);
 }
 
-function toMeetingSession(event: MeetingsCalendarEvent, now: Date): MeetingSession {
+function toMeetingSession(
+  event: MeetingsCalendarEvent,
+  now: Date,
+  source: MeetingSessionSource = "calendar",
+): MeetingSession {
   return {
     id: event.id,
     title: event.title,
@@ -420,8 +425,28 @@ function toMeetingSession(event: MeetingsCalendarEvent, now: Date): MeetingSessi
     meetUrl: event.meetUrl,
     attendees: event.attendees,
     status: meetingSessionStatus(event, now),
-    source: "calendar",
+    source,
   };
+}
+
+function meetingLocalDayKey(value: string | null): string {
+  if (value === null) {
+    return "";
+  }
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    return "";
+  }
+  const date = new Date(parsed);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function meetingOccurrenceKey(session: Pick<MeetingSession, "meetUrl" | "startAt">): string | null {
+  if (session.meetUrl === null) {
+    return null;
+  }
+  const day = meetingLocalDayKey(session.startAt);
+  return day.length === 0 ? null : `${session.meetUrl}|${day}`;
 }
 
 function withSessionStatus(session: MeetingSession, now: Date): MeetingSession {
@@ -501,6 +526,9 @@ const unsignedCalendar: MeetingsCalendarHost = {
   async listToday() {
     return [];
   },
+  async listHistory() {
+    return [];
+  },
 };
 
 export function createMeetingsWorkspace(
@@ -555,16 +583,34 @@ export function createMeetingsWorkspace(
 
   const mergeCalendarSessions = (
     events: readonly MeetingsCalendarEvent[],
+    history: readonly MeetingsCalendarEvent[],
     now: Date,
   ): MeetingSession[] => {
     const calendarSessions = events.map((event) => toMeetingSession(event, now));
     const calendarIds = new Set(calendarSessions.map((session) => session.id));
+    const calendarOccurrences = new Set(
+      calendarSessions
+        .map((session) => meetingOccurrenceKey(session))
+        .filter((value): value is string => value !== null),
+    );
     const calendarMeetUrls = new Set(
       calendarSessions
         .map((session) => session.meetUrl)
         .filter((value): value is string => value !== null),
     );
+    const historySessions = history
+      .map((event) => toMeetingSession(event, now, "history"))
+      .filter((session) => {
+        if (calendarIds.has(session.id)) {
+          return false;
+        }
+        const occurrence = meetingOccurrenceKey(session);
+        return occurrence === null || !calendarOccurrences.has(occurrence);
+      });
     const preserved = snapshot.sessions.filter((session) => {
+      if (session.source === "history") {
+        return false;
+      }
       if (session.source === "pasted") {
         return session.meetUrl === null || !calendarMeetUrls.has(session.meetUrl);
       }
@@ -572,6 +618,7 @@ export function createMeetingsWorkspace(
     });
     return [
       ...calendarSessions,
+      ...historySessions,
       ...preserved.map((session) => withSessionStatus(session, now)),
     ].toSorted(compareSessionsByStart);
   };
@@ -596,9 +643,10 @@ export function createMeetingsWorkspace(
   const applyCalendar = (
     status: MeetingsCalendarStatus,
     events: readonly MeetingsCalendarEvent[],
+    history: readonly MeetingsCalendarEvent[] = [],
   ) => {
     const now = clock();
-    const sessions = mergeCalendarSessions(events, now);
+    const sessions = mergeCalendarSessions(events, history, now);
     const joinedSessionId = retargetJoinedSessionId(sessions, snapshot.joinedSessionId);
     const selectedStillPresent =
       snapshot.selectedSessionId !== null &&
@@ -614,8 +662,11 @@ export function createMeetingsWorkspace(
   };
 
   const hydrateFromStatus = async (status: MeetingsCalendarStatus) => {
-    const events = status.connected ? await calendar.listToday() : [];
-    applyCalendar(status, events);
+    const [events, history] = await Promise.all([
+      status.connected ? calendar.listToday() : Promise.resolve([]),
+      calendar.listHistory(),
+    ]);
+    applyCalendar(status, events, history);
   };
 
   const markPastedSessionEnded = (

@@ -28,5 +28,8 @@ export function createDesktopMeetingsCalendarHost(): MeetingsCalendarHost {
     async listToday() {
       return (await desktopMeetings()?.listToday()) ?? [];
     },
+    async listHistory() {
+      return (await desktopMeetings()?.listHistory()) ?? [];
+    },
   };
 }

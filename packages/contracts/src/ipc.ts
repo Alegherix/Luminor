@@ -555,6 +555,7 @@ export interface DesktopMeetingsBridge {
   getStatus: () => Promise<MeetingsCalendarStatus>;
   connect: () => Promise<MeetingsCalendarStatus>;
   listToday: () => Promise<readonly MeetingsCalendarEvent[]>;
+  listHistory: () => Promise<readonly MeetingsCalendarEvent[]>;
   joinEmbed: (input: { url: string }) => Promise<MeetingsEmbedState>;
   hideEmbed: () => Promise<MeetingsEmbedState>;
   showEmbed: () => Promise<MeetingsEmbedState>;

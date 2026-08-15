@@ -13,6 +13,7 @@ describe("createDesktopMeetingsCalendarHost", () => {
     await expect(host.getStatus()).resolves.toEqual({ connected: false, accountEmail: null });
     await expect(host.connect()).resolves.toEqual({ connected: false, accountEmail: null });
     await expect(host.listToday()).resolves.toEqual([]);
+    await expect(host.listHistory()).resolves.toEqual([]);
   });
 
   it("delegates to the desktop meetings bridge", async () => {
@@ -29,6 +30,16 @@ describe("createDesktopMeetingsCalendarHost", () => {
           attendees: [],
         },
       ]),
+      listHistory: vi.fn(async () => [
+        {
+          id: "hist-1",
+          title: "Standup - standardize",
+          startAt: "2026-08-12T06:00:00.000Z",
+          endAt: "2026-08-12T06:25:00.000Z",
+          meetUrl: "https://meet.google.com/ikn-octf-haj",
+          attendees: [],
+        },
+      ]),
     };
     (globalThis as typeof globalThis & { desktopBridge?: unknown }).desktopBridge = { meetings };
     const host = createDesktopMeetingsCalendarHost();
@@ -42,6 +53,7 @@ describe("createDesktopMeetingsCalendarHost", () => {
       accountEmail: "me@example.com",
     });
     await expect(host.listToday()).resolves.toHaveLength(1);
+    await expect(host.listHistory()).resolves.toHaveLength(1);
     expect(meetings.connect).toHaveBeenCalledTimes(1);
   });
 });

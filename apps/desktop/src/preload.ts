@@ -225,6 +225,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     getStatus: () => ipcRenderer.invoke(IPC.meetings.getStatus),
     connect: () => ipcRenderer.invoke(IPC.meetings.connect),
     listToday: () => ipcRenderer.invoke(IPC.meetings.listToday),
+    listHistory: () => ipcRenderer.invoke(IPC.meetings.listHistory),
     joinEmbed: (input) => ipcRenderer.invoke(IPC.meetings.joinEmbed, input),
     hideEmbed: () => ipcRenderer.invoke(IPC.meetings.hideEmbed),
     showEmbed: () => ipcRenderer.invoke(IPC.meetings.showEmbed),

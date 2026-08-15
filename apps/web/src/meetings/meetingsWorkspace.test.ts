@@ -49,9 +49,11 @@ function fakeCalendar(input: {
   connected?: boolean;
   accountEmail?: string | null;
   events?: MeetingsCalendarEvent[];
-}): MeetingsCalendarHost & { events: MeetingsCalendarEvent[] } {
+  history?: MeetingsCalendarEvent[];
+}): MeetingsCalendarHost & { events: MeetingsCalendarEvent[]; history: MeetingsCalendarEvent[] } {
   const host = {
     events: input.events ?? [],
+    history: input.history ?? [],
     connected: input.connected ?? false,
     accountEmail: input.accountEmail ?? null,
     async getStatus() {
@@ -64,6 +66,9 @@ function fakeCalendar(input: {
     },
     async listToday() {
       return host.events;
+    },
+    async listHistory() {
+      return host.history;
     },
   };
   return host;
@@ -211,6 +216,45 @@ describe("createMeetingsWorkspace", () => {
     expect(snapshot.sessions.map((session) => session.id)).toEqual(["live", "later"]);
     expect(meetingsSidebarSections(snapshot, NOW).live[0]?.title).toBe("Interview");
     expect(meetingsSidebarSections(snapshot, NOW).today[0]?.title).toBe("Retro");
+  });
+
+  it("hydrates previous meetings from disk history even when they are not on today's calendar", async () => {
+    const calendar = fakeCalendar({
+      connected: true,
+      events: [
+        event({
+          id: "later",
+          title: "Retro",
+          startAt: "2026-08-12T15:00:00.000Z",
+          endAt: "2026-08-12T15:45:00.000Z",
+        }),
+      ],
+      history: [
+        event({
+          id: "gcal-standup_20260811T060000Z",
+          title: "Standup - standardize",
+          startAt: "2026-08-11T06:00:00.000Z",
+          endAt: "2026-08-11T06:25:00.000Z",
+          meetUrl: "https://meet.google.com/ikn-octf-haj",
+        }),
+        event({
+          id: "gcal-standup_20260810T060000Z",
+          title: "Standup - standardize",
+          startAt: "2026-08-10T06:00:00.000Z",
+          endAt: "2026-08-10T06:25:00.000Z",
+          meetUrl: "https://meet.google.com/ikn-octf-haj",
+        }),
+      ],
+    });
+    const workspace = createMeetingsWorkspace({ clock: () => NOW, calendar });
+    await workspace.hydrate();
+
+    const ended = meetingsSidebarSections(workspace.getSnapshot(), NOW).ended;
+    expect(ended.map((session) => session.id)).toEqual([
+      "gcal-standup_20260811T060000Z",
+      "gcal-standup_20260810T060000Z",
+    ]);
+    expect(ended[0]?.source).toBe("history");
   });
 
   it("selects a session so the selected-meeting card can render it", async () => {

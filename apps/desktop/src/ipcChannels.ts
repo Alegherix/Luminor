@@ -32,6 +32,7 @@ export const DESKTOP_IPC_CHANNELS = {
     getStatus: "desktop:meetings-get-status",
     connect: "desktop:meetings-connect",
     listToday: "desktop:meetings-list-today",
+    listHistory: "desktop:meetings-list-history",
     joinEmbed: "desktop:meetings-join-embed",
     hideEmbed: "desktop:meetings-hide-embed",
     showEmbed: "desktop:meetings-show-embed",

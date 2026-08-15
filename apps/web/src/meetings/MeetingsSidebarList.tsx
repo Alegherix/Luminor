@@ -8,7 +8,7 @@ import {
   SIDEBAR_ROW_IDLE_TEXT_CLASS_NAME,
   SIDEBAR_SECTION_LABEL_CLASS_NAME,
 } from "~/sidebarRowStyles";
-import { formatMeetingClock } from "./meetingsSchedule";
+import { formatMeetingListWhen } from "./meetingsSchedule";
 import {
   meetingRowOffersJoin,
   meetingsSidebarSections,
@@ -19,13 +19,13 @@ import {
 const EMPTY_SECTION_COPY = {
   live: "No live meeting",
   today: "No other meetings today",
-  ended: "No ended meetings today",
+  ended: "No previous meetings",
 } as const;
 
 const SECTION_LABELS = {
   live: "Live",
   today: "Today",
-  ended: "Ended",
+  ended: "Previous",
 } as const;
 
 function MeetingsSidebarSection({
@@ -60,7 +60,7 @@ function MeetingsSidebarSection({
         <ul className="flex flex-col gap-0.5">
           {sessions.map((session) => {
             const selected = session.id === workspace.selectedSessionId;
-            const time = formatMeetingClock(session.startAt);
+            const time = formatMeetingListWhen(session.startAt, now ?? new Date());
             const offersJoin = meetingRowOffersJoin(session, workspace, now ?? new Date());
             return (
               <li key={session.id}>
