@@ -6,7 +6,8 @@
 
 import type { AutomationMode, AutomationWorktreeMode } from "@luminor/contracts";
 
-import { CentralIcon } from "~/lib/central-icons";
+import { SettingsSelectPopup } from "~/components/settings/SettingsPanelPrimitives";
+import { Select, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { useCommitDraft, useCommitDraftBlurHandlers } from "~/lib/automationInlineDraft";
 import { cn } from "~/lib/utils";
 
@@ -117,31 +118,41 @@ export function InlineSelect({
   readonly disabled?: boolean | undefined;
   readonly title?: string | undefined;
 }) {
+  const selectedLabel = options.find((option) => option.value === value)?.label ?? value;
+
   return (
-    <div className="relative flex min-w-0 items-center">
-      <select
-        value={value}
-        disabled={disabled}
+    <Select
+      value={value}
+      disabled={disabled}
+      onValueChange={(next) => {
+        if (next !== null) onChange(next);
+      }}
+    >
+      <SelectTrigger
+        variant="ghost"
+        size="xs"
         title={title}
-        onChange={(event) => onChange(event.target.value)}
-        className={cn(INLINE_CONTROL_CLASS, "max-w-[11rem] appearance-none truncate pr-5")}
+        aria-label={selectedLabel}
+        className={cn(
+          INLINE_CONTROL_CLASS,
+          "h-auto max-w-[11rem] min-h-0 w-auto min-w-0 justify-end gap-1 border-transparent py-1.5 pr-1 pl-2 text-foreground shadow-none",
+        )}
       >
+        <SelectValue className="min-w-0 text-right">{selectedLabel}</SelectValue>
+      </SelectTrigger>
+      <SettingsSelectPopup>
         {options.map((option) => (
-          <option
-            key={option.value}
+          <SelectItem
+            key={option.value === "" ? "__empty__" : option.value}
             value={option.value}
             disabled={option.disabled}
             title={option.title}
           >
             {option.label}
-          </option>
+          </SelectItem>
         ))}
-      </select>
-      <CentralIcon
-        name="chevron-down-small"
-        className="pointer-events-none absolute right-1 size-3 text-muted-foreground"
-      />
-    </div>
+      </SettingsSelectPopup>
+    </Select>
   );
 }
 
