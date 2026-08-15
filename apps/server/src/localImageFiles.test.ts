@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, it } from "vitest";
 
+import { snapshotChatImageSources } from "./chatImageSnapshots.ts";
 import { resolveAllowedLocalPreviewFile } from "./localImageFiles.ts";
 
 const tempDirs: string[] = [];
@@ -214,5 +215,33 @@ describe("resolveAllowedLocalPreviewFile", () => {
     });
 
     assert.equal(result, null);
+  });
+
+  it("falls back to the chat image snapshot when the original file is gone", async () => {
+    const luminorHome = makeTempDir("luminor-image-snapshot-home-");
+    const sourceDir = makeTempDir("luminor-image-snapshot-source-");
+    const previousLuminorHome = process.env.LUMINOR_HOME;
+    process.env.LUMINOR_HOME = luminorHome;
+    try {
+      const imagePath = path.join(sourceDir, "screenshot.jpg");
+      writeFileSync(imagePath, Buffer.from([0xff, 0xd8, 0xff]));
+      await snapshotChatImageSources({ sources: [imagePath], cwd: null });
+      rmSync(imagePath);
+
+      const result = await resolveAllowedLocalPreviewFile({
+        requestedPath: imagePath,
+        cwd: null,
+      });
+
+      assert.equal(result?.fileName, "screenshot.jpg");
+      assert.equal(result?.sizeBytes, 3);
+      assert.ok(result?.path.startsWith(path.join(luminorHome, "chat-image-snapshots")));
+    } finally {
+      if (previousLuminorHome === undefined) {
+        delete process.env.LUMINOR_HOME;
+      } else {
+        process.env.LUMINOR_HOME = previousLuminorHome;
+      }
+    }
   });
 });

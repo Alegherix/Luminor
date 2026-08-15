@@ -33,6 +33,9 @@ export interface LocalImagePreviewState {
   imgProps: LocalImagePreviewImgProps;
 }
 
+const MAX_LOCAL_IMAGE_LOAD_ATTEMPTS = 3;
+const LOCAL_IMAGE_RETRY_BASE_DELAY_MS = 1_500;
+
 export function useLocalImagePreview(input: {
   src: string;
   cwd: string | null | undefined;
@@ -55,12 +58,18 @@ export function useLocalImagePreview(input: {
   const [storedLoad, setStoredLoad] = useState<{
     url: string;
     generation: number;
+    attempt: number;
     status: LocalImagePreviewStatus;
-  }>(() => ({ url: previewUrl, generation: 0, status: "loading" }));
+  }>(() => ({ url: previewUrl, generation: 0, attempt: 0, status: "loading" }));
   const load =
     storedLoad.url === previewUrl
       ? storedLoad
-      : { url: previewUrl, generation: storedLoad.generation + 1, status: "loading" as const };
+      : {
+          url: previewUrl,
+          generation: storedLoad.generation + 1,
+          attempt: 0,
+          status: "loading" as const,
+        };
   if (load !== storedLoad) {
     setStoredLoad(load);
   }
@@ -73,8 +82,26 @@ export function useLocalImagePreview(input: {
     );
   };
 
+  // A failed load may be transient (the agent referenced the file a moment
+  // before finishing the write, or the server is still snapshotting it), so a
+  // couple of delayed cache-busted retries run before the error card commits.
+  const scheduleRetry = (nextAttempt: number) => {
+    window.setTimeout(() => {
+      setStoredLoad((current) =>
+        current.url === previewUrl &&
+        current.generation === load.generation &&
+        current.attempt === nextAttempt - 1 &&
+        current.status === "loading"
+          ? { ...current, attempt: nextAttempt }
+          : current,
+      );
+    }, LOCAL_IMAGE_RETRY_BASE_DELAY_MS * nextAttempt);
+  };
+
+  const attemptSrc = load.attempt === 0 ? previewUrl : `${previewUrl}&loadAttempt=${load.attempt}`;
+
   const imgProps: LocalImagePreviewImgProps = {
-    src: previewUrl,
+    src: attemptSrc,
     loading: "lazy",
     decoding: "async",
     draggable: false,
@@ -83,6 +110,11 @@ export function useLocalImagePreview(input: {
       input.onPreviewReady?.();
     },
     onError: () => {
+      const nextAttempt = load.attempt + 1;
+      if (nextAttempt < MAX_LOCAL_IMAGE_LOAD_ATTEMPTS) {
+        scheduleRetry(nextAttempt);
+        return;
+      }
       settleLoad("error");
       input.onPreviewError?.();
     },

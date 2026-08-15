@@ -20,7 +20,10 @@ import {
 } from "@luminor/contracts";
 import { Cache, Cause, Deferred, Duration, Effect, Layer, Option, Ref, Stream } from "effect";
 import * as Semaphore from "effect/Semaphore";
-import { makeDrainableWorker, startDrainableWorkerProducers } from "@luminor/shared/DrainableWorker";
+import {
+  makeDrainableWorker,
+  startDrainableWorkerProducers,
+} from "@luminor/shared/DrainableWorker";
 import { providerSupportsNativeTurnSteering } from "@luminor/shared/providerMetadata";
 import { buildStalePendingRequestFailureDetail } from "@luminor/shared/threadSummary";
 import {
@@ -30,6 +33,10 @@ import {
   resolveSubagentIdentityFromDirectory,
 } from "@luminor/shared/subagents";
 
+import {
+  snapshotChatImageSourcesWithRetry,
+  snapshotChatImagesFromMarkdown,
+} from "../../chatImageSnapshots.ts";
 import {
   generatedImageMarkdown,
   generatedImagePathFromRuntimeEvent,
@@ -962,6 +969,49 @@ const make = Effect.gen(function* () {
     );
   });
 
+  const workspaceCwdForThread = Effect.fnUntraced(function* (threadId: ThreadId) {
+    const thread = yield* getThreadDetail(threadId);
+    if (!thread) {
+      return undefined;
+    }
+    const project = yield* getProjectShell(thread);
+    return resolveThreadWorkspaceCwd({
+      thread,
+      projects: project ? [project] : [],
+    });
+  });
+
+  /**
+   * Captures the message's local image references into Luminor-owned snapshot
+   * storage in a detached fiber: the copy retries briefly while a provider is
+   * still flushing the file to disk, so it must never block ingestion.
+   */
+  const snapshotChatImagesDetached = (input: {
+    readonly threadId: ThreadId;
+    readonly markdownText?: string;
+    readonly imagePaths?: ReadonlyArray<string>;
+  }) =>
+    Effect.gen(function* () {
+      const cwd = (yield* workspaceCwdForThread(input.threadId)) ?? null;
+      yield* Effect.promise(async () => {
+        if (input.markdownText !== undefined) {
+          await snapshotChatImagesFromMarkdown({ text: input.markdownText, cwd });
+        }
+        if (input.imagePaths !== undefined && input.imagePaths.length > 0) {
+          await snapshotChatImageSourcesWithRetry({ sources: input.imagePaths, cwd });
+        }
+      });
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("failed to snapshot chat image references", {
+          threadId: input.threadId,
+          cause: Cause.pretty(cause),
+        }),
+      ),
+      Effect.forkDetach,
+      Effect.asVoid,
+    );
+
   const isGitRepoForThread = Effect.fnUntraced(function* (threadId: ThreadId) {
     const thread = yield* getThreadDetail(threadId);
     if (!thread) {
@@ -1438,6 +1488,10 @@ const make = Effect.gen(function* () {
           tagBase: input.finalDeltaCommandTag,
           text,
         });
+        yield* snapshotChatImagesDetached({
+          threadId: input.threadId,
+          markdownText: text,
+        });
       } else {
         const segmentKey = assistantMessageSegmentKey(input.threadId, input.messageId);
         bufferedTextSegmentsByMessageKey.delete(segmentKey);
@@ -1503,6 +1557,10 @@ const make = Effect.gen(function* () {
           createdAt: input.createdAt,
         });
         dispatchedDelta = true;
+        yield* snapshotChatImagesDetached({
+          threadId: input.threadId,
+          imagePaths: input.imagePaths,
+        });
       }
 
       // Only finalize when we actually changed the message (delta dispatched, or we

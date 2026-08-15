@@ -16,11 +16,9 @@ import {
 } from "@luminor/shared/localPreviewFiles";
 import { SCRATCH_WORKSPACES_DIRNAME } from "@luminor/shared/threadWorkspace";
 
+import { resolveChatImageSnapshot } from "./chatImageSnapshots.ts";
 import { resolveCodexGeneratedImagesRoots } from "./codexGeneratedImages.ts";
-import {
-  resolveGrokSessionRelativeImage,
-  resolveGrokSessionsRoot,
-} from "./grokSessionImages.ts";
+import { resolveGrokSessionRelativeImage, resolveGrokSessionsRoot } from "./grokSessionImages.ts";
 
 export { LOCAL_IMAGE_ROUTE_PATH };
 
@@ -125,13 +123,34 @@ async function resolveWorkspaceRoot(cwd: string | null): Promise<string | null> 
   return (gitRoot ? await realpathOrNull(gitRoot) : realCwd) ?? null;
 }
 
-export async function resolveAllowedLocalPreviewFile(input: {
+export interface ResolveLocalPreviewFileInput {
   readonly requestedPath: string | null;
   readonly cwd: string | null;
   readonly codexHomePath?: string;
   readonly allowAbsoluteLocalPreviewFile?: boolean;
   readonly previewGrant?: string | null;
-}): Promise<ResolvedLocalPreviewFile | null> {
+}
+
+export async function resolveAllowedLocalPreviewFile(
+  input: ResolveLocalPreviewFileInput,
+): Promise<ResolvedLocalPreviewFile | null> {
+  const live = await resolveAllowedLocalPreviewFileFromLiveRoots(input);
+  if (live) {
+    return live;
+  }
+  // Ingestion snapshots chat-referenced images into Luminor-owned storage, so a
+  // reference that fails every live allowlist root (file outside the workspace,
+  // a since-removed worktree, a pruned provider session dir) still previews.
+  const requestedPath = input.requestedPath?.trim();
+  if (!requestedPath || requestedPath.includes("\0")) {
+    return null;
+  }
+  return resolveChatImageSnapshot({ requestedPath, cwd: input.cwd });
+}
+
+async function resolveAllowedLocalPreviewFileFromLiveRoots(
+  input: ResolveLocalPreviewFileInput,
+): Promise<ResolvedLocalPreviewFile | null> {
   const requestedPath = input.requestedPath?.trim();
   if (
     !requestedPath ||
