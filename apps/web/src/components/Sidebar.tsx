@@ -4002,6 +4002,13 @@ export default function Sidebar() {
     [folderEditorState, resolveFolderMoveThreads, settleFolderMove],
   );
 
+  const openCreateSpaceFolder = useCallback((spaceId: SpaceId) => {
+    setFolderEditorState({
+      mode: "create",
+      owner: spaceFolderOwner(spaceId),
+    });
+  }, []);
+
   const startNewThreadInFolder = useCallback(
     (folderId: FolderId, projectId: ProjectId) => {
       prefetchModelsForProjectNewThread(projectId, { includeDroid: true });
@@ -6765,12 +6772,7 @@ export default function Sidebar() {
                         voidSpace={voidSpace}
                         onSelect={handleSelectSpace}
                         onCreate={() => openSpaceCreator()}
-                        onCreateFolder={(space) =>
-                          setFolderEditorState({
-                            mode: "create",
-                            owner: spaceFolderOwner(space.id),
-                          })
-                        }
+                        onCreateFolder={(space) => openCreateSpaceFolder(space.id)}
                         onEdit={(space) => openSpaceEditor(space.id)}
                         onDelete={(space) => void handleDeleteSpace(space.id)}
                         onReorder={handleReorderSpaces}
@@ -6785,7 +6787,18 @@ export default function Sidebar() {
                       />
                       {activeSpaceFolderGroups.length > 0 ? (
                         <div className="mb-3">
-                          {renderListSectionHeader("Folders", null)}
+                          {renderListSectionHeader(
+                            "Folders",
+                            activeSpaceId !== null ? (
+                              <SidebarIconButton
+                                icon={AddPlusIcon}
+                                label="New folder"
+                                onClick={() => openCreateSpaceFolder(activeSpaceId)}
+                                tooltip="New folder"
+                                tooltipSide="right"
+                              />
+                            ) : null,
+                          )}
                           <SidebarMenuSub
                             className={cn(
                               "mx-0 my-0 w-full translate-x-0 border-l-0 px-0 py-0",
