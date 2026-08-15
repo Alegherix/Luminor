@@ -28,12 +28,12 @@ const item = {
 describe("pull request inbox presentation", () => {
   it("indexes unread rows and builds a comment notification", () => {
     const indexed = indexPullRequestInboxItems([item]);
-    expect(
-      pullRequestListEntryIsUnread({ repository: "acme/luminor", number: 12 }, indexed),
-    ).toBe(true);
-    expect(
-      pullRequestListEntryIsUnread({ repository: "acme/luminor", number: 13 }, indexed),
-    ).toBe(false);
+    expect(pullRequestListEntryIsUnread({ repository: "acme/luminor", number: 12 }, indexed)).toBe(
+      true,
+    );
+    expect(pullRequestListEntryIsUnread({ repository: "acme/luminor", number: 13 }, indexed)).toBe(
+      false,
+    );
     expect(buildPullRequestInboxNotificationCopy(item)).toEqual({
       title: "reviewer commented on #12",
       body: "Add inbox: Please rename this.",

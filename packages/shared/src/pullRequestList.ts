@@ -1,4 +1,8 @@
-import type { ProjectId, PullRequestListEntry, PullRequestProjectContext } from "@luminor/contracts";
+import type {
+  ProjectId,
+  PullRequestListEntry,
+  PullRequestProjectContext,
+} from "@luminor/contracts";
 
 type ProjectAwarePullRequestEntry = Pick<
   PullRequestListEntry,

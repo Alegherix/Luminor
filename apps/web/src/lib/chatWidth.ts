@@ -10,13 +10,12 @@ export const DEFAULT_CHAT_WIDTH: ChatWidthMode = "standard";
 
 /**
  * Max width applied to the centered chat column (transcript + composer).
- * - standard: the historical 46rem reading column.
- * - wide: a roomier 72rem column for dense content like tables.
+ * - standard and legacy wide: the restored 75rem Luminor chat column.
  * - full: let the column grow to the full available window width.
  */
 const CHAT_MAX_WIDTH_BY_MODE: Record<ChatWidthMode, string> = {
-  standard: "46rem",
-  wide: "72rem",
+  standard: "75rem",
+  wide: "75rem",
   full: "100%",
 };
 

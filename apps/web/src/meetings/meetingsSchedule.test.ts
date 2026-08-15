@@ -81,7 +81,7 @@ describe("meetingCountdown", () => {
 });
 
 describe("featuredMeetingSession", () => {
-  it("keeps the next joinable meeting even if a later row is selected", () => {
+  it("uses the selected upcoming meeting so its details and Join action are shown", () => {
     const later = session({ id: "later", title: "Retro", startAt: "2026-08-13T15:00:00.000Z" });
     const featured = featuredMeetingSession(
       workspace({
@@ -90,7 +90,7 @@ describe("featuredMeetingSession", () => {
       }),
       NOW,
     );
-    expect(featured?.id).toBe("standup");
+    expect(featured?.id).toBe("later");
   });
 
   it("uses the next live or upcoming meeting when nothing is selected", () => {

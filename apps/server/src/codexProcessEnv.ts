@@ -47,7 +47,9 @@ function isSafePluginSectionHeader(value: unknown): value is string {
   );
 }
 
-export async function readLuminorConfigSuppressions(markerPath: string): Promise<readonly string[]> {
+export async function readLuminorConfigSuppressions(
+  markerPath: string,
+): Promise<readonly string[]> {
   try {
     const parsed = JSON.parse(await fs.readFile(markerPath, "utf8")) as unknown;
     if (typeof parsed !== "object" || parsed === null) return [];

@@ -56,9 +56,9 @@ describe("errorMessages", () => {
     const named = new Error("All fibers interrupted without error");
     named.name = "InterruptError";
     expect(isEffectFiberInterruptError(named)).toBe(true);
-    expect(
-      isEffectFiberInterruptError({ message: "All fibers interrupted without error" }),
-    ).toBe(true);
+    expect(isEffectFiberInterruptError({ message: "All fibers interrupted without error" })).toBe(
+      true,
+    );
     expect(isEffectFiberInterruptError(new Error("actual provider failure"))).toBe(false);
   });
 
@@ -66,9 +66,9 @@ describe("errorMessages", () => {
     expect(
       describeUserFacingError(new Error("All fibers interrupted without error"), "Failed to send"),
     ).toBe(CONNECTION_INTERRUPTED_USER_MESSAGE);
-    expect(describeUserFacingError(new Error("provider rejected the prompt"), "Failed to send")).toBe(
-      "provider rejected the prompt",
-    );
+    expect(
+      describeUserFacingError(new Error("provider rejected the prompt"), "Failed to send"),
+    ).toBe("provider rejected the prompt");
     expect(describeUserFacingError({ _tag: "WsRpcError", message: "nope" }, "Failed to send")).toBe(
       "nope",
     );

@@ -148,7 +148,10 @@ const CliEnvConfig = Config.all({
   host: Config.string("LUMINOR_HOST").pipe(Config.option, Config.map(Option.getOrUndefined)),
   luminorHome: Config.string("LUMINOR_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
   devUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
-  publicUrl: Config.url("LUMINOR_PUBLIC_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  publicUrl: Config.url("LUMINOR_PUBLIC_URL").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
   allowInsecureRemote: optionalBooleanEnvironmentConfig("LUMINOR_ALLOW_INSECURE_REMOTE"),
   noBrowser: optionalBooleanEnvironmentConfig("LUMINOR_NO_BROWSER"),
   authToken: Config.string("LUMINOR_AUTH_TOKEN").pipe(

@@ -13,7 +13,10 @@ export function pullRequestListEntryIsUnread(
   entry: Pick<PullRequestListEntry, "repository" | "number">,
   inboxByIdentity: ReadonlyMap<string, PullRequestInboxItem>,
 ): boolean {
-  return inboxByIdentity.get(pullRequestInboxIdentityKey(entry.repository, entry.number))?.unread === true;
+  return (
+    inboxByIdentity.get(pullRequestInboxIdentityKey(entry.repository, entry.number))?.unread ===
+    true
+  );
 }
 
 export function buildPullRequestInboxNotificationCopy(item: PullRequestInboxItem): {
@@ -30,7 +33,9 @@ export function buildPullRequestInboxNotificationCopy(item: PullRequestInboxItem
 
 export const PULL_REQUEST_INBOX_NOTIFICATION_ACTION_PREFIX = "notification-open-pull-request:";
 
-export function pullRequestInboxNotificationAction(item: Pick<PullRequestInboxItem, "repository" | "number">): string {
+export function pullRequestInboxNotificationAction(
+  item: Pick<PullRequestInboxItem, "repository" | "number">,
+): string {
   return `${PULL_REQUEST_INBOX_NOTIFICATION_ACTION_PREFIX}${item.repository}#${item.number}`;
 }
 

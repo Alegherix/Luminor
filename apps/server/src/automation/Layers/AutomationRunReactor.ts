@@ -1,5 +1,8 @@
 import type { OrchestrationEvent, ThreadId } from "@luminor/contracts";
-import { makeDrainableWorker, startDrainableWorkerProducers } from "@luminor/shared/DrainableWorker";
+import {
+  makeDrainableWorker,
+  startDrainableWorkerProducers,
+} from "@luminor/shared/DrainableWorker";
 import { Cause, Effect, Layer, Stream } from "effect";
 
 import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";

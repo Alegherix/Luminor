@@ -14,7 +14,8 @@ afterEach(() => {
 
 describe("external MCP launcher", () => {
   it("uses the packaged backend entry instead of assuming a global luminor command", () => {
-    process.env.LUMINOR_SERVER_ENTRY = "/Applications/Luminor.app/Contents/Resources/server/index.js";
+    process.env.LUMINOR_SERVER_ENTRY =
+      "/Applications/Luminor.app/Contents/Resources/server/index.js";
     process.env.ELECTRON_RUN_AS_NODE = "1";
     const launcher = externalMcpLauncher(["mcp", "serve", "--integration", "integration-1"]);
 

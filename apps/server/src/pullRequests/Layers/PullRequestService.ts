@@ -40,7 +40,10 @@ import {
 } from "../../pullRequests.logic";
 import { makeKeyedSingleFlightCache } from "../KeyedSingleFlightCache";
 import { PullRequestService, type PullRequestServiceShape } from "../Services/PullRequestService";
-import { resolveGitHubRepositories, type GitHubRepositoryInventory } from "../repositoryResolution";
+import {
+  resolvePreferredGitHubRepositoryInventory,
+  type GitHubRepositoryInventory,
+} from "../repositoryResolution";
 import {
   cleanupUnconfiguredPullRequestPins,
   indexProjectRepositoryInventories,
@@ -648,7 +651,8 @@ export const PullRequestServiceLive = Layer.effect(
         projection
           .getShellSnapshot()
           .pipe(Effect.map((snapshot) => snapshot.projects.map(liveProjectFromShell))),
-      resolveRepositories: (project) => resolveGitHubRepositories(git, project.workspaceRoot),
+      resolveRepositories: (project) =>
+        resolvePreferredGitHubRepositoryInventory(git, project.workspaceRoot),
     });
   }),
 );

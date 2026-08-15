@@ -121,6 +121,10 @@ export function featuredMeetingSession(
   snapshot: MeetingsWorkspaceSnapshot,
   now: Date = new Date(),
 ): MeetingSession | null {
+  const selected = snapshot.sessions.find((session) => session.id === snapshot.selectedSessionId);
+  if (selected && meetingSessionStatus(selected, now) !== "ended") {
+    return selected;
+  }
   return meetingsSidebarSections(snapshot, now).live[0] ?? null;
 }
 

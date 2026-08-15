@@ -60,9 +60,9 @@ describe("parseGitHubCommentApiPath", () => {
     expect(
       parseGitHubCommentApiPath("https://api.github.com/repos/acme/luminor/pulls/comments/11"),
     ).toBe("repos/acme/luminor/pulls/comments/11");
-    expect(parseGitHubCommentApiPath("https://evil.example/repos/acme/luminor/issues/comments/9")).toBe(
-      null,
-    );
+    expect(
+      parseGitHubCommentApiPath("https://evil.example/repos/acme/luminor/issues/comments/9"),
+    ).toBe(null);
   });
 });
 

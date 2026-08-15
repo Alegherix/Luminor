@@ -105,7 +105,9 @@ export function SkillsSettingsPanel() {
           description="Skills placed here are available on every provider. When a provider already ships its own copy of a skill, that copy is used; otherwise Luminor's copy is the fallback."
           status={
             luminorSkillsDir ? (
-              <code className="break-all text-[11px] text-muted-foreground">{luminorSkillsDir}</code>
+              <code className="break-all text-[11px] text-muted-foreground">
+                {luminorSkillsDir}
+              </code>
             ) : null
           }
           control={

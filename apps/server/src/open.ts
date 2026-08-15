@@ -12,7 +12,10 @@ import { dirname, extname } from "node:path";
 import pathWin32 from "node:path/win32";
 
 import { EDITORS, type EditorId } from "@luminor/contracts";
-import { prepareWindowsSafeProcess, resolveWindowsSystemRoot } from "@luminor/shared/windowsProcess";
+import {
+  prepareWindowsSafeProcess,
+  resolveWindowsSystemRoot,
+} from "@luminor/shared/windowsProcess";
 import { ServiceMap, Schema, Effect, Layer } from "effect";
 import {
   getEditorMacApplications,

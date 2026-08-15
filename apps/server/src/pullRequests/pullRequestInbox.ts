@@ -109,20 +109,20 @@ export function loadPullRequestInbox(input: {
     const comments = yield* Effect.forEach(
       candidates,
       (notification) =>
-        input.withGitHubRead(
-          input.github.getPullRequestInboxComment({
-            cwd: input.cwd,
-            commentUrl: notification.latestCommentUrl!,
-          }),
-        ).pipe(
-          Effect.map((comment) => [notification.id, comment] as const),
-          Effect.catch(() => Effect.succeed(null)),
-        ),
+        input
+          .withGitHubRead(
+            input.github.getPullRequestInboxComment({
+              cwd: input.cwd,
+              commentUrl: notification.latestCommentUrl!,
+            }),
+          )
+          .pipe(
+            Effect.map((comment) => [notification.id, comment] as const),
+            Effect.catch(() => Effect.succeed(null)),
+          ),
       { concurrency: INBOX_COMMENT_CONCURRENCY },
     );
-    const commentsByNotificationId = new Map(
-      comments.flatMap((entry) => (entry ? [entry] : [])),
-    );
+    const commentsByNotificationId = new Map(comments.flatMap((entry) => (entry ? [entry] : [])));
 
     const humanNotifications = candidates.flatMap((notification) => {
       const comment = commentsByNotificationId.get(notification.id);
@@ -146,9 +146,15 @@ export function loadPullRequestInbox(input: {
       }
     >();
     for (const entry of humanNotifications) {
-      const key = pullRequestInboxIdentityKey(entry.notification.repository, entry.notification.number);
+      const key = pullRequestInboxIdentityKey(
+        entry.notification.repository,
+        entry.notification.number,
+      );
       const current = latestByPullRequest.get(key);
-      if (!current || Date.parse(entry.notification.updatedAt) >= Date.parse(current.notification.updatedAt)) {
+      if (
+        !current ||
+        Date.parse(entry.notification.updatedAt) >= Date.parse(current.notification.updatedAt)
+      ) {
         latestByPullRequest.set(key, entry);
       }
     }

@@ -58,11 +58,11 @@ Reviewers must not treat the remote branch and the local working tree as the sam
 
 ### Committed branch: `5056e395e..9780ff8bb`
 
-| Commit              | Summary                                       |                                         Size |
-| ------------------- | --------------------------------------------- | -------------------------------------------: |
+| Commit              | Summary                                        |                                         Size |
+| ------------------- | ---------------------------------------------- | -------------------------------------------: |
 | `0e5f6af9c`         | Refactor Luminor orchestration and web UI flow |                  387 files, +43,323 / -9,299 |
-| `9780ff8bb`         | Consolidate desktop IPC channel constants     |                        14 files, +287 / -240 |
-| **Committed total** | Two commits after `v0.5.2`                    | **394 files, +43,571 / -9,500; net +34,071** |
+| `9780ff8bb`         | Consolidate desktop IPC channel constants      |                        14 files, +287 / -240 |
+| **Committed total** | Two commits after `v0.5.2`                     | **394 files, +43,571 / -9,500; net +34,071** |
 
 ### Current tracked working-tree changes: `HEAD..working tree`
 
@@ -214,7 +214,7 @@ The table below explains what each workstream was trying to fix and what a revie
 
 | Workstream                              | Why it was needed                                                                   | Main change                                                             | Result to verify                                                       |
 | --------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `P2-ACP-01` ACP foundation              | Luminor maintained a custom wire stack beside the official SDK                       | Official SDK owns all production ACP wire behavior; custom wire deleted | Grok, Droid, and Cursor have one wire implementation and no fallback   |
+| `P2-ACP-01` ACP foundation              | Luminor maintained a custom wire stack beside the official SDK                      | Official SDK owns all production ACP wire behavior; custom wire deleted | Grok, Droid, and Cursor have one wire implementation and no fallback   |
 | `P2-WEB-STATE-01` Web state             | Thread data had normalized and derived/legacy owners that required synchronization  | Normalized slices became the runtime authority                          | Chat/thread updates cannot diverge between duplicate stores            |
 | `P2-PROVIDER-META-01` Provider metadata | Ordering, labels, discovery, health, usage, and settings visibility were duplicated | Shared exhaustive provider descriptor and revision-aware health         | Every provider surface uses consistent identity and presentation rules |
 
@@ -308,11 +308,11 @@ This is not “remove Effect from ACP.” It is a division of responsibility:
 | NDJSON framing and encoding                   | Official SDK           |
 | JSON-RPC request correlation and cancellation | Official SDK           |
 | Client handler dispatch                       | Official SDK           |
-| Provider process supervision                  | Luminor/Effect          |
-| Queue and resource limits                     | Luminor/Effect          |
-| Session/product policy                        | Luminor/Effect          |
-| Normalized Luminor events                      | Luminor/Effect          |
-| Error translation into Luminor domain errors   | Thin local adapter     |
+| Provider process supervision                  | Luminor/Effect         |
+| Queue and resource limits                     | Luminor/Effect         |
+| Session/product policy                        | Luminor/Effect         |
+| Normalized Luminor events                     | Luminor/Effect         |
+| Error translation into Luminor domain errors  | Thin local adapter     |
 
 ### Why this choice was made
 

@@ -96,7 +96,11 @@ describe("deriveLuminorMcpToolTitle", () => {
         "Luminor is reading thread activity",
         "Luminor read thread activity",
       ],
-      ["luminor_read_thread_events", "Luminor is reading thread events", "Luminor read thread events"],
+      [
+        "luminor_read_thread_events",
+        "Luminor is reading thread events",
+        "Luminor read thread events",
+      ],
       [
         "luminor_read_thread_runtime_events",
         "Luminor is reading thread runtime events",
@@ -111,7 +115,11 @@ describe("deriveLuminorMcpToolTitle", () => {
         "Luminor finished waiting for threads",
       ],
       ["luminor_send_message", "Luminor is sending a message", "Luminor sent a message"],
-      ["luminor_interrupt_thread", "Luminor is interrupting a thread", "Luminor interrupted a thread"],
+      [
+        "luminor_interrupt_thread",
+        "Luminor is interrupting a thread",
+        "Luminor interrupted a thread",
+      ],
       ["luminor_set_thread_title", "Luminor is renaming a thread", "Luminor renamed a thread"],
       ["luminor_set_thread_archived", "Luminor is updating a thread", "Luminor updated a thread"],
       [

@@ -1713,7 +1713,8 @@ export const checkAntigravityProviderStatus = (
       authStatus: "unknown",
       version: parsedVersion,
       checkedAt,
-      message: "Antigravity CLI is installed, but Luminor could not verify login by listing models.",
+      message:
+        "Antigravity CLI is installed, but Luminor could not verify login by listing models.",
     } satisfies ServerProviderStatus;
   });
 

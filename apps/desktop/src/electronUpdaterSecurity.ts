@@ -15,7 +15,10 @@ import {
   matchesDistinguishedName,
   parseDistinguishedName,
 } from "@luminor/shared/windowsCertificate";
-import { prepareWindowsSafeProcess, resolveWindowsSystemRoot } from "@luminor/shared/windowsProcess";
+import {
+  prepareWindowsSafeProcess,
+  resolveWindowsSystemRoot,
+} from "@luminor/shared/windowsProcess";
 
 export { parseDistinguishedName } from "@luminor/shared/windowsCertificate";
 

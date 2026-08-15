@@ -344,7 +344,11 @@ describe("discoverSkillsCatalog", () => {
   it("prefers the provider-native copy and falls back to Luminor for that provider", async () => {
     await writeSkill(path.join(luminorBaseDir, "skills", "shared"), "shared", "Luminor copy");
     await writeSkill(path.join(homeDir, ".codex", "skills", "shared"), "shared", "Codex copy");
-    await writeSkill(path.join(luminorBaseDir, "skills", "only-luminor"), "only-luminor", "Fallback");
+    await writeSkill(
+      path.join(luminorBaseDir, "skills", "only-luminor"),
+      "only-luminor",
+      "Fallback",
+    );
 
     const codexView = await discoverSkillsCatalog({ homeDir, luminorBaseDir, provider: "codex" });
     const codexShared = codexView.find((skill) => skill.name === "shared");

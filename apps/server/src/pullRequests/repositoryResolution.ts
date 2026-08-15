@@ -224,3 +224,12 @@ export function resolveGitHubRepository(git: GitCoreShape, cwd: string) {
     Effect.map(({ repositories }) => ({ repository: repositories[0] ?? null, repositories })),
   );
 }
+
+export function resolvePreferredGitHubRepositoryInventory(git: GitCoreShape, cwd: string) {
+  return resolveGitHubRepository(git, cwd).pipe(
+    Effect.map(({ repository }) => ({
+      repositories: repository ? [repository] : [],
+      authoritative: true,
+    })),
+  );
+}

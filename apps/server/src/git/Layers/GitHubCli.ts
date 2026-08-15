@@ -2113,10 +2113,12 @@ const makeGitHubCli = Effect.sync(() => {
             "GitHub CLI returned invalid notification JSON.",
           ),
         ),
-        Effect.map((entries) => entries.flatMap((entry) => {
-          const notification = normalizeInboxNotification(entry);
-          return notification ? [notification] : [];
-        })),
+        Effect.map((entries) =>
+          entries.flatMap((entry) => {
+            const notification = normalizeInboxNotification(entry);
+            return notification ? [notification] : [];
+          }),
+        ),
       ),
     getPullRequestInboxComment: (input) => {
       const path = parseGitHubCommentApiPath(input.commentUrl);

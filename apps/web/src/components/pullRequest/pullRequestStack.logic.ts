@@ -1,4 +1,8 @@
-import type { PullRequestDetail, PullRequestStack, PullRequestStackEntry } from "@luminor/contracts";
+import type {
+  PullRequestDetail,
+  PullRequestStack,
+  PullRequestStackEntry,
+} from "@luminor/contracts";
 
 export type PullRequestStackAssessment = {
   readonly label:

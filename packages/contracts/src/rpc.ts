@@ -779,11 +779,14 @@ export const WsPullRequestsMarkInboxViewedRpc = Rpc.make(WS_METHODS.pullRequests
   error: WsRpcError,
 });
 
-export const WsPullRequestsMarkInboxNotifiedRpc = Rpc.make(WS_METHODS.pullRequestsMarkInboxNotified, {
-  payload: PullRequestInboxMarkNotifiedInput,
-  success: Schema.Void,
-  error: WsRpcError,
-});
+export const WsPullRequestsMarkInboxNotifiedRpc = Rpc.make(
+  WS_METHODS.pullRequestsMarkInboxNotified,
+  {
+    payload: PullRequestInboxMarkNotifiedInput,
+    success: Schema.Void,
+    error: WsRpcError,
+  },
+);
 
 export const WsPullRequestsDetailRpc = Rpc.make(WS_METHODS.pullRequestsDetail, {
   payload: PullRequestDetailInput,

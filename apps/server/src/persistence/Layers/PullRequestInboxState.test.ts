@@ -5,9 +5,7 @@ import { PullRequestInboxState } from "../Services/PullRequestInboxState.ts";
 import { PullRequestInboxStateLive } from "./PullRequestInboxState.ts";
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
 
-const layer = it.layer(
-  PullRequestInboxStateLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
-);
+const layer = it.layer(PullRequestInboxStateLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)));
 
 layer("PullRequestInboxState", (it) => {
   it.effect("baselines first-run initialization and preserves viewed versus notified fields", () =>

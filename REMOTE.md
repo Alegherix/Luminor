@@ -8,13 +8,13 @@ The Luminor CLI accepts the following configuration options, available either as
 
 | CLI flag                | Env var               | Notes                              |
 | ----------------------- | --------------------- | ---------------------------------- |
-| `--mode <web\|desktop>` | `LUMINOR_MODE`         | Runtime mode.                      |
-| `--port <number>`       | `LUMINOR_PORT`         | HTTP/WebSocket port.               |
-| `--host <address>`      | `LUMINOR_HOST`         | Bind interface/address.            |
-| `--home-dir <path>`     | `LUMINOR_HOME`         | Base directory.                    |
+| `--mode <web\|desktop>` | `LUMINOR_MODE`        | Runtime mode.                      |
+| `--port <number>`       | `LUMINOR_PORT`        | HTTP/WebSocket port.               |
+| `--host <address>`      | `LUMINOR_HOST`        | Bind interface/address.            |
+| `--home-dir <path>`     | `LUMINOR_HOME`        | Base directory.                    |
 | `--dev-url <url>`       | `VITE_DEV_SERVER_URL` | Dev web URL redirect/proxy target. |
-| `--no-browser`          | `LUMINOR_NO_BROWSER`   | Disable auto-open browser.         |
-| `--auth-token <token>`  | `LUMINOR_AUTH_TOKEN`   | WebSocket auth token.              |
+| `--no-browser`          | `LUMINOR_NO_BROWSER`  | Disable auto-open browser.         |
+| `--auth-token <token>`  | `LUMINOR_AUTH_TOKEN`  | WebSocket auth token.              |
 
 > TIP: Use the `--help` flag to see all available options and their descriptions.
 

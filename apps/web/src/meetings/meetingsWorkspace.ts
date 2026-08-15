@@ -405,6 +405,9 @@ export function meetingRowOffersJoin(
   if (meetingSessionStatus(session, now) === "ended") {
     return false;
   }
+  if (snapshot.selectedSessionId === session.id) {
+    return true;
+  }
   return meetingsSidebarSections(snapshot, now).live.some((item) => item.id === session.id);
 }
 

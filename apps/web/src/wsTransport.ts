@@ -60,6 +60,7 @@ import {
   Layer,
   ManagedRuntime,
   Option,
+  Queue,
   Schema,
   Scope,
   Stream,
@@ -819,70 +820,6 @@ export class WsTransport {
           throw error;
         }
       }
-      if (method === ORCHESTRATION_WS_METHODS.unsubscribeThread) {
-        const threadId = (params as { threadId: string }).threadId;
-        this.threadSubscriptions.delete(threadId);
-        await awaitWithAbort(
-          this.stopStream(`orchestration.thread:${threadId}`),
-          abortScope.signal,
-        );
-        return undefined as T;
-      }
-
-      if (method === ORCHESTRATION_WS_METHODS.subscribeShell) {
-        const wasSubscribed = this.shellSubscribed;
-        this.shellSubscribed = true;
-        this.resetStreamCapacityRetry("orchestration.shell");
-        this.resetStreamCompletionRetry("orchestration.shell");
-        const client = await awaitWithAbort(this.getClient(), abortScope.signal);
-        await this.startShellStream(client, wasSubscribed && this.shellSnapshotDelivered);
-        return undefined as T;
-      }
-      if (method === ORCHESTRATION_WS_METHODS.subscribeThread) {
-        const threadId = (params as { threadId: string }).threadId;
-        this.resetStreamCapacityRetry(`orchestration.thread:${threadId}`);
-        this.resetStreamCompletionRetry(`orchestration.thread:${threadId}`);
-        // Preserve the stored input identity across explicit refreshes so stale
-        // restart callbacks cannot supersede the newly requested stream.
-        const existingInput = this.threadSubscriptions.get(threadId);
-        const wasSubscribed = existingInput !== undefined;
-        const input = threadStreamInputsEqual(existingInput, params) ? existingInput : params;
-        this.threadSubscriptions.set(threadId, input);
-        const client = await awaitWithAbort(this.getClient(), abortScope.signal);
-        await this.startThreadStream(client, threadId, input as never, wasSubscribed);
-        return undefined as T;
-      }
-
-      const client = await awaitWithAbort(this.getClient(), abortScope.signal);
-
-      if (method === WS_METHODS.gitRunStackedAction) {
-        return (await this.runGitActionStream(client, params, abortScope.signal)) as T;
-      }
-      if (method === WS_METHODS.gitCreateDetachedWorktree) {
-        return (await this.runWorktreeSetupStream(client, params, abortScope.signal)) as T;
-      }
-      if (method === WS_METHODS.projectsProvisionFromGitHub) {
-        return (await this.runProjectProvisionStream(client, params, abortScope.signal)) as T;
-      }
-
-      const rpcInput =
-        method === ORCHESTRATION_WS_METHODS.dispatchCommand
-          ? (params as { command: unknown }).command
-          : (params ?? {});
-      const normalizedRpcInput = omitNullUserInputAnswers(rpcInput);
-      const rpcMethods = client as unknown as Record<
-        string,
-        ((input: unknown) => Effect.Effect<unknown, WsTransportRpcError, never>) | undefined
-      >;
-      const maybeRpcCall = rpcMethods[method];
-      if (maybeRpcCall == null) {
-        throw new WsTransportRpcError({ message: `Unknown RPC method: ${method}` });
-      }
-      const clientRuntime = this.getClientRuntime(client);
-      return (await clientRuntime.runPromise(
-        maybeRpcCall!(normalizedRpcInput),
-        abortScope.signal ? { signal: abortScope.signal } : undefined,
-      )) as T;
     } catch (error) {
       if (abortScope.didTimeout()) {
         throw new WsTransportRequestInterruptedError({
@@ -939,6 +876,9 @@ export class WsTransport {
 
     if (method === WS_METHODS.gitRunStackedAction) {
       return (await this.runGitActionStream(client, params, signal)) as T;
+    }
+    if (method === WS_METHODS.gitCreateDetachedWorktree) {
+      return (await this.runWorktreeSetupStream(client, params, signal)) as T;
     }
     if (method === WS_METHODS.projectsProvisionFromGitHub) {
       return (await this.runProjectProvisionStream(client, params, signal)) as T;
@@ -1979,19 +1919,56 @@ export class WsTransport {
     params: unknown,
     signal?: AbortSignal,
   ): Promise<GitCreateDetachedWorktreeResult> {
+    const request = client[WS_METHODS.gitCreateDetachedWorktree] as (
+      input: unknown,
+      options?: { readonly asQueue: true },
+    ) => unknown;
+    const response = request(params, { asQueue: true });
+    const runtime = this.getClientRuntime(client);
+    const runOptions = signal ? { signal } : undefined;
     let result: GitCreateDetachedWorktreeResult | null = null;
-    await this.getClientRuntime(client).runPromise(
-      Stream.runForEach(client[WS_METHODS.gitCreateDetachedWorktree](params as never), (event) =>
-        Effect.sync(() => {
-          const progressEvent = event as GitWorktreeSetupProgressEvent;
-          this.emit(WS_CHANNELS.gitWorktreeSetupProgress, progressEvent);
-          if (progressEvent.kind === "completed") {
-            result = progressEvent.result;
-          }
-        }),
-      ),
-      signal ? { signal } : undefined,
-    );
+    const onEvent = (event: GitWorktreeSetupProgressEvent) => {
+      this.emit(WS_CHANNELS.gitWorktreeSetupProgress, event);
+      if (event.kind === "completed") {
+        result = event.result;
+      }
+    };
+
+    if (Stream.isStream(response)) {
+      await runtime.runPromise(
+        Stream.runForEach(response, (event) =>
+          Effect.sync(() => {
+            onEvent(event as GitWorktreeSetupProgressEvent);
+          }),
+        ),
+        runOptions,
+      );
+    } else if (Effect.isEffect(response)) {
+      await runtime.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const value = yield* (response as Effect.Effect<
+              | GitCreateDetachedWorktreeResult
+              | Queue.Dequeue<GitWorktreeSetupProgressEvent>
+            >);
+            if (Queue.isQueue(value)) {
+              yield* Stream.runForEach(Stream.fromQueue(value), (event) =>
+                Effect.sync(() => {
+                  onEvent(event);
+                }),
+              );
+              return;
+            }
+            result = value;
+          }),
+        ),
+        runOptions,
+      );
+    } else {
+      throw new Error(
+        `Worktree creation returned ${Object.prototype.toString.call(response)} instead of a progress stream.`,
+      );
+    }
     if (!result) throw new Error("Worktree creation completed without a final result.");
     return result;
   }

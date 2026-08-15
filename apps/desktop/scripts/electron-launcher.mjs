@@ -13,7 +13,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
-import { resolveLuminorDesktopFlavor, luminorDesktopIdentity } from "@luminor/shared/desktopIdentity";
+import {
+  resolveLuminorDesktopFlavor,
+  luminorDesktopIdentity,
+} from "@luminor/shared/desktopIdentity";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 

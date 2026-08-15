@@ -763,6 +763,34 @@ describe("meetingRowOffersJoin", () => {
 
     expect(meetingRowOffersJoin(snapshot.sessions[0]!, snapshot, NOW)).toBe(true);
   });
+
+  it("offers Join for a selected overlapping upcoming meeting", () => {
+    const first = {
+      id: "first",
+      title: "Friday feedback",
+      startAt: "2026-08-12T12:10:00.000Z",
+      endAt: "2026-08-12T12:25:00.000Z",
+      meetUrl: "https://meet.google.com/abc-defg-hij",
+      attendees: [],
+      status: "upcoming" as const,
+      source: "calendar" as const,
+    };
+    const selected = {
+      ...first,
+      id: "selected",
+      title: "Feedback management",
+      meetUrl: "https://meet.google.com/klm-nopq-rst",
+    };
+    const snapshot = {
+      ...createIdleMeetingsWorkspace(),
+      connection: "signed-in" as const,
+      selectedSessionId: selected.id,
+      sessions: [first, selected],
+    };
+
+    expect(meetingRowOffersJoin(selected, snapshot, NOW)).toBe(true);
+    expect(meetingRowOffersJoin(first, snapshot, NOW)).toBe(true);
+  });
 });
 
 describe("meetings reminders workspace", () => {

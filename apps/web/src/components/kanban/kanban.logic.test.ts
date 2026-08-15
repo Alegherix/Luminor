@@ -1083,9 +1083,9 @@ describe("kanban board filters", () => {
   });
 
   it("keeps draft ahead of conflicts on an open PR", () => {
-    expect(
-      resolveKanbanPrFilterState(makePr({ isDraft: true, mergeability: "conflicting" })),
-    ).toBe("draft");
+    expect(resolveKanbanPrFilterState(makePr({ isDraft: true, mergeability: "conflicting" }))).toBe(
+      "draft",
+    );
   });
 
   it("maps work state from the card column", () => {
@@ -1233,10 +1233,9 @@ describe("kanban board filters", () => {
     expect(card).toBeDefined();
     expect(kanbanCardPullRequest(card!)).toBeNull();
     expect(
-      matchPullRequestListEntryForCard(
-        card!,
-        [makeListEntry({ headBranch: "feat/client-qa" as PullRequestListEntry["headBranch"] })],
-      )?.number,
+      matchPullRequestListEntryForCard(card!, [
+        makeListEntry({ headBranch: "feat/client-qa" as PullRequestListEntry["headBranch"] }),
+      ])?.number,
     ).toBe(1);
   });
 
@@ -1296,9 +1295,7 @@ describe("kanban board filters", () => {
     });
 
     expect(filtered.totalCount).toBe(1);
-    expect(filtered.projects[0]?.done.map((card) => card.threadId)).toEqual([
-      "thread-review-live",
-    ]);
+    expect(filtered.projects[0]?.done.map((card) => card.threadId)).toEqual(["thread-review-live"]);
   });
 
   it("maps worktree paths to the live checkout branch and ignores remotes", () => {
@@ -1336,12 +1333,7 @@ describe("kanban board filters", () => {
           url: "https://github.com/acme/widgets/pull/18",
         }),
       ],
-      new Map([
-        [
-          "thread-renamed",
-          { branch: "feat/project-type-slice", pullRequest: null },
-        ],
-      ]),
+      new Map([["thread-renamed", { branch: "feat/project-type-slice", pullRequest: null }]]),
     );
     const card = board.projects[0]?.done[0];
     expect(resolveKanbanPrFilterState(kanbanCardPullRequest(card!))).toBe("reviewNeeded");

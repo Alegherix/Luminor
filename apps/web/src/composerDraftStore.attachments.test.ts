@@ -541,7 +541,6 @@ describe("composerDraftStore prompt history saved draft", () => {
       useComposerDraftStore.getState().draftsByThreadId[threadId]?.promptHistorySavedDraft?.images,
     ).toEqual([hydratedImage]);
   });
-
 });
 
 describe("composerDraftStore copyTransferableComposerState", () => {

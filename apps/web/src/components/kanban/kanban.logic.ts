@@ -753,20 +753,14 @@ export function countActiveKanbanFilterGroups(filters: KanbanBoardFilters): numb
   );
 }
 
-export function toggleKanbanFilterValue<T extends string>(
-  selected: readonly T[],
-  value: T,
-): T[] {
+export function toggleKanbanFilterValue<T extends string>(selected: readonly T[], value: T): T[] {
   return selected.includes(value)
     ? selected.filter((entry) => entry !== value)
     : [...selected, value];
 }
 
 export function resolveKanbanPrFilterState(
-  pr:
-    | Pick<OrchestrationThreadPullRequest, "state" | "isDraft" | "mergeability">
-    | null
-    | undefined,
+  pr: Pick<OrchestrationThreadPullRequest, "state" | "isDraft" | "mergeability"> | null | undefined,
 ): KanbanPrFilterState | null {
   if (!pr) {
     return null;
@@ -1017,9 +1011,7 @@ export function applyKanbanBoardFilters(
   let totalCount = 0;
   const projects = board.projects.map((project) => {
     const draft = project.draft.filter((card) => kanbanCardMatchesFilters(card, filters));
-    const inProgress = project.inProgress.filter((card) =>
-      kanbanCardMatchesFilters(card, filters),
-    );
+    const inProgress = project.inProgress.filter((card) => kanbanCardMatchesFilters(card, filters));
     const done = project.done.filter((card) => kanbanCardMatchesFilters(card, filters));
     const projectTotalCount = draft.length + inProgress.length + done.length;
     totalCount += projectTotalCount;

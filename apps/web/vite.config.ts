@@ -207,6 +207,9 @@ export default defineConfig({
       "@pierre/diffs/react",
       "@pierre/diffs/worker/worker.js",
       "react-icons/gr",
+      "effect",
+      "effect/unstable/rpc",
+      "effect/unstable/socket/Socket",
     ],
   },
   define: {
@@ -216,6 +219,7 @@ export default defineConfig({
   },
   resolve: {
     tsconfigPaths: true,
+    dedupe: ["effect"],
   },
   server: {
     port,

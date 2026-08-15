@@ -34,7 +34,18 @@ import {
   type ServerLifecycleStreamEvent,
 } from "@luminor/contracts";
 import { clamp } from "effect/Number";
-import { Effect, FileSystem, Layer, Option, Path, Queue, Schema, Scope, Stream } from "effect";
+import {
+  Cause,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Queue,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
 import { Headers, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { RpcMiddleware, RpcSchema, RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
@@ -288,23 +299,25 @@ function readDescendantProcesses(rootPid: number): Promise<ProcessTableRow[]> {
 }
 
 function toWsRpcError(cause: unknown, fallbackMessage: string) {
-  if (Schema.is(WsRpcError)(cause)) {
-    return cause;
+  const failure = Cause.isCause(cause) ? Cause.squash(cause) : cause;
+  if (Schema.is(WsRpcError)(failure)) {
+    return failure;
   }
   // Missing projector cursors make the snapshot fence underivable. Mark the
   // failure non-retryable with its own code so clients surface a diagnosable
   // fault instead of restarting the stream into the same condition forever.
-  if (Schema.is(ProjectionStateIncompleteError)(cause)) {
+  if (Schema.is(ProjectionStateIncompleteError)(failure)) {
     return new WsRpcError({
-      message: cause.message,
+      message: failure.message,
       code: "ORCHESTRATION_PROJECTION_STATE_INCOMPLETE",
       retryable: false,
-      cause,
+      cause: failure,
     });
   }
   return new WsRpcError({
-    message: cause instanceof Error && cause.message.length > 0 ? cause.message : fallbackMessage,
-    cause,
+    message:
+      failure instanceof Error && failure.message.length > 0 ? failure.message : fallbackMessage,
+    cause: failure,
   });
 }
 

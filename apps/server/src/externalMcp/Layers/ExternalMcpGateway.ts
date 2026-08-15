@@ -126,7 +126,8 @@ function readAuditMetadata(tool: string, args: Record<string, unknown>) {
     projectId: stringOrNull("projectId"),
     runtimeMode:
       stringOrNull("runtimeMode") ?? (tool === "luminor_create_task" ? "approval-required" : null),
-    environment: stringOrNull("environment") ?? (tool === "luminor_create_task" ? "worktree" : null),
+    environment:
+      stringOrNull("environment") ?? (tool === "luminor_create_task" ? "worktree" : null),
   };
 }
 

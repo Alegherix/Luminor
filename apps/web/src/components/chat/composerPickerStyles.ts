@@ -63,7 +63,7 @@ export const COMPOSER_MUTED_ACCENT_TEXT_CLASS_NAME = "text-muted-foreground/45";
 // sync with dropdown group labels like "Git actions". Picker padding is still
 // tuned via the `--picker-section-py` token on `[data-slot="menu-label"]`.
 
-export const COMPOSER_MAX_WIDTH_CLASS_NAME = "max-w-[var(--app-chat-max-width,46rem)]";
+export const COMPOSER_MAX_WIDTH_CLASS_NAME = "max-w-[var(--app-chat-max-width,75rem)]";
 /** Main chat column background — matches the theme Background setting exactly. */
 export const CHAT_BACKGROUND_CLASS_NAME = "bg-[var(--color-background-surface)]";
 
@@ -96,17 +96,14 @@ export const CHAT_MAIN_CONTENT_SURFACE_CLASS_NAME = `${CHAT_BACKGROUND_CLASS_NAM
  * Chat shells used `h-dvh` before the status bar existed; without this offset the
  * bottom of the composer sits under the footer (`--app-status-bar-height`).
  */
-export const APP_VIEWPORT_HEIGHT_CLASS_NAME =
-  "h-[calc(100dvh-var(--app-status-bar-height,0px))]";
+export const APP_VIEWPORT_HEIGHT_CLASS_NAME = "h-[calc(100dvh-var(--app-status-bar-height,0px))]";
 
 /** Clipped full-height inset shell for routes that already own an outer card wrapper.
  *  Default RouteInsetSurface card routes use an unclipped inset so seam shadows can bleed. */
-export const CHAT_ROUTE_INSET_SHELL_CLASS_NAME =
-  `${APP_VIEWPORT_HEIGHT_CLASS_NAME} min-h-0 overflow-hidden overscroll-y-none text-foreground`;
+export const CHAT_ROUTE_INSET_SHELL_CLASS_NAME = `${APP_VIEWPORT_HEIGHT_CLASS_NAME} min-h-0 overflow-hidden overscroll-y-none text-foreground`;
 
 /** Outer viewport shell for the split/single thread content wrapper that carries the card. */
-export const CHAT_MAIN_VIEWPORT_SHELL_CLASS_NAME =
-  `flex ${APP_VIEWPORT_HEIGHT_CLASS_NAME} min-h-0 min-w-0 flex-1 overflow-hidden`;
+export const CHAT_MAIN_VIEWPORT_SHELL_CLASS_NAME = `flex ${APP_VIEWPORT_HEIGHT_CLASS_NAME} min-h-0 min-w-0 flex-1 overflow-hidden`;
 
 /** Horizontal padding shared by the transcript and composer columns. */
 export const CHAT_COLUMN_GUTTER_CLASS_NAME =

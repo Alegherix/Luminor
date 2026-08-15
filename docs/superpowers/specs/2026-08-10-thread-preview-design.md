@@ -21,14 +21,14 @@ supplies the worktree, the port, the process supervision, and the viewport.
 
 ## Decisions
 
-| Decision | Choice |
-|---|---|
-| Scope | Generic per project; the user configures the command |
-| Ownership | One preview per thread; survives thread switches and window closes |
-| URL discovery | Injected port when a URL template is configured, otherwise stdout sniffing, otherwise manual entry |
-| Viewing surface | Embedded only (a right-dock pane). External/desktop previews are out of scope |
-| Config location | Project settings in the DB, as a `ProjectScript` |
-| Threads without a worktree | Launcher entry visible but disabled |
+| Decision                   | Choice                                                                                             |
+| -------------------------- | -------------------------------------------------------------------------------------------------- |
+| Scope                      | Generic per project; the user configures the command                                               |
+| Ownership                  | One preview per thread; survives thread switches and window closes                                 |
+| URL discovery              | Injected port when a URL template is configured, otherwise stdout sniffing, otherwise manual entry |
+| Viewing surface            | Embedded only (a right-dock pane). External/desktop previews are out of scope                      |
+| Config location            | Project settings in the DB, as a `ProjectScript`                                                   |
+| Threads without a worktree | Launcher entry visible but disabled                                                                |
 
 ## Existing building blocks
 
@@ -79,7 +79,7 @@ No separate env map and no separate cwd: cwd is always the thread's worktree.
 
 ### Execution
 
-The preview process *is* a managed terminal, opened via
+The preview process _is_ a managed terminal, opened via
 `runProjectCommandInTerminal` with a reserved terminal id (`preview`) per thread.
 This inherits logs, scrollback, restart, status events, and process-tree kill
 without new process code.
@@ -109,7 +109,7 @@ so it owns the facts about it. The detection function itself lives in
 ### Why preview state is in-memory
 
 The preview process is a child of the server. If the server dies, the process
-dies. Persisted run state could therefore only ever lie. Only the *config* (the
+dies. Persisted run state could therefore only ever lie. Only the _config_ (the
 preview script on the project) is persisted. After a server restart the registry
 is empty and the pane shows `idle` — which is true.
 
@@ -167,12 +167,12 @@ worktree".
 
 Header (via the shared `DockPaneHeader`): status dot plus control.
 
-| State | Header |
-|---|---|
-| idle | `Start` |
-| starting | spinner, `Cancel` |
-| running | port chip (`:5174`), `Reload`, `Logs`, `Stop` |
-| failed | red dot, last stderr line, `Retry` |
+| State    | Header                                        |
+| -------- | --------------------------------------------- |
+| idle     | `Start`                                       |
+| starting | spinner, `Cancel`                             |
+| running  | port chip (`:5174`), `Reload`, `Logs`, `Stop` |
+| failed   | red dot, last stderr line, `Retry`            |
 
 Body: a webview on the preview URL when running. Otherwise a centered empty
 state — heading, one line of explanation, primary action. The failed state shows
@@ -191,13 +191,13 @@ the layout.
 
 ## Testing
 
-| Unit | Coverage |
-|---|---|
-| `urlDetection` | table test: vite banner, next banner, ANSI-wrapped URL, `127.0.0.1`, `[::1]`, `0.0.0.0` → `localhost`, a URL inside an error message that must not match, a URL split across two writes |
-| `portAllocation` | concurrent allocations return distinct ports; in-flight reservation is released on spawn failure |
-| preview registry | start→running→stop; double start is idempotent; process death → `failed`; stop on a non-running preview is a no-op |
-| `rightDockStore.logic` | `preview` as a singleton kind, extending the existing singleton tests |
-| `DockPreviewPane` | state→render mapping, browser-mode test following the existing `.browser.tsx` convention |
+| Unit                   | Coverage                                                                                                                                                                                |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `urlDetection`         | table test: vite banner, next banner, ANSI-wrapped URL, `127.0.0.1`, `[::1]`, `0.0.0.0` → `localhost`, a URL inside an error message that must not match, a URL split across two writes |
+| `portAllocation`       | concurrent allocations return distinct ports; in-flight reservation is released on spawn failure                                                                                        |
+| preview registry       | start→running→stop; double start is idempotent; process death → `failed`; stop on a non-running preview is a no-op                                                                      |
+| `rightDockStore.logic` | `preview` as a singleton kind, extending the existing singleton tests                                                                                                                   |
+| `DockPreviewPane`      | state→render mapping, browser-mode test following the existing `.browser.tsx` convention                                                                                                |
 
 The split-across-chunks case is the real failure mode in URL sniffing, which is
 why the detector keeps a sliding tail buffer rather than examining one chunk.

@@ -132,7 +132,13 @@ const makePullRequestInboxState = Effect.gen(function* () {
       ),
     );
 
-  return { initializedAt, markInitialized, list, markViewed, markNotified } satisfies PullRequestInboxStateShape;
+  return {
+    initializedAt,
+    markInitialized,
+    list,
+    markViewed,
+    markNotified,
+  } satisfies PullRequestInboxStateShape;
 });
 
 export const PullRequestInboxStateLive = Layer.effect(

@@ -75,7 +75,9 @@ export function buildExternalMcpOverviewNextSteps(
   return [
     "Call luminor_capabilities with a projectId to list the exact provider/model targets available to this integration.",
     ...(capabilities.has("tasks:create") ? ["Create work with luminor_create_task."] : []),
-    ...(capabilities.has("tasks:wait") ? ["Follow permitted work with luminor_wait_for_task."] : []),
+    ...(capabilities.has("tasks:wait")
+      ? ["Follow permitted work with luminor_wait_for_task."]
+      : []),
     ...(capabilities.has("tasks:read")
       ? ["Read permitted task results with luminor_read_task."]
       : []),

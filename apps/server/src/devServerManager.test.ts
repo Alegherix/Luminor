@@ -4,7 +4,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { ProjectId, type ProjectDevServer, type ServerLocalServerProcess } from "@luminor/contracts";
+import {
+  ProjectId,
+  type ProjectDevServer,
+  type ServerLocalServerProcess,
+} from "@luminor/contracts";
 
 import { findProjectDevServerForLocalServer } from "./devServerManager";
 

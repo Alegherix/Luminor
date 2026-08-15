@@ -7260,7 +7260,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await vi.waitFor(
         () => {
           expect(document.documentElement.style.getPropertyValue("--app-chat-max-width")).toBe(
-            "72rem",
+            "75rem",
           );
         },
         { timeout: 8_000, interval: 16 },
@@ -7273,8 +7273,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
             "[data-timeline-row-kind='message'][data-message-role='assistant']",
           ) as HTMLElement | null;
           expect(row).not.toBeNull();
-          expect(row?.className ?? "").toContain("max-w-[var(--app-chat-max-width,46rem)]");
-          expect(getComputedStyle(row!).maxWidth).toBe("1152px"); // 72rem at 16px root
+          expect(row?.className ?? "").toContain("max-w-[var(--app-chat-max-width,75rem)]");
+          expect(getComputedStyle(row!).maxWidth).toBe("1200px"); // 75rem at 16px root
         },
         { timeout: 8_000, interval: 16 },
       );

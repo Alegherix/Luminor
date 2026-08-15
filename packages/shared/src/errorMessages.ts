@@ -14,8 +14,7 @@ export const THREAD_NOT_ARCHIVED_INVARIANT_MARKER = "is not archived for command
 // Surfaces when a WebSocket reconnect/scope close cancels an in-flight RPC.
 const EFFECT_FIBER_INTERRUPT_MESSAGE = "all fibers interrupted without error";
 
-export const CONNECTION_INTERRUPTED_USER_MESSAGE =
-  "Connection was interrupted. Please try again.";
+export const CONNECTION_INTERRUPTED_USER_MESSAGE = "Connection was interrupted. Please try again.";
 
 export function collectErrorMessages(
   error: unknown,

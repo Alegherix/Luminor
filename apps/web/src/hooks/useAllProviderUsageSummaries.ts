@@ -68,9 +68,7 @@ export function useAllProviderUsageSummaries(
   const codexHomePath = settings.codexHomePath || null;
   const queryClient = useQueryClient();
 
-  const allProviderUsageQuery = useQuery(
-    serverAllProviderUsageQueryOptions({ enabled }),
-  );
+  const allProviderUsageQuery = useQuery(serverAllProviderUsageQueryOptions({ enabled }));
   const localSnapshotQueries = useQueries({
     queries: PROVIDER_USAGE_PROVIDERS.map((provider) =>
       serverProviderUsageSnapshotQueryOptions({

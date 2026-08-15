@@ -122,12 +122,7 @@ const CHAT_WIDTH_OPTIONS = [
   {
     value: "standard",
     label: "Standard",
-    description: "Keeps the chat column at the default reading width (46rem).",
-  },
-  {
-    value: "wide",
-    label: "Wide",
-    description: "Gives tables and wide content more room (72rem).",
+    description: "Uses the restored 1200px chat column (75rem).",
   },
   {
     value: "full",

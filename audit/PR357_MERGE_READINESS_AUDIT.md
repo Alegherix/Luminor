@@ -172,15 +172,15 @@ otherwise have to maintain itself.
 
 ### What changes compared with the old Effect ACP implementation?
 
-| Concern                        | Before                                          | Current target                                                      |
-| ------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------- |
-| ACP schemas and method names   | Generated/private `effect-acp` ownership        | Official SDK                                                        |
-| NDJSON and JSON-RPC            | Private framing/correlation/dispatch            | Official SDK                                                        |
+| Concern                        | Before                                           | Current target                                                      |
+| ------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------- |
+| ACP schemas and method names   | Generated/private `effect-acp` ownership         | Official SDK                                                        |
+| NDJSON and JSON-RPC            | Private framing/correlation/dispatch             | Official SDK                                                        |
 | Protocol upgrades              | Luminor had to regenerate and reconcile behavior | Follow the official SDK and negotiate protocol capabilities         |
-| Process lifecycle              | Effect                                          | Effect, unchanged                                                   |
-| Backpressure and queue budgets | Effect/custom transport                         | Luminor-owned bounded bridge around the official SDK                 |
-| Canonical provider events      | Luminor adapters                                 | Luminor adapters, unchanged                                          |
-| Error surface                  | Effect ACP errors                               | One small local Effect error translation around official SDK errors |
+| Process lifecycle              | Effect                                           | Effect, unchanged                                                   |
+| Backpressure and queue budgets | Effect/custom transport                          | Luminor-owned bounded bridge around the official SDK                |
+| Canonical provider events      | Luminor adapters                                 | Luminor adapters, unchanged                                         |
+| Error surface                  | Effect ACP errors                                | One small local Effect error translation around official SDK errors |
 
 ### Is it faster, better, and lighter?
 

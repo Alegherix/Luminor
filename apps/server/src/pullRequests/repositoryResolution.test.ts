@@ -2,7 +2,10 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
 import type { ExecuteGitInput, GitCoreShape } from "../git/Services/GitCore";
-import { resolveGitHubRepositories } from "./repositoryResolution";
+import {
+  resolveGitHubRepositories,
+  resolvePreferredGitHubRepositoryInventory,
+} from "./repositoryResolution";
 
 function makeGit(input: {
   branchExitCode?: number;
@@ -146,5 +149,24 @@ describe("resolveGitHubRepositories", () => {
     await expect(Effect.runPromise(resolveGitHubRepositories(git, "/tmp/project"))).rejects.toThrow(
       "No such remote",
     );
+  });
+});
+
+describe("resolvePreferredGitHubRepositoryInventory", () => {
+  it("excludes additional upstream repositories from pull request discovery", async () => {
+    const git = makeGit({
+      branchRemote: "origin",
+      urls: {
+        origin: "https://github.com/acme/luminor.git",
+        upstream: "https://github.com/elsewhere/synara.git",
+      },
+    });
+
+    await expect(
+      Effect.runPromise(resolvePreferredGitHubRepositoryInventory(git, "/tmp/project")),
+    ).resolves.toEqual({
+      authoritative: true,
+      repositories: [{ nameWithOwner: "acme/luminor", url: "https://github.com/acme/luminor" }],
+    });
   });
 });

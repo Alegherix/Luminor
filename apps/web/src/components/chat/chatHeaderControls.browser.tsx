@@ -57,11 +57,11 @@ describe("SurfaceTabChip selection", () => {
     expect(
       Boolean(
         icon &&
-          closeButton &&
-          selectButton &&
-          (icon.compareDocumentPosition(selectButton) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 &&
-          (selectButton.compareDocumentPosition(closeButton) & Node.DOCUMENT_POSITION_FOLLOWING) !==
-            0,
+        closeButton &&
+        selectButton &&
+        (icon.compareDocumentPosition(selectButton) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 &&
+        (selectButton.compareDocumentPosition(closeButton) & Node.DOCUMENT_POSITION_FOLLOWING) !==
+          0,
       ),
     ).toBe(true);
 

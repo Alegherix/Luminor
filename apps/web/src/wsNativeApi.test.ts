@@ -149,7 +149,11 @@ describe("wsNativeApi", () => {
     const listener = vi.fn();
     onServerWelcome(listener);
 
-    const payload = { cwd: "/tmp/workspace", homeDir: "/Users/tester", projectName: "luminor-code" };
+    const payload = {
+      cwd: "/tmp/workspace",
+      homeDir: "/Users/tester",
+      projectName: "luminor-code",
+    };
     emitPush(WS_CHANNELS.serverWelcome, payload);
 
     expect(listener).toHaveBeenCalledTimes(1);

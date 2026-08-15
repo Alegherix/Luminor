@@ -1,5 +1,8 @@
 import { CommandId, type ProviderRuntimeEvent, type ThreadId } from "@luminor/contracts";
-import { makeDrainableWorker, startDrainableWorkerProducers } from "@luminor/shared/DrainableWorker";
+import {
+  makeDrainableWorker,
+  startDrainableWorkerProducers,
+} from "@luminor/shared/DrainableWorker";
 import { Cause, Effect, Layer, Option, Stream } from "effect";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";

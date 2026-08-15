@@ -224,12 +224,12 @@ describe("createMeetingsTranscriptionManager", () => {
         }),
       },
     ]);
-    expect(JSON.parse(FS.readFileSync(meetingTranscriptionConfigPath(homeDir), "utf8"))).toMatchObject(
-      {
-        command: venvPython,
-        args: bundledTranscriptionArgs(bundledScript),
-      },
-    );
+    expect(
+      JSON.parse(FS.readFileSync(meetingTranscriptionConfigPath(homeDir), "utf8")),
+    ).toMatchObject({
+      command: venvPython,
+      args: bundledTranscriptionArgs(bundledScript),
+    });
   });
 
   it("asks the user to point at the environment when the seeded wrapper script is missing", async () => {

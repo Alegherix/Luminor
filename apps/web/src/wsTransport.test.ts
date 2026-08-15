@@ -3,7 +3,7 @@
 // Layer: Web transport tests
 // Depends on: the global WebSocket constructor shim and desktop bridge URL contract.
 
-import { Cause, Effect, Exit, Stream } from "effect";
+import { Cause, Effect, Exit, Queue, Stream } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ORCHESTRATION_WS_METHODS,
@@ -363,6 +363,135 @@ describe("WsTransport", () => {
     ).resolves.toEqual(completed.result);
     expect(emit).toHaveBeenNthCalledWith(1, WS_CHANNELS.gitWorktreeSetupProgress, phase);
     expect(emit).toHaveBeenNthCalledWith(2, WS_CHANNELS.gitWorktreeSetupProgress, completed);
+  });
+
+  it("accepts a unary worktree result when the RPC client is not streaming", async () => {
+    const completed = {
+      worktree: {
+        path: "/repo/.codex/worktrees/generated/synara",
+        ref: "0123456789abcdef0123456789abcdef01234567",
+        branch: "synara/abcd1234",
+      },
+    };
+    const transport = Object.create(WsTransport.prototype) as WsTransport;
+    Object.assign(transport, {
+      emit: vi.fn(),
+      getClientRuntime: () => ({ runPromise: Effect.runPromise }),
+    });
+    const runWorktreeSetupStream = (
+      transport as unknown as {
+        runWorktreeSetupStream: (
+          client: Record<string, () => Effect.Effect<typeof completed>>,
+          params: unknown,
+        ) => Promise<typeof completed>;
+      }
+    ).runWorktreeSetupStream.bind(transport);
+
+    await expect(
+      runWorktreeSetupStream(
+        {
+          [WS_METHODS.gitCreateDetachedWorktree]: () => Effect.succeed(completed),
+        },
+        { cwd: "/repo", ref: "main" },
+      ),
+    ).resolves.toEqual(completed);
+  });
+
+  it("drains a worktree RpcClient queue when asQueue is requested", async () => {
+    const phase = {
+      progressId: "progress-1",
+      kind: "phase_started" as const,
+      phase: "branch" as const,
+    };
+    const completed = {
+      progressId: "progress-1",
+      kind: "completed" as const,
+      result: {
+        worktree: {
+          path: "/repo/.codex/worktrees/generated/synara",
+          ref: "0123456789abcdef0123456789abcdef01234567",
+          branch: "synara/abcd1234",
+        },
+      },
+    };
+    const emit = vi.fn();
+    const transport = Object.create(WsTransport.prototype) as WsTransport;
+    Object.assign(transport, {
+      emit,
+      getClientRuntime: () => ({ runPromise: Effect.runPromise }),
+    });
+    const runWorktreeSetupStream = (
+      transport as unknown as {
+        runWorktreeSetupStream: (
+          client: Record<
+            string,
+            (
+              input: unknown,
+              options?: { readonly asQueue: true },
+            ) => Effect.Effect<Queue.Dequeue<typeof phase | typeof completed>>
+          >,
+          params: unknown,
+        ) => Promise<typeof completed.result>;
+      }
+    ).runWorktreeSetupStream.bind(transport);
+
+    await expect(
+      runWorktreeSetupStream(
+        {
+          [WS_METHODS.gitCreateDetachedWorktree]: (_input, options) => {
+            expect(options?.asQueue).toBe(true);
+            return Effect.gen(function* () {
+              const queue = yield* Queue.unbounded<typeof phase | typeof completed>();
+              yield* Queue.offer(queue, phase);
+              yield* Queue.offer(queue, completed);
+              yield* Queue.end(queue);
+              return queue;
+            });
+          },
+        },
+        { cwd: "/repo", ref: "main" },
+      ),
+    ).resolves.toEqual(completed.result);
+    expect(emit).toHaveBeenNthCalledWith(1, WS_CHANNELS.gitWorktreeSetupProgress, phase);
+    expect(emit).toHaveBeenNthCalledWith(2, WS_CHANNELS.gitWorktreeSetupProgress, completed);
+  });
+
+  it("routes detached worktree RPC through the setup stream instead of runPromise", async () => {
+    const result = {
+      worktree: {
+        path: "/repo/.codex/worktrees/generated/synara",
+        ref: "0123456789abcdef0123456789abcdef01234567",
+        branch: "synara/abcd1234",
+      },
+    };
+    const client = { [WS_METHODS.gitCreateDetachedWorktree]: vi.fn() };
+    const runWorktreeSetupStream = vi.fn(async () => result);
+    const runPromise = vi.fn();
+    const transport = Object.create(WsTransport.prototype) as WsTransport;
+    Object.assign(transport, {
+      getClient: async () => client,
+      getClientRuntime: () => ({ runPromise }),
+      runWorktreeSetupStream,
+    });
+    const executeRequestOnce = (
+      transport as unknown as {
+        executeRequestOnce: (
+          method: string,
+          params: unknown,
+          signal?: AbortSignal,
+        ) => Promise<typeof result>;
+      }
+    ).executeRequestOnce.bind(transport);
+
+    await expect(
+      executeRequestOnce(WS_METHODS.gitCreateDetachedWorktree, { cwd: "/repo", ref: "main" }),
+    ).resolves.toEqual(result);
+    expect(runWorktreeSetupStream).toHaveBeenCalledWith(
+      client,
+      { cwd: "/repo", ref: "main" },
+      undefined,
+    );
+    expect(runPromise).not.toHaveBeenCalled();
   });
 
   it("does not reconnect the socket for typed stream-admission failures", () => {

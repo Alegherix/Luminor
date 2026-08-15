@@ -1295,6 +1295,36 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
+    it.effect("generates a managed worktree path when the composer omits one", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const core = yield* GitCore;
+        const expectedHead = yield* git(tmp, ["rev-parse", "HEAD"]);
+        const result = yield* core.createDetachedWorktree({
+          cwd: tmp,
+          ref: "HEAD",
+          path: null,
+          newBranch: "luminor/abcd1234",
+          copyChangesFrom: tmp,
+        });
+
+        expect(result.worktree.ref).toBe(expectedHead);
+        expect(result.worktree.branch).toBe("luminor/abcd1234");
+        expect(result.worktree.path.length).toBeGreaterThan(0);
+        expect(yield* git(result.worktree.path, ["symbolic-ref", "--short", "HEAD"])).toBe(
+          "luminor/abcd1234",
+        );
+
+        yield* core.removeWorktree({
+          cwd: tmp,
+          path: result.worktree.path,
+          force: true,
+          reclaimTemporaryBranch: true,
+        });
+      }),
+    );
+
     it.effect("reports setup phases at the real command boundaries", () =>
       Effect.gen(function* () {
         const tmp = yield* makeTmpDir();
