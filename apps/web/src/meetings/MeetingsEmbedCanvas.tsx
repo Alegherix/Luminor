@@ -1,20 +1,28 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import { resolveDesktopDipRectFromCssRect } from "@luminor/shared/desktopChrome";
 
 import { Button } from "~/components/ui/button";
 import { readDesktopZoomFactor, subscribeDesktopZoomFactor } from "~/lib/desktopZoom";
+import { PencilIcon } from "~/lib/icons";
+
+import { JoinedMeetingNotes } from "./JoinedMeetingNotes";
+import { MEETING_NOTES_PANEL_ID } from "./MeetingNotesPanel.logic";
 
 export function MeetingsEmbedCanvas({
   onLeave,
   recordingDegradation = null,
   presentation = "embed",
+  notesSessionId = null,
 }: {
   readonly onLeave: () => void;
   readonly recordingDegradation?: string | null;
   readonly presentation?: "embed" | "external";
+  readonly notesSessionId?: string | null;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const notesToggleRef = useRef<HTMLButtonElement>(null);
+  const [notesOpen, setNotesOpen] = useState(false);
   const isExternal = presentation === "external";
 
   useLayoutEffect(() => {
@@ -73,17 +81,49 @@ export function MeetingsEmbedCanvas({
             </p>
           ) : null}
         </div>
-        <Button type="button" variant="destructive" onClick={onLeave}>
-          Leave
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {notesSessionId ? (
+            <Button
+              ref={notesToggleRef}
+              type="button"
+              variant={notesOpen ? "secondary" : "outline"}
+              size="sm"
+              aria-expanded={notesOpen}
+              aria-controls={MEETING_NOTES_PANEL_ID}
+              onClick={() => {
+                setNotesOpen((open) => !open);
+              }}
+            >
+              <PencilIcon />
+              Notes
+            </Button>
+          ) : null}
+          <Button type="button" variant="destructive" onClick={onLeave}>
+            Leave
+          </Button>
+        </div>
       </div>
-      {isExternal ? null : (
-        <div
-          ref={hostRef}
-          className="min-h-0 flex-1 bg-background"
-          data-testid="meeting-webview-host"
-        />
-      )}
+      <div className="flex min-h-0 flex-1">
+        {isExternal ? (
+          <div className="min-h-0 flex-1" />
+        ) : (
+          <div
+            ref={hostRef}
+            className="min-h-0 flex-1 bg-background"
+            data-testid="meeting-webview-host"
+          />
+        )}
+        {notesSessionId ? (
+          <JoinedMeetingNotes
+            sessionId={notesSessionId}
+            open={notesOpen}
+            onClose={() => {
+              setNotesOpen(false);
+              notesToggleRef.current?.focus();
+            }}
+          />
+        ) : null}
+      </div>
     </section>
   );
 }

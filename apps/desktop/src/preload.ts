@@ -243,5 +243,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.invoke(IPC.meetings.pointAtTranscriptionEnvironment),
     writeSummary: (input) => ipcRenderer.invoke(IPC.meetings.writeSummary, input),
     getSummary: (input) => ipcRenderer.invoke(IPC.meetings.getSummary, input),
+    writeNotes: (input) => ipcRenderer.invoke(IPC.meetings.writeNotes, input),
+    getNotes: (input) => ipcRenderer.invoke(IPC.meetings.getNotes, input),
   },
 } satisfies DesktopBridge);

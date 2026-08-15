@@ -4,6 +4,7 @@ import type { ModelSelection, NativeApi, ProjectId, ThreadId } from "@luminor/co
 import { promoteThreadCreate } from "../lib/threadCreatePromotion";
 import { DEFAULT_INTERACTION_MODE } from "../types";
 import { newCommandId } from "../lib/utils";
+import { loadMeetingsNotes, type MeetingsNotesPersist } from "./meetingsNotes";
 
 const TRANSCRIPT_SEED_LIMIT = 16_000;
 
@@ -11,13 +12,18 @@ export function buildMeetingChatSeed(input: {
   readonly title: string;
   readonly summaryText: string | null;
   readonly transcriptText: string | null;
+  readonly notesText?: string | null;
 }): { readonly title: string; readonly text: string } {
   const title = input.title.trim() || "Meeting";
   const sections = [`# ${title}`];
   const summary = input.summaryText?.trim() ?? "";
   const transcript = input.transcriptText?.trim() ?? "";
+  const notes = input.notesText?.trim() ?? "";
   if (summary.length > 0) {
     sections.push("## Summary", summary);
+  }
+  if (notes.length > 0) {
+    sections.push("## Meeting notes", notes);
   }
   if (transcript.length > 0) {
     const clipped =
@@ -34,18 +40,22 @@ export function buildMeetingChatSeed(input: {
 
 export async function openMeetingInChat(input: {
   readonly projectId: ProjectId;
+  readonly sessionId: string;
   readonly title: string;
   readonly summaryText: string | null;
   readonly transcriptText: string | null;
+  readonly notesPersist: MeetingsNotesPersist;
   readonly modelSelection: ModelSelection;
   readonly handleNewThread: (projectId: ProjectId) => Promise<ThreadId | null>;
   readonly seedComposer: (threadId: ThreadId, prompt: string) => void;
   readonly api: NativeApi;
 }): Promise<ThreadId | null> {
+  const loadedNotes = await loadMeetingsNotes(input.notesPersist, input.sessionId);
   const seed = buildMeetingChatSeed({
     title: input.title,
     summaryText: input.summaryText,
     transcriptText: input.transcriptText,
+    notesText: loadedNotes.notes,
   });
   const threadId = await input.handleNewThread(input.projectId);
   if (!threadId) {

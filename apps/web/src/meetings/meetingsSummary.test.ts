@@ -8,12 +8,17 @@ describe("createMeetingsSummaryHost", () => {
     const writeSummary = vi.fn(async () => ({
       summaryPath: "/tmp/luminor-home/meetings/ended/transcripts/summary.md",
     }));
+    const readNotes = vi.fn(async () => "Follow up with the release team.");
     const host = createMeetingsSummaryHost({
       resolveModelSelection: () => ({ provider: "grok", model: "grok-4" }),
       generate,
       persist: {
         writeSummary,
         readSummary: async () => null,
+      },
+      notesPersist: {
+        readNotes,
+        writeNotes: async () => undefined,
       },
     });
 
@@ -27,8 +32,10 @@ describe("createMeetingsSummaryHost", () => {
     expect(generate).toHaveBeenCalledWith({
       title: "Standup",
       transcriptText: "We shipped the join path.",
+      notesText: "Follow up with the release team.",
       modelSelection: { provider: "grok", model: "grok-4" },
     });
+    expect(readNotes).toHaveBeenCalledWith("ended");
     expect(writeSummary).toHaveBeenCalledWith({
       sessionId: "ended",
       text: "## Decisions\n- Ship the join path.",
@@ -42,6 +49,67 @@ describe("createMeetingsSummaryHost", () => {
     });
   });
 
+  it("keeps generation input unchanged when notes are absent", async () => {
+    const generate = vi.fn(async () => "## Decisions\n- Ship the join path.");
+    const host = createMeetingsSummaryHost({
+      resolveModelSelection: () => ({ provider: "grok", model: "grok-4" }),
+      generate,
+      persist: {
+        writeSummary: async () => ({ summaryPath: "/tmp/summary.md" }),
+        readSummary: async () => null,
+      },
+      notesPersist: {
+        readNotes: async () => null,
+        writeNotes: async () => undefined,
+      },
+    });
+
+    await host.summarize({
+      sessionId: "ended",
+      title: "Standup",
+      transcriptText: "We shipped the join path.",
+      transcriptPath: null,
+    });
+
+    expect(generate).toHaveBeenCalledWith({
+      title: "Standup",
+      transcriptText: "We shipped the join path.",
+      modelSelection: { provider: "grok", model: "grok-4" },
+    });
+  });
+
+  it("continues summarization without notes when reading notes fails", async () => {
+    const generate = vi.fn(async () => "## Decisions\n- Ship the join path.");
+    const host = createMeetingsSummaryHost({
+      resolveModelSelection: () => ({ provider: "grok", model: "grok-4" }),
+      generate,
+      persist: {
+        writeSummary: async () => ({ summaryPath: "/tmp/summary.md" }),
+        readSummary: async () => null,
+      },
+      notesPersist: {
+        readNotes: async () => {
+          throw new Error("Notes unavailable.");
+        },
+        writeNotes: async () => undefined,
+      },
+    });
+
+    const result = await host.summarize({
+      sessionId: "ended",
+      title: "Standup",
+      transcriptText: "We shipped the join path.",
+      transcriptPath: null,
+    });
+
+    expect(generate).toHaveBeenCalledWith({
+      title: "Standup",
+      transcriptText: "We shipped the join path.",
+      modelSelection: { provider: "grok", model: "grok-4" },
+    });
+    expect(result.status).toBe("ready");
+  });
+
   it("returns a failed summary without hiding the transcript when generation fails", async () => {
     const host = createMeetingsSummaryHost({
       resolveModelSelection: () => ({ provider: "claudeAgent", model: "claude-sonnet-4-6" }),
@@ -53,6 +121,10 @@ describe("createMeetingsSummaryHost", () => {
           throw new Error("should not write");
         },
         readSummary: async () => null,
+      },
+      notesPersist: {
+        readNotes: async () => null,
+        writeNotes: async () => undefined,
       },
     });
 
@@ -85,6 +157,10 @@ describe("createMeetingsSummaryHost", () => {
           throw new Error("should not write");
         },
         readSummary: async () => null,
+      },
+      notesPersist: {
+        readNotes: async () => null,
+        writeNotes: async () => undefined,
       },
     });
 

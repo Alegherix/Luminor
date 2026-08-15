@@ -130,4 +130,39 @@ export function registerMeetingsTranscriptionIpc(input: {
       return manager.readSummary(sessionId.trim());
     },
   );
+
+  ipcMain.removeHandler(IPC.writeNotes);
+  ipcMain.handle(
+    IPC.writeNotes,
+    async (_event, payload: unknown): Promise<{ notesPath: string }> => {
+      const record = typeof payload === "object" && payload !== null ? payload : {};
+      const sessionId = (record as { sessionId?: unknown }).sessionId;
+      const markdown = (record as { markdown?: unknown }).markdown;
+      if (typeof sessionId !== "string" || sessionId.trim().length === 0) {
+        throw new Error("missing sessionId");
+      }
+      if (typeof markdown !== "string") {
+        throw new Error("missing notes markdown");
+      }
+      return manager.writeNotes({
+        sessionId: sessionId.trim(),
+        markdown,
+      });
+    },
+  );
+
+  ipcMain.removeHandler(IPC.getNotes);
+  ipcMain.handle(
+    IPC.getNotes,
+    async (_event, payload: unknown): Promise<{ markdown: string; notesPath: string } | null> => {
+      const sessionId =
+        typeof payload === "object" && payload !== null
+          ? (payload as { sessionId?: unknown }).sessionId
+          : undefined;
+      if (typeof sessionId !== "string" || sessionId.trim().length === 0) {
+        throw new Error("missing sessionId");
+      }
+      return manager.readNotes(sessionId.trim());
+    },
+  );
 }

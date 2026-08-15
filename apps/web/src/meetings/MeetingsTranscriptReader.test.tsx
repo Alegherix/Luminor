@@ -137,6 +137,43 @@ describe("MeetingsTranscriptReader", () => {
     expect(html).toContain("overflow-y-auto");
   });
 
+  it("offers an editable notes section for the ended meeting", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsTranscriptReader
+        workspace={{
+          ...endedWorkspace,
+          transcription: {
+            status: "ready",
+            sessionId: "ended",
+            transcriptPath: "/tmp/luminor-home/meetings/ended/transcripts/transcript.txt",
+            text: "We shipped the join path.",
+            error: null,
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain("Anteckningar");
+    expect(html).toContain("<textarea");
+    expect(html).toContain("Inga anteckningar än");
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain("grid-rows-[1fr]");
+  });
+
+  it("leaves out the notes section when no meeting is selected", () => {
+    const html = renderToStaticMarkup(
+      <MeetingsTranscriptReader
+        workspace={{
+          ...endedWorkspace,
+          selectedSessionId: null,
+        }}
+      />,
+    );
+
+    expect(html).not.toContain("Anteckningar");
+    expect(html).not.toContain("<textarea");
+  });
+
   it("shows a point-at-the-environment recovery when config is missing", () => {
     const html = renderToStaticMarkup(
       <MeetingsTranscriptReader

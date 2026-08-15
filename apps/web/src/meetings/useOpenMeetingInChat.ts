@@ -5,6 +5,7 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { readNativeApi } from "../nativeApi";
 import { useStore } from "../store";
+import { desktopMeetingsNotesPersist } from "./desktopMeetingsNotes";
 import { openMeetingInChat } from "./meetingsOpenInChat";
 import { resolveNewThreadDefaultModelSelection } from "./meetingsSummaryModel";
 import { selectedMeetingSession, type MeetingsWorkspaceSnapshot } from "./meetingsWorkspace";
@@ -27,9 +28,11 @@ export function useOpenMeetingInChat() {
       try {
         return await openMeetingInChat({
           projectId,
+          sessionId: selected.id,
           title: selected.title,
           summaryText: snapshot.summary.text,
           transcriptText: snapshot.transcription.text,
+          notesPersist: desktopMeetingsNotesPersist,
           modelSelection: resolveNewThreadDefaultModelSelection({
             projectDefaultModelSelection: project?.defaultModelSelection ?? null,
             defaultProvider: readPersistedDefaultProvider(),

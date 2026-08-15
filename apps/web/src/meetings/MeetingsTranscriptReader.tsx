@@ -1,10 +1,43 @@
+import { useState } from "react";
+
 import { Button } from "~/components/ui/button";
+import { DisclosureChevron } from "~/components/ui/DisclosureChevron";
+import { DisclosureRegion } from "~/components/ui/DisclosureRegion";
+import { MeetingNotesEditor } from "./MeetingNotesEditor";
 import { compactMeetingsSummaryError } from "./meetingsSummary";
 import {
   MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
   selectedMeetingSession,
   type MeetingsWorkspaceSnapshot,
 } from "./meetingsWorkspace";
+import { useMeetingNotes } from "./useMeetingNotes";
+
+function MeetingNotesSection({ sessionId }: { readonly sessionId: string }) {
+  const [open, setOpen] = useState(true);
+  const { notes, setNotes, status } = useMeetingNotes(sessionId);
+
+  return (
+    <section className="flex flex-col gap-2" aria-label="Anteckningar">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((previous) => !previous)}
+        className="flex w-fit items-center gap-1.5 text-[length:var(--app-font-size-ui-sm,11px)] font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <DisclosureChevron open={open} />
+        Anteckningar
+      </button>
+      <DisclosureRegion open={open}>
+        <MeetingNotesEditor
+          notes={notes}
+          status={status}
+          onNotesChange={setNotes}
+          placeholder="Inga anteckningar än — skriv här så sparas de till mötet."
+        />
+      </DisclosureRegion>
+    </section>
+  );
+}
 
 export function MeetingsTranscriptReader({
   workspace,
@@ -79,6 +112,13 @@ export function MeetingsTranscriptReader({
             {summary.error ? compactMeetingsSummaryError(summary.error) : "Summary is unavailable."}
           </p>
         ) : null}
+
+        {workspace.selectedSessionId === null ? null : (
+          <MeetingNotesSection
+            key={workspace.selectedSessionId}
+            sessionId={workspace.selectedSessionId}
+          />
+        )}
 
         {transcription.status === "ready" && transcription.text ? (
           <article className="whitespace-pre-wrap text-sm leading-6 text-foreground">
