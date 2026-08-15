@@ -61,6 +61,7 @@ function MeetingsWorkspaceRouteView() {
           presentation={snapshot.joinKind === "external" ? "external" : "embed"}
           onLeave={() => void leave()}
           recordingDegradation={snapshot.recording.degradation}
+          notesSessionId={snapshot.joinedSessionId}
         />
       ) : showTranscript ? (
         <MeetingsTranscriptReader
