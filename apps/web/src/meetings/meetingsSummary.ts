@@ -1,5 +1,6 @@
 import type { ModelSelection } from "@luminor/contracts";
 
+import { loadMeetingsNotes, type MeetingsNotesPersist } from "./meetingsNotes";
 import { IDLE_MEETINGS_SUMMARY, type MeetingsSummaryHost } from "./meetingsWorkspace";
 
 const MEETINGS_SUMMARY_ERROR_MAX_LENGTH = 240;
@@ -31,18 +32,23 @@ export function createMeetingsSummaryHost(input: {
   readonly generate: (input: {
     title: string;
     transcriptText: string;
+    notesText?: string;
     modelSelection: ModelSelection;
   }) => Promise<string>;
   readonly persist: MeetingsSummaryPersist;
+  readonly notesPersist: MeetingsNotesPersist;
 }): MeetingsSummaryHost {
   return {
     async summarize(request) {
       const modelSelection = input.resolveModelSelection();
       try {
+        const loadedNotes = await loadMeetingsNotes(input.notesPersist, request.sessionId);
+        const notesText = loadedNotes.notes.trim();
         const text = (
           await input.generate({
             title: request.title,
             transcriptText: request.transcriptText,
+            ...(notesText.length > 0 ? { notesText } : {}),
             modelSelection,
           })
         ).trim();
