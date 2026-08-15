@@ -1089,9 +1089,9 @@ describe("kanban board filters", () => {
   });
 
   it("maps work state from the card column", () => {
+    expect(resolveKanbanWorkFilterState({ column: "draft" })).toBe("draft");
     expect(resolveKanbanWorkFilterState({ column: "inProgress" })).toBe("working");
     expect(resolveKanbanWorkFilterState({ column: "done" })).toBe("done");
-    expect(resolveKanbanWorkFilterState({ column: "draft" })).toBeNull();
   });
 
   it("treats empty selections as no filter", () => {
@@ -1144,6 +1144,31 @@ describe("kanban board filters", () => {
         projectIds: [],
       }),
     ).toBe(2);
+  });
+
+  it("keeps only draft cards when the draft work state is selected", () => {
+    const draft = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-draft"),
+    });
+    const working = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-working"),
+      hasLiveTailWork: true,
+    });
+    const done = makeSidebarThreadSummary({
+      id: ThreadId.makeUnsafe("thread-done"),
+      latestTurn: makeLatestTurn(),
+    });
+    const board = buildKanbanBoard(makeBoardInput({ threads: [draft, working, done] }));
+    const filtered = applyKanbanBoardFilters(board, {
+      prStates: [],
+      workStates: ["draft"],
+      projectIds: [],
+    });
+
+    expect(filtered.totalCount).toBe(1);
+    expect(filtered.projects[0]?.draft.map((card) => card.threadId)).toEqual(["thread-draft"]);
+    expect(filtered.projects[0]?.inProgress).toEqual([]);
+    expect(filtered.projects[0]?.done).toEqual([]);
   });
 
   it("hides cards from repos that are not selected", () => {
@@ -1201,12 +1226,12 @@ describe("kanban board filters", () => {
     expect(
       normalizeKanbanBoardFilters({
         prStates: ["merged", "draft", "merged"],
-        workStates: ["done", "working"],
+        workStates: ["done", "draft", "working"],
         projectIds: ["b", "a", "b"],
       }),
     ).toEqual({
       prStates: ["draft", "merged"],
-      workStates: ["working", "done"],
+      workStates: ["draft", "working", "done"],
       projectIds: ["a", "b"],
     });
     expect(toggleKanbanFilterValue(["draft", "merged"], "blocked")).toEqual([

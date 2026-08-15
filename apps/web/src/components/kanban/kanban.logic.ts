@@ -684,12 +684,19 @@ export const KANBAN_PR_FILTER_LABELS: Record<KanbanPrFilterState, string> = {
   blocked: "Blocked",
 };
 
-export const KANBAN_WORK_FILTER_STATES = ["working", "done"] as const;
+export const KANBAN_WORK_FILTER_STATES = ["draft", "working", "done"] as const;
 export type KanbanWorkFilterState = (typeof KANBAN_WORK_FILTER_STATES)[number];
 
 export const KANBAN_WORK_FILTER_LABELS: Record<KanbanWorkFilterState, string> = {
+  draft: "Draft",
   working: "Working",
   done: "Done",
+};
+
+export const KANBAN_WORK_FILTER_COLUMN: Record<KanbanWorkFilterState, KanbanColumnKey> = {
+  draft: "draft",
+  working: "inProgress",
+  done: "done",
 };
 
 export interface KanbanBoardFilters {
@@ -783,6 +790,9 @@ export function resolveKanbanPrFilterState(
 export function resolveKanbanWorkFilterState(
   card: Pick<KanbanCard, "column">,
 ): KanbanWorkFilterState | null {
+  if (card.column === "draft") {
+    return "draft";
+  }
   if (card.column === "inProgress") {
     return "working";
   }

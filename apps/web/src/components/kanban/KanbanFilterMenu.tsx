@@ -32,6 +32,7 @@ import {
   EMPTY_KANBAN_BOARD_FILTERS,
   KANBAN_PR_FILTER_LABELS,
   KANBAN_PR_FILTER_STATES,
+  KANBAN_WORK_FILTER_COLUMN,
   KANBAN_WORK_FILTER_LABELS,
   KANBAN_WORK_FILTER_STATES,
   toggleKanbanFilterValue,
@@ -213,7 +214,7 @@ export function KanbanFilterMenu({
                 >
                   <span className="flex min-w-0 items-center gap-2">
                     <KanbanStatusIcon
-                      column={state === "working" ? "inProgress" : "done"}
+                      column={KANBAN_WORK_FILTER_COLUMN[state]}
                       className="size-3.5"
                     />
                     {KANBAN_WORK_FILTER_LABELS[state]}
