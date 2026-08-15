@@ -44,6 +44,7 @@ describe("MeetingsTranscriptReader", () => {
 
     expect(html).toContain("Standup");
     expect(html).toContain("We shipped the join path.");
+    expect(html).toContain("Rå transkription");
     expect(html).toContain("Översikt");
     expect(html).toContain("Transkription");
     expect(html).toContain("Anteckningar");
@@ -91,7 +92,7 @@ describe("MeetingsTranscriptReader", () => {
             status: "ready",
             sessionId: "ended",
             summaryPath: "/tmp/luminor-home/meetings/ended/transcripts/summary.md",
-            text: "Decision: ship the join path.",
+            text: "## Overview\n\nDecision: ship the join path.\n\n## Action items\n\n- File the follow-up.",
             error: null,
           },
         }}
@@ -103,6 +104,9 @@ describe("MeetingsTranscriptReader", () => {
     expect(html).toContain("We shipped the join path.");
     expect(html).toContain("Sammanfattning");
     expect(html).toContain("Decision: ship the join path.");
+    expect(html).toContain("Åtgärdspunkter");
+    expect(html).toContain("File the follow-up.");
+    expect(html).toContain("Rå transkription");
     expect(html).toContain("Öppna i chatt");
     expect(html).not.toContain("Open in chat");
     expect(html).not.toContain("Transcribe");

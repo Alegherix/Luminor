@@ -3,6 +3,7 @@ import type { DesktopBridge, ModelSelection } from "@luminor/contracts";
 import { readPersistedDefaultProvider } from "../appSettings";
 import { readNativeApi } from "../nativeApi";
 import { useStore } from "../store";
+import { useWorkspacePathsStore } from "../workspacePathsStore";
 import { desktopMeetingsNotesPersist } from "./desktopMeetingsNotes";
 import { createMeetingsSummaryHost, type MeetingsSummaryPersist } from "./meetingsSummary";
 import { resolveNewThreadDefaultModelSelection } from "./meetingsSummaryModel";
@@ -32,9 +33,19 @@ function desktopMeetings() {
   return desktopBridge?.meetings;
 }
 
-function resolveSummaryCwd(): string {
-  const cwd = useStore.getState().projects[0]?.cwd?.trim();
-  return cwd && cwd.length > 0 ? cwd : "/";
+export function resolveSummaryCwd(input?: {
+  readonly projectCwd?: string | null;
+  readonly homeDir?: string | null;
+}): string {
+  const projectCwd = (input?.projectCwd ?? useStore.getState().projects[0]?.cwd)?.trim();
+  if (projectCwd && projectCwd.length > 0) {
+    return projectCwd;
+  }
+  const homeDir = (input?.homeDir ?? useWorkspacePathsStore.getState().homeDir)?.trim();
+  if (homeDir && homeDir.length > 0) {
+    return homeDir;
+  }
+  return "/tmp";
 }
 
 function resolveSummaryModelSelection(): ModelSelection {

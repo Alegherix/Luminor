@@ -41,6 +41,7 @@ import {
   buildMeetingSummaryPrompt,
   buildThreadRecapPrompt,
   buildThreadTitlePrompt,
+  formatMeetingReviewSummary,
   sanitizeMeetingSummary,
   sanitizeCommitSubject,
   sanitizeDiffSummary,
@@ -647,7 +648,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       Effect.map(
         (generated) =>
           ({
-            summary: sanitizeMeetingSummary(generated.summary),
+            summary: sanitizeMeetingSummary(formatMeetingReviewSummary(generated)),
           }) satisfies MeetingSummaryGenerationResult,
       ),
     );

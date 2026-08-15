@@ -362,6 +362,30 @@ export function sanitizeMeetingSummary(value: string): string {
   return value.trim();
 }
 
+export type MeetingReviewGeneration = {
+  readonly overview?: string;
+  readonly summary?: string;
+  readonly decisions?: readonly string[];
+  readonly actionItems?: readonly string[];
+};
+
+export function formatMeetingReviewSummary(generated: MeetingReviewGeneration): string {
+  const overview = (generated.overview ?? generated.summary ?? "").trim();
+  const decisions = (generated.decisions ?? []).map((item) => item.trim()).filter(Boolean);
+  const actionItems = (generated.actionItems ?? []).map((item) => item.trim()).filter(Boolean);
+  const parts: string[] = [];
+  if (overview.length > 0) {
+    parts.push(`## Overview\n\n${overview}`);
+  }
+  if (decisions.length > 0) {
+    parts.push(`## Decisions\n\n${decisions.map((item) => `- ${item}`).join("\n")}`);
+  }
+  if (actionItems.length > 0) {
+    parts.push(`## Action items\n\n${actionItems.map((item) => `- ${item}`).join("\n")}`);
+  }
+  return parts.join("\n\n").trim();
+}
+
 export function buildMeetingSummaryPrompt(input: {
   readonly title: string;
   readonly transcript: string;
@@ -369,17 +393,18 @@ export function buildMeetingSummaryPrompt(input: {
   const title = input.title.trim() || "Meeting";
   return {
     prompt: [
-      "You write a silent post-meeting summary for Luminor's Möten reader.",
-      "Return a JSON object with key: summary.",
+      "You write a silent post-meeting review for Luminor's Möten reader.",
+      "Return a JSON object with keys: overview, decisions, actionItems.",
       "Respond with only the JSON object, no prose and no code fences.",
       "",
       "Rules:",
-      "- summary must be markdown",
       "- use the same language as the transcript",
-      "- start with a short overview paragraph",
-      "- then include sections for Decisions, Action items, and Discussion when those exist",
-      "- do not invent attendees, decisions, dates, or work that is not in the transcript",
-      "- keep it useful and compact; skip empty sections",
+      "- overview: 1-3 short paragraphs covering what happened and why it mattered",
+      "- decisions: concrete decisions only; empty array if none were made",
+      "- actionItems: concrete follow-ups the listener should do; empty array if none",
+      "- do not invent attendees, decisions, dates, owners, or work that is not in the transcript",
+      "- do not include or rewrite the raw transcript; it is shown separately after this review",
+      "- keep it useful and compact",
       "",
       `Meeting title: ${title}`,
       "",
@@ -387,9 +412,11 @@ export function buildMeetingSummaryPrompt(input: {
       limitSection(input.transcript, 80_000),
     ].join("\n"),
     outputSchemaJson: Schema.Struct({
-      summary: Schema.String,
+      overview: Schema.String,
+      decisions: Schema.Array(Schema.String),
+      actionItems: Schema.Array(Schema.String),
     }),
-    rawTextFallback: { key: "summary" } satisfies RawTextFallback,
+    rawTextFallback: { key: "overview" } satisfies RawTextFallback,
   };
 }
 

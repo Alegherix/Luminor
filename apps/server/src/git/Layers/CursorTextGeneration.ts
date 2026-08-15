@@ -28,6 +28,7 @@ import {
   buildThreadRecapPrompt,
   buildThreadTitlePrompt,
   decodeStructuredTextGenerationOutput,
+  formatMeetingReviewSummary,
   type RawTextFallback,
   sanitizeCommitSubject,
   sanitizeDiffSummary,
@@ -411,7 +412,7 @@ const makeCursorTextGeneration = Effect.gen(function* () {
     });
 
     return {
-      summary: sanitizeMeetingSummary(generated.summary),
+      summary: sanitizeMeetingSummary(formatMeetingReviewSummary(generated)),
     };
   });
 

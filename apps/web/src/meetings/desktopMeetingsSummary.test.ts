@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildMeetingSummaryContext } from "./desktopMeetingsSummary";
+import { buildMeetingSummaryContext, resolveSummaryCwd } from "./desktopMeetingsSummary";
 
 describe("buildMeetingSummaryContext", () => {
   it("keeps the transcript unchanged when notes are absent", () => {
@@ -28,5 +28,15 @@ describe("buildMeetingSummaryContext", () => {
 
     expect(result).toHaveLength(200_000);
     expect(result.endsWith("## Meeting notes\n\nKeep this note.")).toBe(true);
+  });
+});
+
+describe("resolveSummaryCwd", () => {
+  it("prefers the project workspace, then the Luminor home, and never uses /", () => {
+    expect(resolveSummaryCwd({ projectCwd: "/repo", homeDir: "/home/me/.luminor" })).toBe("/repo");
+    expect(resolveSummaryCwd({ projectCwd: "  ", homeDir: "/home/me/.luminor" })).toBe(
+      "/home/me/.luminor",
+    );
+    expect(resolveSummaryCwd({ projectCwd: null, homeDir: null })).toBe("/tmp");
   });
 });

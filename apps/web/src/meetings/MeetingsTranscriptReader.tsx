@@ -8,16 +8,95 @@ import {
   type MeetingsReviewTab,
 } from "./MeetingsReviewTabs";
 import { formatMeetingTimeRange } from "./meetingsSchedule";
-import { compactMeetingsSummaryError } from "./meetingsSummary";
+import { compactMeetingsSummaryError, parseMeetingsReviewMarkdown } from "./meetingsSummary";
 import {
   MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
   selectedMeetingSession,
+  type MeetingsSummaryState,
   type MeetingsWorkspaceSnapshot,
 } from "./meetingsWorkspace";
 import { useMeetingNotes } from "./useMeetingNotes";
 
 const REVIEW_CARD_CLASS =
   "rounded-xl border border-[color:var(--color-border)] bg-[var(--color-background-elevated-primary-opaque)]";
+
+function OverviewPanel({
+  summary,
+  transcriptText,
+  canOpenInChat,
+  openingInChat,
+  onOpenInChat,
+}: {
+  readonly summary: MeetingsSummaryState;
+  readonly transcriptText: string | null;
+  readonly canOpenInChat: boolean;
+  readonly openingInChat: boolean;
+  readonly onOpenInChat?: () => void;
+}) {
+  const review = summary.status === "ready" && summary.text ? parseMeetingsReviewMarkdown(summary.text) : null;
+  const hasReviewContent = Boolean(
+    review && (review.overview || review.decisions.length > 0 || review.actionItems.length > 0),
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      {summary.status === "running" ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          Summarizing…
+        </p>
+      ) : null}
+      {review?.overview ? (
+        <section className={`${REVIEW_CARD_CLASS} flex flex-col gap-2 p-5`} aria-label="Sammanfattning">
+          <h2 className="text-sm font-semibold text-foreground">Sammanfattning</h2>
+          <article className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+            {review.overview}
+          </article>
+        </section>
+      ) : null}
+      {review && review.decisions.length > 0 ? (
+        <section className={`${REVIEW_CARD_CLASS} flex flex-col gap-2 p-5`} aria-label="Beslut">
+          <h2 className="text-sm font-semibold text-foreground">Beslut</h2>
+          <ul className="flex list-disc flex-col gap-1 pl-5 text-sm leading-6 text-muted-foreground">
+            {review.decisions.map((decision) => (
+              <li key={decision}>{decision}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {review && review.actionItems.length > 0 ? (
+        <section className={`${REVIEW_CARD_CLASS} flex flex-col gap-2 p-5`} aria-label="Åtgärdspunkter">
+          <h2 className="text-sm font-semibold text-foreground">Åtgärdspunkter</h2>
+          <ul className="flex list-disc flex-col gap-1 pl-5 text-sm leading-6 text-muted-foreground">
+            {review.actionItems.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {summary.status === "failed" ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          {summary.error ? compactMeetingsSummaryError(summary.error) : "Summary is unavailable."}
+        </p>
+      ) : null}
+      {summary.status === "idle" || (summary.status === "ready" && !hasReviewContent) ? (
+        <p className="text-sm text-muted-foreground">Ingen sammanfattning finns för det här mötet än.</p>
+      ) : null}
+      {transcriptText ? (
+        <section className={`${REVIEW_CARD_CLASS} flex flex-col gap-2 p-5`} aria-label="Rå transkription">
+          <h2 className="text-sm font-semibold text-foreground">Rå transkription</h2>
+          <article className="whitespace-pre-wrap text-sm leading-6 text-foreground">{transcriptText}</article>
+        </section>
+      ) : null}
+      {canOpenInChat ? (
+        <div>
+          <Button type="button" onClick={() => onOpenInChat?.()} disabled={openingInChat || !onOpenInChat}>
+            {openingInChat ? "Opening…" : "Öppna i chatt"}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function MeetingNotesPanel({ sessionId }: { readonly sessionId: string }) {
   const { notes, setNotes, status } = useMeetingNotes(sessionId);
@@ -89,42 +168,15 @@ export function MeetingsTranscriptReader({
         <MeetingsReviewTabs tab={tab} onTabChange={setTab} />
 
         <div hidden={meetingsReviewPanelHidden(tab, "overview")}>
-          <div className="flex flex-col gap-4">
-            {summary.status === "running" ? (
-              <p className="text-sm text-muted-foreground" role="status">
-                Summarizing…
-              </p>
-            ) : null}
-            {summary.status === "ready" && summary.text ? (
-              <section className={`${REVIEW_CARD_CLASS} flex flex-col gap-2 p-5`} aria-label="Sammanfattning">
-                <h2 className="text-sm font-semibold text-foreground">Sammanfattning</h2>
-                <article className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-                  {summary.text}
-                </article>
-              </section>
-            ) : null}
-            {summary.status === "failed" ? (
-              <p className="text-sm text-muted-foreground" role="status">
-                {summary.error ? compactMeetingsSummaryError(summary.error) : "Summary is unavailable."}
-              </p>
-            ) : null}
-            {summary.status === "idle" || (summary.status === "ready" && !summary.text) ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Ingen sammanfattning finns för det här mötet än.
-              </p>
-            ) : null}
-            {canOpenInChat ? (
-              <div>
-                <Button
-                  type="button"
-                  onClick={() => onOpenInChat?.()}
-                  disabled={openingInChat || !onOpenInChat}
-                >
-                  {openingInChat ? "Opening…" : "Öppna i chatt"}
-                </Button>
-              </div>
-            ) : null}
-          </div>
+          <OverviewPanel
+            summary={summary}
+            transcriptText={
+              transcription.status === "ready" && transcription.text ? transcription.text : null
+            }
+            canOpenInChat={canOpenInChat}
+            openingInChat={openingInChat}
+            onOpenInChat={onOpenInChat}
+          />
         </div>
 
         <div hidden={meetingsReviewPanelHidden(tab, "transcript")}>

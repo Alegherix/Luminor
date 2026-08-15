@@ -1,6 +1,45 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { compactMeetingsSummaryError, createMeetingsSummaryHost } from "./meetingsSummary";
+import {
+  compactMeetingsSummaryError,
+  createMeetingsSummaryHost,
+  parseMeetingsReviewMarkdown,
+} from "./meetingsSummary";
+
+describe("parseMeetingsReviewMarkdown", () => {
+  it("splits overview, decisions, and action items from a generated review", () => {
+    expect(
+      parseMeetingsReviewMarkdown(
+        [
+          "## Overview",
+          "",
+          "We shipped the join path.",
+          "",
+          "## Decisions",
+          "",
+          "- Keep the embed beside notes.",
+          "",
+          "## Action items",
+          "",
+          "- File the follow-up thread.",
+          "- Check the recording path.",
+        ].join("\n"),
+      ),
+    ).toEqual({
+      overview: "We shipped the join path.",
+      decisions: ["Keep the embed beside notes."],
+      actionItems: ["File the follow-up thread.", "Check the recording path."],
+    });
+  });
+
+  it("treats unsectioned markdown as the overview", () => {
+    expect(parseMeetingsReviewMarkdown("Just a paragraph.")).toEqual({
+      overview: "Just a paragraph.",
+      decisions: [],
+      actionItems: [],
+    });
+  });
+});
 
 describe("createMeetingsSummaryHost", () => {
   it("summarizes with the resolved new-thread model and persists summary.md", async () => {
