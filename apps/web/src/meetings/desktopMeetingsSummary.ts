@@ -73,7 +73,9 @@ export function createDesktopMeetingsSummaryHost(): MeetingsSummaryHost {
       const result = await api.server.generateMeetingSummary({
         cwd: resolveSummaryCwd(),
         title: title.trim() || "Meeting",
-        transcript: buildMeetingSummaryContext({ transcriptText, notesText }),
+        transcript: buildMeetingSummaryContext(
+          notesText === undefined ? { transcriptText } : { transcriptText, notesText },
+        ),
         textGenerationModelSelection: modelSelection,
       });
       return result.summary;

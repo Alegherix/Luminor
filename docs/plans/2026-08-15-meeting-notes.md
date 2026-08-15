@@ -33,6 +33,7 @@ Give the meetings feature a complete note-taking experience:
 ## Slices
 
 ### S1 — Notes domain + persistence (codex gpt-5.6-sol, effort high)
+
 - `apps/web/src/meetings/meetingsNotes.ts`: notes domain module — `MeetingsNotesPersist` port, load/save orchestration, debounced autosave helper, char cap, error handling on failed writes.
 - `apps/web/src/meetings/desktopMeetingsNotes.ts`: Electron persist impl (same mechanism as `desktopMeetingsSummary.ts`).
 - Browser fallback persist for non-Electron (prototype/review use).
@@ -41,18 +42,21 @@ Give the meetings feature a complete note-taking experience:
 - **Deliverable is the API surface the UI slices build on** — keep it small and typed.
 
 ### S2 — In-meeting notes UI (Claude Opus 5, effort high)
+
 - Notes surface available while joined (`MeetingsEmbedCanvas` state in the route). Layout choice free: right side-panel, bottom drawer, or floating composer — must use `disclosureMotion.ts`/`DisclosureRegion` for its open/close.
 - Uses `useMeetingNotes(sessionId)` from S1. Autosaves while typing; shows subtle save state.
 - Keyboard-friendly; does not steal focus from the meeting embed unexpectedly; `motion-reduce` respected via the shared module.
 - Component tests for open/close + autosave wiring.
 
 ### S3 — Review notes integration (Claude Opus 5, effort high)
+
 - The "Anteckningar" tab in the review surface shows the real persisted notes for the selected meeting, editable after the meeting, with empty state when none exist.
 - Wire `MeetingsTranscriptReader` (ended-meeting view) to the same notes so post-meeting editing works outside the prototype too.
 - Keep prototype mock scenarios working (fallback when no persisted notes exist for a mock meeting).
 - Component tests.
 
 ### S4 — Downstream integration (codex gpt-5.6-sol, effort high)
+
 - `meetingsOpenInChat.ts`: include persisted notes in the open-in-chat prompt when present.
 - `meetingsSummary.ts`: offer notes as additional context to summarization when present.
 - Tests updated/added.
