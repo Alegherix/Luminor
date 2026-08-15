@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { RouteInsetSurface } from "~/components/RouteInsetSurface";
+import { MeetingReviewPrototype } from "~/meetings/prototype/MeetingReviewPrototype";
 import { MeetingsEmbedCanvas } from "~/meetings/MeetingsEmbedCanvas";
 import { MeetingsIdleCanvas } from "~/meetings/MeetingsIdleCanvas";
 import { MeetingsTranscriptReader } from "~/meetings/MeetingsTranscriptReader";
@@ -10,7 +11,27 @@ import { useMeetingsWorkspace } from "~/meetings/useMeetingsWorkspace";
 import { useOpenMeetingInChat } from "~/meetings/useOpenMeetingInChat";
 import { isElectron } from "~/env";
 
+export interface MeetingsIndexSearch {
+  prototype?: "review";
+}
+
+function parseMeetingsIndexSearch(raw: Record<string, unknown>): MeetingsIndexSearch {
+  return raw.prototype === "review" ? { prototype: "review" } : {};
+}
+
 function MeetingsIndexRouteView() {
+  const { prototype } = Route.useSearch();
+  if (prototype === "review") {
+    return (
+      <RouteInsetSurface>
+        <MeetingReviewPrototype />
+      </RouteInsetSurface>
+    );
+  }
+  return <MeetingsWorkspaceRouteView />;
+}
+
+function MeetingsWorkspaceRouteView() {
   const {
     snapshot,
     selectSession,
@@ -76,8 +97,9 @@ function MeetingsIndexRouteView() {
 }
 
 export const Route = createFileRoute("/_chat/meetings/")({
-  beforeLoad: () => {
-    if (!isElectron) {
+  validateSearch: parseMeetingsIndexSearch,
+  beforeLoad: ({ search }) => {
+    if (!isElectron && search.prototype !== "review") {
       throw redirect({ to: "/" });
     }
   },
