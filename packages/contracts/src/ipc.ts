@@ -542,6 +542,15 @@ export interface MeetingsSummaryReadResult {
   readonly summaryPath: string;
 }
 
+export interface MeetingsNotesWriteResult {
+  readonly notesPath: string;
+}
+
+export interface MeetingsNotesReadResult {
+  readonly markdown: string;
+  readonly notesPath: string;
+}
+
 export interface DesktopMeetingsBridge {
   getStatus: () => Promise<MeetingsCalendarStatus>;
   connect: () => Promise<MeetingsCalendarStatus>;
@@ -566,6 +575,8 @@ export interface DesktopMeetingsBridge {
   pointAtTranscriptionEnvironment: () => Promise<MeetingsTranscriptionPointResult>;
   writeSummary: (input: { sessionId: string; text: string }) => Promise<MeetingsSummaryWriteResult>;
   getSummary: (input: { sessionId: string }) => Promise<MeetingsSummaryReadResult | null>;
+  writeNotes: (input: { sessionId: string; markdown: string }) => Promise<MeetingsNotesWriteResult>;
+  getNotes: (input: { sessionId: string }) => Promise<MeetingsNotesReadResult | null>;
 }
 
 export interface DesktopBridge {

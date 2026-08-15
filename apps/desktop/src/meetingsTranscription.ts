@@ -139,6 +139,10 @@ export function meetingsSummaryPath(homeDir: string, sessionId: string): string 
   return Path.join(meetingsTranscriptDir(homeDir, sessionId), "summary.md");
 }
 
+export function meetingsNotesPath(homeDir: string, sessionId: string): string {
+  return Path.join(meetingsTranscriptDir(homeDir, sessionId), "notes.md");
+}
+
 export function expandTranscriptionArgs(
   args: readonly string[],
   input: { readonly recordingPath: string; readonly outputPath: string },
@@ -534,6 +538,26 @@ export function createMeetingsTranscriptionManager(deps: MeetingsTranscriptionMa
           return null;
         }
         return { text, summaryPath };
+      } catch {
+        return null;
+      }
+    },
+
+    async writeNotes(input: {
+      sessionId: string;
+      markdown: string;
+    }): Promise<{ notesPath: string }> {
+      const notesPath = meetingsNotesPath(deps.homeDir, input.sessionId);
+      await fs.mkdir(Path.dirname(notesPath), { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
+      await fs.writeFile(notesPath, input.markdown, { mode: PRIVATE_FILE_MODE });
+      return { notesPath };
+    },
+
+    async readNotes(sessionId: string): Promise<{ markdown: string; notesPath: string } | null> {
+      const notesPath = meetingsNotesPath(deps.homeDir, sessionId);
+      try {
+        const markdown = await fs.readFile(notesPath, "utf8");
+        return { markdown, notesPath };
       } catch {
         return null;
       }

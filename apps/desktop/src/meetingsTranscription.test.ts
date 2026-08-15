@@ -15,6 +15,7 @@ import {
   MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY,
   transcriptionFailureMessage,
   meetingTranscriptionConfigPath,
+  meetingsNotesPath,
   meetingsSummaryPath,
   meetingsTranscriptDir,
   meetingsTranscriptTextPath,
@@ -346,6 +347,33 @@ describe("createMeetingsTranscriptionManager", () => {
     await expect(manager.readSummary("ended")).resolves.toEqual({
       text: "Decision: ship the join path.",
       summaryPath: written.summaryPath,
+    });
+  });
+
+  it("writes and reads notes.md beside the transcript without changing markdown", async () => {
+    const homeDir = makeTempDir("luminor-notes-");
+    const manager = createMeetingsTranscriptionManager({
+      homeDir,
+      spawn: async () => {
+        throw new Error("should not spawn");
+      },
+    });
+    const markdown = "  ## Agenda\n\n- Ship the join path.\n";
+
+    const written = await manager.writeNotes({ sessionId: "ended", markdown });
+
+    expect(written.notesPath).toBe(meetingsNotesPath(homeDir, "ended"));
+    expect(written.notesPath.startsWith(Path.join(homeDir, "meetings"))).toBe(true);
+    expect(FS.readFileSync(written.notesPath, "utf8")).toBe(markdown);
+    await expect(manager.readNotes("ended")).resolves.toEqual({
+      markdown,
+      notesPath: written.notesPath,
+    });
+
+    await manager.writeNotes({ sessionId: "ended", markdown: "" });
+    await expect(manager.readNotes("ended")).resolves.toEqual({
+      markdown: "",
+      notesPath: written.notesPath,
     });
   });
 });

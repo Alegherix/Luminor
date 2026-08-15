@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEventHandler } from "react";
 import type { ThreadId } from "@luminor/contracts";
 
-const DEFAULT_NOTES_AUTOSAVE_DEBOUNCE_MS = 500;
+import { useDebouncedAutosave } from "../../../hooks/useDebouncedAutosave";
 
 interface UseThreadNotesAutosaveInput {
   readonly threadId: ThreadId;
@@ -34,20 +34,13 @@ export function useThreadNotesAutosave({
   onChange,
   debounceMs: debounceMsProp,
 }: UseThreadNotesAutosaveInput): UseThreadNotesAutosaveResult {
-  const debounceMs = debounceMsProp ?? DEFAULT_NOTES_AUTOSAVE_DEBOUNCE_MS;
   const [value, setValue] = useState(notes);
   const [focused, setFocused] = useState(false);
-  const debounceRef = useRef<number | null>(null);
-  const saveInFlightRef = useRef(false);
-  const retryAfterInFlightRef = useRef(false);
-  const mountedRef = useRef(true);
-  const lastCommittedRef = useRef(notes);
   const lastObservedServerNotesRef = useRef(notes);
   const pendingLocalEchoRef = useRef<PendingLocalEcho | null>(null);
   const valueRef = useRef(value);
   const threadIdRef = useRef(threadId);
   const onChangeRef = useRef(onChange);
-  const flushRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -58,63 +51,17 @@ export function useThreadNotesAutosave({
     valueRef.current = value;
   }, [value]);
 
-  const scheduleFlush = useCallback((delayMs: number) => {
-    if (debounceRef.current !== null) {
-      window.clearTimeout(debounceRef.current);
-    }
-    debounceRef.current = window.setTimeout(() => {
-      void flushRef.current().catch(() => undefined);
-    }, delayMs);
-  }, []);
-
-  const flush = useCallback((): Promise<void> => {
-    if (debounceRef.current !== null) {
-      window.clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    if (saveInFlightRef.current) {
-      retryAfterInFlightRef.current = true;
-      return Promise.resolve();
-    }
-    const next = valueRef.current;
-    if (next === lastCommittedRef.current) {
-      return Promise.resolve();
-    }
-    saveInFlightRef.current = true;
-    let saved = false;
-    // Promise chain instead of async/try-finally: React Compiler does not yet
-    // support try/finally, and it would skip optimizing this whole hook. The
-    // .finally keeps the exact same run-always semantics, including rejection
-    // propagation to the caller's .catch.
-    return Promise.resolve(onChangeRef.current(threadIdRef.current, next))
-      .then(() => {
-        saved = true;
-        lastCommittedRef.current = next;
-        pendingLocalEchoRef.current = {
-          value: next,
-          staleServerValue: lastObservedServerNotesRef.current,
-        };
-      })
-      .finally(() => {
-        saveInFlightRef.current = false;
-        const shouldFlushQueued =
-          retryAfterInFlightRef.current &&
-          valueRef.current !== lastCommittedRef.current &&
-          (saved || !mountedRef.current);
-        retryAfterInFlightRef.current = false;
-        if (shouldFlushQueued) {
-          if (mountedRef.current) {
-            scheduleFlush(debounceMs);
-          } else {
-            void flushRef.current().catch(() => undefined);
-          }
-        }
-      });
-  }, [debounceMs, scheduleFlush]);
-
-  useEffect(() => {
-    flushRef.current = flush;
-  }, [flush]);
+  const { schedule, flush, reset, isIdle } = useDebouncedAutosave({
+    initialValue: notes,
+    ...(debounceMsProp === undefined ? {} : { debounceMs: debounceMsProp }),
+    save: (next) => onChangeRef.current(threadIdRef.current, next),
+    onSaved: (next) => {
+      pendingLocalEchoRef.current = {
+        value: next,
+        staleServerValue: lastObservedServerNotesRef.current,
+      };
+    },
+  });
 
   useEffect(() => {
     lastObservedServerNotesRef.current = notes;
@@ -126,27 +73,13 @@ export function useThreadNotesAutosave({
       pendingLocalEchoRef.current !== null &&
       valueRef.current === pendingLocalEchoRef.current.value &&
       notes === pendingLocalEchoRef.current.staleServerValue;
-    if (
-      !focused &&
-      debounceRef.current === null &&
-      !saveInFlightRef.current &&
-      notes !== value &&
-      !waitingForLocalEcho
-    ) {
+    if (!focused && isIdle() && notes !== value && !waitingForLocalEcho) {
       pendingLocalEchoRef.current = null;
       valueRef.current = notes;
-      lastCommittedRef.current = notes;
+      reset(notes);
       setValue(notes);
     }
-  }, [notes, focused, value]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      void flush().catch(() => undefined);
-    };
-  }, [flush]);
+  }, [focused, isIdle, notes, reset, value]);
 
   const handleChange = useCallback<ChangeEventHandler<HTMLTextAreaElement>>(
     (event) => {
@@ -154,9 +87,9 @@ export function useThreadNotesAutosave({
       // Keep the ref ahead of React state so immediate unmount still flushes the last keystroke.
       valueRef.current = nextValue;
       setValue(nextValue);
-      scheduleFlush(debounceMs);
+      schedule(nextValue);
     },
-    [debounceMs, scheduleFlush],
+    [schedule],
   );
 
   const handleFocus = useCallback(() => {
