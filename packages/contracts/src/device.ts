@@ -50,7 +50,7 @@ export const DeviceUdid = TrimmedNonEmptyString.check(
 ).check(Schema.isPattern(/^[A-Za-z0-9._:-]+$/));
 export type DeviceUdid = typeof DeviceUdid.Type;
 
-export const DevicePlatform = Schema.Literals(["ios-simulator"]);
+export const DevicePlatform = Schema.Literals(["ios-simulator", "android-emulator"]);
 export type DevicePlatform = typeof DevicePlatform.Type;
 
 export const DeviceRuntimeState = Schema.Literals([
@@ -129,6 +129,11 @@ export const DeviceSetupStepId = Schema.Literals([
   "select-xcode-command-line-tools",
   "install-ios-runtime",
   "build-device-helper",
+  "install-android-sdk",
+  "install-android-platform-tools",
+  "install-android-emulator",
+  "create-android-avd",
+  "install-scrcpy",
 ]);
 export type DeviceSetupStepId = typeof DeviceSetupStepId.Type;
 
