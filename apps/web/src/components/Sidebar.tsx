@@ -410,6 +410,7 @@ import {
 } from "../sidebarRowStyles";
 import { SettingsSidebarNav } from "./SettingsSidebarNav";
 import { MeetingsSidebar } from "~/meetings/MeetingsSidebar";
+import { MeetingReviewPrototypeSidebar } from "~/meetings/prototype/MeetingReviewPrototype";
 import { meetingsSurfaceJoined } from "~/meetings/meetingsWorkspace";
 import { useMeetingsWorkspaceSnapshot } from "~/meetings/useMeetingsWorkspace";
 import {
@@ -1435,6 +1436,8 @@ export default function Sidebar() {
   });
   const isOnStudioRoute = pathname.startsWith("/studio");
   const isOnMeetings = pathname.startsWith("/meetings");
+  const meetingsPrototypeActive =
+    useLocation({ select: (loc) => loc.searchStr.includes("prototype=review") }) && isOnMeetings;
   const meetingsJoined = meetingsSurfaceJoined(useMeetingsWorkspaceSnapshot());
   const isOnKanban = pathname.startsWith("/kanban");
   const isOnAutomations = pathname.startsWith("/automations");
@@ -6635,7 +6638,11 @@ export default function Sidebar() {
               className="sidebar-surface-enter"
             >
               {isOnMeetings ? (
-                <MeetingsSidebar />
+                meetingsPrototypeActive ? (
+                  <MeetingReviewPrototypeSidebar />
+                ) : (
+                  <MeetingsSidebar />
+                )
               ) : (
                 <>
                   {/* Primary sidebar actions stay limited to features we currently ship. */}
