@@ -67,6 +67,7 @@ const makeConfigLayer = () =>
         devUrl: undefined,
         publicUrl: undefined,
         allowInsecureRemote: false,
+        trustedOrigins: [],
         noBrowser: true,
         authToken: undefined,
         autoBootstrapProjectFromCwd: false,

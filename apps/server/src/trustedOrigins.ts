@@ -2,7 +2,7 @@
 // Purpose: Shared origin checks for browser-facing HTTP/WS routes that expose
 //          local machine data only to Luminor's own app surfaces.
 // Layer: Server HTTP/security utility
-// Exports: normalizeCorsOrigin, isTrustedAppOrigin,
+// Exports: normalizeCorsOrigin, parseTrustedOriginsAllowlist, isTrustedAppOrigin,
 //          shouldRejectUntrustedRequestOrigin
 
 import {
@@ -34,6 +34,49 @@ export function normalizeCorsOrigin(rawOrigin: string | ReadonlyArray<string> | 
   } catch {
     return null;
   }
+}
+
+export function parseTrustedOriginsAllowlist(raw: string | undefined): readonly string[] {
+  if (raw === undefined) {
+    return [];
+  }
+  const origins: string[] = [];
+  const seen = new Set<string>();
+  for (const token of raw.split(",")) {
+    const trimmed = token.trim();
+    if (!trimmed) {
+      continue;
+    }
+    if (trimmed === "*") {
+      throw new Error(
+        "LUMINOR_TRUSTED_ORIGINS/--trusted-origins cannot include '*'; list exact normalized origins only.",
+      );
+    }
+    if (trimmed === "null") {
+      throw new Error(
+        "LUMINOR_TRUSTED_ORIGINS/--trusted-origins cannot include 'null'; list exact normalized origins only.",
+      );
+    }
+    const origin = normalizeCorsOrigin(trimmed);
+    if (!origin) {
+      throw new Error(
+        `LUMINOR_TRUSTED_ORIGINS/--trusted-origins entry ${JSON.stringify(trimmed)} is not a usable origin.`,
+      );
+    }
+    if (seen.has(origin)) {
+      continue;
+    }
+    seen.add(origin);
+    origins.push(origin);
+  }
+  return origins;
+}
+
+function isConfiguredTrustedOrigin(origin: string, config: ServerConfigShape): boolean {
+  if (origin === "*" || origin === "null") {
+    return false;
+  }
+  return config.trustedOrigins?.includes(origin) === true;
 }
 
 function normalizeHostForComparison(host: string): string {
@@ -77,7 +120,8 @@ export function isTrustedAppOrigin(input: {
     (input.origin === input.requestOrigin &&
       isTrustedRequestOriginHost(input.requestOrigin, input.config)) ||
     input.origin === input.config.devUrl?.origin ||
-    DESKTOP_APP_CORS_ORIGINS.has(input.origin)
+    DESKTOP_APP_CORS_ORIGINS.has(input.origin) ||
+    isConfiguredTrustedOrigin(input.origin, input.config)
   );
 }
 

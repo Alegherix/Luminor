@@ -525,6 +525,29 @@ it.layer(testLayer)("server CLI command", (it) => {
     }),
   );
 
+  it.effect("honors exact trusted origins from the environment", () =>
+    Effect.gen(function* () {
+      yield* runCli([], {
+        LUMINOR_TRUSTED_ORIGINS: "http://10.0.2.2:3773/",
+      });
+
+      assert.deepStrictEqual(resolvedConfig?.trustedOrigins, ["http://10.0.2.2:3773"]);
+    }),
+  );
+
+  it.effect("refuses a wildcard trusted-origins allowlist", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        runCli([], {
+          LUMINOR_TRUSTED_ORIGINS: "*",
+        }),
+      );
+
+      assert.equal(start.mock.calls.length, 0);
+      assert.match(String(error), /\*/);
+    }),
+  );
+
   it.effect("lets an explicit insecure-remote negative override an enabled environment", () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
