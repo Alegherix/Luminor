@@ -83,7 +83,8 @@ export async function listResourceProcesses(): Promise<ServerListResourceProcess
       processCount: tree.processCount,
       groups: tree.groups,
     };
-  } catch {
+  } catch (error) {
+    console.error("[resourceProcessMonitor] failed to list processes", error);
     return emptySnapshot();
   }
 }

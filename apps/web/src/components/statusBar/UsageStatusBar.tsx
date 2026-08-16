@@ -62,13 +62,13 @@ function UsageStatusBarSegment({ entry }: { entry: ProviderUsageSummaryEntry }) 
   );
 }
 
-function LiveClock() {
+function LiveClock({ className }: { className?: string }) {
   const nowMs = useNowMs(true, CLOCK_UPDATE_INTERVAL_MS);
   const current = new Date(nowMs);
 
   return (
     <time
-      className="tabular-nums text-muted-foreground"
+      className={cn("tabular-nums text-muted-foreground", className)}
       dateTime={current.toISOString()}
       aria-label="Current time"
     >
@@ -94,7 +94,7 @@ export function UsageStatusBar({ usage }: { usage: AllProviderUsageSummaries }) 
 
   return (
     <footer className="relative z-20 flex h-6 shrink-0 items-center justify-between border-t border-border/60 bg-[var(--app-shell-background)] px-2 text-[length:var(--app-font-size-chat-meta,10px)] text-foreground/80">
-      <div className="relative z-10 flex min-w-0 items-center gap-3">
+      <div className="relative z-10 flex min-w-0 max-w-[calc(50%-3.5rem)] flex-1 items-center gap-3 overflow-hidden">
         {visibleEntries.length > 0 ? (
           <Menu modal={false}>
             <MenuTrigger
@@ -124,11 +124,11 @@ export function UsageStatusBar({ usage }: { usage: AllProviderUsageSummaries }) 
         ) : null}
       </div>
 
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <LiveClock />
+      <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+        <LiveClock className="rounded-sm bg-[var(--app-shell-background)] px-1.5" />
       </div>
 
-      <div className="relative z-10 flex shrink-0 items-center">
+      <div className="relative z-10 ml-auto flex shrink-0 items-center pl-2">
         {resources.data?.supported !== false ? (
           <Menu modal={false} onOpenChange={setResourceOpen}>
             <MenuTrigger
@@ -141,9 +141,21 @@ export function UsageStatusBar({ usage }: { usage: AllProviderUsageSummaries }) 
               }
             >
               {leftoverCount > 0 ? <span className="size-1.5 rounded-full bg-warning" /> : null}
-              <span>{formatResourceCpu(resources.data?.totalCpu ?? 0)}</span>
+              <span>
+                {resources.isError
+                  ? "—"
+                  : resources.isPending
+                    ? "…"
+                    : formatResourceCpu(resources.data?.totalCpu ?? 0)}
+              </span>
               <span className="text-muted-foreground">·</span>
-              <span>{formatResourceRss(resources.data?.totalRssMb ?? 0)}</span>
+              <span>
+                {resources.isError
+                  ? "RSS"
+                  : resources.isPending
+                    ? "…"
+                    : formatResourceRss(resources.data?.totalRssMb ?? 0)}
+              </span>
             </MenuTrigger>
             <ComposerPickerMenuPopup align="end" side="top" className="w-[28rem] min-w-[28rem] p-0">
               <ResourceManagerPanel open={resourceOpen} />

@@ -84,6 +84,28 @@ export function ResourceManagerPanel({ open }: { open: boolean }) {
     setConfirmingId(null);
   };
 
+  if (query.isError) {
+    return (
+      <div className="flex h-[min(38rem,70vh)] w-[28rem] flex-col px-3 py-3 text-[12px]">
+        <p className="font-medium text-foreground">Could not read processes.</p>
+        <p className="mt-1 leading-relaxed text-muted-foreground">
+          {query.error instanceof Error
+            ? query.error.message
+            : "The server did not return a process snapshot. Restart Luminor if you just pulled this feature."}
+        </p>
+        <button
+          type="button"
+          className="mt-3 self-start rounded-md px-2 py-1 text-foreground transition-colors duration-150 ease-out hover:bg-muted active:scale-[0.97]"
+          onClick={() => {
+            void query.refetch();
+          }}
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
   if (snapshot && !snapshot.supported) {
     return (
       <div className="px-3 py-3 text-[12px] text-muted-foreground">
