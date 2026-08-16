@@ -8,6 +8,7 @@ import type { ServerConfigShape } from "./config";
 import {
   isTrustedAppOrigin,
   normalizeCorsOrigin,
+  parseTrustedOriginsAllowlist,
   requiresWebSocketAuthentication,
   shouldRejectAuthMutationOrigin,
   shouldRejectUntrustedRequestOrigin,
@@ -234,5 +235,73 @@ describe("trustedOrigins", () => {
         }),
       ).toBe(true);
     }
+  });
+
+  it("parses an exact allowlist and rejects wildcard or null entries", () => {
+    expect(parseTrustedOriginsAllowlist(undefined)).toEqual([]);
+    expect(parseTrustedOriginsAllowlist("")).toEqual([]);
+    expect(parseTrustedOriginsAllowlist(" http://10.0.2.2:3773/ , http://10.0.2.2:3773 ")).toEqual([
+      "http://10.0.2.2:3773",
+    ]);
+    expect(() => parseTrustedOriginsAllowlist("*")).toThrow(/\*/);
+    expect(() => parseTrustedOriginsAllowlist("null")).toThrow(/null/);
+    expect(() => parseTrustedOriginsAllowlist("not a url")).toThrow(/not a url/);
+  });
+
+  it("trusts only exact configured allowlist origins for native WebSocket clients", () => {
+    const emulatorConfig = {
+      ...config,
+      host: "127.0.0.1",
+      trustedOrigins: ["http://10.0.2.2:3773"],
+    } as ServerConfigShape;
+    expect(
+      isTrustedAppOrigin({
+        origin: "http://10.0.2.2:3773",
+        requestOrigin: "http://10.0.2.2:3773",
+        config: emulatorConfig,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRejectUntrustedRequestOrigin({
+        rawOrigin: "http://10.0.2.2:3773",
+        requestOrigin: "http://10.0.2.2:3773",
+        config: emulatorConfig,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRejectUntrustedRequestOrigin({
+        rawOrigin: "http://10.0.2.2:3773",
+        requestOrigin: "http://10.0.2.2:3773",
+        config: { ...config, host: "127.0.0.1" },
+      }),
+    ).toBe(true);
+    expect(
+      shouldRejectUntrustedRequestOrigin({
+        rawOrigin: "https://evil.example",
+        requestOrigin: "http://10.0.2.2:3773",
+        config: emulatorConfig,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRejectUntrustedRequestOrigin({
+        rawOrigin: "null",
+        requestOrigin: "http://10.0.2.2:3773",
+        config: emulatorConfig,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRejectUntrustedRequestOrigin({
+        rawOrigin: undefined,
+        requestOrigin: "http://10.0.2.2:3773",
+        config: emulatorConfig,
+      }),
+    ).toBe(false);
+    expect(
+      isTrustedAppOrigin({
+        origin: "*",
+        requestOrigin: "http://10.0.2.2:3773",
+        config: { ...emulatorConfig, trustedOrigins: ["*"] },
+      }),
+    ).toBe(false);
   });
 });

@@ -43,6 +43,7 @@ import { Server } from "./effectServer";
 import { ServerLoggerLive } from "./serverLogger";
 import { ServerSettingsService } from "./serverSettings";
 import { formatHostForUrl, isLoopbackHost, isWildcardHost } from "./startupAccess";
+import { parseTrustedOriginsAllowlist } from "./trustedOrigins";
 import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine";
 import { startThreadRetentionJob } from "./threadRetention";
 import {
@@ -84,6 +85,7 @@ interface CliInput {
   readonly devUrl: Option.Option<URL>;
   readonly publicUrl: Option.Option<URL>;
   readonly allowInsecureRemote: BooleanFlagInput;
+  readonly trustedOrigins: Option.Option<string>;
   readonly noBrowser: BooleanFlagInput;
   readonly authToken: Option.Option<string>;
   readonly autoBootstrapProjectFromCwd: BooleanFlagInput;
@@ -153,6 +155,10 @@ const CliEnvConfig = Config.all({
     Config.map(Option.getOrUndefined),
   ),
   allowInsecureRemote: optionalBooleanEnvironmentConfig("LUMINOR_ALLOW_INSECURE_REMOTE"),
+  trustedOrigins: Config.string("LUMINOR_TRUSTED_ORIGINS").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
   noBrowser: optionalBooleanEnvironmentConfig("LUMINOR_NO_BROWSER"),
   authToken: Config.string("LUMINOR_AUTH_TOKEN").pipe(
     Config.option,
@@ -216,6 +222,20 @@ const ServerConfigLive = (input: CliInput) =>
         env.allowInsecureRemote,
         false,
       );
+      let trustedOrigins: readonly string[];
+      try {
+        trustedOrigins = parseTrustedOriginsAllowlist(
+          Option.getOrUndefined(input.trustedOrigins) ?? env.trustedOrigins,
+        );
+      } catch (cause) {
+        return yield* new StartupError({
+          message:
+            cause instanceof Error
+              ? cause.message
+              : "Invalid LUMINOR_TRUSTED_ORIGINS/--trusted-origins.",
+          cause,
+        });
+      }
       const configuredHome = Option.getOrUndefined(input.luminorHome) ?? env.luminorHome;
       const baseDir = yield* resolveBaseDir(configuredHome);
       const userHomeDir = OS.homedir();
@@ -282,6 +302,7 @@ const ServerConfigLive = (input: CliInput) =>
         devUrl,
         publicUrl,
         allowInsecureRemote,
+        trustedOrigins,
         noBrowser,
         authToken,
         desktopShutdownToken,
@@ -474,6 +495,12 @@ const allowInsecureRemoteFlag = optionalBooleanFlag("allow-insecure-remote", {
   description:
     "Explicitly allow unencrypted authenticated remote access on a trusted LAN (equivalent to LUMINOR_ALLOW_INSECURE_REMOTE).",
 });
+const trustedOriginsFlag = Flag.string("trusted-origins").pipe(
+  Flag.withDescription(
+    "Comma-separated exact Origin values to trust for native clients (equivalent to LUMINOR_TRUSTED_ORIGINS). Never '*' or 'null'.",
+  ),
+  Flag.optional,
+);
 const noBrowserFlag = optionalBooleanFlag("no-browser", {
   description: "Disable automatic browser opening.",
   negativeName: "browser",
@@ -517,6 +544,7 @@ const baseServerCommand = Command.make("luminor", {
   devUrl: devUrlFlag,
   publicUrl: publicUrlFlag,
   allowInsecureRemote: allowInsecureRemoteFlag,
+  trustedOrigins: trustedOriginsFlag,
   noBrowser: noBrowserFlag,
   authToken: authTokenFlag,
   autoBootstrapProjectFromCwd: autoBootstrapProjectFromCwdFlag,

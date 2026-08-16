@@ -102,6 +102,7 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly devUrl: URL | undefined;
   readonly publicUrl: URL | undefined;
   readonly allowInsecureRemote: boolean;
+  readonly trustedOrigins: ReadonlyArray<string>;
   readonly noBrowser: boolean;
   readonly authToken: string | undefined;
   readonly desktopShutdownToken?: string | undefined;
@@ -265,6 +266,7 @@ export class ServerConfig extends ServiceMap.Service<ServerConfig, ServerConfigS
           devUrl,
           publicUrl: undefined,
           allowInsecureRemote: false,
+          trustedOrigins: [],
           noBrowser: false,
         } satisfies ServerConfigShape;
       }),
