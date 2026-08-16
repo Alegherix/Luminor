@@ -525,12 +525,12 @@ export function partitionProjectThreadsByFolders(input: {
    * project). Threads filed there are neither grouped here nor listed as unfiled, so a
    * thread never renders twice.
    */
-  foldersRenderedElsewhere?: ReadonlySet<FolderId>;
+  foldersRenderedElsewhere?: ReadonlySet<FolderId> | undefined;
   pinnedThreadIds: readonly ThreadId[];
   activeThreadId: ThreadId | undefined;
-  resolveThreadStatus?: (
-    thread: SidebarThreadSummary,
-  ) => ReturnType<typeof resolveThreadStatusPill>;
+  resolveThreadStatus?:
+    | ((thread: SidebarThreadSummary) => ReturnType<typeof resolveThreadStatusPill>)
+    | undefined;
 }): {
   pinnedFolderGroups: SidebarProjectFolderGroup[];
   unpinnedFolderGroups: SidebarProjectFolderGroup[];

@@ -428,7 +428,7 @@ describe("WsTransport", () => {
             (
               input: unknown,
               options?: { readonly asQueue: true },
-            ) => Effect.Effect<Queue.Dequeue<typeof phase | typeof completed>>
+            ) => Effect.Effect<Queue.Dequeue<typeof phase | typeof completed, Cause.Done>>
           >,
           params: unknown,
         ) => Promise<typeof completed.result>;
@@ -441,7 +441,7 @@ describe("WsTransport", () => {
           [WS_METHODS.gitCreateDetachedWorktree]: (_input, options) => {
             expect(options?.asQueue).toBe(true);
             return Effect.gen(function* () {
-              const queue = yield* Queue.unbounded<typeof phase | typeof completed>();
+              const queue = yield* Queue.unbounded<typeof phase | typeof completed, Cause.Done>();
               yield* Queue.offer(queue, phase);
               yield* Queue.offer(queue, completed);
               yield* Queue.end(queue);

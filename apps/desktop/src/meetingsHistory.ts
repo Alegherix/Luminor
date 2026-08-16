@@ -247,21 +247,23 @@ async function readJsonFile(path: string): Promise<RecordingMetadata | null> {
       return null;
     }
     const value = parsed as Record<string, unknown>;
+    const sessionId = readString(value.sessionId);
+    const meetingTitle = readString(value.meetingTitle);
+    const meetingStartAt = readString(value.meetingStartAt);
+    const meetingEndAt = readString(value.meetingEndAt);
+    const meetingMeetUrl = readString(value.meetingMeetUrl);
+    const startedAt = readString(value.startedAt);
+    const endedAt = readString(value.endedAt);
+    const calendarEventId = readString(value.calendarEventId);
     return {
-      ...(readString(value.sessionId) ? { sessionId: readString(value.sessionId) } : {}),
-      ...(readString(value.meetingTitle) ? { meetingTitle: readString(value.meetingTitle) } : {}),
-      ...(readString(value.meetingStartAt)
-        ? { meetingStartAt: readString(value.meetingStartAt) }
-        : {}),
-      ...(readString(value.meetingEndAt) ? { meetingEndAt: readString(value.meetingEndAt) } : {}),
-      ...(readString(value.meetingMeetUrl)
-        ? { meetingMeetUrl: readString(value.meetingMeetUrl) }
-        : {}),
-      ...(readString(value.startedAt) ? { startedAt: readString(value.startedAt) } : {}),
-      ...(readString(value.endedAt) ? { endedAt: readString(value.endedAt) } : {}),
-      ...(readString(value.calendarEventId)
-        ? { calendarEventId: readString(value.calendarEventId) }
-        : {}),
+      ...(sessionId ? { sessionId } : {}),
+      ...(meetingTitle ? { meetingTitle } : {}),
+      ...(meetingStartAt ? { meetingStartAt } : {}),
+      ...(meetingEndAt ? { meetingEndAt } : {}),
+      ...(meetingMeetUrl ? { meetingMeetUrl } : {}),
+      ...(startedAt ? { startedAt } : {}),
+      ...(endedAt ? { endedAt } : {}),
+      ...(calendarEventId ? { calendarEventId } : {}),
     };
   } catch {
     return null;

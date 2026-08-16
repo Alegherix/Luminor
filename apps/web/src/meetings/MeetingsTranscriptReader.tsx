@@ -31,11 +31,12 @@ function OverviewPanel({
   readonly summary: MeetingsSummaryState;
   readonly canOpenInChat: boolean;
   readonly openingInChat: boolean;
-  readonly retrying?: boolean;
-  readonly onOpenInChat?: () => void;
-  readonly onRetrySummary?: () => void;
+  readonly retrying?: boolean | undefined;
+  readonly onOpenInChat?: (() => void) | undefined;
+  readonly onRetrySummary?: (() => void) | undefined;
 }) {
-  const review = summary.status === "ready" && summary.text ? parseMeetingsReviewMarkdown(summary.text) : null;
+  const review =
+    summary.status === "ready" && summary.text ? parseMeetingsReviewMarkdown(summary.text) : null;
   const hasReviewContent = Boolean(
     review && (review.overview || review.decisions.length > 0 || review.actionItems.length > 0),
   );
@@ -48,7 +49,10 @@ function OverviewPanel({
         </p>
       ) : null}
       {review?.overview ? (
-        <section className={`${REVIEW_CARD_CLASS} flex flex-col gap-2 p-5`} aria-label="Sammanfattning">
+        <section
+          className={`${REVIEW_CARD_CLASS} flex flex-col gap-2 p-5`}
+          aria-label="Sammanfattning"
+        >
           <h2 className="text-sm font-semibold text-foreground">Sammanfattning</h2>
           <article className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
             {review.overview}
@@ -66,7 +70,10 @@ function OverviewPanel({
         </section>
       ) : null}
       {review && review.actionItems.length > 0 ? (
-        <section className={`${REVIEW_CARD_CLASS} flex flex-col gap-2 p-5`} aria-label="Åtgärdspunkter">
+        <section
+          className={`${REVIEW_CARD_CLASS} flex flex-col gap-2 p-5`}
+          aria-label="Åtgärdspunkter"
+        >
           <h2 className="text-sm font-semibold text-foreground">Åtgärdspunkter</h2>
           <ul className="flex list-disc flex-col gap-1 pl-5 text-sm leading-6 text-muted-foreground">
             {review.actionItems.map((item) => (
@@ -82,7 +89,13 @@ function OverviewPanel({
           </p>
           {onRetrySummary ? (
             <div>
-              <Button type="button" variant="outline" size="sm" onClick={onRetrySummary} disabled={retrying}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onRetrySummary}
+                disabled={retrying}
+              >
                 {retrying ? "Generating…" : "Generate summary"}
               </Button>
             </div>
@@ -90,11 +103,17 @@ function OverviewPanel({
         </div>
       ) : null}
       {summary.status === "idle" || (summary.status === "ready" && !hasReviewContent) ? (
-        <p className="text-sm text-muted-foreground">Ingen sammanfattning finns för det här mötet än.</p>
+        <p className="text-sm text-muted-foreground">
+          Ingen sammanfattning finns för det här mötet än.
+        </p>
       ) : null}
       {canOpenInChat ? (
         <div>
-          <Button type="button" onClick={() => onOpenInChat?.()} disabled={openingInChat || !onOpenInChat}>
+          <Button
+            type="button"
+            onClick={() => onOpenInChat?.()}
+            disabled={openingInChat || !onOpenInChat}
+          >
             {openingInChat ? "Opening…" : "Öppna i chatt"}
           </Button>
         </div>
@@ -167,9 +186,7 @@ export function MeetingsTranscriptReader({
           <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">
             {selected?.title ?? "Transcript"}
           </h1>
-          {timeRange ? (
-            <p className="text-sm text-muted-foreground">{timeRange}</p>
-          ) : null}
+          {timeRange ? <p className="text-sm text-muted-foreground">{timeRange}</p> : null}
         </header>
 
         <MeetingsReviewTabs tab={tab} onTabChange={setTab} />
@@ -192,7 +209,9 @@ export function MeetingsTranscriptReader({
             </p>
           ) : null}
           {transcription.status === "ready" && transcription.text ? (
-            <article className={`${REVIEW_CARD_CLASS} whitespace-pre-wrap p-5 text-sm leading-6 text-foreground`}>
+            <article
+              className={`${REVIEW_CARD_CLASS} whitespace-pre-wrap p-5 text-sm leading-6 text-foreground`}
+            >
               {transcription.text}
             </article>
           ) : null}
@@ -206,7 +225,9 @@ export function MeetingsTranscriptReader({
           ) : null}
           {showRecovery ? (
             <div className="flex flex-col gap-3" role="alert">
-              <p className="text-sm text-foreground">{MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY}</p>
+              <p className="text-sm text-foreground">
+                {MEETINGS_TRANSCRIPTION_ENVIRONMENT_RECOVERY}
+              </p>
               <Button
                 type="button"
                 onClick={() => onPointAtEnvironment?.()}

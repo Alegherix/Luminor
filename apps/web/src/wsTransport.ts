@@ -1922,7 +1922,14 @@ export class WsTransport {
     const request = client[WS_METHODS.gitCreateDetachedWorktree] as (
       input: unknown,
       options?: { readonly asQueue: true },
-    ) => unknown;
+    ) =>
+      | Stream.Stream<GitWorktreeSetupProgressEvent>
+      | Effect.Effect<
+          | GitCreateDetachedWorktreeResult
+          | Queue.Dequeue<GitWorktreeSetupProgressEvent, Cause.Done>,
+          never,
+          never
+        >;
     const response = request(params, { asQueue: true });
     const runtime = this.getClientRuntime(client);
     const runOptions = signal ? { signal } : undefined;
@@ -1935,22 +1942,26 @@ export class WsTransport {
     };
 
     if (Stream.isStream(response)) {
+      const progress = response as Stream.Stream<GitWorktreeSetupProgressEvent>;
       await runtime.runPromise(
-        Stream.runForEach(response, (event) =>
+        Stream.runForEach(progress, (event) =>
           Effect.sync(() => {
-            onEvent(event as GitWorktreeSetupProgressEvent);
+            onEvent(event);
           }),
         ),
         runOptions,
       );
     } else if (Effect.isEffect(response)) {
+      const queued = response as Effect.Effect<
+        GitCreateDetachedWorktreeResult | Queue.Dequeue<GitWorktreeSetupProgressEvent, Cause.Done>,
+        never,
+        never
+      >;
       await runtime.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
-            const value = yield* response as Effect.Effect<
-              GitCreateDetachedWorktreeResult | Queue.Dequeue<GitWorktreeSetupProgressEvent>
-            >;
-            if (Queue.isQueue(value)) {
+            const value = yield* queued;
+            if (Queue.isDequeue(value)) {
               yield* Stream.runForEach(Stream.fromQueue(value), (event) =>
                 Effect.sync(() => {
                   onEvent(event);
