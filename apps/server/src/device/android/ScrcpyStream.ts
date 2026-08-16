@@ -27,6 +27,74 @@ export interface ScrcpyStreamOptions {
 const DEVICE_JAR_PATH = "/data/local/tmp/luminor-scrcpy-server.jar";
 const CONNECT_ATTEMPTS = 50;
 const CONNECT_RETRY_MS = 100;
+const SCRCPY_SCID_SPACE = 0x80000000;
+
+export function createScrcpyScid(random: () => number = Math.random): string {
+  return Math.floor(random() * SCRCPY_SCID_SPACE)
+    .toString(16)
+    .padStart(8, "0");
+}
+
+export interface ScrcpySocketConnectionOptions {
+  readonly attempts?: number;
+  readonly retryMs?: number;
+  readonly connectSocket?: () => Socket;
+}
+
+export function connectScrcpySocketWithRetry(
+  port: number,
+  options: ScrcpySocketConnectionOptions = {},
+): Promise<Socket> {
+  const attempts = options.attempts ?? CONNECT_ATTEMPTS;
+  const retryMs = options.retryMs ?? CONNECT_RETRY_MS;
+  const connectSocket = options.connectSocket ?? (() => connect({ host: "127.0.0.1", port }));
+
+  return new Promise((resolve, reject) => {
+    let attempt = 0;
+    let settled = false;
+    const tryConnect = (): void => {
+      attempt += 1;
+      const socket = connectSocket();
+      let attemptFinished = false;
+
+      const cleanup = (): void => {
+        socket.off("readable", onReadable);
+        socket.off("error", retry);
+        socket.off("close", retry);
+      };
+      const retry = (): void => {
+        if (attemptFinished || settled) return;
+        attemptFinished = true;
+        cleanup();
+        socket.destroy();
+        if (attempt >= attempts) {
+          settled = true;
+          reject(
+            new DeviceBackendError("Could not connect to the scrcpy video socket.", {
+              retryable: true,
+            }),
+          );
+          return;
+        }
+        setTimeout(tryConnect, retryMs);
+      };
+      const onReadable = (): void => {
+        if (attemptFinished || settled) return;
+        if (socket.readableLength === 0) return;
+        attemptFinished = true;
+        settled = true;
+        cleanup();
+        socket.on("error", () => socket.destroy());
+        resolve(socket);
+      };
+
+      socket.once("readable", onReadable);
+      socket.once("error", retry);
+      socket.once("close", retry);
+    };
+    tryConnect();
+  });
+}
 
 function concat(parts: readonly Uint8Array[]): Uint8Array {
   const out = new Uint8Array(parts.reduce((sum, part) => sum + part.byteLength, 0));
@@ -54,10 +122,7 @@ export class ScrcpyStream {
       options.serverJarPath,
       DEVICE_JAR_PATH,
     ]);
-    const scid = Array.from(
-      { length: 8 },
-      () => "0123456789abcdef"[Math.floor(Math.random() * 16)],
-    ).join("");
+    const scid = createScrcpyScid();
     const forwardOut = await options.run(options.adbPath, [
       "-s",
       options.serial,
@@ -98,34 +163,52 @@ export class ScrcpyStream {
       { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
     );
 
-    const socket = await ScrcpyStream.connectWithRetry(localPort);
+    const startupOutput: string[] = [];
+    const collectStartupOutput = (chunk: Buffer): void => {
+      if (startupOutput.join("").length < 8_192) startupOutput.push(chunk.toString());
+    };
+    serverProcess.stdout?.on("data", collectStartupOutput);
+    serverProcess.stderr?.on("data", collectStartupOutput);
+    let removeExitListeners = (): void => {};
+    const exited = new Promise<never>((_resolve, reject) => {
+      const onExit = (code: number | null, signal: NodeJS.Signals | null): void => {
+        const detail = startupOutput.join("").trim();
+        reject(
+          new DeviceBackendError(
+            `scrcpy server exited before streaming (${code === null ? signal : `code ${code}`})${detail ? `: ${detail}` : ""}`,
+          ),
+        );
+      };
+      const onError = (cause: Error): void => {
+        reject(new DeviceBackendError(`Could not start the scrcpy server: ${cause.message}`));
+      };
+      serverProcess.once("exit", onExit);
+      serverProcess.once("error", onError);
+      removeExitListeners = () => {
+        serverProcess.off("exit", onExit);
+        serverProcess.off("error", onError);
+      };
+    });
+
+    let socket: Socket;
+    try {
+      socket = await Promise.race([connectScrcpySocketWithRetry(localPort), exited]);
+    } catch (cause) {
+      removeExitListeners();
+      serverProcess.kill("SIGKILL");
+      await options
+        .run(options.adbPath, ["-s", options.serial, "forward", "--remove", `tcp:${localPort}`])
+        .catch(() => {});
+      throw cause;
+    }
+    removeExitListeners();
+    serverProcess.stdout?.off("data", collectStartupOutput);
+    serverProcess.stderr?.off("data", collectStartupOutput);
+    serverProcess.stdout?.resume();
+    serverProcess.stderr?.resume();
     const stream = new ScrcpyStream(options, serverProcess, socket, localPort);
     stream.pump();
     return stream;
-  }
-
-  private static connectWithRetry(port: number): Promise<Socket> {
-    return new Promise((resolve, reject) => {
-      let attempt = 0;
-      const tryConnect = (): void => {
-        attempt += 1;
-        const socket = connect({ host: "127.0.0.1", port });
-        socket.once("connect", () => resolve(socket));
-        socket.once("error", () => {
-          socket.destroy();
-          if (attempt >= CONNECT_ATTEMPTS) {
-            reject(
-              new DeviceBackendError("Could not connect to the scrcpy video socket.", {
-                retryable: true,
-              }),
-            );
-            return;
-          }
-          setTimeout(tryConnect, CONNECT_RETRY_MS);
-        });
-      };
-      tryConnect();
-    });
   }
 
   private pump(): void {
