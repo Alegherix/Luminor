@@ -211,7 +211,7 @@ export function buildThreadGroups(input: {
   }
 
   return [...grouped.entries()]
-    .toSorted((left, right) => {
+    .slice().sort((left, right) => {
       const leftUnfiled = left[0] === UNFILED_KEY ? 1 : 0;
       const rightUnfiled = right[0] === UNFILED_KEY ? 1 : 0;
       if (leftUnfiled !== rightUnfiled) return leftUnfiled - rightUnfiled;
@@ -222,7 +222,7 @@ export function buildThreadGroups(input: {
       key,
       title: group.title,
       rows: group.rows
-        .toSorted((left, right) => right.recency - left.recency)
+        .slice().sort((left, right) => right.recency - left.recency)
         .map(({ recency: _recency, ...row }) => row),
     }));
 }
@@ -247,7 +247,7 @@ export function searchCatalogThreads(input: {
         ? [{ row, recency: Date.parse(threadRecencyIso(thread)) }]
         : [];
     })
-    .toSorted((left, right) => right.recency - left.recency)
+    .slice().sort((left, right) => right.recency - left.recency)
     .map(({ row }) => row);
 }
 

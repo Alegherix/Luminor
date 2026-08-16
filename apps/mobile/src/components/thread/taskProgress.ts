@@ -94,7 +94,7 @@ export function deriveTaskProgress(
 ): TaskProgressView | null {
   const taskActivities = activities.filter((activity) => activity.kind === "turn.tasks.updated");
   const fromCurrentTurn = latestTurnId
-    ? taskActivities.toReversed().find((activity) => activity.turnId === latestTurnId)
+    ? taskActivities.slice().reverse().find((activity) => activity.turnId === latestTurnId)
     : undefined;
   const latestTaskActivity = fromCurrentTurn ?? taskActivities[taskActivities.length - 1];
   if (latestTaskActivity) {

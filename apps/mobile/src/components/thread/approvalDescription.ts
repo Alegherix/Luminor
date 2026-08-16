@@ -15,7 +15,7 @@ export function describeApproval(
   interaction: OrchestrationPendingInteraction,
   activities: readonly OrchestrationThreadActivity[],
 ): { readonly title: string; readonly body: string | null } {
-  const match = activities.toReversed().find((activity) => {
+  const match = activities.slice().reverse().find((activity) => {
     if (activity.kind !== "approval.requested") return false;
     const payload = asRecord(activity.payload);
     return payload?.requestId === interaction.requestId;
