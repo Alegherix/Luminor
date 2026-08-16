@@ -8,6 +8,16 @@ import { Schema } from "effect";
 import { errorMessageFromBody, HttpRequestError, requestJson } from "./http";
 import { makeBearerBootstrapUrl, makeWsTokenUrl } from "./urls";
 
+const AuthBearerBootstrapHttpResult = Schema.Struct({
+  ...AuthBearerBootstrapResult.fields,
+  expiresAt: Schema.DateTimeUtcFromString,
+});
+
+const AuthWebSocketTokenHttpResult = Schema.Struct({
+  ...AuthWebSocketTokenResult.fields,
+  expiresAt: Schema.DateTimeUtcFromString,
+});
+
 export async function exchangePairingCredential(
   baseUrl: string,
   credential: string,
@@ -27,7 +37,7 @@ export async function exchangePairingCredential(
       response.body,
     );
   }
-  return Schema.decodeUnknownPromise(AuthBearerBootstrapResult)(response.body);
+  return Schema.decodeUnknownPromise(AuthBearerBootstrapHttpResult)(response.body);
 }
 
 export async function issueWsToken(
@@ -51,5 +61,5 @@ export async function issueWsToken(
       response.body,
     );
   }
-  return Schema.decodeUnknownPromise(AuthWebSocketTokenResult)(response.body);
+  return Schema.decodeUnknownPromise(AuthWebSocketTokenHttpResult)(response.body);
 }
