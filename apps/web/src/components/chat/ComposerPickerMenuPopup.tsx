@@ -9,17 +9,28 @@ import { cn } from "~/lib/utils";
 import { MenuPopupBase, MenuSubPopup } from "../ui/menu";
 import { SelectPopup } from "../ui/select";
 import {
+  type ComposerPickerFixedWidth,
   type ComposerPickerSize,
   composerPickerMenuFixedShellClassName,
   composerPickerMenuShellClassName,
   resolveComposerPickerSize,
 } from "./composerPickerSize";
 
+type FixedWidthProp = boolean | ComposerPickerFixedWidth;
+
+function resolveFixedWidth(
+  fixedWidth: FixedWidthProp | undefined,
+): ComposerPickerFixedWidth | null {
+  if (fixedWidth === undefined || fixedWidth === false) return null;
+  return fixedWidth === true ? "default" : fixedWidth;
+}
+
 type ComposerPickerMenuPopupProps = Omit<ComponentProps<typeof MenuPopupBase>, "surface"> & {
   /** Override global COMPOSER_PICKER_SIZE for this panel. */
   size?: ComposerPickerSize;
-  /** Apply the fixed picker width (model/effort/provider pickers). Off = content-sized. */
-  fixedWidth?: boolean;
+  /** Apply the fixed picker width (model/effort/provider pickers). Off = content-sized.
+   *  "wide" also raises label size and row height for long model names. */
+  fixedWidth?: FixedWidthProp;
 };
 
 /** App-wide picker dropdown panel — frosted shell, border, shadow, option row radius. */
@@ -29,7 +40,7 @@ export function ComposerPickerMenuPopup({
   fixedWidth: fixedWidthProp,
   ...props
 }: ComposerPickerMenuPopupProps) {
-  const fixedWidth = fixedWidthProp ?? false;
+  const fixedWidth = resolveFixedWidth(fixedWidthProp);
   const resolvedSize = resolveComposerPickerSize(size);
   return (
     <MenuPopupBase
@@ -37,7 +48,7 @@ export function ComposerPickerMenuPopup({
       pickerSize={resolvedSize}
       className={cn(
         fixedWidth
-          ? composerPickerMenuFixedShellClassName(resolvedSize)
+          ? composerPickerMenuFixedShellClassName(resolvedSize, fixedWidth)
           : composerPickerMenuShellClassName(resolvedSize),
         className,
       )}
@@ -76,8 +87,9 @@ export function ComposerPickerSelectPopup({
 type ComposerPickerMenuSubPopupProps = Omit<ComponentProps<typeof MenuSubPopup>, "surface"> & {
   /** Override global COMPOSER_PICKER_SIZE for this submenu. */
   size?: ComposerPickerSize;
-  /** Apply the fixed picker width (model/effort/provider pickers). Off = content-sized. */
-  fixedWidth?: boolean;
+  /** Apply the fixed picker width (model/effort/provider pickers). Off = content-sized.
+   *  "wide" also raises label size and row height for long model names. */
+  fixedWidth?: FixedWidthProp;
 };
 
 /** Composer-attached submenu popup with the same shared shell styling. */
@@ -87,7 +99,7 @@ export function ComposerPickerMenuSubPopup({
   fixedWidth: fixedWidthProp,
   ...props
 }: ComposerPickerMenuSubPopupProps) {
-  const fixedWidth = fixedWidthProp ?? false;
+  const fixedWidth = resolveFixedWidth(fixedWidthProp);
   const resolvedSize = resolveComposerPickerSize(size);
   return (
     <MenuSubPopup
@@ -95,7 +107,7 @@ export function ComposerPickerMenuSubPopup({
       pickerSize={resolvedSize}
       className={cn(
         fixedWidth
-          ? composerPickerMenuFixedShellClassName(resolvedSize)
+          ? composerPickerMenuFixedShellClassName(resolvedSize, fixedWidth)
           : composerPickerMenuShellClassName(resolvedSize),
         className,
       )}

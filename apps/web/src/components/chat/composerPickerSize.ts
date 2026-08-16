@@ -6,6 +6,9 @@
 
 export type ComposerPickerSize = "small" | "normal";
 
+/** Fixed-width variants: "wide" panels also raise label size and row height. */
+export type ComposerPickerFixedWidth = "default" | "wide";
+
 /** Global picker menu density — set to "small" or "normal". */
 export const COMPOSER_PICKER_SIZE: ComposerPickerSize = "normal";
 
@@ -27,6 +30,8 @@ export function composerPickerMenuShellClassName(
 // Density shell + opt-in fixed width for the composer model/effort/provider pickers.
 export function composerPickerMenuFixedShellClassName(
   size: ComposerPickerSize | undefined = COMPOSER_PICKER_SIZE,
+  width: ComposerPickerFixedWidth = "default",
 ): string {
-  return `${composerPickerMenuShellClassName(size)} composer-picker-menu-fixed`;
+  const shell = `${composerPickerMenuShellClassName(size)} composer-picker-menu-fixed`;
+  return width === "wide" ? `${shell} composer-picker-menu-fixed--wide` : shell;
 }

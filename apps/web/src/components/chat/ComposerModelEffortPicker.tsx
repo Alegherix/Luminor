@@ -243,7 +243,7 @@ export function ComposerModelEffortPicker(props: ComposerModelEffortPickerProps)
             <span className="truncate">{modelLabel}</span>
           </MenuSubTrigger>
           <ComposerPickerMenuSubPopup
-            fixedWidth
+            fixedWidth="wide"
             className={COMPOSER_PICKER_MODEL_SUBMENU_HEIGHT_CLASS_NAME}
           >
             <ProviderModelMenuItems

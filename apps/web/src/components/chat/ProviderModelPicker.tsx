@@ -405,7 +405,7 @@ export const ProviderModelMenuItems = function ProviderModelMenuItems(
               {option.label}
             </MenuSubTrigger>
             <ComposerPickerMenuSubPopup
-              fixedWidth
+              fixedWidth="wide"
               className={COMPOSER_PICKER_MODEL_SUBMENU_HEIGHT_CLASS_NAME}
             >
               {renderModelRadioGroup(option.value)}

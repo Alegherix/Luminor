@@ -2724,6 +2724,27 @@ diffs-container {
   max-width: min(10rem, 92vw);
 }
 
+/* Wide fixed panel — model lists, where truncated names are unreadable.
+   Also raises label size and row height on top of the density tokens. */
+.composer-picker-menu-fixed--wide.composer-picker-menu--normal {
+  width: 21rem;
+  min-width: 21rem;
+  max-width: min(21rem, 92vw);
+  --picker-option-font-size: var(--app-font-size-ui-lg, 13px);
+  --picker-option-min-h: 1.875rem;
+  --picker-option-py: 0.125rem;
+  --picker-group-label-font-size: var(--app-font-size-ui, 12px);
+}
+
+.composer-picker-menu-fixed--wide.composer-picker-menu--small {
+  width: 17rem;
+  min-width: 17rem;
+  max-width: min(17rem, 92vw);
+  --picker-option-font-size: var(--app-font-size-ui, 12px);
+  --picker-option-min-h: 1.75rem;
+  --picker-group-label-font-size: var(--app-font-size-ui-sm, 11px);
+}
+
 /* Size-aware option rows inside composer picker shells. */
 .composer-picker-menu--small [data-slot="menu-item"],
 .composer-picker-menu--small [data-slot="menu-radio-item"],

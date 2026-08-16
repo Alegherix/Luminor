@@ -130,7 +130,7 @@ function ProviderModelRadioItem(
           {provenanceLabel ? (
             <span
               aria-hidden="true"
-              className="block min-w-0 truncate text-[10px] leading-tight text-muted-foreground/60"
+              className="block min-w-0 truncate text-[length:var(--app-font-size-ui-xs,11px)] leading-tight text-muted-foreground/60"
             >
               {provenanceLabel}
             </span>
@@ -164,7 +164,7 @@ function CollapsibleModelGroup(
         <span className="col-start-2 min-w-0 truncate normal-case tracking-normal">
           {props.group.label}
         </span>
-        <span className="col-start-3 shrink-0 justify-self-end rounded-full bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] px-1.5 py-px text-[9px] font-normal tabular-nums normal-case tracking-normal text-muted-foreground/70">
+        <span className="col-start-3 shrink-0 justify-self-end rounded-full bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] px-1.5 py-px text-[length:var(--app-font-size-ui-2xs,10px)] font-normal tabular-nums normal-case tracking-normal text-muted-foreground/70">
           {props.group.options.length}
         </span>
       </CollapsibleTrigger>
