@@ -231,6 +231,21 @@ describe("getPiDiscoverableModels", () => {
     });
   });
 
+  it("forwards a Pi model's context window into the discovery descriptor", () => {
+    const descriptor = toPiProviderModelDescriptor(
+      {
+        provider: "anthropic",
+        id: "claude-opus-4-8",
+        name: "Claude Opus 4.8",
+        reasoning: true,
+        contextWindow: 1_000_000,
+      } as Model<Api>,
+      () => "Anthropic",
+    );
+
+    expect(descriptor?.contextWindowTokens).toBe(1_000_000);
+  });
+
   it("omits models whose normalized identity would no longer resolve in the registry", () => {
     expect(
       toPiProviderModelDescriptor(

@@ -506,6 +506,8 @@ describe("context window helpers", () => {
     expect(opus5Caps.contextWindowTokens).toBe(1_000_000);
     expect(getDefaultAutoCompactWindow(opus5Caps)).toBe("1m");
     expect(getDefaultContextWindow(getModelCapabilities("codex", "gpt-5.4"))).toBeNull();
+    expect(getModelCapabilities("grok", "grok-build").contextWindowTokens).toBe(500_000);
+    expect(getModelCapabilities("grok", "grok-4.6").contextWindowTokens).toBe(500_000);
   });
 
   it("validates auto-compact budgets against model capabilities", () => {

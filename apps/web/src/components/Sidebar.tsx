@@ -4777,6 +4777,7 @@ export default function Sidebar() {
     threadJumpLabelParts: readonly string[];
     rightMetaChips: ThreadMetaChip[];
     threadStatus: ReturnType<typeof resolveThreadStatusForSidebar>;
+    timeLabel: string;
     timestampToneClassName?: string;
     hoverActions: ReactNode;
   }) {
@@ -4801,9 +4802,6 @@ export default function Sidebar() {
           </KbdGroup>
         ) : null}
         {trailingStatus ? (
-          // The relative time now lives in the row hover card, so the trailing
-          // slot only carries the live status/loader glyph; when idle it
-          // collapses and the hover action icons sit flush at the end.
           <span
             title={trailingStatus.label}
             className={threadRowStatusSlotClassName(
@@ -4814,6 +4812,17 @@ export default function Sidebar() {
             <SidebarStatusTrailingGlyph status={trailingStatus} />
           </span>
         ) : null}
+        <span
+          data-slot="thread-row-time"
+          className={cn(
+            "shrink-0 tabular-nums leading-none text-[length:calc(var(--app-font-size-ui-meta,11px)+0.5px)]",
+            sidebarHoverRevealHideClassName("thread-row"),
+            input.timestampToneClassName ??
+              (input.isSubagentThread ? "text-muted-foreground/26" : "text-muted-foreground/38"),
+          )}
+        >
+          {input.timeLabel}
+        </span>
         {input.hoverActions}
       </div>
     );
@@ -5057,6 +5066,7 @@ export default function Sidebar() {
                 threadJumpLabelParts,
                 rightMetaChips,
                 threadStatus,
+                timeLabel: formatRelativeTime(thread.updatedAt ?? thread.createdAt),
                 timestampToneClassName: "text-muted-foreground/38",
                 hoverActions: renderThreadHoverActions({
                   threadId: thread.id,
@@ -5265,6 +5275,7 @@ export default function Sidebar() {
                 threadJumpLabelParts,
                 rightMetaChips: showCompactMeta ? rightMetaChips : [],
                 threadStatus,
+                timeLabel: formatRelativeTime(thread.updatedAt ?? thread.createdAt),
                 timestampToneClassName: isSubagentThread
                   ? isHighlighted
                     ? "text-foreground/38 dark:text-foreground/46"

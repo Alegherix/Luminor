@@ -234,6 +234,7 @@ const GROK_BUILD_CAPABILITIES: ModelCapabilities = {
   supportsThinkingToggle: false,
   promptInjectedEffortLevels: [],
   contextWindowOptions: [],
+  contextWindowTokens: 500_000,
 };
 
 // Cursor's live catalog is discovered per session (see CursorAdapter.listModels);

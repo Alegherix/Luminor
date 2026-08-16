@@ -10,6 +10,8 @@ import {
   formatContextWindowSelectionLabel,
   formatContextWindowTokens,
   inferContextWindowSelectionValue,
+  parseContextWindowMaxTokens,
+  resolveComposerContextWindowSnapshot,
 } from "./contextWindow";
 
 function makeActivity(
@@ -198,6 +200,39 @@ describe("contextWindow", () => {
     expect(snapshot?.usedPercentage).toBe(0);
   });
 
+  it("parses compact and numeric context window labels", () => {
+    expect(parseContextWindowMaxTokens("500k")).toBe(500_000);
+    expect(parseContextWindowMaxTokens("128k")).toBe(128_000);
+    expect(parseContextWindowMaxTokens(256_000)).toBe(256_000);
+    expect(deriveSelectedContextWindowSnapshot("500k")?.maxTokens).toBe(500_000);
+  });
+
+  it("seeds the composer meter from the selected model window before usage arrives", () => {
+    const snapshot = resolveComposerContextWindowSnapshot({
+      activeSnapshot: null,
+      contextWindowTokens: 500_000,
+    });
+
+    expect(snapshot?.usedTokens).toBe(0);
+    expect(snapshot?.maxTokens).toBe(500_000);
+    expect(snapshot?.usedPercentage).toBe(0);
+  });
+
+  it("fills a missing live max from the selected composer model window", () => {
+    const snapshot = resolveComposerContextWindowSnapshot({
+      activeSnapshot: deriveLatestContextWindowSnapshot([
+        makeActivity("activity-1", "context-window.updated", {
+          usedTokens: 12_500,
+        }),
+      ]),
+      contextWindowTokens: 500_000,
+    });
+
+    expect(snapshot?.usedTokens).toBe(12_500);
+    expect(snapshot?.maxTokens).toBe(500_000);
+    expect(snapshot?.usedPercentage).toBe(2.5);
+  });
+
   it("derives meter display labels without inventing token ratios", () => {
     const percentOnly = deriveLatestContextWindowSnapshot([
       makeActivity("activity-1", "context-window.configured", {
@@ -242,6 +277,7 @@ describe("contextWindow", () => {
   it("infers the active Claude context window from max tokens", () => {
     expect(inferContextWindowSelectionValue(200_000)).toBe("200k");
     expect(inferContextWindowSelectionValue(1_000_000)).toBe("1m");
+    expect(inferContextWindowSelectionValue(500_000)).toBe("500k");
     expect(inferContextWindowSelectionValue(333_000)).toBeNull();
   });
 

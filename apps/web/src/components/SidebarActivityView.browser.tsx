@@ -207,6 +207,47 @@ describe("SidebarActivityView", () => {
     await mounted.unmount();
   });
 
+  it("collapses time sections and drops their rows from the visible set", async () => {
+    const today = makeThread(500, { lastVisitedAt: "2026-08-02T12:00:00.000Z" });
+    const yesterday = makeThread(501, {
+      createdAt: "2026-08-01T12:00:00.000Z",
+      updatedAt: "2026-08-01T12:00:00.000Z",
+      latestTurn: {
+        turnId: "activity-turn-501",
+        state: "completed",
+        requestedAt: "2026-08-01T12:00:00.000Z",
+        startedAt: "2026-08-01T12:00:00.000Z",
+        completedAt: "2026-08-01T12:00:00.000Z",
+        assistantMessageId: null,
+      } as SidebarThreadSummary["latestTurn"],
+      lastVisitedAt: "2026-08-01T13:00:00.000Z",
+    });
+    const onVisibleThreadIdsChange = vi.fn();
+    const mounted = await render(
+      renderActivity({
+        threads: [today, yesterday],
+        onVisibleThreadIdsChange,
+      }),
+    );
+
+    await expect.element(page.getByRole("button", { name: "Today", exact: true })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(document.querySelector(`[data-testid="activity-thread-${today.id}"]`)).not.toBeNull();
+
+    await page.getByRole("button", { name: "Today", exact: true }).click();
+    await vi.waitFor(() => {
+      expect(page.getByRole("button", { name: "Today", exact: true }).element()).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+      expect(document.querySelector(`[data-testid="activity-thread-${today.id}"]`)).toBeNull();
+      expect(onVisibleThreadIdsChange.mock.lastCall?.[0]).toEqual([yesterday.id]);
+    });
+    await mounted.unmount();
+  });
+
   it("does not forward touch action taps to the row rename gesture", async () => {
     const thread = makeThread(0);
     const onThreadRenamePointerUp = vi.fn();

@@ -49,9 +49,109 @@ export interface ContextWindowMeterDisplay {
 }
 
 const KNOWN_CONTEXT_WINDOW_MAX_TOKENS = {
+  "128k": 128_000,
   "200k": 200_000,
+  "256k": 256_000,
+  "500k": 500_000,
   "1m": 1_000_000,
 } as const;
+
+const EMPTY_CONTEXT_WINDOW_USAGE = {
+  usedTokens: 0,
+  usedPercent: null,
+  totalProcessedTokens: null,
+  remainingTokens: null,
+  usedPercentage: null,
+  remainingPercentage: null,
+  inputTokens: null,
+  cachedInputTokens: null,
+  outputTokens: null,
+  reasoningOutputTokens: null,
+  lastUsedTokens: null,
+  lastInputTokens: null,
+  lastCachedInputTokens: null,
+  lastOutputTokens: null,
+  lastReasoningOutputTokens: null,
+  toolUses: null,
+  durationMs: null,
+  compactsAutomatically: false,
+  updatedAt: "",
+} as const;
+
+export function parseContextWindowMaxTokens(
+  value: string | number | null | undefined,
+): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  const knownMaxTokens =
+    KNOWN_CONTEXT_WINDOW_MAX_TOKENS[normalized as keyof typeof KNOWN_CONTEXT_WINDOW_MAX_TOKENS];
+  if (knownMaxTokens !== undefined) {
+    return knownMaxTokens;
+  }
+  const compact = /^(\d+(?:\.\d+)?)(k|m)$/u.exec(normalized);
+  if (compact) {
+    const amount = Number(compact[1]);
+    const multiplier = compact[2] === "m" ? 1_000_000 : 1_000;
+    return Number.isFinite(amount) && amount > 0 ? amount * multiplier : null;
+  }
+  const raw = Number(normalized);
+  return Number.isFinite(raw) && raw > 0 ? raw : null;
+}
+
+export function deriveContextWindowSnapshotFromMaxTokens(
+  maxTokens: number | null | undefined,
+): ContextWindowSnapshot | null {
+  const resolvedMaxTokens = parseContextWindowMaxTokens(maxTokens);
+  if (resolvedMaxTokens === null) {
+    return null;
+  }
+  return {
+    ...EMPTY_CONTEXT_WINDOW_USAGE,
+    maxTokens: resolvedMaxTokens,
+    remainingTokens: Math.round(resolvedMaxTokens),
+    usedPercentage: 0,
+    remainingPercentage: 100,
+  };
+}
+
+export function withFallbackContextWindowMaxTokens(
+  snapshot: ContextWindowSnapshot | null,
+  maxTokens: number | null | undefined,
+): ContextWindowSnapshot | null {
+  const resolvedMaxTokens = parseContextWindowMaxTokens(maxTokens);
+  if (snapshot === null) {
+    return deriveContextWindowSnapshotFromMaxTokens(resolvedMaxTokens);
+  }
+  if (snapshot.maxTokens !== null || resolvedMaxTokens === null) {
+    return snapshot;
+  }
+  const usedPercentage =
+    snapshot.usedPercent ??
+    (resolvedMaxTokens > 0 ? Math.min(100, (snapshot.usedTokens / resolvedMaxTokens) * 100) : null);
+  return {
+    ...snapshot,
+    maxTokens: resolvedMaxTokens,
+    remainingTokens: Math.max(0, Math.round(resolvedMaxTokens - snapshot.usedTokens)),
+    usedPercentage,
+    remainingPercentage: usedPercentage !== null ? Math.max(0, 100 - usedPercentage) : null,
+  };
+}
+
+export function resolveComposerContextWindowSnapshot(input: {
+  readonly activeSnapshot: ContextWindowSnapshot | null;
+  readonly selectedValue?: string | null;
+  readonly contextWindowTokens?: number | null;
+}): ContextWindowSnapshot | null {
+  const catalogMaxTokens =
+    parseContextWindowMaxTokens(input.selectedValue) ??
+    parseContextWindowMaxTokens(input.contextWindowTokens);
+  return withFallbackContextWindowMaxTokens(input.activeSnapshot, catalogMaxTokens);
+}
 
 // Read the latest token-usage snapshot emitted by the runtime.
 function deriveLatestUsageContextWindowSnapshot(
@@ -182,39 +282,7 @@ export function deriveLatestContextWindowSnapshot(
 export function deriveSelectedContextWindowSnapshot(
   selectedValue: string | null | undefined,
 ): ContextWindowSnapshot | null {
-  const normalized = selectedValue?.trim().toLowerCase();
-  if (!normalized) {
-    return null;
-  }
-  const maxTokens =
-    KNOWN_CONTEXT_WINDOW_MAX_TOKENS[normalized as keyof typeof KNOWN_CONTEXT_WINDOW_MAX_TOKENS] ??
-    null;
-  if (maxTokens === null) {
-    return null;
-  }
-
-  return {
-    usedTokens: 0,
-    usedPercent: null,
-    totalProcessedTokens: null,
-    maxTokens,
-    remainingTokens: maxTokens,
-    usedPercentage: 0,
-    remainingPercentage: 100,
-    inputTokens: null,
-    cachedInputTokens: null,
-    outputTokens: null,
-    reasoningOutputTokens: null,
-    lastUsedTokens: null,
-    lastInputTokens: null,
-    lastCachedInputTokens: null,
-    lastOutputTokens: null,
-    lastReasoningOutputTokens: null,
-    toolUses: null,
-    durationMs: null,
-    compactsAutomatically: false,
-    updatedAt: "",
-  };
+  return deriveContextWindowSnapshotFromMaxTokens(parseContextWindowMaxTokens(selectedValue));
 }
 
 function formatPercentage(value: number | null): string | null {

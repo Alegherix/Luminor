@@ -694,8 +694,11 @@ describe("collectVisibleActivityThreadIds", () => {
         pinnedOpen: false,
         pinned: [thread("pinned")],
         priority: [thread("attention")],
+        recentOpen: true,
         recent: [thread("recent")],
+        todayOpen: false,
         today: [thread("today")],
+        yesterdayOpen: true,
         yesterday: [thread("yesterday")],
         earlierOpen: true,
         earlier: [thread("earlier-visible")],
@@ -703,7 +706,7 @@ describe("collectVisibleActivityThreadIds", () => {
         settledOpen: false,
         settled: [thread("done")],
       }),
-    ).toEqual(["attention", "recent", "today", "yesterday", "earlier-visible"]);
+    ).toEqual(["attention", "recent", "yesterday", "earlier-visible"]);
   });
 
   it("uses already-paged project groups in project mode", () => {
@@ -714,8 +717,11 @@ describe("collectVisibleActivityThreadIds", () => {
         pinnedOpen: true,
         pinned: [thread("pinned")],
         priority: [thread("ignored-priority")],
+        recentOpen: true,
         recent: [],
+        todayOpen: true,
         today: [],
+        yesterdayOpen: true,
         yesterday: [],
         earlierOpen: false,
         earlier: [],
@@ -734,8 +740,11 @@ describe("collectVisibleActivityThreadIds", () => {
         pinnedOpen: true,
         pinned: [duplicated],
         priority: [duplicated],
+        recentOpen: true,
         recent: [],
+        todayOpen: true,
         today: [],
+        yesterdayOpen: true,
         yesterday: [],
         earlierOpen: false,
         earlier: [],

@@ -422,7 +422,8 @@ import {
   deriveContextWindowSelectionStatus,
   deriveCumulativeCostUsd,
   deriveLatestContextWindowSnapshot,
-  deriveSelectedContextWindowSnapshot,
+  inferContextWindowSelectionValue,
+  resolveComposerContextWindowSnapshot,
 } from "../lib/contextWindow";
 import { useComposerVoiceController } from "./chat/useComposerVoiceController";
 import {
@@ -9605,20 +9606,30 @@ export default function ChatView({
   );
   const runtimeUsageContextWindow = useMemo(
     () =>
-      activeContextWindow ??
-      (selectedProvider === "claudeAgent"
-        ? deriveSelectedContextWindowSnapshot(composerTraitSelection.contextWindow)
-        : null),
-    [activeContextWindow, composerTraitSelection.contextWindow, selectedProvider],
+      resolveComposerContextWindowSnapshot({
+        activeSnapshot: activeContextWindow,
+        selectedValue: composerTraitSelection.contextWindow,
+        contextWindowTokens: composerTraitSelection.caps.contextWindowTokens,
+      }),
+    [
+      activeContextWindow,
+      composerTraitSelection.caps.contextWindowTokens,
+      composerTraitSelection.contextWindow,
+    ],
   );
   const contextWindowSelectionStatus = useMemo(
     () =>
       deriveContextWindowSelectionStatus({
         activeSnapshot: runtimeUsageContextWindow,
         selectedValue:
-          selectedProvider === "claudeAgent" ? composerTraitSelection.contextWindow : null,
+          composerTraitSelection.contextWindow ??
+          inferContextWindowSelectionValue(composerTraitSelection.caps.contextWindowTokens),
       }),
-    [runtimeUsageContextWindow, composerTraitSelection.contextWindow, selectedProvider],
+    [
+      runtimeUsageContextWindow,
+      composerTraitSelection.caps.contextWindowTokens,
+      composerTraitSelection.contextWindow,
+    ],
   );
   const useSplitComposerPickerControls = isLocalDraftThread && !hasThreadStarted;
   const composerFooterControlsPlan = useMemo(

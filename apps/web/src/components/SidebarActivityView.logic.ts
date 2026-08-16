@@ -491,8 +491,11 @@ export function collectVisibleActivityThreadIds(input: {
   pinnedOpen: boolean;
   pinned: readonly SidebarThreadSummary[];
   priority: readonly SidebarThreadSummary[];
+  recentOpen: boolean;
   recent: readonly SidebarThreadSummary[];
+  todayOpen: boolean;
   today: readonly SidebarThreadSummary[];
+  yesterdayOpen: boolean;
   yesterday: readonly SidebarThreadSummary[];
   earlierOpen: boolean;
   earlier: readonly SidebarThreadSummary[];
@@ -505,7 +508,10 @@ export function collectVisibleActivityThreadIds(input: {
   if (input.groupMode === "project") {
     for (const group of input.projectGroups) visible.push(...group);
   } else {
-    visible.push(...input.priority, ...input.recent, ...input.today, ...input.yesterday);
+    visible.push(...input.priority);
+    if (input.recentOpen) visible.push(...input.recent);
+    if (input.todayOpen) visible.push(...input.today);
+    if (input.yesterdayOpen) visible.push(...input.yesterday);
     if (input.earlierOpen) visible.push(...input.earlier);
   }
   if (input.settledOpen) visible.push(...input.settled);

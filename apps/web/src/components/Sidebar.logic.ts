@@ -827,11 +827,11 @@ export function pruneProjectThreadListPagingForCollapsedProjects<
  * trailing cluster, sized to what the slot ACTUALLY shows so the title runs as
  * far right as the on-screen content allows:
  *
- * - The relative time now lives in the row hover card, so an idle row with no
- *   status/jump glyph and no meta chips reserves almost nothing — the title runs
- *   to the row edge instead of truncating against permanently reserved space.
- * - A status/loader (or keyboard-jump) glyph occupies a ~2.25rem slot, and each
- *   fork/worktree/handoff meta chip adds width; the reserve grows only for the
+ * - Every row keeps a ~2.75rem trailing reserve for the overlay time label so
+ *   the title fades before it instead of sliding underneath when the sidebar
+ *   narrows; the hover card still carries the same timestamp for full context.
+ * - A status/loader (or keyboard-jump) glyph adds width beside the time, and each
+ *   fork/worktree/handoff meta chip adds more; the reserve grows only for the
  *   badges that are present.
  * - The wider reserve that clears the hover pin/archive actions is applied only
  *   on hover/focus (mirroring the project header row), so the title gives up that
@@ -847,17 +847,18 @@ export function resolveThreadRowTrailingReserveClass(input: {
   // at the same time, so the hover reserve is constant regardless of rest content.
   const hoverReserve =
     "transition-[padding] duration-150 ease-out group-hover/thread-row:pr-[4.75rem] group-focus-within/thread-row:pr-[4.75rem]";
+  const timeReserve = "pr-[2.75rem]";
   const { metaChipCount, hasTrailingGlyph } = input;
   if (metaChipCount <= 0) {
-    return cn(hasTrailingGlyph ? "pr-[1.75rem]" : "pr-2", hoverReserve);
+    return cn(hasTrailingGlyph ? "pr-[3.5rem]" : timeReserve, hoverReserve);
   }
   if (metaChipCount === 1) {
-    return cn(hasTrailingGlyph ? "pr-[3rem]" : "pr-[1.75rem]", hoverReserve);
+    return cn(hasTrailingGlyph ? "pr-[4.25rem]" : "pr-[3.75rem]", hoverReserve);
   }
   if (metaChipCount === 2) {
-    return cn(hasTrailingGlyph ? "pr-[4rem]" : "pr-[3rem]", hoverReserve);
+    return cn(hasTrailingGlyph ? "pr-[4.75rem]" : "pr-[4.25rem]", hoverReserve);
   }
-  return cn(hasTrailingGlyph ? "pr-[4.5rem]" : "pr-[4.25rem]", hoverReserve);
+  return cn(hasTrailingGlyph ? "pr-[5.25rem]" : "pr-[4.75rem]", hoverReserve);
 }
 
 export function resolveThreadRowClassName(input: {

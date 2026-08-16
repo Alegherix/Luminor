@@ -95,6 +95,13 @@ export function getRuntimeAwareModelCapabilities(input: {
     })) ?? staticCapabilities.contextWindowOptions;
   const optionDescriptors =
     input.runtimeModel?.optionDescriptors ?? staticCapabilities.optionDescriptors;
+  const runtimeContextWindowTokens = input.runtimeModel?.contextWindowTokens;
+  const contextWindowTokens =
+    typeof runtimeContextWindowTokens === "number" &&
+    Number.isFinite(runtimeContextWindowTokens) &&
+    runtimeContextWindowTokens > 0
+      ? runtimeContextWindowTokens
+      : staticCapabilities.contextWindowTokens;
   const runtimeEfforts = input.runtimeModel?.supportedReasoningEfforts;
   // Providers with dynamic catalogs, including Droid, expose model-specific effort ladders here.
   if (
@@ -115,6 +122,7 @@ export function getRuntimeAwareModelCapabilities(input: {
       supportsFastMode,
       supportsThinkingToggle,
       contextWindowOptions,
+      ...(contextWindowTokens !== undefined ? { contextWindowTokens } : {}),
     };
   }
 
@@ -142,6 +150,7 @@ export function getRuntimeAwareModelCapabilities(input: {
       variantOptions: runtimeOptions,
       supportsThinkingToggle,
       contextWindowOptions,
+      ...(contextWindowTokens !== undefined ? { contextWindowTokens } : {}),
     };
   }
 
@@ -152,5 +161,6 @@ export function getRuntimeAwareModelCapabilities(input: {
     supportsThinkingToggle,
     contextWindowOptions,
     reasoningEffortLevels: runtimeOptions,
+    ...(contextWindowTokens !== undefined ? { contextWindowTokens } : {}),
   };
 }

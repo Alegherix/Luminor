@@ -611,6 +611,11 @@ export function toPiProviderModelDescriptor(
     name: trimToUndefined(model.name) ?? slug,
     upstreamProviderId: provider,
     upstreamProviderName: trimToUndefined(getProviderDisplayName(model.provider)) ?? provider,
+    ...(typeof model.contextWindow === "number" &&
+    Number.isFinite(model.contextWindow) &&
+    model.contextWindow > 0
+      ? { contextWindowTokens: model.contextWindow }
+      : {}),
     ...(supportedThinkingOptions.length > 0
       ? {
           supportedReasoningEfforts: supportedThinkingOptions.map((option) => ({

@@ -17,6 +17,7 @@ import {
 import type { OrchestrationThreadPullRequest, ProjectId, ThreadId } from "@luminor/contracts";
 import { resolveThreadEnvironmentMode } from "@luminor/shared/threadEnvironment";
 
+import { useAppSettings } from "~/appSettings";
 import {
   AddPlusIcon,
   CircleCheckIcon,
@@ -60,6 +61,7 @@ import {
   splitActivityThreadsByDateBucket,
   splitPriorityActivityThreads,
   splitRecentActivityThreads,
+  formatActivityRowTime,
   type ActivityGroupMode,
   type ActivityProjectGroup,
   type ActivityScopeOption,
@@ -115,6 +117,7 @@ function ActivityThreadRow({
   onRenamePointerUp,
   onContextMenu,
   renderHoverCard,
+  timeLabel,
 }: {
   thread: SidebarThreadSummary;
   project: Project | undefined;
@@ -131,6 +134,7 @@ function ActivityThreadRow({
   onRenamePointerUp: (event: ReactPointerEvent<HTMLElement>, threadId: ThreadId) => void;
   onContextMenu: (threadId: ThreadId, position: SidebarRowContextMenuPosition) => void;
   renderHoverCard: (anchorId: string) => ReactNode;
+  timeLabel: string;
 }) {
   const provider = thread.session?.provider ?? thread.modelSelection.provider;
   const branch = resolveThreadDisplayBranch(thread);
@@ -149,6 +153,7 @@ function ActivityThreadRow({
   // unread completion and the running spinner (or state dot) for everything
   // else — same rule and same glyphs the classic thread/project rows use.
   const trailingStatus = resolveThreadStatusTrailingIndicator({ status, isActive });
+  const titleRowReserveClassName = trailingStatus ? "pr-[3.5rem]" : "pr-[2.75rem]";
   // Rename/context-menu gestures live on the row wrapper (not the title button) so
   // they also fire over the trailing status and hover-action cluster, which are
   // absolutely positioned siblings of the button.
@@ -185,8 +190,8 @@ function ActivityThreadRow({
         >
           <span
             className={cn(
-              "flex min-w-0 items-center gap-1.5 overflow-hidden pr-5 transition-[padding] duration-150 ease-out",
-              // Yield the title row to the hover action cluster (pin + archive + done).
+              "flex min-w-0 items-center gap-1.5 overflow-hidden transition-[padding] duration-150 ease-out",
+              titleRowReserveClassName,
               "group-hover/activity-row:pr-[4.25rem] group-focus-within/activity-row:pr-[4.25rem]",
             )}
           >
@@ -199,7 +204,7 @@ function ActivityThreadRow({
             />
             <span
               className={cn(
-                "min-w-0 shrink truncate text-[length:var(--app-font-size-ui,12px)] leading-5 font-normal",
+                "min-w-0 flex-1 truncate-fade text-[length:var(--app-font-size-ui,12px)] leading-5 font-normal",
                 isActive ? "text-foreground" : SIDEBAR_ROW_LABEL_TEXT_CLASS_NAME,
               )}
             >
@@ -225,17 +230,28 @@ function ActivityThreadRow({
             </span>
           </span>
         </button>
-        {trailingStatus ? (
+        <span className="pointer-events-none absolute top-1.5 right-1.5 inline-flex items-center gap-1">
+          {trailingStatus ? (
+            <span
+              data-slot="activity-completion-status"
+              className={cn(
+                "inline-flex size-5 items-center justify-center",
+                sidebarHoverRevealHideClassName("activity-row"),
+              )}
+            >
+              <SidebarStatusTrailingGlyph status={trailingStatus} />
+            </span>
+          ) : null}
           <span
-            data-slot="activity-completion-status"
+            data-slot="activity-row-time"
             className={cn(
-              "pointer-events-none absolute top-1 right-1 inline-flex size-5 items-center justify-center",
+              "shrink-0 tabular-nums text-[length:var(--app-font-size-ui-meta,10px)] text-muted-foreground/55",
               sidebarHoverRevealHideClassName("activity-row"),
             )}
           >
-            <SidebarStatusTrailingGlyph status={trailingStatus} />
+            {timeLabel}
           </span>
-        ) : null}
+        </span>
         <span
           className="absolute top-1 right-1 inline-flex items-center gap-1 opacity-0 transition-opacity group-hover/activity-row:opacity-100 group-focus-within/activity-row:opacity-100"
           // Double-clicking an action button toggles it twice; it must not also open
@@ -277,37 +293,10 @@ function ActivityThreadRow({
   );
 }
 
-function ActivitySectionLabel({
-  label,
-  onContextMenu,
-}: {
-  label: string;
-  /** Project blocks carry the same right-click menu as a classic project row. */
-  onContextMenu?: (position: SidebarRowContextMenuPosition) => void;
-}) {
-  return (
-    <div
-      data-slot="activity-section-label"
-      className="mb-1.5 px-2"
-      {...(onContextMenu
-        ? {
-            onContextMenu: (event: MouseEvent) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onContextMenu({ x: event.clientX, y: event.clientY });
-            },
-          }
-        : {})}
-    >
-      <span className={SIDEBAR_SECTION_LABEL_CLASS_NAME}>{label}</span>
-    </div>
-  );
-}
-
 /**
- * Collapsible section (Pinned, Earlier, Settled): the same label + inline
- * disclosure chevron the classic "Chats" header uses, with the shared
- * disclosure motion. Section-to-section spacing is owned by the parent list.
+ * Collapsible section (Pinned, Recent, Today, project blocks, etc.): the same
+ * label + inline disclosure chevron the classic "Chats" header uses, with the
+ * shared disclosure motion. Section-to-section spacing is owned by the parent list.
  */
 function ActivityCollapsibleSection({
   label,
@@ -315,23 +304,36 @@ function ActivityCollapsibleSection({
   onToggle,
   children,
   className,
+  onContextMenu,
 }: {
   label: string;
   open: boolean;
   onToggle: () => void;
   children: ReactNode;
   className?: string;
+  /** Project blocks carry the same right-click menu as a classic project row. */
+  onContextMenu?: (position: SidebarRowContextMenuPosition) => void;
 }) {
   return (
     <div className={className}>
       <button
         type="button"
+        data-slot="activity-section-label"
         className={cn(
           "flex h-7 w-full min-w-0 cursor-pointer items-center gap-1 rounded-md px-2 py-0.5",
           SIDEBAR_ROW_FOCUS_CLASS_NAME,
         )}
         aria-expanded={open}
         onClick={onToggle}
+        {...(onContextMenu
+          ? {
+              onContextMenu: (event: MouseEvent) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onContextMenu({ x: event.clientX, y: event.clientY });
+              },
+            }
+          : {})}
       >
         <span className={cn("min-w-0 truncate", SIDEBAR_SECTION_LABEL_CLASS_NAME)}>{label}</span>
         <DisclosureChevron open={open} className="text-muted-foreground/58" />
@@ -569,13 +571,20 @@ export function SidebarActivityView({
   /** Same "Add project" action the Projects section header runs. */
   onAddProject: () => void;
 }) {
+  const { settings } = useAppSettings();
   const [scopeSelection, setScopeSelection] = useState<ActivityScopeSelection>(null);
   const [groupMode, setGroupMode] = useState<ActivityGroupMode>("time");
   const [pinnedOpen, setPinnedOpen] = useState(true);
+  const [recentOpen, setRecentOpen] = useState(true);
+  const [todayOpen, setTodayOpen] = useState(true);
+  const [yesterdayOpen, setYesterdayOpen] = useState(true);
   const [earlierOpen, setEarlierOpen] = useState(false);
   const [earlierExtraPages, setEarlierExtraPages] = useState(0);
   const [settledOpen, setSettledOpen] = useState(false);
   const [settledExtraPages, setSettledExtraPages] = useState(0);
+  const [projectOpenByKey, setProjectOpenByKey] = useState<ReadonlyMap<string, boolean>>(
+    () => new Map(),
+  );
   const [projectExtraPagesByKey, setProjectExtraPagesByKey] = useState<ReadonlyMap<string, number>>(
     () => new Map(),
   );
@@ -641,6 +650,13 @@ export function SidebarActivityView({
     };
   });
 
+  const visibleProjectGroups = useMemo(
+    () =>
+      pagedProjectGroups.filter(
+        ({ group }) => projectOpenByKey.get(group.key) ?? true,
+      ),
+    [pagedProjectGroups, projectOpenByKey],
+  );
   const visibleThreadIds = useMemo(
     () =>
       collectVisibleActivityThreadIds({
@@ -648,12 +664,15 @@ export function SidebarActivityView({
         pinnedOpen,
         pinned: scopedPinnedThreads,
         priority: priorityThreads,
+        recentOpen,
         recent: recentThreads,
+        todayOpen,
         today: dateBuckets.today,
+        yesterdayOpen,
         yesterday: dateBuckets.yesterday,
         earlierOpen,
         earlier: dateBuckets.earlier.slice(0, earlierPaging.previewLimit),
-        projectGroups: pagedProjectGroups.map((group) => group.threads),
+        projectGroups: visibleProjectGroups.map((group) => group.threads),
         settledOpen,
         settled: model.settled.slice(0, settledPaging.previewLimit),
       }),
@@ -665,13 +684,16 @@ export function SidebarActivityView({
       earlierPaging.previewLimit,
       groupMode,
       model.settled,
-      pagedProjectGroups,
       pinnedOpen,
       priorityThreads,
+      recentOpen,
       recentThreads,
       scopedPinnedThreads,
       settledOpen,
       settledPaging.previewLimit,
+      todayOpen,
+      visibleProjectGroups,
+      yesterdayOpen,
     ],
   );
   const visibleThreadIdsFingerprint = visibleThreadIds.join("\0");
@@ -725,6 +747,11 @@ export function SidebarActivityView({
       onRenamePointerUp={onThreadRenamePointerUp}
       onContextMenu={onThreadContextMenu}
       renderHoverCard={(anchorId) => renderThreadHoverCard(thread, anchorId)}
+      timeLabel={formatActivityRowTime({
+        thread,
+        nowMs,
+        timestampFormat: settings.timestampFormat,
+      })}
     />
   );
   const renderActiveRow = (thread: SidebarThreadSummary) =>
@@ -795,69 +822,82 @@ export function SidebarActivityView({
         </div>
       ) : groupMode === "project" ? (
         pagedProjectGroups.map(({ group, paging, threads: visibleThreads }) => (
-          <div key={group.key}>
-            <ActivitySectionLabel
-              label={
-                group.kind === "chats"
-                  ? "Luminor"
-                  : resolveThreadProjectLabel(projectById.get(group.projectId))
-              }
-              {...(group.kind === "project"
-                ? {
-                    onContextMenu: (position: SidebarRowContextMenuPosition) =>
-                      onProjectContextMenu(group.projectId, position),
-                  }
-                : {})}
+          <ActivityCollapsibleSection
+            key={group.key}
+            label={
+              group.kind === "chats"
+                ? "Luminor"
+                : resolveThreadProjectLabel(projectById.get(group.projectId))
+            }
+            open={projectOpenByKey.get(group.key) ?? true}
+            onToggle={() => {
+              setProjectOpenByKey((current) => {
+                const next = new Map(current);
+                next.set(group.key, !(current.get(group.key) ?? true));
+                return next;
+              });
+            }}
+            {...(group.kind === "project"
+              ? {
+                  onContextMenu: (position: SidebarRowContextMenuPosition) =>
+                    onProjectContextMenu(group.projectId, position),
+                }
+              : {})}
+          >
+            {visibleThreads.map(renderActiveRow)}
+            <ActivityShowMoreRow
+              canShowMore={paging.canShowMore}
+              canShowLess={paging.canShowLess}
+              onShowMore={() => {
+                setProjectExtraPagesByKey((current) => {
+                  const next = new Map(current);
+                  next.set(group.key, paging.effectiveExtraPages + 1);
+                  return next;
+                });
+              }}
+              onShowLess={() => {
+                setProjectExtraPagesByKey((current) => {
+                  const next = new Map(current);
+                  const extraPages = Math.max(0, paging.effectiveExtraPages - 1);
+                  if (extraPages === 0) next.delete(group.key);
+                  else next.set(group.key, extraPages);
+                  return next;
+                });
+              }}
             />
-            <div className="flex flex-col gap-0.5">
-              {visibleThreads.map(renderActiveRow)}
-              <ActivityShowMoreRow
-                canShowMore={paging.canShowMore}
-                canShowLess={paging.canShowLess}
-                onShowMore={() => {
-                  setProjectExtraPagesByKey((current) => {
-                    const next = new Map(current);
-                    next.set(group.key, paging.effectiveExtraPages + 1);
-                    return next;
-                  });
-                }}
-                onShowLess={() => {
-                  setProjectExtraPagesByKey((current) => {
-                    const next = new Map(current);
-                    const extraPages = Math.max(0, paging.effectiveExtraPages - 1);
-                    if (extraPages === 0) next.delete(group.key);
-                    else next.set(group.key, extraPages);
-                    return next;
-                  });
-                }}
-              />
-            </div>
-          </div>
+          </ActivityCollapsibleSection>
         ))
       ) : (
         <>
-          {priorityThreads.length > 0 || recentThreads.length > 0 ? (
-            <div>
-              <ActivitySectionLabel label="Recent" />
-              <div className="flex flex-col gap-0.5">
-                {priorityThreads.map(renderActiveRow)}
-                {recentThreads.map(renderActiveRow)}
-              </div>
-            </div>
+          {priorityThreads.length > 0 ? (
+            <div className="flex flex-col gap-0.5">{priorityThreads.map(renderActiveRow)}</div>
+          ) : null}
+          {recentThreads.length > 0 ? (
+            <ActivityCollapsibleSection
+              label="Recent"
+              open={recentOpen}
+              onToggle={() => setRecentOpen((open) => !open)}
+            >
+              {recentThreads.map(renderActiveRow)}
+            </ActivityCollapsibleSection>
           ) : null}
           {dateBuckets.today.length > 0 ? (
-            <div>
-              <ActivitySectionLabel label="Today" />
-              <div className="flex flex-col gap-0.5">{dateBuckets.today.map(renderActiveRow)}</div>
-            </div>
+            <ActivityCollapsibleSection
+              label="Today"
+              open={todayOpen}
+              onToggle={() => setTodayOpen((open) => !open)}
+            >
+              {dateBuckets.today.map(renderActiveRow)}
+            </ActivityCollapsibleSection>
           ) : null}
           {dateBuckets.yesterday.length > 0 ? (
-            <div>
-              <ActivitySectionLabel label="Yesterday" />
-              <div className="flex flex-col gap-0.5">
-                {dateBuckets.yesterday.map(renderActiveRow)}
-              </div>
-            </div>
+            <ActivityCollapsibleSection
+              label="Yesterday"
+              open={yesterdayOpen}
+              onToggle={() => setYesterdayOpen((open) => !open)}
+            >
+              {dateBuckets.yesterday.map(renderActiveRow)}
+            </ActivityCollapsibleSection>
           ) : null}
           {dateBuckets.earlier.length > 0 ? (
             <ActivityCollapsibleSection

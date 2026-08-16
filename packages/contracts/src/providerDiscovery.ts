@@ -281,6 +281,7 @@ export const ProviderModelDescriptor = Schema.Struct({
   supportsAutoMode: Schema.optional(Schema.Boolean),
   contextWindowOptions: Schema.optional(Schema.Array(ProviderContextWindowDescriptor)),
   defaultContextWindow: Schema.optional(TrimmedNonEmptyString),
+  contextWindowTokens: Schema.optional(Schema.Number),
 });
 export type ProviderModelDescriptor = typeof ProviderModelDescriptor.Type;
 

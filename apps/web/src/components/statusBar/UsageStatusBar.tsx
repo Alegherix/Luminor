@@ -4,7 +4,7 @@
 // always renders so the clock stays available even when no provider reports usage.
 // Structure ported from Orca (https://github.com/stablyai/orca, MIT, Copyright (c) 2026 Lovecast Inc.).
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { formatResourceCpu, formatResourceRss } from "@luminor/shared/resourceProcesses";
@@ -33,15 +33,49 @@ import { UsageRosterPanel } from "./UsageRosterPanel";
 const SEGMENT_BAR_CLASS = "h-1 w-6 overflow-hidden rounded-full bg-muted";
 const CLOCK_UPDATE_INTERVAL_MS = 1_000;
 
+function useStatusBarRightInset(dependencyKey: string) {
+  const footerRef = useRef<HTMLElement>(null);
+  const rightRef = useRef<HTMLDivElement>(null);
+  const [rightInsetPx, setRightInsetPx] = useState(0);
+
+  useEffect(() => {
+    const footer = footerRef.current;
+    const right = rightRef.current;
+    if (!footer) {
+      return;
+    }
+
+    const update = () => {
+      if (!right || right.childElementCount === 0) {
+        setRightInsetPx(0);
+        return;
+      }
+      const footerRect = footer.getBoundingClientRect();
+      const rightRect = right.getBoundingClientRect();
+      setRightInsetPx(Math.max(0, Math.ceil(footerRect.right - rightRect.left)));
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(footer);
+    if (right) {
+      observer.observe(right);
+    }
+    return () => observer.disconnect();
+  }, [dependencyKey]);
+
+  return { footerRef, rightRef, rightInsetPx };
+}
+
 function UsageStatusBarSegment({ entry }: { entry: ProviderUsageSummaryEntry }) {
   const resetsAt = entry.tightestRow?.resetsAt;
   const resetDuration = resetsAt ? formatRateLimitResetDuration(resetsAt) : null;
 
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
+    <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
       <ProviderIcon provider={entry.provider} tone="header" className="size-3 shrink-0" />
       {entry.rows.map((row) => (
-        <span key={row.id} className="flex items-center gap-1">
+        <span key={row.id} className="flex shrink-0 items-center gap-1 whitespace-nowrap">
           <span className="tabular-nums">{row.remainingLabel}</span>
           <span className="text-muted-foreground">{row.label}</span>
           <span className={SEGMENT_BAR_CLASS}>
@@ -56,7 +90,7 @@ function UsageStatusBarSegment({ entry }: { entry: ProviderUsageSummaryEntry }) 
         </span>
       ))}
       {resetDuration ? (
-        <span className="tabular-nums text-muted-foreground">{resetDuration}</span>
+        <span className="shrink-0 tabular-nums text-muted-foreground">{resetDuration}</span>
       ) : null}
     </span>
   );
@@ -91,18 +125,35 @@ export function UsageStatusBar({ usage }: { usage: AllProviderUsageSummaries }) 
   );
   const leftoverCount =
     resources.data?.groups.find((group) => group.group === "leftovers")?.children.length ?? 0;
+  const showResources = resources.data?.supported !== false;
+  const layoutKey = [
+    visibleEntries.length,
+    visibleEntries.map((entry) => entry.provider).join(","),
+    showResources,
+    resources.data?.totalCpu,
+    resources.data?.totalRssMb,
+    resources.isPending,
+    resources.isError,
+  ].join("\0");
+  const { footerRef, rightRef, rightInsetPx } = useStatusBarRightInset(layoutKey);
 
   return (
-    <footer className="relative z-20 flex h-6 shrink-0 items-center justify-between border-t border-border/60 bg-[var(--app-shell-background)] px-2 text-[length:var(--app-font-size-chat-meta,10px)] text-foreground/80">
-      <div className="relative z-10 flex min-w-0 max-w-[calc(50%-3.5rem)] flex-1 items-center gap-3 overflow-hidden">
-        {visibleEntries.length > 0 ? (
+    <footer
+      ref={footerRef}
+      className="relative z-20 h-6 shrink-0 overflow-hidden border-t border-border/60 bg-[var(--app-shell-background)] text-[length:var(--app-font-size-chat-meta,10px)] text-foreground/80"
+    >
+      {visibleEntries.length > 0 ? (
+        <div
+          className="absolute inset-y-0 left-0 z-10 flex items-center overflow-hidden pl-2"
+          style={rightInsetPx > 0 ? { right: `${rightInsetPx}px` } : undefined}
+        >
           <Menu modal={false}>
             <MenuTrigger
               render={
                 <button
                   type="button"
                   aria-label="Provider usage"
-                  className="flex min-w-0 items-center gap-3 rounded-sm px-1 py-0.5 transition-colors hover:bg-muted/60"
+                  className="flex w-max max-w-none flex-nowrap items-center gap-3 whitespace-nowrap rounded-sm px-1 py-0.5 transition-colors hover:bg-muted/60"
                 />
               }
             >
@@ -121,22 +172,25 @@ export function UsageStatusBar({ usage }: { usage: AllProviderUsageSummaries }) 
               />
             </ComposerPickerMenuPopup>
           </Menu>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
         <LiveClock className="rounded-sm bg-[var(--app-shell-background)] px-1.5" />
       </div>
 
-      <div className="relative z-10 ml-auto flex shrink-0 items-center pl-2">
-        {resources.data?.supported !== false ? (
+      <div
+        ref={rightRef}
+        className="absolute inset-y-0 right-0 z-10 flex shrink-0 items-center justify-end pr-2"
+      >
+        {showResources ? (
           <Menu modal={false} onOpenChange={setResourceOpen}>
             <MenuTrigger
               render={
                 <button
                   type="button"
                   aria-label="Resource manager"
-                  className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 tabular-nums transition-colors hover:bg-muted/60"
+                  className="flex shrink-0 flex-nowrap items-center gap-1.5 whitespace-nowrap rounded-sm px-1 py-0.5 tabular-nums transition-colors hover:bg-muted/60"
                 />
               }
             >
