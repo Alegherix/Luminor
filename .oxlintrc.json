@@ -7,7 +7,12 @@
     "bun.lock",
     "*.tsbuildinfo",
     "**/routeTree.gen.ts",
-    ".luminor-*"
+    ".luminor-*",
+    ".expo",
+    "apps/mobile/.expo",
+    "apps/mobile/android",
+    "apps/mobile/ios",
+    "apps/mobile/dist"
   ],
   "plugins": ["eslint", "oxc", "react", "unicorn", "typescript"],
   "categories": {

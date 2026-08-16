@@ -27,6 +27,11 @@ apps/web/test-results
 output/playwright/
 apps/web/src/components/__screenshots__
 .vitest-*
+.expo
+apps/mobile/.expo
+apps/mobile/android
+apps/mobile/ios
+apps/mobile/dist
 __screenshots__/
 .tanstack
 /.pi/

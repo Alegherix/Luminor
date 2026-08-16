@@ -1,0 +1,40 @@
+{
+  "name": "@luminor/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "dev": "expo start",
+    "android": "expo start --android",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "export:android": "expo export --platform android"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
+    "@luminor/contracts": "workspace:*",
+    "@luminor/shared": "workspace:*",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "babel-preset-expo": "~57.0.0",
+    "effect": "catalog:",
+    "expo": "~57.0.13",
+    "expo-constants": "~57.0.11",
+    "expo-linking": "~57.0.6",
+    "expo-router": "~57.0.13",
+    "expo-secure-store": "~57.0.1",
+    "expo-splash-screen": "~57.0.6",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.2",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.28.5",
+    "@types/react": "~19.2.2",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

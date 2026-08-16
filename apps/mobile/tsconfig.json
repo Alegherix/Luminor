@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2023"],
+    "noEmit": true,
+    "isolatedModules": true,
+    "allowJs": true,
+    "paths": {
+      "@luminor/contracts": ["../../packages/contracts/src/index.ts"],
+      "@luminor/shared/*": ["../../packages/shared/src/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "expo-env.d.ts"],
+  "exclude": ["node_modules", "dist", ".expo", "android", "ios"]
+}

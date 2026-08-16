@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Luminor",
+    "slug": "luminor",
+    "scheme": "luminor",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0B"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "dev.luminor.mobile"
+    },
+    "android": {
+      "package": "dev.luminor.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0A0A0B"
+      },
+      "usesCleartextTraffic": true
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-status-bar", "expo-splash-screen"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
