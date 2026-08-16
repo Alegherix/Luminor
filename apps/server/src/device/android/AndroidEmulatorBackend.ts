@@ -35,6 +35,8 @@ import {
 import { probeAndroidToolchain, type AndroidToolchain } from "./androidToolchain.ts";
 import { androidFamily, androidGeometry, parseAvdConfigIni } from "./avdConfig.ts";
 import { resolveApkPackageName } from "./apkPackageName.ts";
+import { pngDimensions } from "./pngDimensions.ts";
+import { parseUiautomatorXml } from "./uiautomatorTree.ts";
 
 export interface AndroidEmulatorBackendOptions {
   readonly toolchain?: AndroidToolchain;
@@ -388,11 +390,51 @@ export class AndroidEmulatorBackend implements DeviceBackend {
     await this.adbClient().shell(serial, ["input", "keyevent", String(keyCode)]);
   }
 
-  screenshot(
-    _udid: string,
-    _options?: { readonly save?: boolean },
+  async screenshot(
+    udid: string,
+    options?: { readonly save?: boolean },
   ): Promise<DeviceScreenshotResult> {
-    return this.notImplemented();
+    const serial = await this.serialFor(udid);
+    const devicePath = "/data/local/tmp/luminor-screenshot.png";
+    await this.adbClient().shell(serial, ["screencap", "-p", devicePath]);
+
+    const { mkdtemp, readFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const tempDir = await mkdtemp(path.join(tmpdir(), "luminor-android-"));
+    const localPath = path.join(tempDir, "screenshot.png");
+    try {
+      await this.adbClient().adb(["-s", serial, "pull", devicePath, localPath], {
+        timeoutMs: 30_000,
+      });
+      const bytes = await readFile(localPath);
+      const { width, height } = pngDimensions(bytes);
+      const capturedAt = new Date(this.now()).toISOString();
+      const name = `${udid}-${capturedAt.replaceAll(/[:.]/gu, "-")}.png`;
+      let savedPath: string | undefined;
+      if (options?.save === true) {
+        const { copyFile, mkdir } = await import("node:fs/promises");
+        const directory = this.recordingDirectoryOverride ?? tmpdir();
+        await mkdir(directory, { recursive: true });
+        savedPath = path.join(directory, name);
+        await copyFile(localPath, savedPath);
+      }
+      return {
+        udid,
+        name,
+        mimeType: "image/png",
+        width,
+        height,
+        sizeBytes: bytes.byteLength,
+        bytesBase64: Buffer.from(bytes).toString("base64"),
+        capturedAt,
+        ...(savedPath ? { path: savedPath } : {}),
+      };
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+      await this.adbClient()
+        .shell(serial, ["rm", "-f", devicePath])
+        .catch(() => {});
+    }
   }
 
   startRecording(_udid: string): Promise<DeviceStartRecordingResult> {
@@ -403,8 +445,22 @@ export class AndroidEmulatorBackend implements DeviceBackend {
     return this.notImplemented();
   }
 
-  describeUi(_udid: string): Promise<DeviceDescribeUiResult> {
-    return this.notImplemented();
+  async describeUi(udid: string): Promise<DeviceDescribeUiResult> {
+    const serial = await this.serialFor(udid);
+    const { scale } = await this.geometryFor(udid, serial);
+    const devicePath = "/data/local/tmp/luminor-uidump.xml";
+    await this.adbClient().shell(serial, ["uiautomator", "dump", devicePath], {
+      timeoutMs: 30_000,
+    });
+    const xml = await this.adbClient().shell(serial, ["cat", devicePath]);
+    await this.adbClient()
+      .shell(serial, ["rm", "-f", devicePath])
+      .catch(() => {});
+    return {
+      udid,
+      capturedAt: new Date(this.now()).toISOString(),
+      root: parseUiautomatorXml(xml, scale),
+    };
   }
 
   attachStream(_udid: string, _onFrame: DeviceFrameListener): Promise<void> {
