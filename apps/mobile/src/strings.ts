@@ -146,6 +146,41 @@ export const strings = {
     daysAgo: "{count}d ago",
     stopping: "Stopping",
   },
+  sessionsUi: {
+    emptyTitle: "Terminal sessions appear here",
+    emptyBody:
+      "Host terminals live on the Luminor desktop. This app has no session-list RPC, so there is nothing truthful to show yet. Rows will land here when the server exposes a terminal inventory.",
+    disconnectedHint: "Connect to a server first. Pairing and health live in Settings.",
+    connectingHint: "Connecting to the server…",
+    incompatibleHint:
+      "This app and server are incompatible. Open Settings to inspect the protocol.",
+  },
+  settingsUi: {
+    pairingStatus: "Pairing",
+    healthResult: "Last health check",
+    healthStarting: "starting",
+    healthReady: "ready",
+    healthNotReady: "not ready",
+    healthUnknown: "unknown",
+    projection: "Projection",
+    pushBus: "Push bus",
+    startup: "Startup",
+    forgetConfirmTitle: "Forget pairing?",
+    forgetConfirmBody: "This removes the stored session token and disconnects from the server.",
+    cancel: "Cancel",
+    confirmForget: "Forget pairing",
+    aboutSection: "About",
+    licenses: "Licenses",
+    licensesTitle: "Open-source licenses",
+    licensesSubtitle: "Key packages shipped in this app.",
+    openConnectionSheet: "Connection details",
+    capabilities: "Capabilities",
+    theme: "Theme",
+    pairHint: "Paste the one-time pairing token shown on the desktop host.",
+    healthFailed: "Health check failed",
+    none: "None",
+    chevron: "›",
+  },
 } as const;
 
 export const homeStrings = {
