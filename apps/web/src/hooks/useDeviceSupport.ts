@@ -17,5 +17,7 @@ import { serverEnvironmentQueryOptions } from "~/lib/serverReactQuery";
  */
 export function useDeviceSupport(): boolean {
   const environmentQuery = useQuery(serverEnvironmentQueryOptions());
-  return environmentQuery.data?.platform.os === "darwin";
+  const environment = environmentQuery.data;
+  if (!environment) return false;
+  return environment.capabilities.devicePane === true || environment.platform.os === "darwin";
 }

@@ -15,6 +15,7 @@ import {
   deviceKeyModifiers,
   deviceRecordingClickIntent,
   deviceSetupProgress,
+  deviceSetupCheckingLabel,
   describeDegradedCapabilities,
   inferDeviceScaleFactor,
   isDeviceRecordingActive,
@@ -23,6 +24,7 @@ import {
   resolveDeviceHardwareButtonShortcut,
   resolveDevicePointerGesture,
   resolveDevicePointSize,
+  resolveDeviceSetupAction,
   shouldSubscribeToDeviceStream,
   stepDeviceFrameGate,
   stepDeviceRecording,
@@ -575,6 +577,21 @@ describe("device picker", () => {
 });
 
 describe("availability", () => {
+  it("offers a download action for the android sdk step", () => {
+    const action = resolveDeviceSetupAction([
+      { id: "install-android-sdk", label: "Install the Android SDK", done: false },
+    ]);
+    expect(action?.url).toContain("developer.android.com");
+  });
+
+  it("labels the checking state for android", () => {
+    expect(
+      deviceSetupCheckingLabel([
+        { id: "install-android-sdk", label: "Install the Android SDK", done: false },
+      ]),
+    ).toBe("Checking for the Android SDK…");
+  });
+
   it("reports ready when the backend is available", () => {
     expect(resolveDeviceAvailabilityView({ kind: "available" })).toEqual({ kind: "ready" });
   });

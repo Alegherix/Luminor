@@ -92,6 +92,20 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.length > 0 ? error.message : fallback;
 }
 
+function deviceCopy(platform: string | undefined): {
+  readonly paneLabel: string;
+  readonly noun: string;
+  readonly plural: string;
+} {
+  if (platform?.startsWith("android")) {
+    return { paneLabel: "Android Emulator", noun: "emulator", plural: "emulators" };
+  }
+  if (platform) {
+    return { paneLabel: "iOS Simulator", noun: "simulator", plural: "simulators" };
+  }
+  return { paneLabel: "Device", noun: "device", plural: "devices" };
+}
+
 export default function DevicePanel(props: {
   mode: DiffPanelMode;
   threadId: ThreadId;
@@ -121,6 +135,12 @@ export default function DevicePanel(props: {
   // stayed blank for the whole of a cold boot, so the click looked ignored.
   const [pendingDevice, setPendingDevice] = useState<PendingDeviceSelection | null>(null);
   const attachedDevice = resolveDisplayedDevice({ threadState, pending: pendingDevice });
+  const devicePlatform = attachedDevice?.platform ?? threadState?.devices[0]?.platform;
+  const {
+    paneLabel: devicePaneLabel,
+    noun: deviceNoun,
+    plural: devicePlural,
+  } = deviceCopy(devicePlatform);
   const availabilityView = resolveDeviceAvailabilityView(
     threadState?.availability ?? { kind: "available" },
   );
@@ -212,20 +232,23 @@ export default function DevicePanel(props: {
     [threadState?.devices, threadState?.attachedDeviceUdid],
   );
 
-  const runDeviceAction = useCallback(async (action: () => Promise<void>, failureTitle: string) => {
-    setBusy(true);
-    try {
-      await action();
-    } catch (error) {
-      toastManager.add({
-        type: "error",
-        title: failureTitle,
-        description: errorMessage(error, "The simulator did not respond."),
-      });
-    } finally {
-      setBusy(false);
-    }
-  }, []);
+  const runDeviceAction = useCallback(
+    async (action: () => Promise<void>, failureTitle: string) => {
+      setBusy(true);
+      try {
+        await action();
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: failureTitle,
+          description: errorMessage(error, `The ${deviceNoun} did not respond.`),
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [deviceNoun],
+  );
 
   const attachDevice = useCallback(
     async (udid: DeviceUdid) => {
@@ -266,9 +289,9 @@ export default function DevicePanel(props: {
           setPendingDevice(null);
           throw error;
         }
-      }, "Could not open that simulator");
+      }, `Could not open that ${deviceNoun}`);
     },
-    [attachDevice, reportedUdid, runDeviceAction],
+    [attachDevice, deviceNoun, reportedUdid, runDeviceAction],
   );
 
   const shutdownForBootLimit = useCallback(
@@ -295,24 +318,24 @@ export default function DevicePanel(props: {
           setPendingDevice(null);
           throw error;
         }
-      }, "Could not free a simulator slot");
+      }, `Could not free a ${deviceNoun} slot`);
     },
-    [attachDevice, bootLimit, reportedUdid, runDeviceAction, threadState?.devices],
+    [attachDevice, bootLimit, deviceNoun, reportedUdid, runDeviceAction, threadState?.devices],
   );
 
   const detachDevice = useCallback(() => {
     setPendingDevice(null);
     void runDeviceAction(async () => {
       upsertThreadState(await ensureNativeApi().device.detach({ threadId }));
-    }, "Could not detach the simulator");
-  }, [runDeviceAction, threadId, upsertThreadState]);
+    }, `Could not detach the ${deviceNoun}`);
+  }, [deviceNoun, runDeviceAction, threadId, upsertThreadState]);
 
   const shutdownAttached = useCallback(() => {
     if (!attachedDevice) return;
     void runDeviceAction(async () => {
       await ensureNativeApi().device.shutdown({ udid: attachedDevice.udid });
-    }, "Could not shut down the simulator");
-  }, [attachedDevice, runDeviceAction]);
+    }, `Could not shut down the ${deviceNoun}`);
+  }, [attachedDevice, deviceNoun, runDeviceAction]);
 
   const pressButton = useCallback(
     (button: DeviceHardwareButton) => {
@@ -361,7 +384,7 @@ export default function DevicePanel(props: {
           toastManager.add({
             type: "error",
             title: "Could not start recording",
-            description: errorMessage(error, "The simulator did not start recording."),
+            description: errorMessage(error, `The ${deviceNoun} did not start recording.`),
           });
         });
       return;
@@ -387,7 +410,7 @@ export default function DevicePanel(props: {
           description: errorMessage(error, "The recording may be incomplete."),
         });
       });
-  }, [attachedDevice, recording]);
+  }, [attachedDevice, deviceNoun, recording]);
 
   const saveScreenshot = useCallback(() => {
     if (!attachedDevice) return;
@@ -543,12 +566,12 @@ export default function DevicePanel(props: {
       void sent.catch((error: unknown) => {
         toastManager.add({
           type: "error",
-          title: "The simulator did not accept that input",
+          title: `The ${deviceNoun} did not accept that input`,
           description: errorMessage(error, "The input could not be delivered."),
         });
       });
     },
-    [attachedDevice, pointFromEvent],
+    [attachedDevice, deviceNoun, pointFromEvent],
   );
 
   // ── Keyboard passthrough ───────────────────────────────────────────
@@ -624,21 +647,21 @@ export default function DevicePanel(props: {
     <div className="flex h-full w-full min-w-0 items-center gap-1.5">
       {availabilityView.kind === "blocked" ? (
         <span className="truncate px-2 font-medium text-muted-foreground text-xs">
-          iOS Simulator
+          {devicePaneLabel}
         </span>
       ) : (
         <Menu>
           <MenuTrigger
             render={
               <Button variant="ghost" size="sm" className="min-w-0 gap-1" disabled={busy}>
-                <span className="truncate">{attachedDevice?.name ?? "Choose a simulator"}</span>
+                <span className="truncate">{attachedDevice?.name ?? `Choose a ${deviceNoun}`}</span>
                 <ChevronDownIcon />
               </Button>
             }
           />
           <ComposerPickerMenuPopup align="start">
             {pickerEntries.length === 0 ? (
-              <MenuItem disabled>No simulators found</MenuItem>
+              <MenuItem disabled>No {devicePlural} found</MenuItem>
             ) : (
               pickerEntries.map((entry) => (
                 <MenuItem
@@ -670,7 +693,7 @@ export default function DevicePanel(props: {
           size="icon-sm"
           onClick={props.onClosePanel}
           title="Close"
-          aria-label="Close simulator panel"
+          aria-label={`Close ${deviceNoun} panel`}
         >
           <XIcon />
         </Button>
@@ -711,7 +734,7 @@ export default function DevicePanel(props: {
     }
 
     if (!attachedDevice) {
-      return <DeviceEmptyScreen message="Choose a simulator to start streaming it here." />;
+      return <DeviceEmptyScreen message={`Choose a ${deviceNoun} to start streaming it here.`} />;
     }
 
     // Anything that is not yet a picture belongs on the boot screen, which
@@ -747,6 +770,7 @@ export default function DevicePanel(props: {
             <DeviceVideoOverlay
               status={videoStatus}
               label={attachStatusLabel ?? "Connecting…"}
+              deviceNoun={deviceNoun}
               runtimeMode={runtimeMode}
               {...(props.onRequestLive ? { onRequestLive: props.onRequestLive } : {})}
             />
@@ -827,7 +851,9 @@ export default function DevicePanel(props: {
 
       <DeviceBootLimitDialog
         state={bootLimit}
-        deviceName={bootLimit?.pendingName ?? "that simulator"}
+        deviceName={bootLimit?.pendingName ?? `that ${deviceNoun}`}
+        deviceNoun={deviceNoun}
+        devicePlural={devicePlural}
         onDismiss={() => setBootLimit(null)}
         onShutdown={shutdownForBootLimit}
       />
@@ -841,10 +867,10 @@ export default function DevicePanel(props: {
         <AlertDialogPopup>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Shut down {attachedDevice?.name ?? "this simulator"}?
+              Shut down {attachedDevice?.name ?? `this ${deviceNoun}`}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Anything running on the simulator closes. Booting it again takes about a minute.
+              Anything running on the {deviceNoun} closes. Booting it again takes about a minute.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -872,6 +898,7 @@ function DeviceVideoOverlay(props: {
   status: ReturnType<typeof useDeviceVideoStream>["status"];
   /** What the pane is waiting on, from the server's attach phase. */
   label: string;
+  deviceNoun: string;
   runtimeMode: DockPaneRuntimeMode;
   onRequestLive?: () => void;
 }) {
@@ -884,7 +911,7 @@ function DeviceVideoOverlay(props: {
         className="pointer-events-auto rounded-full bg-white/95 px-3 py-1.5 font-medium text-[10px] text-black"
         onClick={props.onRequestLive}
       >
-        Show the live simulator
+        Show the live {props.deviceNoun}
       </button>
     );
   }
@@ -892,8 +919,8 @@ function DeviceVideoOverlay(props: {
   if (status.kind === "unsupported") {
     return (
       <p className="text-balance text-center text-[10px] text-white/70 leading-snug">
-        This browser cannot decode the simulator stream. Chrome, Edge, or Safari 17+ support the
-        WebCodecs video decoder Synara uses.
+        This browser cannot decode the {props.deviceNoun} stream. Chrome, Edge, or Safari 17+
+        support the WebCodecs video decoder Synara uses.
       </p>
     );
   }
@@ -919,8 +946,9 @@ function DeviceBootLimitDialog(props: {
     readonly limit: number;
     readonly candidates: readonly DeviceDescriptor[];
   } | null;
-  /** The simulator the user asked for, named so the trade is concrete. */
   deviceName: string;
+  deviceNoun: string;
+  devicePlural: string;
   onDismiss: () => void;
   onShutdown: (candidate: DeviceDescriptor) => void;
 }) {
@@ -930,7 +958,9 @@ function DeviceBootLimitDialog(props: {
     <Dialog open={state !== null} onOpenChange={(open) => (open ? undefined : props.onDismiss())}>
       <DialogPopup>
         <DialogHeader>
-          <DialogTitle>Shut down a simulator to start {props.deviceName}</DialogTitle>
+          <DialogTitle>
+            Shut down a {props.deviceNoun} to start {props.deviceName}
+          </DialogTitle>
           {/*
             The cap is about memory, and saying so is what makes it read as a
             guardrail rather than an arbitrary refusal. The consequence of the
@@ -938,9 +968,9 @@ function DeviceBootLimitDialog(props: {
             and one of them is about to lose whatever is on it.
           */}
           <DialogDescription>
-            Synara keeps at most {state?.limit ?? 0} simulators running at once, because each one
-            holds a few gigabytes of memory. Pick one to shut down — anything running on it closes —
-            and {props.deviceName} starts in its place.
+            Synara keeps at most {state?.limit ?? 0} {props.devicePlural} running at once, because
+            each one holds a few gigabytes of memory. Pick one to shut down — anything running on it
+            closes — and {props.deviceName} starts in its place.
           </DialogDescription>
         </DialogHeader>
         <ul className="space-y-1">
