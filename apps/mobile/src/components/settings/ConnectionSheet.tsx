@@ -32,16 +32,24 @@ export function ConnectionSheet({
           <View style={styles.handle} />
           <Text style={styles.title}>{strings.connection.sheetTitle}</Text>
           <View style={styles.statusRow}>
-            <View style={[styles.dot, { backgroundColor: connectionStatusColor(connection.status) }]} />
+            <View
+              style={[styles.dot, { backgroundColor: connectionStatusColor(connection.status) }]}
+            />
             <Text style={styles.status}>{connectionStatusLabel(connection.status)}</Text>
           </View>
           <Info label={strings.connection.server} value={connection.serverUrl || "—"} />
-          <Info label={strings.settingsUi.pairingStatus} value={pairingStatusLabel(connection.paired)} />
+          <Info
+            label={strings.settingsUi.pairingStatus}
+            value={pairingStatusLabel(connection.paired)}
+          />
           <Info
             label={strings.connection.instance}
             value={connection.serverInfo?.serverInstanceId ?? "—"}
           />
-          <Info label={strings.connection.build} value={connection.serverInfo?.serverBuild ?? "—"} />
+          <Info
+            label={strings.connection.build}
+            value={connection.serverInfo?.serverBuild ?? "—"}
+          />
           <Info label={strings.connection.protocol} value={protocolLabel(connection.serverInfo)} />
           <Info
             label={strings.settingsUi.capabilities}

@@ -27,13 +27,21 @@ export function ConfirmSheet({
           <View style={styles.actions}>
             <Pressable
               onPress={onCancel}
-              style={({ pressed }) => [styles.button, styles.cancel, pressed ? styles.pressed : null]}
+              style={({ pressed }) => [
+                styles.button,
+                styles.cancel,
+                pressed ? styles.pressed : null,
+              ]}
             >
               <Text style={styles.cancelLabel}>{strings.settingsUi.cancel}</Text>
             </Pressable>
             <Pressable
               onPress={onConfirm}
-              style={({ pressed }) => [styles.button, styles.confirm, pressed ? styles.pressed : null]}
+              style={({ pressed }) => [
+                styles.button,
+                styles.confirm,
+                pressed ? styles.pressed : null,
+              ]}
             >
               <Text style={styles.confirmLabel}>{confirmLabel}</Text>
             </Pressable>

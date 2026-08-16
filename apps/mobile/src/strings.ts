@@ -88,7 +88,8 @@ export const strings = {
       "Host terminals live on the Luminor desktop. This app has no session-list RPC, so there is nothing truthful to show yet. Rows will land here when the server exposes a terminal inventory.",
     disconnectedHint: "Connect to a server first. Pairing and health live in Settings.",
     connectingHint: "Connecting to the server…",
-    incompatibleHint: "This app and server are incompatible. Open Settings to inspect the protocol.",
+    incompatibleHint:
+      "This app and server are incompatible. Open Settings to inspect the protocol.",
   },
   settingsUi: {
     pairingStatus: "Pairing",

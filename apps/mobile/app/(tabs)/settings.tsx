@@ -128,7 +128,10 @@ export default function SettingsScreen() {
         </GroupedSection>
 
         <GroupedSection title={strings.settings.connectionSection}>
-          <InfoRow label={strings.settings.state} value={connectionStatusLabel(connection.status)} />
+          <InfoRow
+            label={strings.settings.state}
+            value={connectionStatusLabel(connection.status)}
+          />
           <SettingsDivider />
           <InfoRow label={strings.connection.server} value={connection.serverUrl || "—"} />
           <SettingsDivider />
@@ -142,7 +145,10 @@ export default function SettingsScreen() {
             value={connection.serverInfo?.serverInstanceId ?? "—"}
           />
           <SettingsDivider />
-          <InfoRow label={strings.connection.protocol} value={protocolLabel(connection.serverInfo)} />
+          <InfoRow
+            label={strings.connection.protocol}
+            value={protocolLabel(connection.serverInfo)}
+          />
           {connection.compatibility ? (
             <>
               <SettingsDivider />
@@ -171,7 +177,10 @@ export default function SettingsScreen() {
           <SettingsDivider />
           <ActionRow label={strings.connection.reconnect} onPress={() => connection.reconnect()} />
           <SettingsDivider />
-          <ActionRow label={strings.connection.disconnect} onPress={() => connection.disconnect()} />
+          <ActionRow
+            label={strings.connection.disconnect}
+            onPress={() => connection.disconnect()}
+          />
           <SettingsDivider />
           <ActionRow
             label={strings.connection.forgetPairing}
