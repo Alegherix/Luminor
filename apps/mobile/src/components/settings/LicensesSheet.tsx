@@ -1,4 +1,4 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { strings } from "../../strings";
 import { colors, radii, spacing, type } from "../../theme/tokens";
@@ -17,14 +17,14 @@ export function LicensesSheet({
         <Pressable style={styles.sheet} onPress={() => undefined}>
           <Text style={styles.title}>{strings.settingsUi.licensesTitle}</Text>
           <Text style={styles.subtitle}>{strings.settingsUi.licensesSubtitle}</Text>
-          <ScrollView style={styles.list}>
+          <View>
             {OPEN_SOURCE_LICENSES.map((entry) => (
               <View key={entry.name} style={styles.row}>
                 <Text style={styles.name}>{entry.name}</Text>
                 <Text style={styles.license}>{entry.license}</Text>
               </View>
             ))}
-          </ScrollView>
+          </View>
           <Pressable
             onPress={onClose}
             style={({ pressed }) => [styles.close, pressed ? styles.pressed : null]}
@@ -58,9 +58,6 @@ const styles = StyleSheet.create({
   subtitle: {
     ...type.meta,
     color: colors.textMuted,
-  },
-  list: {
-    flexGrow: 0,
   },
   row: {
     flexDirection: "row",

@@ -1,7 +1,7 @@
 import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useConnection } from "../../src/api";
+import { useConnection } from "../../src/api/hooks";
 import { SessionsEmpty } from "../../src/components/sessions/SessionsEmpty";
 import { ScreenHeader } from "../../src/components/shared/ScreenHeader";
 import { strings } from "../../src/strings";

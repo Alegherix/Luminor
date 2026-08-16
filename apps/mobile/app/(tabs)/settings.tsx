@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { getRuntime, useConnection } from "../../src/api";
+import { useConnection } from "../../src/api/hooks";
+import { getRuntime } from "../../src/api/runtime";
 import { ActionRow } from "../../src/components/settings/ActionRow";
 import { ConfirmSheet } from "../../src/components/settings/ConfirmSheet";
 import { ConnectionSheet } from "../../src/components/settings/ConnectionSheet";
