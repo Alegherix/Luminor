@@ -36,6 +36,7 @@ import { probeAndroidToolchain, type AndroidToolchain } from "./androidToolchain
 import { androidFamily, androidGeometry, parseAvdConfigIni } from "./avdConfig.ts";
 import { resolveApkPackageName } from "./apkPackageName.ts";
 import { pngDimensions } from "./pngDimensions.ts";
+import { ScrcpyStream, type ScrcpyStreamOptions } from "./ScrcpyStream.ts";
 import { parseUiautomatorXml } from "./uiautomatorTree.ts";
 import { resolveDeviceRecordingDirectory } from "../recordingPaths.ts";
 
@@ -53,6 +54,9 @@ export interface AndroidEmulatorBackendOptions {
   readonly bootDeadlineMs?: number;
   readonly bootPollIntervalMs?: number;
   readonly listBuildToolsDirs?: (sdkRoot: string) => Promise<readonly string[]>;
+  readonly startScrcpyStream?: (
+    options: ScrcpyStreamOptions,
+  ) => Promise<Pick<ScrcpyStream, "stop">>;
 }
 
 export class AndroidEmulatorBackend implements DeviceBackend {
@@ -72,11 +76,16 @@ export class AndroidEmulatorBackend implements DeviceBackend {
   private readonly listBuildToolsDirsOverride:
     | ((sdkRoot: string) => Promise<readonly string[]>)
     | undefined;
+  private readonly startScrcpyStream: NonNullable<
+    AndroidEmulatorBackendOptions["startScrcpyStream"]
+  >;
   private readonly deviceGeometry = new Map<string, DeviceGeometry>();
   private readonly activeRecordings = new Map<
     string,
     { child: ChildProcess; devicePath: string; localPath: string; startedAtMs: number }
   >();
+  private readonly streams = new Map<string, Pick<ScrcpyStream, "stop">>();
+  private scrcpyVersion: string | null = null;
   private disposed = false;
 
   constructor(options: AndroidEmulatorBackendOptions = {}) {
@@ -97,6 +106,7 @@ export class AndroidEmulatorBackend implements DeviceBackend {
     this.bootPollIntervalMs =
       options.bootPollIntervalMs ?? AndroidEmulatorBackend.BOOT_POLL_INTERVAL_MS;
     this.listBuildToolsDirsOverride = options.listBuildToolsDirs;
+    this.startScrcpyStream = options.startScrcpyStream ?? ScrcpyStream.start;
   }
 
   private toolchain(): AndroidToolchain {
@@ -232,10 +242,13 @@ export class AndroidEmulatorBackend implements DeviceBackend {
 
   async dispose(): Promise<void> {
     this.disposed = true;
-  }
-
-  private notImplemented(): never {
-    throw new DeviceBackendError("Not implemented for android-emulator yet");
+    const streams = [...this.streams.values()];
+    this.streams.clear();
+    await Promise.allSettled(streams.map((stream) => stream.stop()));
+    for (const recording of this.activeRecordings.values()) {
+      recording.child.kill("SIGKILL");
+    }
+    this.activeRecordings.clear();
   }
 
   async boot(udid: string): Promise<DeviceDescriptor> {
@@ -517,12 +530,32 @@ export class AndroidEmulatorBackend implements DeviceBackend {
     };
   }
 
-  attachStream(_udid: string, _onFrame: DeviceFrameListener): Promise<void> {
-    return this.notImplemented();
+  async attachStream(udid: string, onFrame: DeviceFrameListener): Promise<void> {
+    const toolchain = this.toolchain();
+    if (toolchain.adbPath === null || toolchain.scrcpyServerPath === null) {
+      throw new DeviceBackendError(
+        "scrcpy is not installed; complete the Android setup steps first.",
+      );
+    }
+    const serial = await this.serialFor(udid);
+    await this.geometryFor(udid, serial);
+    await this.detachStream(udid);
+    const stream = await this.startScrcpyStream({
+      adbPath: toolchain.adbPath,
+      serial,
+      serverJarPath: toolchain.scrcpyServerPath,
+      serverVersion: await this.resolveScrcpyVersion(),
+      onFrame,
+      run: this.run,
+    });
+    this.streams.set(udid, stream);
   }
 
-  detachStream(_udid: string): Promise<void> {
-    return this.notImplemented();
+  async detachStream(udid: string): Promise<void> {
+    const stream = this.streams.get(udid);
+    if (!stream) return;
+    this.streams.delete(udid);
+    await stream.stop();
   }
 
   private sleep(ms: number): Promise<void> {
@@ -536,6 +569,22 @@ export class AndroidEmulatorBackend implements DeviceBackend {
     const geometry = androidGeometry(display.widthPx, display.heightPx, display.densityDpi);
     this.deviceGeometry.set(udid, geometry);
     return geometry;
+  }
+
+  private async resolveScrcpyVersion(): Promise<string> {
+    if (this.scrcpyVersion !== null) return this.scrcpyVersion;
+    const fromEnv = process.env.SCRCPY_SERVER_VERSION?.trim();
+    if (fromEnv) return (this.scrcpyVersion = fromEnv);
+    const result = await this.run("scrcpy", ["--version"], { allowNonZeroExit: true }).catch(
+      () => null,
+    );
+    const match = result === null ? null : /scrcpy\s+([\d.]+)/u.exec(result.stdout);
+    if (!match?.[1]) {
+      throw new DeviceBackendError(
+        "Could not determine the scrcpy version. Install scrcpy or set SCRCPY_SERVER_VERSION.",
+      );
+    }
+    return (this.scrcpyVersion = match[1]);
   }
 
   private async listBuildToolsDirs(sdkRoot: string): Promise<readonly string[]> {

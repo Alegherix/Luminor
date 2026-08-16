@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import type { ProcessRunResult } from "../../processRunner.ts";
 import { AndroidEmulatorBackend } from "./AndroidEmulatorBackend";
+import type { ScrcpyStreamOptions } from "./ScrcpyStream.ts";
 
 const ok = (stdout: string): ProcessRunResult => ({
   stdout,
@@ -227,6 +228,54 @@ describe("AndroidEmulatorBackend input", () => {
     await backend.tap("Pixel_8_API_35", 100, 200);
 
     expect(commands).toContain("/sdk/platform-tools/adb -s emulator-5554 shell input tap 275 550");
+  });
+});
+
+describe("AndroidEmulatorBackend live stream", () => {
+  it("restarts repeated attaches and stops streams on detach and dispose", async () => {
+    const starts: ScrcpyStreamOptions[] = [];
+    const stopped: number[] = [];
+    const backend = new AndroidEmulatorBackend({
+      toolchain: FULL_TOOLCHAIN,
+      startScrcpyStream: async (options) => {
+        starts.push(options);
+        const index = starts.length;
+        return { stop: async () => void stopped.push(index) };
+      },
+      run: async (command, args) => {
+        const key = [command, ...args].join(" ");
+        if (key === "/sdk/platform-tools/adb devices")
+          return ok("List of devices attached\nemulator-5554\tdevice\n");
+        if (key === "/sdk/platform-tools/adb -s emulator-5554 emu avd name")
+          return ok("Pixel_8_API_35\nOK\n");
+        if (key === "/sdk/platform-tools/adb -s emulator-5554 shell wm size")
+          return ok("Physical size: 1080x2340\n");
+        if (key === "/sdk/platform-tools/adb -s emulator-5554 shell wm density")
+          return ok("Physical density: 440\n");
+        if (key === "scrcpy --version") return ok("scrcpy 3.3.1\n");
+        throw new Error(`unexpected: ${key}`);
+      },
+    });
+    const onFrame = () => {};
+
+    await backend.attachStream("Pixel_8_API_35", onFrame);
+    await backend.attachStream("Pixel_8_API_35", onFrame);
+    expect(starts).toHaveLength(2);
+    expect(starts[0]).toMatchObject({
+      adbPath: "/sdk/platform-tools/adb",
+      serial: "emulator-5554",
+      serverJarPath: "/usr/share/scrcpy/scrcpy-server",
+      serverVersion: "3.3.1",
+      onFrame,
+    });
+    expect(stopped).toEqual([1]);
+
+    await backend.detachStream("Pixel_8_API_35");
+    expect(stopped).toEqual([1, 2]);
+
+    await backend.attachStream("Pixel_8_API_35", onFrame);
+    await backend.dispose();
+    expect(stopped).toEqual([1, 2, 3]);
   });
 });
 
