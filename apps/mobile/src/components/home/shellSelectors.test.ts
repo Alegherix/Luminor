@@ -207,12 +207,7 @@ describe("buildHomeModel", () => {
   });
 
   it("omits session data when no live session exists", () => {
-    const model = buildHomeModel(
-      spaces,
-      projects,
-      [thread("t1", "Idle", "p-luminor")],
-      NOW,
-    );
+    const model = buildHomeModel(spaces, projects, [thread("t1", "Idle", "p-luminor")], NOW);
     expect(model.hasSessionData).toBe(false);
     expect(model.sessions).toEqual([]);
   });
@@ -262,7 +257,10 @@ describe("buildWorkspaceDetail", () => {
     expect(detail?.pinned).toEqual([
       { id: "t-pin", title: "Pinned plan", subtitle: "Thread • Luminor" },
     ]);
-    expect(detail?.projects.map((projectGroup) => projectGroup.id)).toEqual(["p-docs", "p-luminor"]);
+    expect(detail?.projects.map((projectGroup) => projectGroup.id)).toEqual([
+      "p-docs",
+      "p-luminor",
+    ]);
     expect(detail?.projects[1]?.threads.map((item) => item.id)).toEqual(["t-pin", "t-run"]);
     expect(detail?.chats.map((item) => item.id)).toEqual(["t-pin", "t-chat", "t-run"]);
     expect(detail?.chats[1]).toMatchObject({ unreadCount: 1, subtitle: "Personal • Docs" });

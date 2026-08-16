@@ -36,11 +36,7 @@ export function WorkspaceCard({
   return (
     <Pressable
       onPress={onPress}
-      style={[
-        styles.card,
-        { width, height },
-        selected ? styles.cardSelected : null,
-      ]}
+      style={[styles.card, { width, height }, selected ? styles.cardSelected : null]}
     >
       <View style={styles.top}>
         <IconTile

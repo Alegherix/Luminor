@@ -2,7 +2,13 @@ import { Pressable, StyleSheet, Text } from "react-native";
 
 import { colors, radii, spacing, type } from "../../theme/tokens";
 
-export function ChevronLinkRow({ label, onPress }: { readonly label: string; readonly onPress: () => void }) {
+export function ChevronLinkRow({
+  label,
+  onPress,
+}: {
+  readonly label: string;
+  readonly onPress: () => void;
+}) {
   return (
     <Pressable onPress={onPress} style={styles.row}>
       <Text style={styles.label}>{label}</Text>

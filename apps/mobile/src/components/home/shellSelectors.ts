@@ -217,18 +217,18 @@ export function buildHomeModel(
   const projectById = new Map(projects.map((project) => [project.id, project]));
   const spaceById = new Map(spaces.map((space) => [space.id, space]));
 
-  const recentThreads = [...visible]
-    .sort(compareRecency)
+  const recentThreads = visible
+    .toSorted(compareRecency)
     .map((thread) => toThreadRow(thread, projectById, spaceById, nowMs));
 
   const activityThreads = visible
     .filter((thread) => thread.status !== "idle")
-    .sort(compareRecency)
+    .toSorted(compareRecency)
     .map((thread) => toThreadRow(thread, projectById, spaceById, nowMs));
 
   const pinnedThreads = visible
     .filter((thread) => thread.isPinned)
-    .sort(compareRecency)
+    .toSorted(compareRecency)
     .map((thread) => toThreadRow(thread, projectById, spaceById, nowMs));
 
   const sessions = visible.flatMap((thread) => {
@@ -275,7 +275,7 @@ export function buildWorkspaceDetail(
   const memberThreads = threads
     .filter(isVisibleThread)
     .filter((thread) => memberProjectIds.has(thread.projectId))
-    .sort(compareRecency);
+    .toSorted(compareRecency);
 
   const chats = memberThreads.map((thread) => toThreadRow(thread, projectById, spaceById, nowMs));
   const pinned = memberThreads
@@ -292,8 +292,7 @@ export function buildWorkspaceDetail(
     });
 
   const projectGroups = memberProjects
-    .slice()
-    .sort((left, right) => left.title.localeCompare(right.title))
+    .toSorted((left, right) => left.title.localeCompare(right.title))
     .map((project) => {
       const projectThreads = memberThreads
         .filter((thread) => thread.projectId === project.id)
@@ -327,8 +326,8 @@ export function buildWorkspaces(
 ): WorkspaceSummary[] {
   const visible = threads.filter(isVisibleThread);
   if (spaces.length === 0) {
-    return [...projects]
-      .sort((left, right) => left.title.localeCompare(right.title))
+    return projects
+      .toSorted((left, right) => left.title.localeCompare(right.title))
       .map((project) =>
         toWorkspaceSummary({
           id: project.id,
@@ -340,7 +339,7 @@ export function buildWorkspaces(
       );
   }
 
-  const orderedSpaces = [...spaces].sort((left, right) => left.sortOrder - right.sortOrder);
+  const orderedSpaces = spaces.toSorted((left, right) => left.sortOrder - right.sortOrder);
   const summaries = orderedSpaces.map((space) => {
     const spaceProjects = projects.filter((project) => project.spaceId === space.id);
     const projectIds = new Set(spaceProjects.map((project) => project.id));
