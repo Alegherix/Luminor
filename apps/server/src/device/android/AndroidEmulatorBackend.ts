@@ -37,6 +37,7 @@ import { androidFamily, androidGeometry, parseAvdConfigIni } from "./avdConfig.t
 import { resolveApkPackageName } from "./apkPackageName.ts";
 import { pngDimensions } from "./pngDimensions.ts";
 import { parseUiautomatorXml } from "./uiautomatorTree.ts";
+import { resolveDeviceRecordingDirectory } from "../recordingPaths.ts";
 
 export interface AndroidEmulatorBackendOptions {
   readonly toolchain?: AndroidToolchain;
@@ -72,6 +73,10 @@ export class AndroidEmulatorBackend implements DeviceBackend {
     | ((sdkRoot: string) => Promise<readonly string[]>)
     | undefined;
   private readonly deviceGeometry = new Map<string, DeviceGeometry>();
+  private readonly activeRecordings = new Map<
+    string,
+    { child: ChildProcess; devicePath: string; localPath: string; startedAtMs: number }
+  >();
   private disposed = false;
 
   constructor(options: AndroidEmulatorBackendOptions = {}) {
@@ -413,7 +418,7 @@ export class AndroidEmulatorBackend implements DeviceBackend {
       let savedPath: string | undefined;
       if (options?.save === true) {
         const { copyFile, mkdir } = await import("node:fs/promises");
-        const directory = this.recordingDirectoryOverride ?? tmpdir();
+        const directory = await resolveDeviceRecordingDirectory(this.recordingDirectoryOverride);
         await mkdir(directory, { recursive: true });
         savedPath = path.join(directory, name);
         await copyFile(localPath, savedPath);
@@ -437,12 +442,61 @@ export class AndroidEmulatorBackend implements DeviceBackend {
     }
   }
 
-  startRecording(_udid: string): Promise<DeviceStartRecordingResult> {
-    return this.notImplemented();
+  async startRecording(udid: string): Promise<DeviceStartRecordingResult> {
+    const serial = await this.serialFor(udid);
+    if (this.activeRecordings.has(udid)) {
+      throw new DeviceBackendError(`A recording is already running for ${udid}.`);
+    }
+    const startedAtMs = this.now();
+    const startedAt = new Date(startedAtMs).toISOString();
+    const stamp = startedAt.replaceAll(/[:.]/gu, "-");
+    const devicePath = `/data/local/tmp/luminor-rec-${stamp}.mp4`;
+    const directory = await resolveDeviceRecordingDirectory(this.recordingDirectoryOverride);
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(directory, { recursive: true });
+    const localPath = path.join(directory, `${udid}-${stamp}.mp4`);
+    const toolchain = this.toolchain();
+    if (toolchain.adbPath === null) throw new DeviceBackendError("adb is not installed.");
+    const child = this.spawnProcess(
+      toolchain.adbPath,
+      ["-s", serial, "shell", "screenrecord", "--bugreport", devicePath],
+      { detached: false },
+    );
+    this.activeRecordings.set(udid, { child, devicePath, localPath, startedAtMs });
+    return { udid, path: localPath, startedAt };
   }
 
-  stopRecording(_udid: string): Promise<DeviceStopRecordingResult> {
-    return this.notImplemented();
+  async stopRecording(udid: string): Promise<DeviceStopRecordingResult> {
+    const active = this.activeRecordings.get(udid);
+    if (!active) throw new DeviceBackendError(`No recording is running for ${udid}.`);
+    this.activeRecordings.delete(udid);
+    const serial = await this.serialFor(udid);
+
+    active.child.kill("SIGINT");
+    await new Promise<void>((resolve) => {
+      active.child.once("exit", () => resolve());
+      setTimeout(resolve, 5_000);
+    });
+    await this.sleep(500);
+
+    const { stat } = await import("node:fs/promises");
+    await this.adbClient().adb(["-s", serial, "pull", active.devicePath, active.localPath], {
+      timeoutMs: 60_000,
+    });
+    await this.adbClient()
+      .shell(serial, ["rm", "-f", active.devicePath])
+      .catch(() => {});
+    const sizeBytes = await stat(active.localPath)
+      .then((value) => value.size)
+      .catch(() => 0);
+    const stoppedAtMs = this.now();
+    return {
+      udid,
+      path: active.localPath,
+      sizeBytes,
+      durationMs: Math.max(0, stoppedAtMs - active.startedAtMs),
+      stoppedAt: new Date(stoppedAtMs).toISOString(),
+    };
   }
 
   async describeUi(udid: string): Promise<DeviceDescribeUiResult> {

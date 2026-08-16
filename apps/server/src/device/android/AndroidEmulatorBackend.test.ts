@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import * as path from "node:path";
 import type { ProcessRunResult } from "../../processRunner.ts";
 import { AndroidEmulatorBackend } from "./AndroidEmulatorBackend";
 
@@ -224,5 +227,75 @@ describe("AndroidEmulatorBackend input", () => {
     await backend.tap("Pixel_8_API_35", 100, 200);
 
     expect(commands).toContain("/sdk/platform-tools/adb -s emulator-5554 shell input tap 275 550");
+  });
+});
+
+describe("AndroidEmulatorBackend recording", () => {
+  it("starts screenrecord and pulls the completed recording", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "luminor-android-recording-"));
+    const spawned: Array<{
+      command: string;
+      args: readonly string[];
+      detached: boolean;
+    }> = [];
+    const commands: string[] = [];
+    let now = 1_000;
+    let killed = false;
+    try {
+      const backend = new AndroidEmulatorBackend({
+        toolchain: FULL_TOOLCHAIN,
+        recordingDirectory: directory,
+        now: () => {
+          now += 100;
+          return now;
+        },
+        spawnProcess: (command, args, options) => {
+          spawned.push({ command, args, detached: options.detached });
+          const child = {
+            kill: () => {
+              killed = true;
+              return true;
+            },
+            once: (event: string, listener: (...args: unknown[]) => void) => {
+              if (event === "exit" && killed) queueMicrotask(() => listener(0, null));
+              return child;
+            },
+          };
+          return child as never;
+        },
+        run: async (command, args) => {
+          const key = [command, ...args].join(" ");
+          commands.push(key);
+          if (key === "/sdk/platform-tools/adb devices")
+            return ok("List of devices attached\nemulator-5554\tdevice\n");
+          if (key === "/sdk/platform-tools/adb -s emulator-5554 emu avd name")
+            return ok("Pixel_8_API_35\nOK\n");
+          if (key.includes("/sdk/platform-tools/adb -s emulator-5554 pull ")) return ok("");
+          if (key.includes("/sdk/platform-tools/adb -s emulator-5554 shell rm -f ")) return ok("");
+          throw new Error(`unexpected: ${key}`);
+        },
+      });
+
+      const started = await backend.startRecording("Pixel_8_API_35");
+      expect(started.path.startsWith(directory)).toBe(true);
+      expect(spawned).toHaveLength(1);
+      expect(spawned[0]?.command).toBe("/sdk/platform-tools/adb");
+      expect(spawned[0]?.args.slice(0, 5)).toEqual([
+        "-s",
+        "emulator-5554",
+        "shell",
+        "screenrecord",
+        "--bugreport",
+      ]);
+      expect(spawned[0]?.detached).toBe(false);
+
+      const stopped = await backend.stopRecording("Pixel_8_API_35");
+      expect(killed).toBe(true);
+      expect(stopped.path).toBe(started.path);
+      expect(stopped.durationMs).toBeGreaterThan(0);
+      expect(commands.some((command) => command.includes(" pull "))).toBe(true);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

@@ -17,8 +17,8 @@
  * @module device/IosSimulatorBackend
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { constants as fsConstants, existsSync } from "node:fs";
-import { access, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import * as path from "node:path";
 
@@ -70,6 +70,9 @@ import {
   sandboxedHelperCommand,
   type HelperSandboxCommand,
 } from "./helperSandbox.ts";
+import { resolveDeviceRecordingDirectory } from "./recordingPaths.ts";
+
+export { selectRecordingDirectory } from "./recordingPaths.ts";
 
 const SIMCTL_TIMEOUT_MS = 30_000;
 const BOOT_TIMEOUT_MS = 120_000;
@@ -220,26 +223,6 @@ export function parseSimctlDevices(
 
 export function hasBootableIosRuntime(devices: readonly DeviceDescriptor[]): boolean {
   return devices.length > 0;
-}
-
-export async function selectRecordingDirectory(
-  candidates: readonly string[],
-  fallback: string,
-): Promise<string> {
-  for (const directory of candidates) {
-    const usable = await stat(directory).then(
-      async (info) => {
-        if (!info.isDirectory()) return false;
-        return await access(directory, fsConstants.W_OK).then(
-          () => true,
-          () => false,
-        );
-      },
-      () => false,
-    );
-    if (usable) return directory;
-  }
-  return fallback;
 }
 
 export class IosSimulatorBackend implements DeviceBackend {
@@ -900,11 +883,7 @@ export class IosSimulatorBackend implements DeviceBackend {
   }
 
   private async recordingDirectory(): Promise<string> {
-    if (this.recordingDirectoryOverride) return path.resolve(this.recordingDirectoryOverride);
-    return await selectRecordingDirectory(
-      [path.join(homedir(), "Desktop"), path.join(homedir(), "Downloads")],
-      tmpdir(),
-    );
+    return await resolveDeviceRecordingDirectory(this.recordingDirectoryOverride);
   }
 
   // ── simctl plumbing ────────────────────────────────────────────────
