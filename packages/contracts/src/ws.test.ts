@@ -128,6 +128,26 @@ it.effect("accepts automation proposal resolution requests", () =>
   }),
 );
 
+it.effect("accepts server upsert keybinding requests", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decode(WebSocketRequest, {
+      id: "req-keybinding-1",
+      body: {
+        _tag: WS_METHODS.serverUpsertKeybinding,
+        rule: {
+          key: "mod+k",
+          command: "shortcuts.show",
+        },
+        replacing: {
+          key: "mod+/",
+          command: "shortcuts.show",
+        },
+      },
+    });
+    assert.strictEqual(parsed.body._tag, WS_METHODS.serverUpsertKeybinding);
+  }),
+);
+
 it.effect("accepts automation run action requests", () =>
   Effect.gen(function* () {
     const markRead = yield* decode(WebSocketRequest, {

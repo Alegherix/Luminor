@@ -71,7 +71,6 @@ import {
   TerminalRestartInput,
   TerminalWriteInput,
 } from "./terminal";
-import { KeybindingRule } from "./keybindings";
 import {
   ProjectCreateLocalFilePreviewGrantInput,
   ProjectDevServerEvent,
@@ -134,6 +133,7 @@ import {
   ServerStopLocalServerInput,
   ServerVoicePrewarmInput,
   ServerVoiceTranscriptionInput,
+  ServerUpsertKeybindingInput,
 } from "./server";
 import { StatsGetProfileStatsInput, StatsGetProfileTokenStatsInput } from "./stats";
 import {
@@ -497,7 +497,7 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(WS_METHODS.serverGenerateThreadRecap, ServerGenerateThreadRecapInput),
   tagRequestBody(WS_METHODS.serverGenerateMeetingSummary, ServerGenerateMeetingSummaryInput),
   tagRequestBody(WS_METHODS.serverGenerateAutomationIntent, ServerGenerateAutomationIntentInput),
-  tagRequestBody(WS_METHODS.serverUpsertKeybinding, KeybindingRule),
+  tagRequestBody(WS_METHODS.serverUpsertKeybinding, ServerUpsertKeybindingInput),
 
   // Provider discovery
   tagRequestBody(WS_METHODS.providerGetComposerCapabilities, ProviderGetComposerCapabilitiesInput),
