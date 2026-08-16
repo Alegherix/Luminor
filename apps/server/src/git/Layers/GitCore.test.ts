@@ -1262,6 +1262,42 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
+    it.effect("skips nested git checkouts when copying checkout changes", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* writeTextFile(path.join(tmp, "notes.txt"), "untracked note\n");
+
+        const nestedWorktree = path.join(tmp, ".claude", "worktrees", "nested-prototype");
+        yield* Effect.promise(() => fs.mkdir(path.dirname(nestedWorktree), { recursive: true }));
+        yield* git(tmp, ["worktree", "add", "--detach", nestedWorktree, "HEAD"]);
+        yield* writeTextFile(path.join(nestedWorktree, "only-in-nested.txt"), "nested only\n");
+
+        const nestedRepo = path.join(tmp, "vendor", "other-repo");
+        yield* Effect.promise(() => fs.mkdir(nestedRepo, { recursive: true }));
+        yield* git(nestedRepo, ["init"]);
+        yield* writeTextFile(path.join(nestedRepo, "vendored.txt"), "vendored\n");
+
+        const core = yield* GitCore;
+        const wtPath = path.join(tmp, "wt-skip-nested");
+        yield* core.createDetachedWorktree({
+          cwd: tmp,
+          ref: "HEAD",
+          path: wtPath,
+          copyChangesFrom: tmp,
+        });
+
+        expect(yield* readTextFile(path.join(wtPath, "notes.txt"))).toBe("untracked note\n");
+        expect(existsSync(path.join(wtPath, ".claude", "worktrees", "nested-prototype"))).toBe(
+          false,
+        );
+        expect(existsSync(path.join(wtPath, "vendor", "other-repo"))).toBe(false);
+
+        yield* core.removeWorktree({ cwd: tmp, path: wtPath, force: true });
+        yield* git(tmp, ["worktree", "remove", "--force", nestedWorktree]);
+      }),
+    );
+
     it.effect("creates a branch-backed managed worktree when newBranch is provided", () =>
       Effect.gen(function* () {
         const tmp = yield* makeTmpDir();

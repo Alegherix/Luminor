@@ -22,7 +22,7 @@ import {
 } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { createHash, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { createReadStream, lstatSync } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as nodePath from "node:path";
@@ -129,6 +129,36 @@ function hasNodeErrorCode(cause: unknown, code: string): boolean {
     (cause as { code?: unknown }).code === code
   );
 }
+
+function hasGitCheckoutMarker(absolutePath: string): boolean {
+  try {
+    const entry = lstatSync(nodePath.join(absolutePath, ".git"));
+    return entry.isFile() || entry.isDirectory();
+  } catch (cause) {
+    if (hasNodeErrorCode(cause, "ENOENT") || hasNodeErrorCode(cause, "ENOTDIR")) {
+      return false;
+    }
+    throw cause;
+  }
+}
+
+function isNestedGitCheckoutPath(cwd: string, relativePath: string): boolean {
+  const root = nodePath.resolve(cwd);
+  let current = nodePath.resolve(cwd, relativePath);
+  while (current.startsWith(`${root}${nodePath.sep}`)) {
+    if (hasGitCheckoutMarker(current)) return true;
+    current = nodePath.dirname(current);
+  }
+  return false;
+}
+
+const WORKTREE_TRANSFER_COPY_OPTIONS = {
+  recursive: true,
+  force: false,
+  errorOnExist: true,
+  preserveTimestamps: true,
+  filter: (sourcePath: string) => !hasGitCheckoutMarker(sourcePath),
+} as const;
 
 function joinPatchSegments(segments: ReadonlyArray<string>): string {
   let combined = "";
@@ -2252,7 +2282,9 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
               { maxOutputBytes: WORKTREE_TRANSFER_MAX_OUTPUT_BYTES },
             ).pipe(Effect.map((result) => parseNullSeparatedPaths(result.stdout)))
           : [];
-        return [...new Set([...untracked, ...included])].sort();
+        return [...new Set([...untracked, ...included])]
+          .filter((relativePath) => !isNestedGitCheckoutPath(cwd, relativePath))
+          .sort();
       });
 
     const readWorktreeStateHash = (cwd: string) =>
@@ -2381,12 +2413,7 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
                 const sourcePath = nodePath.join(sourceCwd, relativePath);
                 const targetPath = nodePath.join(worktreePath, relativePath);
                 await nodeFs.mkdir(nodePath.dirname(targetPath), { recursive: true });
-                await nodeFs.cp(sourcePath, targetPath, {
-                  recursive: true,
-                  force: false,
-                  errorOnExist: true,
-                  preserveTimestamps: true,
-                });
+                await nodeFs.cp(sourcePath, targetPath, WORKTREE_TRANSFER_COPY_OPTIONS);
               },
               catch: (cause) =>
                 createGitCommandError(
@@ -2439,12 +2466,11 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
                   recursive: true,
                   mode: 0o700,
                 });
-                await nodeFs.cp(nodePath.join(input.cwd, relativePath), targetPath, {
-                  recursive: true,
-                  force: false,
-                  errorOnExist: true,
-                  preserveTimestamps: true,
-                });
+                await nodeFs.cp(
+                  nodePath.join(input.cwd, relativePath),
+                  targetPath,
+                  WORKTREE_TRANSFER_COPY_OPTIONS,
+                );
               }
               await nodeFs.writeFile(
                 nodePath.join(temporaryPath, "snapshot.json"),
