@@ -606,6 +606,7 @@ export interface DesktopBridge {
   };
   clipboard?: {
     writeImagePngDataUrl: (dataUrl: string) => Promise<boolean>;
+    writeText: (value: string) => Promise<boolean>;
   };
   windowControls?: {
     minimize: () => Promise<void>;

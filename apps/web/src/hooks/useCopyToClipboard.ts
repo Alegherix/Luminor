@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { toastManager } from "../components/ui/toast";
+import { copyTextToDesktopClipboard } from "../lib/desktopClipboard";
 
 function fallbackCopyTextToClipboard(value: string): boolean {
   if (typeof document === "undefined" || typeof document.execCommand !== "function") {
@@ -54,6 +55,10 @@ export async function copyTextToClipboard(value: string): Promise<void> {
   }
 
   if (!value) {
+    return;
+  }
+
+  if (await copyTextToDesktopClipboard(value)) {
     return;
   }
 

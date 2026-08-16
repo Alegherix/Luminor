@@ -244,6 +244,7 @@ const shellEnvironmentSync = syncShellEnvironment();
 
 const IPC = DESKTOP_IPC_CHANNELS;
 const MAX_CLIPBOARD_IMAGE_DATA_URL_LENGTH = 16 * 1024 * 1024;
+const MAX_CLIPBOARD_TEXT_LENGTH = 16 * 1024 * 1024;
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const desktopFlavor = resolveLuminorDesktopFlavor({
   isDevelopment,
@@ -3713,6 +3714,19 @@ function registerIpcHandlers(): void {
     }
 
     clipboard.writeImage(image);
+    return true;
+  });
+
+  ipcMain.removeHandler(IPC.clipboardWriteText);
+  ipcMain.handle(IPC.clipboardWriteText, async (_event, rawText: unknown) => {
+    if (typeof rawText !== "string") {
+      return false;
+    }
+    if (rawText.length > MAX_CLIPBOARD_TEXT_LENGTH) {
+      return false;
+    }
+
+    clipboard.writeText(rawText);
     return true;
   });
 

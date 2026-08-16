@@ -73,6 +73,65 @@ afterEach(() => {
 });
 
 describe("copyTextToClipboard", () => {
+  it("prefers the desktop clipboard bridge when it is available", async () => {
+    const { documentMock } = installMockDocument(false);
+    const writeText = vi.fn().mockResolvedValue(true);
+    const writeImagePngDataUrl = vi.fn();
+
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        desktopBridge: {
+          clipboard: {
+            writeImagePngDataUrl,
+            writeText,
+          },
+        },
+      },
+    });
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: {
+        clipboard: {
+          writeText: vi.fn().mockRejectedValue(new DOMException("Document is not focused.")),
+        },
+      },
+    });
+
+    await expect(copyTextToClipboard("thread-123")).resolves.toBeUndefined();
+    expect(writeText).toHaveBeenCalledWith("thread-123");
+    expect(globalThis.navigator?.clipboard?.writeText).not.toHaveBeenCalled();
+    expect(documentMock.execCommand).not.toHaveBeenCalled();
+  });
+
+  it("falls through to browser APIs when the desktop clipboard write fails", async () => {
+    const { documentMock } = installMockDocument(true);
+
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        desktopBridge: {
+          clipboard: {
+            writeImagePngDataUrl: vi.fn(),
+            writeText: vi.fn().mockResolvedValue(false),
+          },
+        },
+      },
+    });
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: {
+        clipboard: {
+          writeText: vi.fn().mockRejectedValue(new DOMException("Document is not focused.")),
+        },
+      },
+    });
+
+    await expect(copyTextToClipboard("hello")).resolves.toBeUndefined();
+    expect(globalThis.navigator?.clipboard?.writeText).toHaveBeenCalledWith("hello");
+    expect(documentMock.execCommand).toHaveBeenCalledWith("copy");
+  });
+
   it("falls back to execCommand when navigator.clipboard.writeText rejects", async () => {
     const { documentMock } = installMockDocument(true);
 
