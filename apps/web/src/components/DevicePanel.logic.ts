@@ -747,11 +747,17 @@ export interface DeviceSetupAction {
  * or none, rather than a row of links that mostly go nowhere.
  */
 const DEVICE_SETUP_ACTIONS: Partial<Record<DeviceSetupStepId, DeviceSetupAction>> = {
-  // The https form rather than macappstore://: the shell bridge only forwards
-  // http(s), and macOS hands this link to the App Store app regardless.
   "install-xcode": {
     label: "Open Mac App Store",
     url: "https://apps.apple.com/app/xcode/id497799835",
+  },
+  "install-android-sdk": {
+    label: "Get the command line tools",
+    url: "https://developer.android.com/studio#command-line-tools-only",
+  },
+  "install-scrcpy": {
+    label: "Install scrcpy",
+    url: "https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md",
   },
 };
 
@@ -770,7 +776,9 @@ export function resolveDeviceSetupAction(
 export function deviceSetupCheckingLabel(steps: readonly DeviceSetupStep[]): string | null {
   const next = steps.find((step) => !step.done);
   if (!next) return null;
-  return next.id === "install-xcode" ? "Checking for Xcode…" : "Checking your setup…";
+  if (next.id === "install-xcode") return "Checking for Xcode…";
+  if (next.id === "install-android-sdk") return "Checking for the Android SDK…";
+  return "Checking your setup…";
 }
 
 // ── Thread state helpers ─────────────────────────────────────────────

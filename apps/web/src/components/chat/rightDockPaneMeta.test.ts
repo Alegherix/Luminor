@@ -4,6 +4,7 @@ import { RIGHT_DOCK_PANE_KINDS } from "~/rightDockStore.logic";
 import {
   PREVIEW_WORKTREE_PENDING_TOOLTIP,
   RIGHT_DOCK_ADD_MENU_KINDS,
+  devicePaneLabel,
   getRightDockPaneMeta,
   resolveRightDockLauncherItems,
 } from "./rightDockPaneMeta";
@@ -28,6 +29,12 @@ describe("RIGHT_DOCK_ADD_MENU_KINDS", () => {
 
   it("gives the platform-neutral device kind its user-facing iOS label", () => {
     expect(getRightDockPaneMeta("device").label).toBe("iOS Simulator");
+  });
+
+  it("labels the device pane per server platform", () => {
+    expect(devicePaneLabel("darwin")).toBe("iOS Simulator");
+    expect(devicePaneLabel("linux")).toBe("Android Emulator");
+    expect(devicePaneLabel(null)).toBe("Android Emulator");
   });
 });
 
@@ -116,7 +123,7 @@ describe("resolveRightDockLauncherItems", () => {
         isWorktreePending: false,
         hasDeviceSupport: true,
       }).map(({ kind }) => kind),
-    ).toEqual(["terminal", "browser", "explorer", "sidechat", "device"]);
+    ).toEqual(["terminal", "browser", "preview", "explorer", "sidechat", "device"]);
 
     expect(
       resolveRightDockLauncherItems({

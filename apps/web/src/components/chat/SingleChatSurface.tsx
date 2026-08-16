@@ -45,6 +45,7 @@ import type { FileCommentSelection } from "../../lib/fileComments";
 import { gitBranchesQueryOptions } from "../../lib/gitReactQuery";
 import { canComposerHandlePanelWidth } from "../../lib/panelResize";
 import { projectListDirectoriesQueryOptions } from "../../lib/projectReactQuery";
+import { serverEnvironmentQueryOptions } from "../../lib/serverReactQuery";
 import { waitForSidechatCreator } from "../../lib/sidechatCreatorRegistry";
 import {
   clearSidechatPaneRetention,
@@ -90,7 +91,11 @@ import {
 } from "./ChatThreadSurfacePrimitives";
 import { PanelStateMessage } from "./PanelStateMessage";
 import { RightDock } from "./RightDock";
-import { getRightDockPaneMeta, resolveRightDockLauncherItems } from "./rightDockPaneMeta";
+import {
+  devicePaneLabel,
+  getRightDockPaneMeta,
+  resolveRightDockLauncherItems,
+} from "./rightDockPaneMeta";
 import {
   CHAT_BACKGROUND_CLASS_NAME,
   CHAT_MAIN_CONTENT_SURFACE_CLASS_NAME,
@@ -228,6 +233,8 @@ export function SingleChatSurface(props: {
       threadWorkspaceMetadata.workingDirectory ?? draftThread?.workingDirectory ?? null,
   });
   const dockGitRepositoryQuery = useQuery(gitBranchesQueryOptions(workspaceRoot));
+  const serverEnvironmentQuery = useQuery(serverEnvironmentQueryOptions());
+  const serverOs = serverEnvironmentQuery.data?.platform.os;
   const hasGitRepository = dockGitRepositoryQuery.data?.isRepo === true;
   const dockDiffTotals = useRepoDiffTotals({
     gitCwd: workspaceRoot,
@@ -246,6 +253,7 @@ export function SingleChatSurface(props: {
     hasReview: dockDiffTotals.fileCount > 0,
     isWorktreePending: threadWorkspaceState === "worktree-pending",
     hasDeviceSupport,
+    serverOs,
   });
   // Gated tools stay visible in the launcher but must not be openable from the
   // "+" menu until their prerequisite exists.
@@ -836,7 +844,9 @@ export function SingleChatSurface(props: {
         );
       case "device":
         return (
-          <Suspense fallback={<PanelStateMessage>Loading simulator...</PanelStateMessage>}>
+          <Suspense
+            fallback={<PanelStateMessage>Loading {devicePaneLabel(serverOs)}...</PanelStateMessage>}
+          >
             <LazyDevicePanel
               mode="sidebar"
               threadId={props.threadId}
@@ -1165,6 +1175,7 @@ export function SingleChatSurface(props: {
           shouldAcceptWidth={shouldAcceptDockWidth}
           addMenuKinds={availableDockPaneKinds}
           launcherItems={dockLauncherItems}
+          serverOs={serverOs}
           motionKey={props.threadId}
           activePaneRuntimeMode={activePaneRuntimeMode}
           {...(paneLabelOverrides ? { paneLabelOverrides } : {})}

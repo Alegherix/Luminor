@@ -41,12 +41,13 @@ export interface RightDockLauncherItem extends RightDockPaneMeta {
   disabledReason?: string;
 }
 
+export function devicePaneLabel(serverOs: string | null | undefined): string {
+  return serverOs === "darwin" ? "iOS Simulator" : "Android Emulator";
+}
+
 export const RIGHT_DOCK_PANE_META: Record<RightDockPaneKind, RightDockPaneMeta> = {
   browser: { label: "Browser", Icon: GlobeIcon },
-  // The contracts stay platform-neutral ("device") so Android emulators can plug
-  // in later, but the only backend today is the iOS Simulator, so that is what
-  // the label says.
-  device: { label: "iOS Simulator", Icon: DeviceMobileIcon },
+  device: { label: devicePaneLabel("darwin"), Icon: DeviceMobileIcon },
   diff: { label: "Diff", Icon: DiffIcon },
   explorer: { label: "Explorer", Icon: FoldersIcon },
   file: { label: "File", Icon: FileIcon },
@@ -68,8 +69,12 @@ const FALLBACK_RIGHT_DOCK_PANE_META: RightDockPaneMeta = {
 
 // Always resolve pane meta through this helper instead of indexing the map
 // directly, so an unknown kind degrades gracefully rather than throwing.
-export function getRightDockPaneMeta(kind: RightDockPaneKind): RightDockPaneMeta {
-  return RIGHT_DOCK_PANE_META[kind] ?? FALLBACK_RIGHT_DOCK_PANE_META;
+export function getRightDockPaneMeta(
+  kind: RightDockPaneKind,
+  serverOs: string | null | undefined = "darwin",
+): RightDockPaneMeta {
+  const meta = RIGHT_DOCK_PANE_META[kind] ?? FALLBACK_RIGHT_DOCK_PANE_META;
+  return kind === "device" ? { ...meta, label: devicePaneLabel(serverOs) } : meta;
 }
 
 // Add-menu / quick triggers follow the canonical kind order from the single
@@ -111,6 +116,7 @@ export function resolveRightDockLauncherItems(input: {
   hasReview: boolean;
   isWorktreePending: boolean;
   hasDeviceSupport?: boolean;
+  serverOs?: string | null | undefined;
 }): readonly RightDockLauncherItem[] {
   return RIGHT_DOCK_LAUNCHER_ORDER.flatMap((kind) => {
     if (kind === "diff" && !input.hasReview) {
@@ -125,7 +131,7 @@ export function resolveRightDockLauncherItems(input: {
     if (kind === "device" && input.hasDeviceSupport !== true) {
       return [];
     }
-    const meta = getRightDockPaneMeta(kind);
+    const meta = getRightDockPaneMeta(kind, input.serverOs);
     const gate =
       kind === "preview" && input.isWorktreePending
         ? { disabled: true, disabledReason: PREVIEW_WORKTREE_PENDING_TOOLTIP }
@@ -146,8 +152,9 @@ export function resolveRightDockLauncherItems(input: {
 export function resolveRightDockPaneLabel(
   pane: RightDockPane,
   overrides?: Record<string, string | undefined>,
+  serverOs?: string | null,
 ): string {
-  return overrides?.[pane.id] ?? getRightDockPaneMeta(pane.kind).label;
+  return overrides?.[pane.id] ?? getRightDockPaneMeta(pane.kind, serverOs).label;
 }
 
 // Resolves a tab glyph: file panes show the per-file-type icon (matching the
