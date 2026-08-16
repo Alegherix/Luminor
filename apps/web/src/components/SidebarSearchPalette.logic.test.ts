@@ -6,6 +6,7 @@ import {
   matchSidebarSearchActions,
   matchSidebarSearchProjects,
   matchSidebarSearchThemes,
+  matchSidebarSearchThreadGroups,
   matchSidebarSearchThreads,
   resolveSidebarSearchThreadLocation,
   type SidebarSearchAction,
@@ -357,5 +358,31 @@ describe("SidebarSearchPalette.logic", () => {
     assert.equal(result[0]?.thread.id, "thread-alpha-compose-prompt");
     assert.equal(result[0]?.matchKind, "title");
     assert.equal(result[0]?.messageMatchCount, 2);
+  });
+
+  it("keeps archived threads out of recent results until a query is typed", () => {
+    const archivedComposer: SidebarSearchThread = {
+      ...threads[0]!,
+      id: "thread-archived-composer",
+      title: "Archived composer",
+      archived: true,
+    };
+
+    const emptyQuery = matchSidebarSearchThreadGroups([...threads, archivedComposer], "");
+    assert.equal(
+      emptyQuery.active.some((match) => match.thread.id === "thread-archived-composer"),
+      false,
+    );
+    assert.deepEqual(emptyQuery.archived, []);
+
+    const typed = matchSidebarSearchThreadGroups([...threads, archivedComposer], "archived");
+    assert.deepEqual(
+      typed.archived.map((match) => match.thread.id),
+      ["thread-archived-composer"],
+    );
+    assert.equal(
+      typed.active.some((match) => match.thread.id === "thread-archived-composer"),
+      false,
+    );
   });
 });

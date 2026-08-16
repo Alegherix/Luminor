@@ -12,9 +12,14 @@ import { useCallback, useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { DisclosureChevron } from "~/components/ui/DisclosureChevron";
 import { DisclosureRegion } from "~/components/ui/DisclosureRegion";
+import { SearchInput } from "~/components/ui/search-input";
 import { gitRemoveWorktreeMutationOptions } from "~/lib/gitReactQuery";
 import { ArchiveIcon } from "~/lib/icons";
 import { deleteArchivedThreadsFromClient } from "~/lib/archivedThreadDelete";
+import {
+  collectArchivedThreadSearchRoots,
+  filterArchivedGroupsByTitle,
+} from "~/lib/archivedThreadSearch";
 import { formatRelativeTime } from "~/lib/relativeTime";
 import { serverQueryKeys, serverWorktreesQueryOptions } from "~/lib/serverReactQuery";
 import { unarchiveThreadFromClient } from "~/lib/threadArchive";
@@ -364,23 +369,14 @@ export function WorktreesSettingsPanel({ active }: { readonly active: boolean })
 }
 
 export function ArchivedSettingsPanel({ active }: { readonly active: boolean }) {
+  const [query, setQuery] = useState("");
   const removeDeletedThreadFromClientState = useStore(
     (store) => store.removeDeletedThreadFromClientState,
   );
   const threadShells = useStore(useMemo(() => createThreadShellsSelector(), []));
   const projects = useStore((store) => store.projects);
   const archivedGroups = useMemo(() => {
-    // Represent each archived subtree once. Normally that is a top-level thread;
-    // a child whose parent is still active/missing is also a root and must remain
-    // visible so legacy retention state can be recovered.
-    const archivedThreadIds = new Set(
-      threadShells.filter((thread) => thread.archivedAt != null).map((thread) => thread.id),
-    );
-    const archivedThreads = threadShells.filter((thread) => {
-      if (thread.archivedAt == null) return false;
-      const parentThreadId = thread.parentThreadId ?? null;
-      return parentThreadId === null || !archivedThreadIds.has(parentThreadId);
-    });
+    const archivedThreads = collectArchivedThreadSearchRoots(threadShells);
     const knownProjectIds = new Set(projects.map((project) => project.id));
     const groups: Array<{
       project: (typeof projects)[number] | null;
@@ -399,6 +395,11 @@ export function ArchivedSettingsPanel({ active }: { readonly active: boolean }) 
     }
     return groups.filter((group) => group.threads.length > 0);
   }, [projects, threadShells]);
+  const visibleArchivedGroups = useMemo(
+    () => filterArchivedGroupsByTitle(archivedGroups, query),
+    [archivedGroups, query],
+  );
+  const isSearching = query.trim().length > 0;
 
   const unarchiveThread = useCallback(async (threadId: ThreadId) => {
     const api = readNativeApi();
@@ -507,23 +508,46 @@ export function ArchivedSettingsPanel({ active }: { readonly active: boolean }) 
 
   return (
     <div className="space-y-6">
-      {archivedGroups.map(({ project, threads }) => {
-        const groupId = project?.id ?? "unknown-project";
-        return (
-          <ArchivedThreadGroup
-            key={groupId}
-            title={project?.name ?? "Unknown project"}
-            threads={threads}
-            open={!collapsedGroupIds.has(groupId)}
-            onToggle={() => toggleGroup(groupId)}
-            onRestore={(threadId) => void unarchiveThread(threadId)}
-            onDelete={(threadId, threadTitle) => void deleteArchivedThread(threadId, threadTitle)}
-            onContextMenu={(threadId, threadTitle, position) => {
-              void handleContextMenu(threadId, threadTitle, position);
-            }}
-          />
-        );
-      })}
+      <SearchInput
+        type="search"
+        value={query}
+        spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="off"
+        placeholder="Search archived threads..."
+        aria-label="Search archived threads"
+        onChange={(event) => setQuery(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && query.length > 0) {
+            event.preventDefault();
+            event.stopPropagation();
+            setQuery("");
+          }
+        }}
+      />
+      {visibleArchivedGroups.length === 0 ? (
+        <SettingsEmptyState>
+          No archived threads match &ldquo;{query.trim()}&rdquo;.
+        </SettingsEmptyState>
+      ) : (
+        visibleArchivedGroups.map(({ project, threads }) => {
+          const groupId = project?.id ?? "unknown-project";
+          return (
+            <ArchivedThreadGroup
+              key={groupId}
+              title={project?.name ?? "Unknown project"}
+              threads={threads}
+              open={isSearching || !collapsedGroupIds.has(groupId)}
+              onToggle={() => toggleGroup(groupId)}
+              onRestore={(threadId) => void unarchiveThread(threadId)}
+              onDelete={(threadId, threadTitle) => void deleteArchivedThread(threadId, threadTitle)}
+              onContextMenu={(threadId, threadTitle, position) => {
+                void handleContextMenu(threadId, threadTitle, position);
+              }}
+            />
+          );
+        })
+      )}
     </div>
   );
 }

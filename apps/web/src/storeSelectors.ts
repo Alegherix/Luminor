@@ -412,7 +412,8 @@ export function createSidebarDisplayThreadsSelector(
 // Sidebar tree source: unlike the flat display selector above, this keeps
 // child (subagent) threads so buildProjectThreadTree can nest them under
 // their parent row behind the "N subagents" expand toggle. Flat consumers
-// (pinned rows, search palette) should keep using the display selector.
+// (pinned rows) should keep using the display selector. The search palette
+// uses that list for active threads and adds archived roots separately.
 export function createSidebarTreeThreadsSelector(
   options?: SidebarThreadVisibilityOptions,
 ): (state: AppState) => readonly SidebarThreadSummary[] {

@@ -75,6 +75,7 @@ export interface SidebarSearchThread {
   provider: ProviderKind;
   createdAt: string;
   updatedAt?: string | undefined;
+  archived?: boolean | undefined;
   messages: readonly {
     text: string;
   }[];
@@ -445,4 +446,30 @@ export function matchSidebarSearchThreads(
       snippet,
       messageMatchCount,
     }));
+}
+
+export function matchSidebarSearchThreadGroups(
+  threads: readonly SidebarSearchThread[],
+  query: string,
+  limit = 8,
+): {
+  active: SidebarSearchThreadMatch[];
+  archived: SidebarSearchThreadMatch[];
+} {
+  const activeThreads: SidebarSearchThread[] = [];
+  const archivedThreads: SidebarSearchThread[] = [];
+  for (const thread of threads) {
+    if (thread.archived) {
+      archivedThreads.push(thread);
+    } else {
+      activeThreads.push(thread);
+    }
+  }
+
+  return {
+    active: matchSidebarSearchThreads(activeThreads, query, limit),
+    archived: normalizeText(query)
+      ? matchSidebarSearchThreads(archivedThreads, query, limit)
+      : [],
+  };
 }

@@ -386,6 +386,7 @@ import {
 import type { LastThreadRoute } from "../chatRouteRestore";
 import { useCopyPathToClipboard, useCopyThreadIdToClipboard } from "~/hooks/useCopyToClipboard";
 import { DESKTOP_TOP_BAR_TRAFFIC_LIGHT_GUTTER_CLASS } from "~/hooks/useDesktopTopBarGutter";
+import { collectArchivedThreadSearchRoots } from "~/lib/archivedThreadSearch";
 import { cn } from "~/lib/utils";
 import {
   disclosureContentClassName,
@@ -7644,33 +7645,32 @@ function SidebarSearchPaletteController(props: {
       props.projects.map((project) => [project.id, project] as const),
     );
     const folderById = new Map(folders.map((folder) => [folder.id, folder] as const));
-    return sidebarDisplayThreads.flatMap((threadSummary) => {
-      const thread = threadById.get(threadSummary.id);
-      if (!thread) {
-        return [];
-      }
-
+    const toSearchThread = (thread: (typeof threads)[number]): SidebarSearchThread => {
       const folder = thread.folderId ? (folderById.get(thread.folderId) ?? null) : null;
-
-      return [
-        {
-          id: thread.id,
-          title: thread.title,
-          projectId: thread.projectId,
-          projectName: props.projectById.get(thread.projectId)?.name ?? "Unknown project",
-          projectRemoteName:
-            props.projectById.get(thread.projectId)?.remoteName ?? "Unknown project",
-          spaceName: searchProjectById.get(thread.projectId)?.spaceName ?? "Global",
-          folder: folder === null ? null : { name: folder.name, owner: folder.owner },
-          provider: thread.modelSelection.provider,
-          createdAt: thread.createdAt,
-          updatedAt: thread.updatedAt,
-          messages: thread.messages.map((message) => ({
-            text: message.text,
-          })),
-        },
-      ];
+      return {
+        id: thread.id,
+        title: thread.title,
+        projectId: thread.projectId,
+        projectName: props.projectById.get(thread.projectId)?.name ?? "Unknown project",
+        projectRemoteName:
+          props.projectById.get(thread.projectId)?.remoteName ?? "Unknown project",
+        spaceName: searchProjectById.get(thread.projectId)?.spaceName ?? "Global",
+        folder: folder === null ? null : { name: folder.name, owner: folder.owner },
+        provider: thread.modelSelection.provider,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+        archived: thread.archivedAt != null,
+        messages: thread.messages.map((message) => ({
+          text: message.text,
+        })),
+      };
+    };
+    const activeThreads = sidebarDisplayThreads.flatMap((threadSummary) => {
+      const thread = threadById.get(threadSummary.id);
+      return thread ? [toSearchThread(thread)] : [];
     });
+    const archivedThreads = collectArchivedThreadSearchRoots(threads).map(toSearchThread);
+    return [...activeThreads, ...archivedThreads];
   }, [folders, props.projectById, props.projects, sidebarDisplayThreads, threads]);
 
   return (

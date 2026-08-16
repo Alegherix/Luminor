@@ -292,7 +292,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     id: "archived:archived-threads",
     section: "archived",
     title: "Archived threads",
-    keywords: "View and restore archived threads. unarchive history",
+    keywords: "View, search, and restore archived threads by name. unarchive history",
     target: null,
   },
 

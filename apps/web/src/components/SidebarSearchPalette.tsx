@@ -48,7 +48,7 @@ import {
   matchSidebarSearchActions,
   matchSidebarSearchProjects,
   matchSidebarSearchThemes,
-  matchSidebarSearchThreads,
+  matchSidebarSearchThreadGroups,
   resolveSidebarSearchThreadLocation,
 } from "./SidebarSearchPalette.logic";
 import { useTheme } from "../hooks/useTheme";
@@ -322,6 +322,83 @@ function ThreadLocationBreadcrumb(props: { thread: SidebarSearchThread }) {
   );
 }
 
+function SearchThreadCommandItem(props: {
+  id: string;
+  query: string;
+  matchKind: "message" | "project" | "title";
+  messageMatchCount: number;
+  snippet: string | null;
+  thread: SidebarSearchThread;
+  onOpenThread: (threadId: string) => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <CommandItem
+      value={props.id}
+      className="cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2"
+      onMouseDown={(event) => {
+        event.preventDefault();
+      }}
+      onClick={() => {
+        props.onOpenChange(false);
+        props.onOpenThread(props.thread.id);
+      }}
+    >
+      {isGenericChatThreadTitle(props.thread.title) ? null : (
+        <ProviderIcon provider={props.thread.provider} />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-3">
+          <div className="min-w-0 flex-1 truncate text-[length:var(--app-font-size-ui,12px)] text-foreground">
+            <HighlightedText
+              text={props.thread.title || "Untitled thread"}
+              query={props.query}
+            />
+          </div>
+          <ThreadLocationBreadcrumb thread={props.thread} />
+          {props.thread.updatedAt || props.thread.createdAt ? (
+            <span className="w-10 shrink-0 text-right text-[length:var(--app-font-size-ui-timestamp,10px)] text-muted-foreground/79">
+              {formatRelativeTime(props.thread.updatedAt ?? props.thread.createdAt)}
+            </span>
+          ) : (
+            <span className="w-10 shrink-0" />
+          )}
+        </div>
+        {props.snippet ? (
+          <div className="mt-0.5 flex items-start gap-3">
+            <div className="min-w-0 flex-1 line-clamp-1 text-[length:var(--app-font-size-ui-meta,10px)] leading-5 text-muted-foreground/78">
+              <HighlightedText text={props.snippet} query={props.query} />
+            </div>
+            <div className="flex w-[8.5rem] shrink-0 justify-end">
+              {threadMatchLabel({
+                matchKind: props.matchKind,
+                messageMatchCount: props.messageMatchCount,
+              }) ? (
+                <span className="truncate text-[length:var(--app-font-size-ui-meta,10px)] text-muted-foreground/58">
+                  {threadMatchLabel({
+                    matchKind: props.matchKind,
+                    messageMatchCount: props.messageMatchCount,
+                  })}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : threadMatchLabel({
+            matchKind: props.matchKind,
+            messageMatchCount: props.messageMatchCount,
+          }) ? (
+          <div className="mt-0.5 text-[length:var(--app-font-size-ui-meta,10px)] text-muted-foreground/58">
+            {threadMatchLabel({
+              matchKind: props.matchKind,
+              messageMatchCount: props.messageMatchCount,
+            })}
+          </div>
+        ) : null}
+      </div>
+    </CommandItem>
+  );
+}
+
 function tokenizeHighlightQuery(query: string): string[] {
   const tokens = query
     .trim()
@@ -489,13 +566,16 @@ export function SidebarSearchPalette(props: SidebarSearchPaletteProps) {
     query.trim().length > 0 &&
     (themeCommandItems.length > 0 || matchedCurrentThemes.length > 0);
   const matchedProjects = isBrowsing ? [] : matchSidebarSearchProjects(props.projects, query);
-  const matchedThreads = isBrowsing ? [] : matchSidebarSearchThreads(props.threads, query);
+  const { active: matchedThreads, archived: matchedArchivedThreads } = isBrowsing
+    ? { active: [], archived: [] }
+    : matchSidebarSearchThreadGroups(props.threads, query);
   const hasSearchResults =
     matchedActions.length > 0 ||
     themeCommandItems.length > 0 ||
     matchedCurrentThemes.length > 0 ||
     matchedProjects.length > 0 ||
-    matchedThreads.length > 0;
+    matchedThreads.length > 0 ||
+    matchedArchivedThreads.length > 0;
   const importFieldLabel = importProvider === "codex" ? "Thread ID" : "Session ID";
   const importPlaceholder =
     importProvider === "claudeAgent"
@@ -909,7 +989,10 @@ export function SidebarSearchPalette(props: SidebarSearchPaletteProps) {
 
                   {!isBrowsing &&
                   matchedActions.length > 0 &&
-                  (matchedThreads.length > 0 || matchedProjects.length > 0 || showThemeSection) ? (
+                  (matchedThreads.length > 0 ||
+                    matchedArchivedThreads.length > 0 ||
+                    matchedProjects.length > 0 ||
+                    showThemeSection) ? (
                     <CommandSeparator />
                   ) : null}
 
@@ -920,58 +1003,17 @@ export function SidebarSearchPalette(props: SidebarSearchPaletteProps) {
                       </CommandGroupLabel>
                       {matchedThreads.map(
                         ({ id, matchKind, messageMatchCount, snippet, thread }) => (
-                          <CommandItem
+                          <SearchThreadCommandItem
                             key={id}
-                            value={id}
-                            className="cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2"
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                            }}
-                            onClick={() => {
-                              props.onOpenChange(false);
-                              props.onOpenThread(thread.id);
-                            }}
-                          >
-                            {isGenericChatThreadTitle(thread.title) ? null : (
-                              <ProviderIcon provider={thread.provider} />
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-baseline gap-3">
-                                <div className="min-w-0 flex-1 truncate text-[length:var(--app-font-size-ui,12px)] text-foreground">
-                                  <HighlightedText
-                                    text={thread.title || "Untitled thread"}
-                                    query={query}
-                                  />
-                                </div>
-                                <ThreadLocationBreadcrumb thread={thread} />
-                                {thread.updatedAt || thread.createdAt ? (
-                                  <span className="w-10 shrink-0 text-right text-[length:var(--app-font-size-ui-timestamp,10px)] text-muted-foreground/79">
-                                    {formatRelativeTime(thread.updatedAt ?? thread.createdAt)}
-                                  </span>
-                                ) : (
-                                  <span className="w-10 shrink-0" />
-                                )}
-                              </div>
-                              {snippet ? (
-                                <div className="mt-0.5 flex items-start gap-3">
-                                  <div className="min-w-0 flex-1 line-clamp-1 text-[length:var(--app-font-size-ui-meta,10px)] leading-5 text-muted-foreground/78">
-                                    <HighlightedText text={snippet} query={query} />
-                                  </div>
-                                  <div className="flex w-[8.5rem] shrink-0 justify-end">
-                                    {threadMatchLabel({ matchKind, messageMatchCount }) ? (
-                                      <span className="truncate text-[length:var(--app-font-size-ui-meta,10px)] text-muted-foreground/58">
-                                        {threadMatchLabel({ matchKind, messageMatchCount })}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              ) : threadMatchLabel({ matchKind, messageMatchCount }) ? (
-                                <div className="mt-0.5 text-[length:var(--app-font-size-ui-meta,10px)] text-muted-foreground/58">
-                                  {threadMatchLabel({ matchKind, messageMatchCount })}
-                                </div>
-                              ) : null}
-                            </div>
-                          </CommandItem>
+                            id={id}
+                            query={query}
+                            matchKind={matchKind}
+                            messageMatchCount={messageMatchCount}
+                            snippet={snippet}
+                            thread={thread}
+                            onOpenThread={props.onOpenThread}
+                            onOpenChange={props.onOpenChange}
+                          />
                         ),
                       )}
                     </CommandGroup>
@@ -979,6 +1021,35 @@ export function SidebarSearchPalette(props: SidebarSearchPaletteProps) {
 
                   {!isBrowsing &&
                   matchedThreads.length > 0 &&
+                  (matchedArchivedThreads.length > 0 ||
+                    matchedProjects.length > 0 ||
+                    showThemeSection) ? (
+                    <CommandSeparator />
+                  ) : null}
+
+                  {!isBrowsing && matchedArchivedThreads.length > 0 ? (
+                    <CommandGroup>
+                      <CommandGroupLabel className="py-1.5 pl-3">Archived</CommandGroupLabel>
+                      {matchedArchivedThreads.map(
+                        ({ id, matchKind, messageMatchCount, snippet, thread }) => (
+                          <SearchThreadCommandItem
+                            key={id}
+                            id={id}
+                            query={query}
+                            matchKind={matchKind}
+                            messageMatchCount={messageMatchCount}
+                            snippet={snippet}
+                            thread={thread}
+                            onOpenThread={props.onOpenThread}
+                            onOpenChange={props.onOpenChange}
+                          />
+                        ),
+                      )}
+                    </CommandGroup>
+                  ) : null}
+
+                  {!isBrowsing &&
+                  matchedArchivedThreads.length > 0 &&
                   (matchedProjects.length > 0 || showThemeSection) ? (
                     <CommandSeparator />
                   ) : null}

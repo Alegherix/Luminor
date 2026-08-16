@@ -201,4 +201,41 @@ describe("ConversationStorageSettingsPanels", () => {
     expect(disclosureShell).not.toBeNull();
     expect(disclosureShell?.className).toContain("duration-220");
   });
+
+  it("filters archived threads by title", async () => {
+    harness.threadShells = [
+      thread({
+        id: "older",
+        title: "Older archived",
+        archivedAt: "2026-01-02T00:00:00.000Z",
+      }),
+      thread({
+        id: "newer",
+        title: "Newer archived",
+        archivedAt: "2026-01-03T00:00:00.000Z",
+      }),
+    ];
+
+    await render(<ArchivedSettingsPanel active />);
+    await page.getByLabelText("Search archived threads").fill("newer");
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Newer archived");
+    expect(text).not.toContain("Older archived");
+  });
+
+  it("shows an empty search state when no archived title matches", async () => {
+    harness.threadShells = [
+      thread({
+        id: "older",
+        title: "Older archived",
+        archivedAt: "2026-01-02T00:00:00.000Z",
+      }),
+    ];
+
+    await render(<ArchivedSettingsPanel active />);
+    await page.getByLabelText("Search archived threads").fill("missing");
+
+    expect(document.body.textContent).toContain('No archived threads match “missing”.');
+  });
 });
