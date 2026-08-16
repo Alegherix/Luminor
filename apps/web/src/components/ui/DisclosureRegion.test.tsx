@@ -1,10 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import {
-  DISCLOSURE_SHELL_CLOSED_CLASS,
-  DISCLOSURE_SHELL_OPEN_CLASS,
-} from "~/lib/disclosureMotion";
+import { DISCLOSURE_SHELL_CLOSED_CLASS, DISCLOSURE_SHELL_OPEN_CLASS } from "~/lib/disclosureMotion";
 import { DisclosureRegion, PresenceDisclosure } from "./DisclosureRegion";
 
 describe("DisclosureRegion", () => {

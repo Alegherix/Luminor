@@ -71,10 +71,7 @@ import { resetWsNativeApiForTest } from "../wsNativeApi";
 // The router's auto-split route otherwise requests this module on first mount.
 import "./ChatView";
 import { estimateTimelineMessageHeight } from "./timelineHeight";
-import {
-  DISCLOSURE_CLEANUP_BUFFER_MS,
-  DISCLOSURE_TRANSITION_MS,
-} from "~/lib/disclosureMotion";
+import { DISCLOSURE_CLEANUP_BUFFER_MS, DISCLOSURE_TRANSITION_MS } from "~/lib/disclosureMotion";
 import { COMPOSER_OVERLAY_TUCK_PX } from "./chat/composerOverlay";
 
 const THREAD_ID = "thread-browser-test" as ThreadId;
@@ -7908,9 +7905,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         const taskListCard = document.querySelector<HTMLElement>(
           '[data-testid="active-task-list-card"]',
         );
-        const stackedPanels = document.querySelector<HTMLElement>(
-          "[data-composer-stacked-panels]",
-        );
+        const stackedPanels = document.querySelector<HTMLElement>("[data-composer-stacked-panels]");
 
         expect(
           finalTranscriptRow,

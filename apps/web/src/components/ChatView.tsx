@@ -11500,9 +11500,7 @@ export default function ChatView({
                   </div>
                 ) : null}
               </PresenceDisclosure>
-              <PresenceDisclosure
-                open={!activePendingApproval && pendingUserInputs.length > 0}
-              >
+              <PresenceDisclosure open={!activePendingApproval && pendingUserInputs.length > 0}>
                 {pendingUserInputs.length > 0 ? (
                   <div className="pb-2">
                     <ComposerPendingUserInputPanel
