@@ -181,7 +181,13 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { useLatestProjectStore } from "../latestProjectStore";
 import { resolveThreadEnvironmentPresentation } from "../lib/threadEnvironment";
 import { dispatchThreadRename } from "../lib/threadRename";
-import { createFolder, deleteFolder, renameFolder, setFolderPinned } from "../lib/folders";
+import {
+  archiveFolder,
+  createFolder,
+  deleteFolder,
+  renameFolder,
+  setFolderPinned,
+} from "../lib/folders";
 import {
   buildFolderMoveMenuItems,
   describeFolderMoveOutcome,
@@ -4072,7 +4078,8 @@ export default function Sidebar() {
           separatorBefore: true,
         },
         { id: "rename", label: "Rename folder" },
-        { id: "delete", label: "Delete folder", destructive: true, separatorBefore: true },
+        { id: "archive", label: "Archive folder", separatorBefore: true },
+        { id: "delete", label: "Delete folder", destructive: true },
       ];
       const clicked = await api.contextMenu.show(menuItems, position);
       if (clicked === "new-thread") {
@@ -4095,10 +4102,45 @@ export default function Sidebar() {
         setFolderEditorState({ mode: "rename", folderId: folder.id });
         return;
       }
-      if (clicked !== "delete") return;
       const memberCount = sidebarTreeThreads.filter(
         (thread) => !thread.parentThreadId && thread.folderId === folder.id,
       ).length;
+      const collapseFolder = () => {
+        setExpandedFolderIds((current) => {
+          if (!current.has(folder.id)) return current;
+          const next = new Set(current);
+          next.delete(folder.id);
+          return next;
+        });
+      };
+      if (clicked === "archive") {
+        const confirmed = await api.dialogs.confirm(
+          memberCount === 0
+            ? `Archive empty folder “${folder.name}”? The folder will be removed.`
+            : [
+                `Archive folder “${folder.name}”? Its ${memberCount} ${pluralize(memberCount, "thread")} will be archived and the folder will be removed.`,
+                "Archived threads are hidden from the sidebar but can be restored later.",
+              ].join("\n"),
+        );
+        if (!confirmed) return;
+        try {
+          await archiveFolder({ api, folderId: folder.id });
+          removeFromSelection(
+            sidebarTreeThreads
+              .filter((thread) => thread.folderId === folder.id)
+              .map((thread) => thread.id),
+          );
+          collapseFolder();
+        } catch (error) {
+          toastManager.add({
+            type: "error",
+            title: "Unable to archive folder",
+            description: error instanceof Error ? error.message : "Try again.",
+          });
+        }
+        return;
+      }
+      if (clicked !== "delete") return;
       const confirmed = await api.dialogs.confirm(
         memberCount === 0
           ? `Delete empty folder “${folder.name}”?`
@@ -4109,12 +4151,7 @@ export default function Sidebar() {
       if (!confirmed) return;
       try {
         await deleteFolder({ api, folderId: folder.id });
-        setExpandedFolderIds((current) => {
-          if (!current.has(folder.id)) return current;
-          const next = new Set(current);
-          next.delete(folder.id);
-          return next;
-        });
+        collapseFolder();
       } catch (error) {
         toastManager.add({
           type: "error",
@@ -4123,7 +4160,7 @@ export default function Sidebar() {
         });
       }
     },
-    [handleNewThreadInFolder, sidebarTreeThreads],
+    [handleNewThreadInFolder, removeFromSelection, sidebarTreeThreads],
   );
 
   const projectDnDSensors = useSensors(

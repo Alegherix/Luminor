@@ -112,6 +112,7 @@ function commandToAggregateRef(command: OrchestrationCommand): {
     case "folder.create":
     case "folder.rename":
     case "folder.delete":
+    case "folder.archive":
     case "folder.pin":
       return {
         aggregateKind: "folder",

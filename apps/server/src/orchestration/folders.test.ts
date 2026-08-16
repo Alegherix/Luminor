@@ -1509,4 +1509,186 @@ describe("Folders", () => {
       expect(moved?.projectId).toBe(projectId);
     }
   });
+
+  it("archives every member thread, unfiles them, and deletes the folder", async () => {
+    const { readModel, departingThreadId, stayingThreadId, folderId } =
+      await createSpaceFolderFixture();
+
+    const archived = await dispatch(readModel, {
+      type: "folder.archive",
+      commandId: CommandId.makeUnsafe("cmd-archive-shared-folder"),
+      folderId,
+    });
+
+    expect(archived.events.map((event) => event.type)).toEqual([
+      "thread.archived",
+      "thread.archived",
+      "thread.meta-updated",
+      "thread.meta-updated",
+      "folder.deleted",
+    ]);
+    expect(
+      archived.readModel.threads.map((thread) => [
+        thread.id,
+        thread.folderId,
+        thread.archivedAt !== null,
+        thread.deletedAt,
+      ]),
+    ).toEqual([
+      [departingThreadId, null, true, null],
+      [stayingThreadId, null, true, null],
+    ]);
+    expect(archived.readModel.folders.find((folder) => folder.id === folderId)?.deletedAt).not.toBe(
+      null,
+    );
+  });
+
+  it("archives the subagent subtree of each folder member", async () => {
+    const createdAt = "2026-08-16T10:00:00.000Z";
+    const projectId = ProjectId.makeUnsafe("project-folder-archive");
+    const folderId = FolderId.makeUnsafe("folder-archive-cascade");
+    const parentThreadId = ThreadId.makeUnsafe("thread-folder-parent");
+    const childThreadId = ThreadId.makeUnsafe("thread-folder-child");
+    let readModel = createEmptyReadModel(createdAt);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-project-create"),
+      projectId,
+      title: "Archive cascade",
+      workspaceRoot: "/tmp/archive-cascade",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-folder-create"),
+      folderId,
+      owner: projectFolderOwner(projectId),
+      name: "Batch",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(
+      readModel,
+      threadCreateCommand({
+        commandId: "cmd-parent-create",
+        threadId: parentThreadId,
+        projectId,
+        title: "Parent",
+        createdAt,
+      }),
+    ));
+    ({ readModel } = await dispatch(readModel, {
+      type: "thread.meta.update",
+      commandId: CommandId.makeUnsafe("cmd-file-parent"),
+      threadId: parentThreadId,
+      folderId,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "thread.create",
+      commandId: CommandId.makeUnsafe("cmd-child-create"),
+      threadId: childThreadId,
+      projectId,
+      title: "Child",
+      modelSelection: { provider: "codex", model: "gpt-5.6-sol" },
+      interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+      runtimeMode: "approval-required",
+      branch: null,
+      worktreePath: null,
+      parentThreadId,
+      createdAt,
+    }));
+
+    const archived = await dispatch(readModel, {
+      type: "folder.archive",
+      commandId: CommandId.makeUnsafe("cmd-archive-folder"),
+      folderId,
+    });
+
+    expect(
+      archived.events
+        .filter((event) => event.type === "thread.archived")
+        .map((event) => event.payload.threadId),
+    ).toEqual([childThreadId, parentThreadId]);
+    expect(
+      archived.readModel.threads.find((thread) => thread.id === childThreadId)?.archivedAt,
+    ).not.toBe(null);
+    expect(
+      archived.readModel.threads.find((thread) => thread.id === parentThreadId)?.archivedAt,
+    ).not.toBe(null);
+    expect(archived.readModel.folders.find((folder) => folder.id === folderId)?.deletedAt).not.toBe(
+      null,
+    );
+  });
+
+  it("skips already archived members and still removes the folder", async () => {
+    const { readModel, departingThreadId, stayingThreadId, folderId } =
+      await createSpaceFolderFixture();
+    const afterOneArchive = await dispatch(readModel, {
+      type: "thread.archive",
+      commandId: CommandId.makeUnsafe("cmd-archive-one-member"),
+      threadId: departingThreadId,
+    });
+
+    const archived = await dispatch(afterOneArchive.readModel, {
+      type: "folder.archive",
+      commandId: CommandId.makeUnsafe("cmd-archive-remaining"),
+      folderId,
+    });
+
+    expect(
+      archived.events
+        .filter((event) => event.type === "thread.archived")
+        .map((event) => event.payload.threadId),
+    ).toEqual([stayingThreadId]);
+    expect(
+      archived.readModel.threads.find((thread) => thread.id === departingThreadId),
+    ).toMatchObject({
+      folderId: null,
+      archivedAt: expect.any(String),
+    });
+    expect(archived.readModel.folders.find((folder) => folder.id === folderId)?.deletedAt).not.toBe(
+      null,
+    );
+  });
+
+  it("rejects archive on a deleted folder", async () => {
+    const createdAt = "2026-08-16T11:00:00.000Z";
+    const projectId = ProjectId.makeUnsafe("project-deleted-folder-archive");
+    const folderId = FolderId.makeUnsafe("folder-already-deleted");
+    let readModel = createEmptyReadModel(createdAt);
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-project-create"),
+      projectId,
+      title: "Deleted folder",
+      workspaceRoot: "/tmp/deleted-folder-archive",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-folder-create"),
+      folderId,
+      owner: projectFolderOwner(projectId),
+      name: "Gone",
+      createdAt,
+    }));
+    ({ readModel } = await dispatch(readModel, {
+      type: "folder.delete",
+      commandId: CommandId.makeUnsafe("cmd-folder-delete"),
+      folderId,
+    }));
+
+    await expect(
+      Effect.runPromise(
+        decideOrchestrationCommand({
+          command: {
+            type: "folder.archive",
+            commandId: CommandId.makeUnsafe("cmd-archive-deleted"),
+            folderId,
+          },
+          readModel,
+        }),
+      ),
+    ).rejects.toThrow(/was deleted/i);
+  });
 });

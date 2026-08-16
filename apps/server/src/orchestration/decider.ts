@@ -125,6 +125,42 @@ function withEventBase(
   };
 }
 
+function isActiveUnarchivedThread(thread: OrchestrationReadModel["threads"][number]): boolean {
+  return thread.deletedAt === null && (thread.archivedAt ?? null) === null;
+}
+
+type ThreadArchivedEventBase = Omit<
+  Extract<OrchestrationEvent, { type: "thread.archived" }>,
+  "sequence"
+>;
+
+function threadArchiveEvents(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly commandId: OrchestrationCommand["commandId"];
+  readonly occurredAt: string;
+  readonly threadId: OrchestrationThread["id"];
+}): ReadonlyArray<ThreadArchivedEventBase> {
+  const subagentThreadIds = collectSubagentDescendants(input.readModel.threads, input.threadId)
+    .filter(isActiveUnarchivedThread)
+    .map((thread) => thread.id);
+  return [...subagentThreadIds, input.threadId].map(
+    (threadId): ThreadArchivedEventBase => ({
+      ...withEventBase({
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: input.occurredAt,
+        commandId: input.commandId,
+      }),
+      type: "thread.archived",
+      payload: {
+        threadId,
+        archivedAt: input.occurredAt,
+        updatedAt: input.occurredAt,
+      },
+    }),
+  );
+}
+
 function folderAutoUnpinEvents(input: {
   readonly readModel: OrchestrationReadModel;
   readonly commandId: OrchestrationCommand["commandId"];
@@ -704,6 +740,57 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         payload: { folderId: command.folderId, deletedAt: occurredAt },
       };
       return unfileEvents.length === 0 ? deleteEvent : [...unfileEvents, deleteEvent];
+    }
+
+    case "folder.archive": {
+      yield* requireFolder({ readModel, command, folderId: command.folderId });
+      const occurredAt = nowIso();
+      const memberThreads = readModel.threads.filter(
+        (thread) => thread.deletedAt === null && thread.folderId === command.folderId,
+      );
+      const archivedThreadIds = new Set<OrchestrationThread["id"]>();
+      const archiveEvents: Omit<OrchestrationEvent, "sequence">[] = [];
+      for (const thread of memberThreads) {
+        if (!isActiveUnarchivedThread(thread) || archivedThreadIds.has(thread.id)) continue;
+        for (const event of threadArchiveEvents({
+          readModel,
+          commandId: command.commandId,
+          occurredAt,
+          threadId: thread.id,
+        })) {
+          if (archivedThreadIds.has(event.payload.threadId)) continue;
+          archivedThreadIds.add(event.payload.threadId);
+          archiveEvents.push(event);
+        }
+      }
+      const unfileEvents = memberThreads.map(
+        (thread): Omit<OrchestrationEvent, "sequence"> => ({
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: thread.id,
+            occurredAt,
+            commandId: command.commandId,
+          }),
+          type: "thread.meta-updated",
+          payload: {
+            threadId: thread.id,
+            folderId: null,
+            updatedAt: occurredAt,
+          },
+        }),
+      );
+      const deleteEvent: Omit<OrchestrationEvent, "sequence"> = {
+        ...withEventBase({
+          aggregateKind: "folder",
+          aggregateId: command.folderId,
+          occurredAt,
+          commandId: command.commandId,
+        }),
+        type: "folder.deleted",
+        payload: { folderId: command.folderId, deletedAt: occurredAt },
+      };
+      const events = [...archiveEvents, ...unfileEvents, deleteEvent];
+      return events.length === 1 ? deleteEvent : events;
     }
 
     case "folder.pin": {
@@ -1545,25 +1632,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       // Subagent threads are only reachable through their parent, so archiving a
       // thread archives its still-active subagent subtree with it. The commanded
       // thread goes last: the command receipt records the final event's aggregate.
-      const subagentThreadIds = collectSubagentDescendants(readModel.threads, command.threadId)
-        .filter((thread) => thread.deletedAt === null && (thread.archivedAt ?? null) === null)
-        .map((thread) => thread.id);
-      return [...subagentThreadIds, command.threadId].map(
-        (threadId): Omit<OrchestrationEvent, "sequence"> => ({
-          ...withEventBase({
-            aggregateKind: "thread",
-            aggregateId: threadId,
-            occurredAt,
-            commandId: command.commandId,
-          }),
-          type: "thread.archived",
-          payload: {
-            threadId,
-            archivedAt: occurredAt,
-            updatedAt: occurredAt,
-          },
-        }),
-      );
+      return threadArchiveEvents({
+        readModel,
+        commandId: command.commandId,
+        occurredAt,
+        threadId: command.threadId,
+      });
     }
 
     case "thread.unarchive": {
