@@ -197,3 +197,32 @@ describe("AndroidEmulatorBackend app lifecycle", () => {
     );
   });
 });
+
+describe("AndroidEmulatorBackend input", () => {
+  it("converts tap coordinates from device points to pixels", async () => {
+    const commands: string[] = [];
+    const backend = new AndroidEmulatorBackend({
+      toolchain: FULL_TOOLCHAIN,
+      run: async (command, args) => {
+        const key = [command, ...args].join(" ");
+        commands.push(key);
+        if (key === "/sdk/emulator/emulator -list-avds") return ok("Pixel_8_API_35\n");
+        if (key === "/sdk/platform-tools/adb devices")
+          return ok("List of devices attached\nemulator-5554\tdevice\n");
+        if (key === "/sdk/platform-tools/adb -s emulator-5554 emu avd name")
+          return ok("Pixel_8_API_35\nOK\n");
+        if (key === "/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed")
+          return ok("1\n");
+        if (key === "/sdk/platform-tools/adb -s emulator-5554 shell input tap 275 550")
+          return ok("");
+        throw new Error(`unexpected: ${key}`);
+      },
+      readFile: async () => "hw.lcd.width=1080\nhw.lcd.height=2340\nhw.lcd.density=440\n",
+    });
+
+    await backend.listDevices({ includeShutdown: true });
+    await backend.tap("Pixel_8_API_35", 100, 200);
+
+    expect(commands).toContain("/sdk/platform-tools/adb -s emulator-5554 shell input tap 275 550");
+  });
+});

@@ -27,6 +27,11 @@ import {
   type DeviceSwipeGesture,
 } from "../DeviceBackend.ts";
 import { AdbClient } from "./AdbClient.ts";
+import {
+  ANDROID_HARDWARE_BUTTON_KEYCODES,
+  escapeForAdbInputText,
+  hidUsageToAndroidKeyCode,
+} from "./androidKeys.ts";
 import { probeAndroidToolchain, type AndroidToolchain } from "./androidToolchain.ts";
 import { androidFamily, androidGeometry, parseAvdConfigIni } from "./avdConfig.ts";
 import { resolveApkPackageName } from "./apkPackageName.ts";
@@ -331,24 +336,56 @@ export class AndroidEmulatorBackend implements DeviceBackend {
     ]);
   }
 
-  tap(_udid: string, _x: number, _y: number): Promise<void> {
-    return this.notImplemented();
+  async tap(udid: string, x: number, y: number): Promise<void> {
+    const serial = await this.serialFor(udid);
+    const { scale } = await this.geometryFor(udid, serial);
+    await this.adbClient().shell(serial, [
+      "input",
+      "tap",
+      String(Math.round(x * scale)),
+      String(Math.round(y * scale)),
+    ]);
   }
 
-  swipe(_udid: string, _gesture: DeviceSwipeGesture): Promise<void> {
-    return this.notImplemented();
+  async swipe(udid: string, gesture: DeviceSwipeGesture): Promise<void> {
+    const serial = await this.serialFor(udid);
+    const { scale } = await this.geometryFor(udid, serial);
+    await this.adbClient().shell(serial, [
+      "input",
+      "swipe",
+      String(Math.round(gesture.fromX * scale)),
+      String(Math.round(gesture.fromY * scale)),
+      String(Math.round(gesture.toX * scale)),
+      String(Math.round(gesture.toY * scale)),
+      String(Math.max(1, Math.round(gesture.durationMs))),
+    ]);
   }
 
-  typeText(_udid: string, _text: string): Promise<void> {
-    return this.notImplemented();
+  async typeText(udid: string, text: string): Promise<void> {
+    if (text === "") return;
+    const serial = await this.serialFor(udid);
+    await this.adbClient().shell(serial, ["input", "text", escapeForAdbInputText(text)]);
   }
 
-  keyEvent(_udid: string, _event: DeviceKeyEvent): Promise<void> {
-    return this.notImplemented();
+  async keyEvent(udid: string, event: DeviceKeyEvent): Promise<void> {
+    if (event.direction === "up") return;
+    const keyCode = hidUsageToAndroidKeyCode(event.keyCode);
+    if (keyCode === null) return;
+    const serial = await this.serialFor(udid);
+    await this.adbClient().shell(serial, ["input", "keyevent", String(keyCode)]);
   }
 
-  pressButton(_udid: string, _button: DeviceHardwareButton): Promise<void> {
-    return this.notImplemented();
+  async pressButton(udid: string, button: DeviceHardwareButton): Promise<void> {
+    const serial = await this.serialFor(udid);
+    if (button === "rotate") {
+      await this.adbClient().adb(["-s", serial, "emu", "rotate"]);
+      return;
+    }
+    const keyCode = ANDROID_HARDWARE_BUTTON_KEYCODES[button];
+    if (keyCode === undefined) {
+      throw new DeviceBackendError(`Button "${button}" is not supported on Android emulators.`);
+    }
+    await this.adbClient().shell(serial, ["input", "keyevent", String(keyCode)]);
   }
 
   screenshot(
@@ -380,6 +417,15 @@ export class AndroidEmulatorBackend implements DeviceBackend {
 
   private sleep(ms: number): Promise<void> {
     return ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async geometryFor(udid: string, serial: string): Promise<DeviceGeometry> {
+    const cached = this.deviceGeometry.get(udid);
+    if (cached) return cached;
+    const display = await this.adbClient().displayGeometry(serial);
+    const geometry = androidGeometry(display.widthPx, display.heightPx, display.densityDpi);
+    this.deviceGeometry.set(udid, geometry);
+    return geometry;
   }
 
   private async listBuildToolsDirs(sdkRoot: string): Promise<readonly string[]> {
