@@ -1131,6 +1131,12 @@ export const FolderDeleteCommand = Schema.Struct({
   folderId: FolderId,
 });
 
+export const FolderArchiveCommand = Schema.Struct({
+  type: Schema.Literal("folder.archive"),
+  commandId: CommandId,
+  folderId: FolderId,
+});
+
 export const FolderPinCommand = Schema.Struct({
   type: Schema.Literal("folder.pin"),
   commandId: CommandId,
@@ -1604,6 +1610,7 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   FolderCreateCommand,
   FolderRenameCommand,
   FolderDeleteCommand,
+  FolderArchiveCommand,
   FolderPinCommand,
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
@@ -1648,6 +1655,7 @@ export const ClientOrchestrationCommand = Schema.Union([
   FolderCreateCommand,
   FolderRenameCommand,
   FolderDeleteCommand,
+  FolderArchiveCommand,
   FolderPinCommand,
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,

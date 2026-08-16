@@ -53,6 +53,14 @@ export async function deleteFolder(input: { api: NativeApi; folderId: FolderId }
   });
 }
 
+export async function archiveFolder(input: { api: NativeApi; folderId: FolderId }): Promise<void> {
+  await input.api.orchestration.dispatchCommand({
+    type: "folder.archive",
+    commandId: newCommandId(),
+    folderId: input.folderId,
+  });
+}
+
 export async function moveThreadToFolder(input: {
   api: NativeApi;
   threadId: ThreadId;
