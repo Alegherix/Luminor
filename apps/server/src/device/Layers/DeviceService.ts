@@ -1,19 +1,15 @@
 /**
  * DeviceServiceLive - one DeviceManager for the server process.
  *
- * The manager exists on every platform so no caller has to branch on `null`;
- * off darwin its backend reports `unsupported-platform` and every device call
- * fails cleanly through the same path a missing Xcode would take. `supported`
- * is what callers use to decide whether to expose the surface at all.
- *
  * @module device/Layers/DeviceService
  */
 import { Effect, Layer } from "effect";
 import { homedir } from "node:os";
 import * as path from "node:path";
 
-import { makeBootOwnershipStore, NULL_BOOT_OWNERSHIP } from "../bootOwnership.ts";
+import { makeBootOwnershipStore } from "../bootOwnership.ts";
 import { DeviceManager } from "../DeviceManager.ts";
+import { AndroidEmulatorBackend } from "../android/AndroidEmulatorBackend.ts";
 import { IosSimulatorBackend } from "../IosSimulatorBackend.ts";
 import { DeviceService, type DeviceServiceShape } from "../Services/DeviceService.ts";
 
@@ -42,33 +38,27 @@ export function makeDeviceServiceLayer(options: DeviceServiceLiveOptions = {}) {
     DeviceService,
     Effect.gen(function* () {
       const platform = options.platform ?? process.platform;
-      const backend = new IosSimulatorBackend({ platform });
-      // Only darwin can boot anything, so only darwin needs to remember doing so.
-      const bootOwnership =
+      const backend =
         platform === "darwin"
-          ? makeBootOwnershipStore(options.bootOwnershipPath ?? defaultBootOwnershipPath())
-          : NULL_BOOT_OWNERSHIP;
+          ? new IosSimulatorBackend({ platform })
+          : new AndroidEmulatorBackend();
+      const bootOwnership = makeBootOwnershipStore(
+        options.bootOwnershipPath ?? defaultBootOwnershipPath(),
+      );
       const manager = new DeviceManager({ backend, bootOwnership });
 
-      // A previous run that crashed left its simulators booted and no longer
-      // owned by anyone: reclaim them before this run starts counting boots,
-      // or they linger forever outside the cap and the idle sweep.
-      if (platform === "darwin") {
-        yield* Effect.promise(async () => {
-          const reclaimed = await manager.reclaimOrphanedBoots().catch(() => []);
-          if (reclaimed.length > 0) {
-            console.info(
-              `[device] shut down ${reclaimed.length} simulator(s) left booted by a previous ` +
-                `Synara run: ${reclaimed.join(", ")}`,
-            );
-          }
-        });
-      }
+      yield* Effect.promise(async () => {
+        const reclaimed = await manager.reclaimOrphanedBoots().catch(() => []);
+        if (reclaimed.length > 0) {
+          console.info(
+            `[device] shut down ${reclaimed.length} device(s) left booted by a previous ` +
+              `Synara run: ${reclaimed.join(", ")}`,
+          );
+        }
+      });
 
-      // App quit shuts down every simulator Synara booted and leaves the
-      // user's own devices running.
       yield* Effect.addFinalizer(() => Effect.promise(() => manager.dispose()));
-      return { supported: platform === "darwin", manager } satisfies DeviceServiceShape;
+      return { supported: true, manager } satisfies DeviceServiceShape;
     }),
   );
 }
