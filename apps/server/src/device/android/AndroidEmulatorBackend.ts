@@ -575,6 +575,8 @@ export class AndroidEmulatorBackend implements DeviceBackend {
     if (this.scrcpyVersion !== null) return this.scrcpyVersion;
     const fromEnv = process.env.SCRCPY_SERVER_VERSION?.trim();
     if (fromEnv) return (this.scrcpyVersion = fromEnv);
+    const fromSidecar = await this.readScrcpyVersionSidecar();
+    if (fromSidecar) return (this.scrcpyVersion = fromSidecar);
     const result = await this.run("scrcpy", ["--version"], { allowNonZeroExit: true }).catch(
       () => null,
     );
@@ -585,6 +587,14 @@ export class AndroidEmulatorBackend implements DeviceBackend {
       );
     }
     return (this.scrcpyVersion = match[1]);
+  }
+
+  private async readScrcpyVersionSidecar(): Promise<string | null> {
+    const jarPath = this.toolchain().scrcpyServerPath;
+    if (jarPath === null) return null;
+    const contents = await this.readFile(`${jarPath}.version`).catch(() => "");
+    const version = /^[\d.]+$/u.exec(contents.trim());
+    return version ? version[0] : null;
   }
 
   private async listBuildToolsDirs(sdkRoot: string): Promise<readonly string[]> {

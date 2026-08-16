@@ -47,4 +47,14 @@ describe("probeAndroidToolchain", () => {
     expect(toolchain.scrcpyServerPath).toBe("/opt/jar");
     expect(toolchain.avdHome).toBe("/data/avd");
   });
+
+  it("falls back to the luminor-local scrcpy server jar", () => {
+    const toolchain = probeAndroidToolchain({
+      env: {},
+      platform: "linux",
+      homeDir: "/home/u",
+      exists: fakeFs(["/home/u/.local/share/luminor/scrcpy-server"]),
+    });
+    expect(toolchain.scrcpyServerPath).toBe("/home/u/.local/share/luminor/scrcpy-server");
+  });
 });

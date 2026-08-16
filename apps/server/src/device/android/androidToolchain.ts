@@ -67,7 +67,11 @@ export function probeAndroidToolchain(
   const avdHome = env.ANDROID_AVD_HOME?.trim() || path.join(androidUserHome, "avd");
 
   const scrcpyServerPath = firstExisting(
-    [env.SCRCPY_SERVER_PATH, ...SCRCPY_SERVER_CANDIDATES],
+    [
+      env.SCRCPY_SERVER_PATH,
+      ...SCRCPY_SERVER_CANDIDATES,
+      path.join(home, ".local", "share", "luminor", "scrcpy-server"),
+    ],
     exists,
   );
 
