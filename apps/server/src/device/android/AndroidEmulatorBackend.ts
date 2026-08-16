@@ -29,6 +29,7 @@ import {
 import { AdbClient } from "./AdbClient.ts";
 import { probeAndroidToolchain, type AndroidToolchain } from "./androidToolchain.ts";
 import { androidFamily, androidGeometry, parseAvdConfigIni } from "./avdConfig.ts";
+import { resolveApkPackageName } from "./apkPackageName.ts";
 
 export interface AndroidEmulatorBackendOptions {
   readonly toolchain?: AndroidToolchain;
@@ -43,6 +44,7 @@ export interface AndroidEmulatorBackendOptions {
   readonly recordingDirectory?: string;
   readonly bootDeadlineMs?: number;
   readonly bootPollIntervalMs?: number;
+  readonly listBuildToolsDirs?: (sdkRoot: string) => Promise<readonly string[]>;
 }
 
 export class AndroidEmulatorBackend implements DeviceBackend {
@@ -59,6 +61,9 @@ export class AndroidEmulatorBackend implements DeviceBackend {
   private readonly toolchainOverride: AndroidToolchain | undefined;
   private readonly bootDeadlineMs: number;
   private readonly bootPollIntervalMs: number;
+  private readonly listBuildToolsDirsOverride:
+    | ((sdkRoot: string) => Promise<readonly string[]>)
+    | undefined;
   private readonly deviceGeometry = new Map<string, DeviceGeometry>();
   private disposed = false;
 
@@ -79,6 +84,7 @@ export class AndroidEmulatorBackend implements DeviceBackend {
     this.bootDeadlineMs = options.bootDeadlineMs ?? AndroidEmulatorBackend.BOOT_DEADLINE_MS;
     this.bootPollIntervalMs =
       options.bootPollIntervalMs ?? AndroidEmulatorBackend.BOOT_POLL_INTERVAL_MS;
+    this.listBuildToolsDirsOverride = options.listBuildToolsDirs;
   }
 
   private toolchain(): AndroidToolchain {
@@ -268,20 +274,61 @@ export class AndroidEmulatorBackend implements DeviceBackend {
     }
   }
 
-  install(_udid: string, _appPath: string): Promise<DeviceInstallAppResult> {
-    return this.notImplemented();
+  async install(udid: string, appPath: string): Promise<DeviceInstallAppResult> {
+    if (!appPath.endsWith(".apk")) {
+      throw new DeviceBackendError(`Android installs need an .apk file, got: ${appPath}`);
+    }
+    const toolchain = this.toolchain();
+    if (toolchain.sdkRoot === null) throw new DeviceBackendError("Android SDK not installed.");
+    const serial = await this.serialFor(udid);
+    const bundleId = await resolveApkPackageName({
+      apkPath: appPath,
+      sdkRoot: toolchain.sdkRoot,
+      run: this.run,
+      listBuildToolsDirs: () => this.listBuildToolsDirs(toolchain.sdkRoot ?? ""),
+    });
+    await this.adbClient().adb(["-s", serial, "install", "-r", "-t", appPath], {
+      timeoutMs: 120_000,
+    });
+    return { udid, bundleId };
   }
 
-  launch(
-    _udid: string,
-    _bundleId: string,
-    _launchArguments?: readonly string[],
+  async launch(
+    udid: string,
+    bundleId: string,
+    launchArguments: readonly string[] = [],
   ): Promise<DeviceLaunchAppResult> {
-    return this.notImplemented();
+    const serial = await this.serialFor(udid);
+    const adb = this.adbClient();
+    const resolved = await adb.shell(serial, [
+      "cmd",
+      "package",
+      "resolve-activity",
+      "--brief",
+      bundleId,
+    ]);
+    const component = resolved.trim().split("\n").at(-1)?.trim();
+    if (!component || !component.includes("/")) {
+      throw new DeviceBackendError(`No launchable activity found for ${bundleId}.`);
+    }
+    await adb.shell(serial, ["am", "start", "-W", "-n", component, ...launchArguments], {
+      timeoutMs: 30_000,
+    });
+    const pidOut = await adb.shell(serial, ["pidof", bundleId]).catch(() => "");
+    const pid = Number.parseInt(pidOut.trim().split(/\s+/u)[0] ?? "", 10);
+    return { udid, bundleId, pid: Number.isFinite(pid) && pid > 0 ? pid : null };
   }
 
-  openUrl(_udid: string, _url: string): Promise<void> {
-    return this.notImplemented();
+  async openUrl(udid: string, url: string): Promise<void> {
+    const serial = await this.serialFor(udid);
+    await this.adbClient().shell(serial, [
+      "am",
+      "start",
+      "-a",
+      "android.intent.action.VIEW",
+      "-d",
+      url,
+    ]);
   }
 
   tap(_udid: string, _x: number, _y: number): Promise<void> {
@@ -333,5 +380,11 @@ export class AndroidEmulatorBackend implements DeviceBackend {
 
   private sleep(ms: number): Promise<void> {
     return ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async listBuildToolsDirs(sdkRoot: string): Promise<readonly string[]> {
+    if (this.listBuildToolsDirsOverride) return this.listBuildToolsDirsOverride(sdkRoot);
+    const { readdir } = await import("node:fs/promises");
+    return readdir(path.join(sdkRoot, "build-tools")).catch(() => []);
   }
 }

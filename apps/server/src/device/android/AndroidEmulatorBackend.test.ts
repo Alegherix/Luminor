@@ -141,3 +141,59 @@ describe("AndroidEmulatorBackend.boot", () => {
     ]);
   });
 });
+
+describe("AndroidEmulatorBackend app lifecycle", () => {
+  it("installs and launches an apk, then opens a url", async () => {
+    const commands: string[] = [];
+    const backend = new AndroidEmulatorBackend({
+      toolchain: FULL_TOOLCHAIN,
+      listBuildToolsDirs: async () => ["35.0.0"],
+      run: async (command, args) => {
+        const key = [command, ...args].join(" ");
+        commands.push(key);
+        if (key === "/sdk/platform-tools/adb devices")
+          return ok("List of devices attached\nemulator-5554\tdevice\n");
+        if (key === "/sdk/platform-tools/adb -s emulator-5554 emu avd name")
+          return ok("Pixel_8_API_35\nOK\n");
+        if (key === "/sdk/build-tools/35.0.0/aapt2 dump packagename /tmp/app.apk")
+          return ok("com.example.fitness\n");
+        if (key === "/sdk/platform-tools/adb -s emulator-5554 install -r -t /tmp/app.apk")
+          return ok("Success\n");
+        if (
+          key ===
+          "/sdk/platform-tools/adb -s emulator-5554 shell cmd package resolve-activity --brief com.example.fitness"
+        )
+          return ok("com.example.fitness/.MainActivity\n");
+        if (
+          key ===
+          "/sdk/platform-tools/adb -s emulator-5554 shell am start -W -n com.example.fitness/.MainActivity --ez demo true"
+        )
+          return ok("Status: ok\n");
+        if (key === "/sdk/platform-tools/adb -s emulator-5554 shell pidof com.example.fitness")
+          return ok("4321\n");
+        if (
+          key ===
+          "/sdk/platform-tools/adb -s emulator-5554 shell am start -a android.intent.action.VIEW -d https://example.com"
+        )
+          return ok("Starting: Intent\n");
+        throw new Error(`unexpected: ${key}`);
+      },
+    });
+
+    await expect(backend.install("Pixel_8_API_35", "/tmp/app.apk")).resolves.toEqual({
+      udid: "Pixel_8_API_35",
+      bundleId: "com.example.fitness",
+    });
+    await expect(
+      backend.launch("Pixel_8_API_35", "com.example.fitness", ["--ez", "demo", "true"]),
+    ).resolves.toEqual({
+      udid: "Pixel_8_API_35",
+      bundleId: "com.example.fitness",
+      pid: 4321,
+    });
+    await expect(backend.openUrl("Pixel_8_API_35", "https://example.com")).resolves.toBeUndefined();
+    expect(commands).toContain(
+      "/sdk/platform-tools/adb -s emulator-5554 install -r -t /tmp/app.apk",
+    );
+  });
+});
