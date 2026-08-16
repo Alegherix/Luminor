@@ -76,6 +76,7 @@ export const makeServerEnvironment = Effect.fn(function* () {
     serverVersion: packageJson.version,
     capabilities: {
       repositoryIdentity: true,
+      devicePane: true,
     },
   };
 

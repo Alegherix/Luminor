@@ -5,6 +5,7 @@ import {
   DeviceDescriptor,
   DeviceListResult,
   DeviceScrollToElementInput,
+  DeviceSetupStep,
   DeviceSwipeInput,
   ThreadDeviceState,
 } from "./device";
@@ -33,6 +34,25 @@ const BASE_DEVICE = {
 
 /** iPhone 17 Pro: the geometry that exposed the pixel-vs-point tap bug. */
 const GEOMETRY = { pointWidth: 402, pointHeight: 874, scale: 3 } as const;
+
+it("accepts android-emulator descriptors and android setup steps", () => {
+  const descriptor = Schema.decodeUnknownSync(DeviceDescriptor)({
+    platform: "android-emulator",
+    udid: "Pixel_8_API_35",
+    name: "Pixel 8 API 35",
+    runtime: "Android API 35",
+    state: "shutdown",
+    bootSource: "user",
+  });
+  expect(descriptor.platform).toBe("android-emulator");
+
+  const step = Schema.decodeUnknownSync(DeviceSetupStep)({
+    id: "install-android-sdk",
+    label: "Install the Android SDK",
+    done: false,
+  });
+  expect(step.id).toBe("install-android-sdk");
+});
 
 describe("DeviceDescriptor geometry", () => {
   it("carries point dimensions and scale for an attached device", () => {

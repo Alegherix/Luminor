@@ -77,6 +77,7 @@ interface RightDockProps {
   paneIconOverrides?: Record<string, ReactNode | undefined>;
   addMenuKinds: readonly RightDockPaneKind[];
   launcherItems?: readonly RightDockLauncherItem[];
+  serverOs?: string | null | undefined;
   // Single-pane hosts omit selection so their lone tab label is static; multi-pane chat hosts
   // provide the callback and keep the normal selectable-tab behavior.
   onSelectPane?: ((paneId: string) => void) | undefined;
@@ -316,7 +317,7 @@ export function RightDock(props: RightDockProps) {
                 <RightDockTab
                   key={pane.id}
                   pane={pane}
-                  label={resolveRightDockPaneLabel(pane, props.paneLabelOverrides)}
+                  label={resolveRightDockPaneLabel(pane, props.paneLabelOverrides, props.serverOs)}
                   icon={props.paneIconOverrides?.[pane.id]}
                   active={pane.id === props.state.activePaneId}
                   onSelect={onSelectPane ? () => onSelectPane(pane.id) : undefined}
@@ -341,7 +342,7 @@ export function RightDock(props: RightDockProps) {
                 </MenuTrigger>
                 <ComposerPickerMenuPopup align="end" side="bottom" className="w-44 min-w-44">
                   {props.addMenuKinds.map((kind) => {
-                    const { Icon, label } = getRightDockPaneMeta(kind);
+                    const { Icon, label } = getRightDockPaneMeta(kind, props.serverOs);
                     return (
                       <MenuItem key={kind} onClick={() => props.onAddPane(kind)}>
                         <Icon className="size-3.5 shrink-0" />
