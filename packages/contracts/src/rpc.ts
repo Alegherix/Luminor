@@ -214,6 +214,7 @@ import {
   ServerLifecycleStreamEvent,
   ServerGetSettingsResult,
   ServerListLocalServersResult,
+  ServerListResourceProcessesResult,
   ServerListWorktreesResult,
   ServerProviderUpdateError,
   ServerProviderUpdateInput,
@@ -221,6 +222,9 @@ import {
   ServerRefreshProvidersResult,
   ServerStopLocalServerInput,
   ServerStopLocalServerResult,
+  ServerStopResourceLeftoversResult,
+  ServerStopResourceProcessInput,
+  ServerStopResourceProcessResult,
   ServerUpdateSettingsInput,
   ServerUpdateSettingsResult,
   ServerUpsertKeybindingInput,
@@ -1059,6 +1063,24 @@ export const WsServerStopLocalServerRpc = Rpc.make(WS_METHODS.serverStopLocalSer
   error: WsRpcError,
 });
 
+export const WsServerListResourceProcessesRpc = Rpc.make(WS_METHODS.serverListResourceProcesses, {
+  payload: Schema.Struct({}),
+  success: ServerListResourceProcessesResult,
+  error: WsRpcError,
+});
+
+export const WsServerStopResourceProcessRpc = Rpc.make(WS_METHODS.serverStopResourceProcess, {
+  payload: ServerStopResourceProcessInput,
+  success: ServerStopResourceProcessResult,
+  error: WsRpcError,
+});
+
+export const WsServerStopResourceLeftoversRpc = Rpc.make(WS_METHODS.serverStopResourceLeftovers, {
+  payload: Schema.Struct({}),
+  success: ServerStopResourceLeftoversResult,
+  error: WsRpcError,
+});
+
 export const WsServerGetProviderUsageSnapshotRpc = Rpc.make(
   WS_METHODS.serverGetProviderUsageSnapshot,
   {
@@ -1384,6 +1406,9 @@ export const WsFeatureRpcGroup = RpcGroup.make(
   WsServerListWorktreesRpc,
   WsServerListLocalServersRpc,
   WsServerStopLocalServerRpc,
+  WsServerListResourceProcessesRpc,
+  WsServerStopResourceProcessRpc,
+  WsServerStopResourceLeftoversRpc,
   WsServerGetProviderUsageSnapshotRpc,
   WsServerListProviderUsageRpc,
   WsStatsGetProfileStatsRpc,

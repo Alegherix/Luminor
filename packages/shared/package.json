@@ -92,6 +92,10 @@
       "types": "./src/localServers.ts",
       "import": "./src/localServers.ts"
     },
+    "./resourceProcesses": {
+      "types": "./src/resourceProcesses.ts",
+      "import": "./src/resourceProcesses.ts"
+    },
     "./browserShortcuts": {
       "types": "./src/browserShortcuts.ts",
       "import": "./src/browserShortcuts.ts"

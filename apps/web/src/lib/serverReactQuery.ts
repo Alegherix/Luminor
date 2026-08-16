@@ -4,6 +4,7 @@ import type {
   ServerListProviderUsageInput,
   ServerProviderStatus,
   ServerStopLocalServerInput,
+  ServerStopResourceProcessInput,
   ThreadId,
 } from "@luminor/contracts";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
@@ -20,6 +21,7 @@ export const serverQueryKeys = {
   settings: () => ["server", "settings"] as const,
   worktrees: () => ["server", "worktrees"] as const,
   localServers: () => ["server", "localServers"] as const,
+  resourceProcesses: () => ["server", "resourceProcesses"] as const,
   providerUsage: (provider: ProviderKind | null | undefined, homePath?: string | null) =>
     ["server", "providerUsage", provider ?? null, homePath ?? null] as const,
   allProviderUsage: () => ["server", "allProviderUsage"] as const,
@@ -33,6 +35,8 @@ export const serverQueryKeys = {
 
 export const serverMutationKeys = {
   stopLocalServer: () => ["server", "mutation", "stopLocalServer"] as const,
+  stopResourceProcess: () => ["server", "mutation", "stopResourceProcess"] as const,
+  stopResourceLeftovers: () => ["server", "mutation", "stopResourceLeftovers"] as const,
 };
 
 export function serverConfigQueryOptions() {
@@ -275,6 +279,54 @@ export function serverStopLocalServerMutationOptions(input: { queryClient: Query
     },
     onSettled: () => {
       void input.queryClient.invalidateQueries({ queryKey: serverQueryKeys.localServers() });
+    },
+  });
+}
+
+export const RESOURCE_PROCESSES_REFETCH_INTERVAL_MS = 2_000;
+export const RESOURCE_PROCESSES_IDLE_REFETCH_INTERVAL_MS = 8_000;
+
+export function serverResourceProcessesQueryOptions(input: {
+  enabled?: boolean;
+  refetchInterval?: number | false;
+} = {}) {
+  const enabled = input.enabled ?? true;
+  return queryOptions({
+    queryKey: serverQueryKeys.resourceProcesses(),
+    queryFn: async () => {
+      const api = ensureNativeApi();
+      return api.server.listResourceProcesses();
+    },
+    enabled,
+    staleTime: 1_000,
+    refetchInterval: input.refetchInterval ?? (enabled ? RESOURCE_PROCESSES_IDLE_REFETCH_INTERVAL_MS : false),
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
+}
+
+export function serverStopResourceProcessMutationOptions(input: { queryClient: QueryClient }) {
+  return mutationOptions({
+    mutationKey: serverMutationKeys.stopResourceProcess(),
+    mutationFn: async (payload: ServerStopResourceProcessInput) => {
+      const api = ensureNativeApi();
+      return api.server.stopResourceProcess(payload);
+    },
+    onSettled: () => {
+      void input.queryClient.invalidateQueries({ queryKey: serverQueryKeys.resourceProcesses() });
+    },
+  });
+}
+
+export function serverStopResourceLeftoversMutationOptions(input: { queryClient: QueryClient }) {
+  return mutationOptions({
+    mutationKey: serverMutationKeys.stopResourceLeftovers(),
+    mutationFn: async () => {
+      const api = ensureNativeApi();
+      return api.server.stopResourceLeftovers();
+    },
+    onSettled: () => {
+      void input.queryClient.invalidateQueries({ queryKey: serverQueryKeys.resourceProcesses() });
     },
   });
 }

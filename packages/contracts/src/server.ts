@@ -224,6 +224,70 @@ export const ServerStopLocalServerResult = Schema.Struct({
 });
 export type ServerStopLocalServerResult = typeof ServerStopLocalServerResult.Type;
 
+export const ResourceProcessGroup = Schema.Literals(["app", "agents", "background", "leftovers"]);
+export type ResourceProcessGroup = typeof ResourceProcessGroup.Type;
+
+export const ResourceProcessStatus = Schema.Literals(["running", "idle", "stale", "dead"]);
+export type ResourceProcessStatus = typeof ResourceProcessStatus.Type;
+
+export const ResourceProcessLeaf = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  pid: PositiveInt,
+  pids: Schema.Array(PositiveInt),
+  fingerprints: Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(256))),
+  name: TrimmedNonEmptyString,
+  detail: TrimmedNonEmptyString,
+  project: TrimmedNonEmptyString,
+  group: ResourceProcessGroup,
+  status: ResourceProcessStatus,
+  cpu: Schema.Number,
+  rssMb: Schema.Number,
+  canStop: Schema.Boolean,
+});
+export type ResourceProcessLeaf = typeof ResourceProcessLeaf.Type;
+
+export const ResourceProcessTreeGroup = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  detail: TrimmedNonEmptyString,
+  project: TrimmedNonEmptyString,
+  group: ResourceProcessGroup,
+  status: ResourceProcessStatus,
+  cpu: Schema.Number,
+  rssMb: Schema.Number,
+  canStop: Schema.Boolean,
+  children: Schema.Array(ResourceProcessLeaf),
+});
+export type ResourceProcessTreeGroup = typeof ResourceProcessTreeGroup.Type;
+
+export const ServerListResourceProcessesResult = Schema.Struct({
+  generatedAt: IsoDateTime,
+  supported: Schema.Boolean,
+  totalCpu: Schema.Number,
+  totalRssMb: Schema.Number,
+  processCount: NonNegativeInt,
+  groups: Schema.Array(ResourceProcessTreeGroup),
+});
+export type ServerListResourceProcessesResult = typeof ServerListResourceProcessesResult.Type;
+
+export const ServerStopResourceProcessInput = Schema.Struct({
+  pids: Schema.Array(PositiveInt).check(Schema.isMinLength(1)).check(Schema.isMaxLength(64)),
+  fingerprints: Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(256)))
+    .check(Schema.isMinLength(1))
+    .check(Schema.isMaxLength(64)),
+});
+export type ServerStopResourceProcessInput = typeof ServerStopResourceProcessInput.Type;
+
+export const ServerStopResourceProcessResult = Schema.Struct({
+  stoppedPids: Schema.Array(PositiveInt),
+  failedPids: Schema.Array(PositiveInt),
+  message: Schema.optional(Schema.String.check(Schema.isMaxLength(500))),
+});
+export type ServerStopResourceProcessResult = typeof ServerStopResourceProcessResult.Type;
+
+export const ServerStopResourceLeftoversResult = ServerStopResourceProcessResult;
+export type ServerStopResourceLeftoversResult = typeof ServerStopResourceLeftoversResult.Type;
+
 export const ServerDiagnosticsMemory = Schema.Struct({
   rssBytes: NonNegativeInt,
   heapTotalBytes: NonNegativeInt,

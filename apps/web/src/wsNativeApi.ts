@@ -718,6 +718,9 @@ export function createWsNativeApi(): NativeApi {
       listWorktrees: () => transport.request(WS_METHODS.serverListWorktrees),
       listLocalServers: () => transport.request(WS_METHODS.serverListLocalServers),
       stopLocalServer: (input) => transport.request(WS_METHODS.serverStopLocalServer, input),
+      listResourceProcesses: () => transport.request(WS_METHODS.serverListResourceProcesses),
+      stopResourceProcess: (input) => transport.request(WS_METHODS.serverStopResourceProcess, input),
+      stopResourceLeftovers: () => transport.request(WS_METHODS.serverStopResourceLeftovers),
       getProviderUsageSnapshot: (input) =>
         transport.request(WS_METHODS.serverGetProviderUsageSnapshot, input),
       listProviderUsage: (input) => transport.request(WS_METHODS.serverListProviderUsage, input),

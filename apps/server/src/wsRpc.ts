@@ -96,6 +96,11 @@ import { Keybindings } from "./keybindings";
 import { createLocalPreviewGrant } from "./localImageFiles";
 import { listLocalServers, stopLocalServer } from "./localServerMonitor";
 import {
+  listResourceProcesses,
+  stopResourceLeftovers,
+  stopResourceProcess,
+} from "./resourceProcessMonitor";
+import {
   listManagedWorktrees,
   pruneProjectedArchivedManagedWorktrees,
   removeThreadWorktreeAndStopPreviews,
@@ -1762,6 +1767,21 @@ const makeWsRpcHandlersLayer = () =>
           ),
         [WS_METHODS.serverStopLocalServer]: (input) =>
           rpcEffect(stopLocalServerAndTrackedProjectRun(input), "Failed to stop local server"),
+        [WS_METHODS.serverListResourceProcesses]: () =>
+          rpcEffect(
+            Effect.promise(() => listResourceProcesses()),
+            "Failed to list resource processes",
+          ),
+        [WS_METHODS.serverStopResourceProcess]: (input) =>
+          rpcEffect(
+            Effect.promise(() => stopResourceProcess(input)),
+            "Failed to stop resource process",
+          ),
+        [WS_METHODS.serverStopResourceLeftovers]: () =>
+          rpcEffect(
+            Effect.promise(() => stopResourceLeftovers()),
+            "Failed to stop leftover processes",
+          ),
         [WS_METHODS.statsGetProfileStats]: (input) =>
           rpcEffect(profileStatsQuery.getProfileStats(input), "Failed to load profile stats"),
         [WS_METHODS.statsGetProfileTokenStats]: (input) =>

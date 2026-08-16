@@ -198,12 +198,16 @@ import type {
   ServerListProviderUsageResult,
   ServerGetSettingsResult,
   ServerListLocalServersResult,
+  ServerListResourceProcessesResult,
   ServerListWorktreesResult,
   ServerProviderUpdateInput,
   ServerProviderUpdateResult,
   ServerRefreshProvidersResult,
   ServerStopLocalServerInput,
   ServerStopLocalServerResult,
+  ServerStopResourceLeftoversResult,
+  ServerStopResourceProcessInput,
+  ServerStopResourceProcessResult,
   ServerUpdateSettingsInput,
   ServerUpdateSettingsResult,
   ServerUpsertKeybindingInput,
@@ -814,6 +818,11 @@ export interface NativeApi {
     listWorktrees: () => Promise<ServerListWorktreesResult>;
     listLocalServers: () => Promise<ServerListLocalServersResult>;
     stopLocalServer: (input: ServerStopLocalServerInput) => Promise<ServerStopLocalServerResult>;
+    listResourceProcesses: () => Promise<ServerListResourceProcessesResult>;
+    stopResourceProcess: (
+      input: ServerStopResourceProcessInput,
+    ) => Promise<ServerStopResourceProcessResult>;
+    stopResourceLeftovers: () => Promise<ServerStopResourceLeftoversResult>;
     getProviderUsageSnapshot: (
       input: ServerGetProviderUsageSnapshotInput,
     ) => Promise<ServerGetProviderUsageSnapshotResult>;
