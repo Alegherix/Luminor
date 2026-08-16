@@ -70,6 +70,14 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
         altKey: false,
         modKey: true,
       });
+      assert.deepEqual(parseKeybindingShortcut("mod+/"), {
+        key: "/",
+        metaKey: false,
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        modKey: true,
+      });
     }),
   );
 

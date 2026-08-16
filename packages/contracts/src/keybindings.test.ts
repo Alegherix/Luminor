@@ -53,6 +53,12 @@ it.effect("parses keybinding rules", () =>
     });
     assert.strictEqual(parsedTerminalToggle.command, "terminal.toggle");
 
+    const parsedShortcutsShow = yield* decode(KeybindingRule, {
+      key: "mod+/",
+      command: "shortcuts.show",
+    });
+    assert.strictEqual(parsedShortcutsShow.command, "shortcuts.show");
+
     const parsedClose = yield* decode(KeybindingRule, {
       key: "mod+w",
       command: "terminal.close",

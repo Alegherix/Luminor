@@ -31,7 +31,7 @@ import { isTerminalFocused } from "../lib/terminalFocus";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
 import { startFreshChatForActiveSurface } from "../lib/startContainerChat";
 import { isOrdinarySpaceProject } from "../lib/spaces";
-import { isKeyboardShortcutsHelpShortcut, resolveShortcutCommand } from "../keybindings";
+import { resolveShortcutCommand } from "../keybindings";
 import { useStore } from "../store";
 import { createProjectLastActivityAtSelector } from "../storeSelectors";
 import { useSpacesUiStore } from "../spacesUiStore";
@@ -353,13 +353,6 @@ function ChatRouteGlobalShortcuts() {
         return;
       }
 
-      if (isKeyboardShortcutsHelpShortcut(event, platform)) {
-        event.preventDefault();
-        event.stopPropagation();
-        setShortcutsDialogOpen(true);
-        return;
-      }
-
       const appNavigationShortcut = isElectron
         ? resolveBrowserNavigationShortcut(event, platform)
         : null;
@@ -395,6 +388,13 @@ function ChatRouteGlobalShortcuts() {
         event.preventDefault();
         event.stopPropagation();
         void navigate({ to: "/settings" });
+        return;
+      }
+
+      if (command === "shortcuts.show") {
+        event.preventDefault();
+        event.stopPropagation();
+        setShortcutsDialogOpen(true);
         return;
       }
 

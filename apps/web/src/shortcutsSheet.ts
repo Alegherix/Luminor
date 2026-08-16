@@ -9,7 +9,6 @@ import {
   type ResolvedKeybindingRule,
   type ResolvedKeybindingsConfig,
 } from "@luminor/contracts";
-import { isMacPlatform } from "./lib/utils";
 import { formatShortcutLabel, resolveKeybindingForCommand } from "./keybindings";
 import { commandForProjectScript } from "./projectScripts";
 import type { ProjectScript } from "./types";
@@ -64,7 +63,14 @@ const SPACE_JUMP_DEFINITIONS: readonly ShortcutDefinition[] = Array.from(
   }),
 );
 
+const SHORTCUTS_SHOW_DEFINITION: ShortcutDefinition = {
+  command: "shortcuts.show",
+  label: "Show keybindings",
+  description: "Open this sheet from anywhere without leaving your current context.",
+};
+
 const AVAILABLE_NOW_DEFINITIONS: readonly ShortcutDefinition[] = [
+  SHORTCUTS_SHOW_DEFINITION,
   {
     command: "sidebar.addProject",
     label: "Add project",
@@ -303,10 +309,6 @@ export function listEditableShortcutDefinitions(): EditableShortcutDefinition[] 
   );
 }
 
-function modSlashLabel(platform: string): string {
-  return isMacPlatform(platform) ? "⌘/" : "Ctrl+/";
-}
-
 /** Human-readable sheet label for a keybinding command, e.g. `chat.new` → "New thread". */
 export function shortcutSheetCommandLabel(command: KeybindingCommand): string | null {
   for (const definitions of [
@@ -363,22 +365,12 @@ export function buildShortcutSheetSections(
 ): ShortcutSheetSection[] {
   const sections: ShortcutSheetSection[] = [];
 
-  const currentEntries: ShortcutSheetEntry[] = [
-    {
-      id: "shortcuts.show",
-      command: null,
-      binding: null,
-      label: "Show keybindings",
-      description: "Open this sheet from anywhere without leaving your current context.",
-      shortcutLabel: modSlashLabel(options.platform),
-    },
-    ...definitionsToEntries(
-      AVAILABLE_NOW_DEFINITIONS,
-      options.keybindings,
-      options.platform,
-      options.context,
-    ),
-  ];
+  const currentEntries: ShortcutSheetEntry[] = definitionsToEntries(
+    AVAILABLE_NOW_DEFINITIONS,
+    options.keybindings,
+    options.platform,
+    options.context,
+  );
 
   const sidebarToggle = definitionToEntry(
     SIDEBAR_TOGGLE_DEFINITION,

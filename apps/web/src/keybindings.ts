@@ -9,7 +9,6 @@ import {
   THREAD_JUMP_KEYBINDING_COMMANDS,
   type ThreadJumpKeybindingCommand,
 } from "@luminor/contracts";
-import { isKeyboardShortcutsHelpChord } from "@luminor/shared/browserShortcuts";
 import { isMacPlatform, isWindowsPlatform } from "./lib/utils";
 
 export interface ShortcutEventLike {
@@ -83,6 +82,10 @@ const whenThreadJumpAvailable = whenAnd(
 const whenModChordAllowed = whenOr(whenNotTerminalFocus, whenIdentifier("isMac"));
 
 export const DEFAULT_SHORTCUT_FALLBACKS: ResolvedKeybindingsConfig = [
+  {
+    command: "shortcuts.show",
+    shortcut: commandShortcut("/"),
+  },
   {
     command: "sidebar.activity",
     shortcut: commandShortcut("u", { altKey: true }),
@@ -323,7 +326,21 @@ const EVENT_CODE_KEY_ALIASES: Readonly<Record<string, readonly string[]>> = {
   KeyX: ["x"],
   KeyY: ["y"],
   KeyZ: ["z"],
+  Slash: ["/"],
+  NumpadDivide: ["/"],
 };
+
+function resolveEventKeys(event: ShortcutEventLike): Set<string> {
+  const keys = new Set([normalizeEventKey(event.key)]);
+  const aliases = event.code ? EVENT_CODE_KEY_ALIASES[event.code] : undefined;
+  if (aliases) {
+    for (const alias of aliases) {
+      keys.add(alias);
+    }
+  }
+
+  return keys;
+}
 
 function normalizeEventKey(key: string): string {
   const normalized = key.toLowerCase();
@@ -331,17 +348,6 @@ function normalizeEventKey(key: string): string {
   if (normalized === "{") return "[";
   if (normalized === "}") return "]";
   return normalized;
-}
-
-function resolveEventKeys(event: ShortcutEventLike): Set<string> {
-  const keys = new Set([normalizeEventKey(event.key)]);
-  const aliases = event.code ? EVENT_CODE_KEY_ALIASES[event.code] : undefined;
-  if (!aliases) return keys;
-
-  for (const alias of aliases) {
-    keys.add(alias);
-  }
-  return keys;
 }
 
 function matchesShortcutModifiers(
@@ -360,12 +366,33 @@ function matchesShortcutModifiers(
   );
 }
 
+function isRejectedSlashShortcutEvent(
+  event: ShortcutEventLike,
+  shortcutKey: string,
+  platform: string,
+): boolean {
+  if (shortcutKey !== "/") {
+    return false;
+  }
+  if (event.key === "-") {
+    return true;
+  }
+  if (
+    isWindowsPlatform(platform) &&
+    (event.code === "Minus" || event.code === "NumpadSubtract")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function matchesShortcut(
   event: ShortcutEventLike,
   shortcut: KeybindingShortcut,
   platform = navigator.platform,
 ): boolean {
   if (!matchesShortcutModifiers(event, shortcut, platform)) return false;
+  if (isRejectedSlashShortcutEvent(event, shortcut.key, platform)) return false;
   return resolveEventKeys(event).has(shortcut.key);
 }
 
@@ -523,6 +550,13 @@ export function resolveShortcutCommand(
   keybindings: ResolvedKeybindingsConfig,
   options?: ShortcutMatchOptions,
 ): string | null {
+  if (event.type !== undefined && event.type.toLowerCase() !== "keydown") {
+    return null;
+  }
+  if (event.repeat) {
+    return null;
+  }
+
   const explicitCommand = resolveShortcutCommandFromBindings(event, keybindings, options);
   if (explicitCommand !== null) {
     return explicitCommand;
@@ -791,23 +825,9 @@ export function isTerminalClearShortcut(event: ShortcutEventLike): boolean {
 export function isKeyboardShortcutsHelpShortcut(
   event: ShortcutEventLike,
   platform = navigator.platform,
+  keybindings: ResolvedKeybindingsConfig = [],
 ): boolean {
-  return isKeyboardShortcutsHelpChord(
-    {
-      key: event.key,
-      meta: event.metaKey,
-      ctrl: event.ctrlKey,
-      shift: event.shiftKey,
-      alt: event.altKey,
-      ...(event.type !== undefined ? { type: event.type } : {}),
-      ...(event.code !== undefined ? { code: event.code } : {}),
-      ...(event.repeat !== undefined ? { repeat: event.repeat } : {}),
-    },
-    {
-      isMac: isMacPlatform(platform),
-      isWindows: isWindowsPlatform(platform),
-    },
-  );
+  return resolveShortcutCommand(event, keybindings, { platform }) === "shortcuts.show";
 }
 
 export function terminalNavigationShortcutData(

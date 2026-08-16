@@ -47,6 +47,7 @@ export const STATIC_KEYBINDING_COMMANDS = [
   "traitsPicker.toggle",
   "settings.open",
   "settings.usage",
+  "shortcuts.show",
   "chat.new",
   "chat.newLatestProject",
   "chat.newChat",

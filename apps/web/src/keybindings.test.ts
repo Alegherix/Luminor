@@ -333,6 +333,7 @@ const DEFAULT_BINDINGS = compile([
     command: "settings.usage",
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
+  { shortcut: modShortcut("/"), command: "shortcuts.show" },
   {
     shortcut: modShortcut("o", { shiftKey: true }),
     command: "sidebar.addProject",

@@ -259,7 +259,7 @@ export function KeyboardShortcutsSettingsPanel() {
             const muted = section.tone === "muted";
             return section.entries.map((entry) => {
               const command = entry.command;
-              const isEditing = command === editingCommand && !isAdding;
+              const isEditing = command != null && command === editingCommand && !isAdding;
               return (
                 <div
                   key={`${section.id}:${entry.id}`}
@@ -288,7 +288,6 @@ export function KeyboardShortcutsSettingsPanel() {
                       <Input
                         size="sm"
                         nativeInput
-                        autoFocus
                         readOnly
                         placeholder="Press a key..."
                         aria-label={`Shortcut for ${entry.label}`}

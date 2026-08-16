@@ -118,6 +118,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+shift+e", command: "traitsPicker.toggle", when: "!terminalFocus" },
   { key: "mod+s", command: "settings.open", when: "!terminalFocus" },
   { key: "mod+shift+u", command: "settings.usage", when: "!terminalFocus" },
+  { key: "mod+/", command: "shortcuts.show" },
   // New thread (chat.new) is the primary create action; it falls back to the most
   // recent project when no project is active.
   //
