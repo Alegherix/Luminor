@@ -1,14 +1,19 @@
 // FILE: providerUsage/providers/cursor.ts
 // Purpose: Live Cursor usage fetcher. Reads the Cursor access token from its VS Code-style
-// state.vscdb (key cursorAuth/accessToken) or the macOS keychain ("cursor-access-token")
-// read-only, then calls the Cursor DashboardService (Connect RPC) for the current billing
-// period usage + credit grants.
+// state.vscdb (key cursorAuth/accessToken), the cursor-agent CLI auth.json, or the macOS
+// keychain ("cursor-access-token") read-only, then calls the Cursor DashboardService
+// (Connect RPC) for the current billing period usage + credit grants.
 
 import nodePath from "node:path";
 
 import type { ServerProviderUsageLimit, ServerProviderUsageLine } from "@luminor/contracts";
 
-import { credentialFingerprint, decodeJwtExpMs, readKeychainPassword } from "../credentials";
+import {
+  credentialFingerprint,
+  decodeJwtExpMs,
+  readJsonFile,
+  readKeychainPassword,
+} from "../credentials";
 import { fetchJson, isAuthFailureStatus } from "../http";
 import {
   asFiniteNumber,
@@ -48,6 +53,30 @@ function stateDbPaths(ctx: ProviderUsageContext): string[] {
   return [nodePath.join(ctx.homeDir, ".config", ...segments)];
 }
 
+function cursorCliAuthPaths(ctx: ProviderUsageContext): string[] {
+  const xdgConfigHome = asString(ctx.env.XDG_CONFIG_HOME);
+  const paths = [
+    nodePath.join(ctx.homeDir, ".config", "cursor", "auth.json"),
+    nodePath.join(ctx.homeDir, ".cursor", "auth.json"),
+  ];
+  if (xdgConfigHome) {
+    paths.unshift(nodePath.join(xdgConfigHome, "cursor", "auth.json"));
+  }
+  return paths;
+}
+
+async function readCursorCliAuth(ctx: ProviderUsageContext): Promise<CursorAuth | null> {
+  for (const authPath of cursorCliAuthPaths(ctx)) {
+    const record = asRecord(await readJsonFile(authPath));
+    const accessToken = asString(record?.accessToken) ?? asString(record?.access_token);
+    if (accessToken) {
+      const plan = asString(record?.stripeMembershipType) ?? asString(record?.plan);
+      return { accessToken, ...(plan ? { plan } : {}) };
+    }
+  }
+  return null;
+}
+
 async function resolveCursorAuth(ctx: ProviderUsageContext): Promise<CursorAuth | null> {
   for (const dbPath of stateDbPaths(ctx)) {
     const values = await readItemTableValues({ dbPath, keys: [ACCESS_TOKEN_KEY, PLAN_KEY] });
@@ -56,6 +85,11 @@ async function resolveCursorAuth(ctx: ProviderUsageContext): Promise<CursorAuth 
       const plan = asString(values[PLAN_KEY]);
       return { accessToken, ...(plan ? { plan } : {}) };
     }
+  }
+
+  const cliAuth = await readCursorCliAuth(ctx);
+  if (cliAuth) {
+    return cliAuth;
   }
 
   const keychain = await readKeychainPassword({
