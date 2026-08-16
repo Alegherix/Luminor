@@ -110,6 +110,20 @@ export class MobileRuntime {
   private readonly leases = new Map<string, ThreadLease>();
   private readonly stores: RuntimeStores;
   private readonly openSocket: (url: string) => WebSocket;
+  private shellSnapshotCache: {
+    shellState: ShellState;
+    lastVisitedState: Record<string, string>;
+    snapshot: ShellSnapshot;
+  } | null = null;
+  private readonly threadSnapshotCache = new Map<
+    string,
+    {
+      detail: ThreadDetailState | undefined;
+      loading: boolean;
+      error: ThreadSnapshot["error"];
+      snapshot: ThreadSnapshot;
+    }
+  >();
 
   constructor(options: RuntimeOptions = {}) {
     this.stores = options.stores ?? {
@@ -246,7 +260,11 @@ export class MobileRuntime {
   getShellSnapshot(): ShellSnapshot {
     const shell = this.shell.getState();
     const lastVisited = this.lastVisited.getState();
-    return {
+    const cached = this.shellSnapshotCache;
+    if (cached && cached.shellState === shell && cached.lastVisitedState === lastVisited) {
+      return cached.snapshot;
+    }
+    const snapshot: ShellSnapshot = {
       spaces: shell.spaces,
       folders: shell.folders,
       projects: shell.projects,
@@ -256,6 +274,8 @@ export class MobileRuntime {
         this.toShellThread(thread, lastVisited[thread.id] ?? null),
       ),
     };
+    this.shellSnapshotCache = { shellState: shell, lastVisitedState: lastVisited, snapshot };
+    return snapshot;
   }
 
   private toShellThread(
@@ -279,6 +299,22 @@ export class MobileRuntime {
   getThreadSnapshot(threadId: string): ThreadSnapshot {
     const detail = this.threads.getState()[threadId];
     const lease = this.leases.get(threadId);
+    const loading = detail === undefined && lease !== undefined;
+    const error = lease?.error ?? null;
+    const cached = this.threadSnapshotCache.get(threadId);
+    if (cached && cached.detail === detail && cached.loading === loading && cached.error === error) {
+      return cached.snapshot;
+    }
+    const snapshot = this.buildThreadSnapshot(detail, loading, error);
+    this.threadSnapshotCache.set(threadId, { detail, loading, error, snapshot });
+    return snapshot;
+  }
+
+  private buildThreadSnapshot(
+    detail: ThreadDetailState | undefined,
+    loading: boolean,
+    error: ThreadSnapshot["error"],
+  ): ThreadSnapshot {
     if (!detail) {
       return {
         thread: null,
@@ -290,8 +326,8 @@ export class MobileRuntime {
         fileEdits: [],
         session: null,
         status: "idle",
-        loading: lease !== undefined,
-        error: lease?.error ?? null,
+        loading,
+        error,
       };
     }
     const pendingInteractions = openPendingInteractions(detail.thread);
@@ -312,7 +348,7 @@ export class MobileRuntime {
         pendingInteractions,
       }),
       loading: false,
-      error: lease?.error ?? null,
+      error,
     };
   }
 
