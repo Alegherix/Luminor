@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Luminor icon</title>
+  <desc id="desc">An orange four-pointed star with subtle diagonal rays inside a thin circular ring, on a near-black background.</desc>
+
+  <rect width="1024" height="1024" fill="#0A0A0B"/>
+
+  <defs>
+    <linearGradient id="ringOrange" x1="218" y1="226" x2="806" y2="798" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9A3412"/>
+      <stop offset="0.22" stop-color="#FB923C"/>
+      <stop offset="0.42" stop-color="#FED7AA"/>
+      <stop offset="0.64" stop-color="#EA580C"/>
+      <stop offset="0.83" stop-color="#FDBA74"/>
+      <stop offset="1" stop-color="#7C2D12"/>
+    </linearGradient>
+
+    <linearGradient id="starOrange" x1="342" y1="302" x2="705" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9A3412"/>
+      <stop offset="0.23" stop-color="#F97316"/>
+      <stop offset="0.46" stop-color="#FFEDD5"/>
+      <stop offset="0.66" stop-color="#EA580C"/>
+      <stop offset="0.84" stop-color="#FDBA74"/>
+      <stop offset="1" stop-color="#7C2D12"/>
+    </linearGradient>
+
+    <linearGradient id="rayFadeNW" x1="464" y1="464" x2="327" y2="327" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FDBA74" stop-opacity="0.50"/>
+      <stop offset="0.45" stop-color="#F97316" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#C2410C" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="rayFadeNE" x1="560" y1="464" x2="697" y2="327" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FDBA74" stop-opacity="0.50"/>
+      <stop offset="0.45" stop-color="#F97316" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#C2410C" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="rayFadeSE" x1="560" y1="560" x2="697" y2="697" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FDBA74" stop-opacity="0.50"/>
+      <stop offset="0.45" stop-color="#F97316" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#C2410C" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="rayFadeSW" x1="464" y1="560" x2="327" y2="697" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FDBA74" stop-opacity="0.50"/>
+      <stop offset="0.45" stop-color="#F97316" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#C2410C" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="ringGlow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feFlood flood-color="#F97316" flood-opacity="0.22" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="starGlow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="11" result="blur"/>
+      <feFlood flood-color="#FB923C" flood-opacity="0.30" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="starClip">
+      <path d="M512 266
+               C503 388 482 479 278 512
+               C482 545 503 636 512 758
+               C521 636 542 545 746 512
+               C542 479 521 388 512 266Z"/>
+    </clipPath>
+  </defs>
+
+  <g fill="none" stroke-linecap="round" stroke-width="2.2">
+    <path d="M463 463 L323 323" stroke="url(#rayFadeNW)"/>
+    <path d="M561 463 L701 323" stroke="url(#rayFadeNE)"/>
+    <path d="M561 561 L701 701" stroke="url(#rayFadeSE)"/>
+    <path d="M463 561 L323 701" stroke="url(#rayFadeSW)"/>
+  </g>
+
+  <circle cx="512" cy="512" r="292" fill="none" stroke="url(#ringOrange)" stroke-width="5.5" filter="url(#ringGlow)"/>
+
+  <path d="M512 266
+           C503 388 482 479 278 512
+           C482 545 503 636 512 758
+           C521 636 542 545 746 512
+           C542 479 521 388 512 266Z"
+        fill="url(#starOrange)" filter="url(#starGlow)"/>
+
+  <g clip-path="url(#starClip)" pointer-events="none">
+    <rect x="512" y="240" width="260" height="544" fill="#FFEDD5" opacity="0.10"/>
+    <rect x="252" y="512" width="520" height="272" fill="#7C2D12" opacity="0.10"/>
+    <path d="M512 266 V758" stroke="#FFEDD5" stroke-opacity="0.16" stroke-width="1.2"/>
+    <path d="M278 512 H746" stroke="#7C2D12" stroke-opacity="0.16" stroke-width="1.2"/>
+  </g>
+</svg>
