@@ -17,6 +17,10 @@ export function providerLabel(provider: ProviderKind): string {
   return PROVIDER_LABELS[provider];
 }
 
+export function providerGlyph(provider: ProviderKind): string {
+  return providerLabel(provider).slice(0, 1);
+}
+
 export function formatContextWindow(value: string | null | undefined): string | null {
   if (!value) return null;
   const trimmed = value.trim();

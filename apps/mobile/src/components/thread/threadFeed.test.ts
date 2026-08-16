@@ -89,7 +89,7 @@ describe("buildThreadFeed", () => {
         threadId: "th1" as OrchestrationSession["threadId"],
         status: "running",
         providerName: "grok",
-        runtimeMode: "local",
+        runtimeMode: "auto",
         activeTurnId: null,
         lastError: null,
         updatedAt: "2026-08-16T12:01:20.000Z",
@@ -106,12 +106,12 @@ describe("buildThreadFeed", () => {
       "session",
     ]);
     const firstActivity = items.find((item) => item.type === "activity");
-    const lastActivity = [...items].reverse().find((item) => item.type === "activity");
+    const lastActivity = items.toReversed().find((item) => item.type === "activity");
     expect(firstActivity?.type === "activity" && firstActivity.connectBelow).toBe(false);
     expect(lastActivity?.type === "activity" && lastActivity.connectAbove).toBe(false);
-    expect(items.some((item) => item.type === "activity" && item.activity.kind === "turn.tasks.updated")).toBe(
-      false,
-    );
+    expect(
+      items.some((item) => item.type === "activity" && item.activity.kind === "turn.tasks.updated"),
+    ).toBe(false);
   });
 });
 

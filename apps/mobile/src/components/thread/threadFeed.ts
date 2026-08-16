@@ -94,13 +94,16 @@ export function buildThreadFeed(input: {
       progress: input.taskProgress,
     });
   }
-  mixed.sort(compareItems);
-  const withConnectors = mixed.map((item, index) => {
+  const ordered = mixed.toSorted(compareItems);
+  const withConnectors = ordered.map((item, index) => {
     if (item.type !== "activity") return item;
-    const previous = mixed[index - 1];
-    const next = mixed[index + 1];
+    const previous = ordered[index - 1];
+    const next = ordered[index + 1];
     return {
-      ...item,
+      type: "activity" as const,
+      key: item.key,
+      at: item.at,
+      activity: item.activity,
       connectAbove: previous?.type === "activity",
       connectBelow: next?.type === "activity",
     };

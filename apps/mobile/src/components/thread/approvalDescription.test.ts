@@ -1,4 +1,7 @@
-import type { OrchestrationPendingInteraction, OrchestrationThreadActivity } from "@luminor/contracts";
+import type {
+  OrchestrationPendingInteraction,
+  OrchestrationThreadActivity,
+} from "@luminor/contracts";
 import { describe, expect, it } from "vitest";
 
 import { describeApproval, openApprovals } from "./approvalDescription";

@@ -26,7 +26,8 @@ type ParsedTask = {
 const TASK_LINE = /^\s*(?:[-*+]|\d+[.)])\s+\[(x|X| )\]\s+(.*)$/;
 
 export function parseTaskListTasks(payload: unknown): ParsedTask[] | null {
-  const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+  const record =
+    payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
   const rawTasks = record?.tasks;
   if (!Array.isArray(rawTasks)) return null;
   const tasks = rawTasks
@@ -93,7 +94,7 @@ export function deriveTaskProgress(
 ): TaskProgressView | null {
   const taskActivities = activities.filter((activity) => activity.kind === "turn.tasks.updated");
   const fromCurrentTurn = latestTurnId
-    ? [...taskActivities].reverse().find((activity) => activity.turnId === latestTurnId)
+    ? taskActivities.toReversed().find((activity) => activity.turnId === latestTurnId)
     : undefined;
   const latestTaskActivity = fromCurrentTurn ?? taskActivities[taskActivities.length - 1];
   if (latestTaskActivity) {

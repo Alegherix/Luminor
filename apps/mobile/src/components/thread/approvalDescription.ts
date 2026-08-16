@@ -15,13 +15,11 @@ export function describeApproval(
   interaction: OrchestrationPendingInteraction,
   activities: readonly OrchestrationThreadActivity[],
 ): { readonly title: string; readonly body: string | null } {
-  const match = [...activities]
-    .reverse()
-    .find((activity) => {
-      if (activity.kind !== "approval.requested") return false;
-      const payload = asRecord(activity.payload);
-      return payload?.requestId === interaction.requestId;
-    });
+  const match = activities.toReversed().find((activity) => {
+    if (activity.kind !== "approval.requested") return false;
+    const payload = asRecord(activity.payload);
+    return payload?.requestId === interaction.requestId;
+  });
   if (!match) {
     return { title: strings.thread.approvalTitle, body: null };
   }

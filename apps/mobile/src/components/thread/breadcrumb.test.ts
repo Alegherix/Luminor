@@ -6,9 +6,7 @@ import { threadBreadcrumb } from "./breadcrumb";
 describe("threadBreadcrumb", () => {
   it("joins space and project when both exist", () => {
     const spaces = [{ id: "s1", name: "Personal" }] as OrchestrationSpaceShell[];
-    const projects = [
-      { id: "p1", title: "Luminor", spaceId: "s1" },
-    ] as OrchestrationProjectShell[];
+    const projects = [{ id: "p1", title: "Luminor", spaceId: "s1" }] as OrchestrationProjectShell[];
     expect(threadBreadcrumb({ projectId: "p1" as never }, projects, spaces)).toBe(
       "Personal • Luminor",
     );
