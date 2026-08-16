@@ -41,9 +41,14 @@ export interface AndroidEmulatorBackendOptions {
   readonly readFile?: (filePath: string) => Promise<string>;
   readonly now?: () => number;
   readonly recordingDirectory?: string;
+  readonly bootDeadlineMs?: number;
+  readonly bootPollIntervalMs?: number;
 }
 
 export class AndroidEmulatorBackend implements DeviceBackend {
+  private static readonly BOOT_DEADLINE_MS = 180_000;
+  private static readonly BOOT_POLL_INTERVAL_MS = 2_000;
+
   readonly platform = "android-emulator" as const;
 
   private readonly run: typeof runProcess;
@@ -52,6 +57,8 @@ export class AndroidEmulatorBackend implements DeviceBackend {
   private readonly now: () => number;
   private readonly recordingDirectoryOverride: string | undefined;
   private readonly toolchainOverride: AndroidToolchain | undefined;
+  private readonly bootDeadlineMs: number;
+  private readonly bootPollIntervalMs: number;
   private readonly deviceGeometry = new Map<string, DeviceGeometry>();
   private disposed = false;
 
@@ -69,6 +76,9 @@ export class AndroidEmulatorBackend implements DeviceBackend {
     this.readFile = options.readFile ?? ((filePath) => fsReadFile(filePath, "utf-8"));
     this.now = options.now ?? Date.now;
     this.recordingDirectoryOverride = options.recordingDirectory;
+    this.bootDeadlineMs = options.bootDeadlineMs ?? AndroidEmulatorBackend.BOOT_DEADLINE_MS;
+    this.bootPollIntervalMs =
+      options.bootPollIntervalMs ?? AndroidEmulatorBackend.BOOT_POLL_INTERVAL_MS;
   }
 
   private toolchain(): AndroidToolchain {
@@ -210,12 +220,52 @@ export class AndroidEmulatorBackend implements DeviceBackend {
     throw new DeviceBackendError("Not implemented for android-emulator yet");
   }
 
-  boot(_udid: string): Promise<DeviceDescriptor> {
-    return this.notImplemented();
+  async boot(udid: string): Promise<DeviceDescriptor> {
+    const toolchain = this.toolchain();
+    if (toolchain.emulatorPath === null) {
+      throw new DeviceBackendError("The Android emulator is not installed.");
+    }
+    const known = await this.adbClient().listAvdNames();
+    if (!known.includes(udid)) {
+      throw new DeviceBackendError(`No AVD named "${udid}".`);
+    }
+
+    const alreadyRunning = await this.serialFor(udid).catch(() => null);
+    if (alreadyRunning === null) {
+      const child = this.spawnProcess(
+        toolchain.emulatorPath,
+        ["-avd", udid, "-no-window", "-no-boot-anim", "-no-audio", "-gpu", "auto"],
+        { detached: true },
+      );
+      child.unref();
+    }
+
+    const deadline = this.now() + this.bootDeadlineMs;
+    while (this.now() < deadline) {
+      if (this.disposed) throw new DeviceBackendError("Backend disposed during boot.");
+      const serial = await this.serialFor(udid).catch(() => null);
+      if (serial !== null && (await this.adbClient().bootCompleted(serial))) {
+        const devices = await this.listDevices({ includeShutdown: true });
+        const descriptor = devices.find((device) => device.udid === udid);
+        if (descriptor) return { ...descriptor, state: "booted" };
+      }
+      await this.sleep(this.bootPollIntervalMs);
+    }
+    throw new DeviceBackendError(`Emulator "${udid}" did not finish booting within 3 minutes.`, {
+      retryable: true,
+    });
   }
 
-  shutdown(_udid: string): Promise<void> {
-    return this.notImplemented();
+  async shutdown(udid: string): Promise<void> {
+    const serial = await this.serialFor(udid).catch(() => null);
+    if (serial === null) return;
+    await this.adbClient().adb(["-s", serial, "emu", "kill"]);
+    const deadline = this.now() + 15_000;
+    while (this.now() < deadline) {
+      const rows = await this.adbClient().listSerials();
+      if (!rows.some((row) => row.serial === serial)) return;
+      await this.sleep(500);
+    }
   }
 
   install(_udid: string, _appPath: string): Promise<DeviceInstallAppResult> {
@@ -279,5 +329,9 @@ export class AndroidEmulatorBackend implements DeviceBackend {
 
   detachStream(_udid: string): Promise<void> {
     return this.notImplemented();
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

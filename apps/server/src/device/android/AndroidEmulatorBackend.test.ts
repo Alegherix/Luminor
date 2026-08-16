@@ -95,3 +95,49 @@ describe("AndroidEmulatorBackend.listDevices", () => {
     expect(bootedOnly.map((device) => device.udid)).toEqual(["Pixel_8_API_35"]);
   });
 });
+
+describe("AndroidEmulatorBackend.boot", () => {
+  it("spawns a headless emulator and resolves when boot completes", async () => {
+    const spawned: Array<{ command: string; args: readonly string[] }> = [];
+    let pollCount = 0;
+    const backend = new AndroidEmulatorBackend({
+      toolchain: FULL_TOOLCHAIN,
+      bootPollIntervalMs: 0,
+      spawnProcess: (command, args) => {
+        spawned.push({ command, args });
+        return { unref: () => {}, on: () => {}, kill: () => true } as never;
+      },
+      run: async (command, args) => {
+        const key = [command, ...args].join(" ");
+        if (key === "/sdk/emulator/emulator -list-avds") return ok("Pixel_8_API_35\n");
+        if (key === "/sdk/platform-tools/adb devices") {
+          pollCount += 1;
+          return ok(
+            pollCount < 2
+              ? "List of devices attached\n"
+              : "List of devices attached\nemulator-5554\tdevice\n",
+          );
+        }
+        if (key === "/sdk/platform-tools/adb -s emulator-5554 emu avd name")
+          return ok("Pixel_8_API_35\nOK\n");
+        if (key === "/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed")
+          return ok("1\n");
+        throw new Error(`unexpected: ${key}`);
+      },
+      readFile: async () => "hw.lcd.width=1080\nhw.lcd.height=2340\nhw.lcd.density=440\n",
+    });
+
+    const descriptor = await backend.boot("Pixel_8_API_35");
+    expect(descriptor.state).toBe("booted");
+    expect(spawned[0]?.command).toBe("/sdk/emulator/emulator");
+    expect(spawned[0]?.args).toEqual([
+      "-avd",
+      "Pixel_8_API_35",
+      "-no-window",
+      "-no-boot-anim",
+      "-no-audio",
+      "-gpu",
+      "auto",
+    ]);
+  });
+});
