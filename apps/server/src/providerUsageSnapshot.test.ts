@@ -12,6 +12,18 @@ import { readCodexSessionSummary } from "./providerUsageSnapshot";
 
 const tempDirs: string[] = [];
 
+function readCallLength(call: ReadonlyArray<unknown>): number {
+  const first = call[0];
+  if (first && typeof first === "object" && "length" in first) {
+    const optionsLength = (first as { length?: unknown }).length;
+    if (typeof optionsLength === "number") {
+      return optionsLength;
+    }
+  }
+  const positionalLength = call[2];
+  return typeof positionalLength === "number" ? positionalLength : 0;
+}
+
 function tokenCountLine(timestamp: string, totalTokens: number, note?: string): string {
   return JSON.stringify({
     timestamp,
@@ -62,7 +74,7 @@ describe("readCodexSessionSummary", () => {
       limits: [{ window: "5h", usedPercent: 25, windowDurationMins: 300 }],
     });
     expect(readFile).not.toHaveBeenCalled();
-    expect(read.mock.calls.every((call) => (call[2] ?? 0) <= 64 * 1024)).toBe(true);
+    expect(read.mock.calls.every((call) => readCallLength(call) <= 64 * 1024)).toBe(true);
   });
 
   it("parses a CRLF token record split across read chunks", async () => {
