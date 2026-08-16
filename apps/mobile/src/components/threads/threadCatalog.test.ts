@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { CatalogLabels, CatalogThread } from "./threadCatalog";
 import {
   buildThreadGroups,
+  catalogViewState,
   countThreadFilters,
   formatRelativeTime,
   searchCatalogThreads,
@@ -33,6 +34,16 @@ function thread(overrides: Partial<CatalogThread> & Pick<CatalogThread, "id">): 
   };
 }
 
+describe("catalogViewState", () => {
+  it("maps connection and hydration into screen states", () => {
+    expect(catalogViewState("incompatible", false)).toBe("incompatible");
+    expect(catalogViewState("connecting", false)).toBe("loading");
+    expect(catalogViewState("closed", true)).toBe("disconnected");
+    expect(catalogViewState("open", false)).toBe("loading");
+    expect(catalogViewState("open", true)).toBe("ready");
+  });
+});
+
 describe("visibleCatalogThreads", () => {
   const threads = [
     thread({ id: "idle", status: "idle" }),
@@ -40,7 +51,12 @@ describe("visibleCatalogThreads", () => {
     thread({ id: "running", status: "running" }),
     thread({ id: "attention", status: "needs-attention", isPinned: true }),
     thread({ id: "pinned-idle", status: "idle", isPinned: true }),
-    thread({ id: "archived", status: "active", isPinned: true, archivedAt: "2026-08-15T00:00:00.000Z" }),
+    thread({
+      id: "archived",
+      status: "active",
+      isPinned: true,
+      archivedAt: "2026-08-15T00:00:00.000Z",
+    }),
   ];
 
   it("hides archived threads from every filter", () => {

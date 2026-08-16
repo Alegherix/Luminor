@@ -8,8 +8,8 @@ export type CatalogThread = {
   readonly title: string;
   readonly status: ThreadStatusKind;
   readonly unread: boolean;
-  readonly isPinned?: boolean;
-  readonly archivedAt?: string | null;
+  readonly isPinned?: boolean | undefined;
+  readonly archivedAt?: string | null | undefined;
   readonly updatedAt: string;
   readonly createdAt: string;
   readonly latestTurn: {
@@ -21,7 +21,7 @@ export type CatalogThread = {
 export type CatalogProject = {
   readonly id: string;
   readonly title: string;
-  readonly spaceId?: string | null;
+  readonly spaceId?: string | null | undefined;
 };
 
 export type CatalogSpace = {
@@ -57,6 +57,21 @@ export type ThreadFilterCounts = {
   readonly active: number;
   readonly pinned: number;
 };
+
+export type ConnectionViewStatus = "connecting" | "open" | "closed" | "incompatible";
+
+export type CatalogViewState = "disconnected" | "incompatible" | "loading" | "ready";
+
+export function catalogViewState(
+  status: ConnectionViewStatus,
+  hydrated: boolean,
+): CatalogViewState {
+  if (status === "incompatible") return "incompatible";
+  if (status === "connecting") return "loading";
+  if (status !== "open") return "disconnected";
+  if (!hydrated) return "loading";
+  return "ready";
+}
 
 const UNFILED_KEY = "__unfiled";
 
