@@ -25,6 +25,20 @@ function isRunningThread(thread: SpaceJustFinishedThread): boolean {
   return isThreadActivelyWorking(thread) || thread.session?.status === "connecting";
 }
 
+function isPeekEligibleProject(
+  project: SpaceJustFinishedProject,
+  activeSpaceId: SpaceId | null,
+): boolean {
+  if (project.kind === "chat") return true;
+  if (project.kind !== "project") return false;
+  return (project.spaceId ?? null) === activeSpaceId;
+}
+
+function resolvePeekProjectLabel(project: SpaceJustFinishedProject): string {
+  if (project.kind === "chat") return "Chat";
+  return resolveThreadProjectLabel(project);
+}
+
 export function collectSpaceJustFinishedItems(input: {
   threads: ReadonlyArray<SpaceJustFinishedThread>;
   projects: ReadonlyArray<SpaceJustFinishedProject>;
@@ -34,7 +48,7 @@ export function collectSpaceJustFinishedItems(input: {
 }): SpaceJustFinishedItem[] {
   const projectById = new Map(
     input.projects
-      .filter((project) => (project.spaceId ?? null) === input.activeSpaceId)
+      .filter((project) => isPeekEligibleProject(project, input.activeSpaceId))
       .map((project) => [project.id, project] as const),
   );
   const limit = input.limit ?? SPACE_JUST_FINISHED_LIMIT;
@@ -57,7 +71,7 @@ export function collectSpaceJustFinishedItems(input: {
       threadId: thread.id,
       title: thread.title,
       projectId: thread.projectId,
-      projectName: resolveThreadProjectLabel(project),
+      projectName: resolvePeekProjectLabel(project),
       spaceId: project.spaceId ?? null,
       completedAt,
       provider: thread.session?.provider ?? thread.modelSelection.provider,

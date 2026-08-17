@@ -10,6 +10,8 @@ const KOGNIC = SpaceId.makeUnsafe("space-kognic");
 const COMPUTER = SpaceId.makeUnsafe("space-computer");
 const LUMINOR_PROJECT = ProjectId.makeUnsafe("project-luminor");
 const COMPUTER_PROJECT = ProjectId.makeUnsafe("project-computer");
+const CHAT_PROJECT = ProjectId.makeUnsafe("project-home-chat");
+const STUDIO_PROJECT = ProjectId.makeUnsafe("project-studio");
 
 function makeSession(status: ThreadSession["status"]): ThreadSession {
   return {
@@ -262,5 +264,54 @@ describe("collectSpaceJustFinishedItems", () => {
     expect(items).toHaveLength(8);
     expect(items[0]?.threadId).toEqual(ThreadId.makeUnsafe("done-9"));
     expect(items[7]?.threadId).toEqual(ThreadId.makeUnsafe("done-2"));
+  });
+
+  it("includes home chat completions next to the current space, labeled Chat", () => {
+    const items = collectSpaceJustFinishedItems({
+      threads: [
+        makeThread({
+          id: "space-done",
+          title: "Space thread",
+        }),
+        makeThread({
+          id: "chat-done",
+          title: "Wave XLR mic after reboot",
+          projectId: CHAT_PROJECT,
+        }),
+        makeThread({
+          id: "studio-done",
+          title: "Studio note",
+          projectId: STUDIO_PROJECT,
+        }),
+      ],
+      projects: [
+        ...projects,
+        makeProject({
+          id: CHAT_PROJECT,
+          kind: "chat",
+          name: "Home",
+          folderName: "Home",
+          spaceId: null,
+        }),
+        makeProject({
+          id: STUDIO_PROJECT,
+          kind: "studio",
+          name: "Studio",
+          folderName: "Studio",
+          spaceId: null,
+        }),
+      ],
+      activeSpaceId: KOGNIC,
+      activeThreadId: null,
+    });
+
+    expect(items.map((item) => item.threadId)).toEqual([
+      ThreadId.makeUnsafe("space-done"),
+      ThreadId.makeUnsafe("chat-done"),
+    ]);
+    expect(items[1]).toMatchObject({
+      title: "Wave XLR mic after reboot",
+      projectName: "Chat",
+    });
   });
 });

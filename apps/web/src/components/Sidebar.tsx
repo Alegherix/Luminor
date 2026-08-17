@@ -4406,11 +4406,17 @@ export default function Sidebar() {
     () =>
       collectSpaceJustFinishedItems({
         threads: sidebarTreeThreads,
-        projects: allStandardProjectsBase,
+        projects: [...allStandardProjectsBase, ...chatProjects],
         activeSpaceId,
         activeThreadId: visualActiveSidebarThreadId ?? null,
       }),
-    [activeSpaceId, allStandardProjectsBase, sidebarTreeThreads, visualActiveSidebarThreadId],
+    [
+      activeSpaceId,
+      allStandardProjectsBase,
+      chatProjects,
+      sidebarTreeThreads,
+      visualActiveSidebarThreadId,
+    ],
   );
   const pinnedProjectIds = useMemo(
     () =>
