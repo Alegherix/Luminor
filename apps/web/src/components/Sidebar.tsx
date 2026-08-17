@@ -469,6 +469,8 @@ import { SpaceEmptyState } from "./SpaceEmptyState";
 import { SpaceIcon } from "./SpaceIcon";
 import { SpaceProjectPickerDialog } from "./SpaceProjectPickerDialog";
 import { PROJECT_SPACE_DRAG_MIME, SpaceSwitcher, type SpaceActivityTone } from "./SpaceSwitcher";
+import { collectSpaceJustFinishedItems } from "./spaceJustFinished/SpaceJustFinishedPeek.logic";
+import { SpaceJustFinishedPeek } from "./spaceJustFinished/SpaceJustFinishedPeek";
 import {
   SIDEBAR_CONTEXT_MENU_ICON_CLASS_NAME,
   SIDEBAR_CONTEXT_MENU_ITEM_CLASS_NAME,
@@ -4400,6 +4402,16 @@ export default function Sidebar() {
     () => allStandardProjectsBase.filter((project) => (project.spaceId ?? null) === activeSpaceId),
     [activeSpaceId, allStandardProjectsBase],
   );
+  const spaceJustFinishedItems = useMemo(
+    () =>
+      collectSpaceJustFinishedItems({
+        threads: sidebarTreeThreads,
+        projects: allStandardProjectsBase,
+        activeSpaceId,
+        activeThreadId: visualActiveSidebarThreadId ?? null,
+      }),
+    [activeSpaceId, allStandardProjectsBase, sidebarTreeThreads, visualActiveSidebarThreadId],
+  );
   const pinnedProjectIds = useMemo(
     () =>
       derivePinnedProjectIdsForSidebar({
@@ -6840,6 +6852,13 @@ export default function Sidebar() {
                           void handleMoveProjectToSpace(projectId, spaceId)
                         }
                         jumpShortcutLabelForTab={jumpShortcutLabelForSpaceTab}
+                      />
+                      <SpaceJustFinishedPeek
+                        key={activeSpaceId ?? "void-space"}
+                        spaceName={spaceDisplayName(activeSpaceId, spaces, voidSpace)}
+                        items={spaceJustFinishedItems}
+                        onOpenThread={activateThreadFromSidebarIntent}
+                        onMarkVisited={markThreadVisited}
                       />
                       {activeSpaceFolderGroups.length > 0 ? (
                         <div className="mb-3">
