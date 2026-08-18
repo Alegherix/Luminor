@@ -18,6 +18,7 @@ export const DESKTOP_IPC_CHANNELS = {
   windowGetState: "desktop:window-get-state",
   windowState: "desktop:window-state",
   menuAction: "desktop:menu-action",
+  inboundOpenThread: "desktop:inbound-open-thread",
   updateState: "desktop:update-state",
   updateGetState: "desktop:update-get-state",
   updateCheck: "desktop:update-check",

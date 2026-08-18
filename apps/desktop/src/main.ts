@@ -61,6 +61,8 @@ import { applyShellEnvironmentHydrationMarker } from "@luminor/shared/shell";
 import { RotatingFileSink } from "@luminor/shared/logging";
 import { ensureStaticSnapshot, findAsarArchivePath } from "@luminor/shared/staticSnapshot";
 import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness";
+import { createInboundNewChatRuntime } from "./inbound/inboundNewChat";
+import { parseInboundArgv } from "./inbound/parseInboundArgv";
 import { resolveBackendNodeArgs } from "./backendNodeOptions";
 import { withDesktopRemoteAccessEnv } from "./backendRemoteAccess";
 import { applyLinuxElectronDisplayEnvironment } from "./linuxDisplayEnv";
@@ -1409,6 +1411,98 @@ function dispatchMenuAction(action: string): void {
   }
 
   send();
+}
+
+const pendingInboundThreadIds: string[] = [];
+
+function sendInboundOpenThread(window: BrowserWindow, threadId: string): void {
+  if (window.isDestroyed()) {
+    pendingInboundThreadIds.push(threadId);
+    return;
+  }
+  window.webContents.send(IPC.inboundOpenThread, { threadId });
+}
+
+function navigateRendererToInboundThread(threadId: string): void {
+  const targetWindow = resolveMenuTargetWindow();
+  if (!targetWindow || targetWindow.isDestroyed()) {
+    pendingInboundThreadIds.push(threadId);
+    return;
+  }
+
+  const send = () => {
+    sendInboundOpenThread(targetWindow, threadId);
+  };
+
+  if (targetWindow.webContents.isLoadingMainFrame()) {
+    targetWindow.webContents.once("did-finish-load", send);
+    return;
+  }
+
+  send();
+}
+
+function flushPendingInboundNavigation(window: BrowserWindow): void {
+  if (pendingInboundThreadIds.length === 0 || window.isDestroyed()) {
+    return;
+  }
+  const threadIds = pendingInboundThreadIds.splice(0);
+  for (const threadId of threadIds) {
+    sendInboundOpenThread(window, threadId);
+  }
+}
+
+function logInbound(message: string, error?: unknown): void {
+  if (error === undefined) {
+    console.error(message);
+  } else {
+    console.error(message, error);
+  }
+  writeDesktopLogHeader(message);
+}
+
+const inboundNewChatRuntime = createInboundNewChatRuntime({
+  readFile: (path) => FS.promises.readFile(path, "utf8"),
+  unlink: (path) => FS.promises.unlink(path),
+  fetchImpl: fetch,
+  waitUntilReady: async () => {
+    while (backendHttpUrl.length === 0 || backendAuthToken.length === 0) {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 50);
+      });
+    }
+    await waitForHttpReady(backendHttpUrl, {
+      path: "/health",
+      timeoutMs: null,
+      isReady: async (response) => {
+        if (!response.ok) {
+          return false;
+        }
+        try {
+          const payload = (await response.json()) as { startupReady?: unknown };
+          return payload.startupReady === true;
+        } catch {
+          return false;
+        }
+      },
+    });
+  },
+  getBackendHttpUrl: () => backendHttpUrl,
+  getBackendAuthToken: () => backendAuthToken,
+  navigateToThread: navigateRendererToInboundThread,
+  log: logInbound,
+});
+
+function handleInboundArgv(argv: readonly string[]): void {
+  const parsed = parseInboundArgv(argv);
+  if (parsed.kind === "none") {
+    return;
+  }
+  if (parsed.kind === "error") {
+    logInbound(`[inbound] ${parsed.message}`);
+    return;
+  }
+  void inboundNewChatRuntime.enqueue(parsed.command);
 }
 
 function resolveMenuTargetWindow(): BrowserWindow | null {
@@ -4041,6 +4135,7 @@ function createWindow(): BrowserWindow {
   window.webContents.on("did-finish-load", () => {
     window.setTitle(APP_DISPLAY_NAME);
     emitUpdateState();
+    flushPendingInboundNavigation(window);
   });
   window.once("ready-to-show", () => {
     // Preserve the original first-launch behavior, then respect the state saved
@@ -4293,9 +4388,11 @@ configureAppIdentity();
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  app.on("second-instance", (_event, commandLine) => {
     focusMainWindow();
+    handleInboundArgv(commandLine);
   });
+  handleInboundArgv(process.argv);
 }
 
 async function bootstrap(): Promise<void> {

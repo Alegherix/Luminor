@@ -112,6 +112,19 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.removeListener(IPC.menuAction, wrappedListener);
     };
   },
+  onInboundOpenThread: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const threadId = (payload as { readonly threadId?: unknown }).threadId;
+      if (typeof threadId !== "string" || threadId.trim().length === 0) return;
+      listener({ threadId });
+    };
+
+    ipcRenderer.on(IPC.inboundOpenThread, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IPC.inboundOpenThread, wrappedListener);
+    };
+  },
   getZoomFactor: () => {
     const factor = ipcRenderer.sendSync(IPC.zoomFactor);
     return typeof factor === "number" && Number.isFinite(factor) && factor > 0 ? factor : 1;

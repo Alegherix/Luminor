@@ -1,4 +1,4 @@
-import type { ResolvedKeybindingsConfig } from "@luminor/contracts";
+import type { ResolvedKeybindingsConfig, ThreadId } from "@luminor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, createFileRoute, useLocation, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -539,6 +539,29 @@ function ChatRouteGlobalShortcuts() {
       unsubscribe?.();
     };
   }, [navigate, toggleSidebar]);
+
+  useEffect(() => {
+    const onInboundOpenThread = window.desktopBridge?.onInboundOpenThread;
+    if (typeof onInboundOpenThread !== "function") {
+      return;
+    }
+
+    const unsubscribe = onInboundOpenThread(({ threadId }) => {
+      const nextThreadId = threadId.trim();
+      if (nextThreadId.length === 0) {
+        return;
+      }
+      void navigate({
+        to: "/$threadId",
+        params: { threadId: nextThreadId as ThreadId },
+        search: (previous) => ({ ...previous, splitViewId: undefined }),
+      });
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [navigate]);
 
   return (
     <>
