@@ -60,11 +60,13 @@ export function ComposerHandoffPicker(props: ComposerHandoffPickerProps) {
           {props.actionLabel}
         </TooltipPopup>
       </Tooltip>
-      <ComposerPickerMenuPopup align="end" side="top" className="w-48 min-w-48">
+      <ComposerPickerMenuPopup align="end" side="top" sideOffset={6} className="min-w-56 w-max max-w-[min(18rem,92vw)]">
         {props.targetProviders.map((provider) => (
           <MenuItem key={provider} onClick={() => props.onCreateHandoff(provider)}>
-            <ProviderIcon provider={provider} className="size-3.5 shrink-0 opacity-100" />
-            <span>Handoff to {PROVIDER_DISPLAY_NAMES[provider]}</span>
+            <ProviderIcon provider={provider} className="shrink-0 opacity-100" />
+            <span className="min-w-0 truncate leading-none">
+              Handoff to {PROVIDER_DISPLAY_NAMES[provider]}
+            </span>
           </MenuItem>
         ))}
       </ComposerPickerMenuPopup>
