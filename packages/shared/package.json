@@ -136,6 +136,10 @@
       "types": "./src/threadSummary.ts",
       "import": "./src/threadSummary.ts"
     },
+    "./orphanedUserInputContinuation": {
+      "types": "./src/orphanedUserInputContinuation.ts",
+      "import": "./src/orphanedUserInputContinuation.ts"
+    },
     "./pendingInteractions": {
       "types": "./src/pendingInteractions.ts",
       "import": "./src/pendingInteractions.ts"
