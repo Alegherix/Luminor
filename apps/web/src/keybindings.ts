@@ -172,7 +172,7 @@ export const DEFAULT_SHORTCUT_FALLBACKS: ResolvedKeybindingsConfig = [
   },
   {
     command: "traitsPicker.toggle",
-    shortcut: commandShortcut("e", { shiftKey: true }),
+    shortcut: commandShortcut("e", { altKey: true }),
     whenAst: whenNotTerminalFocus,
   },
   // Cmd-only instead of mod so Ctrl+L remains available to shells on non-macOS.
@@ -493,6 +493,35 @@ export function resolveKeybindingForCommand(
   return (
     findEffectiveKeybindingForCommand(keybindings, command, options) ??
     findEffectiveKeybindingForCommand(getFallbackBindings(keybindings), command, options)
+  );
+}
+
+function findConfiguredKeybindingForCommand(
+  keybindings: ResolvedKeybindingsConfig,
+  command: KeybindingCommand,
+  options?: ShortcutMatchOptions,
+): ResolvedKeybindingRule | null {
+  const context = resolveContext(options);
+
+  for (let index = keybindings.length - 1; index >= 0; index -= 1) {
+    const binding = keybindings[index];
+    if (!binding) continue;
+    if (binding.command !== command) continue;
+    if (!matchesWhenClause(binding.whenAst, context)) continue;
+    return binding;
+  }
+
+  return null;
+}
+
+export function resolveConfiguredKeybindingForCommand(
+  keybindings: ResolvedKeybindingsConfig,
+  command: KeybindingCommand,
+  options?: ShortcutMatchOptions,
+): ResolvedKeybindingRule | null {
+  return (
+    findConfiguredKeybindingForCommand(keybindings, command, options) ??
+    findConfiguredKeybindingForCommand(getFallbackBindings(keybindings), command, options)
   );
 }
 

@@ -119,6 +119,106 @@ describe("buildShortcutSheetSections", () => {
     ).toBe(true);
   });
 
+  it("keeps left and right sidebar toggles adjacent", () => {
+    const notTerminalFocus = {
+      type: "not" as const,
+      node: { type: "identifier" as const, name: "terminalFocus" },
+    };
+    const sections = buildShortcutSheetSections({
+      keybindings: [
+        {
+          command: "sidebar.toggle",
+          shortcut: {
+            key: "e",
+            modKey: true,
+            metaKey: false,
+            ctrlKey: false,
+            shiftKey: false,
+            altKey: false,
+          },
+          whenAst: notTerminalFocus,
+        },
+        {
+          command: "rightDock.toggle",
+          shortcut: {
+            key: "e",
+            modKey: true,
+            metaKey: false,
+            ctrlKey: false,
+            shiftKey: false,
+            altKey: true,
+          },
+          whenAst: notTerminalFocus,
+        },
+      ],
+      projectScripts: [],
+      platform: "Linux",
+      context: {
+        terminalFocus: false,
+        terminalOpen: false,
+        terminalWorkspaceOpen: false,
+      },
+    });
+
+    const ids = sections[0]?.entries.map((entry) => entry.id) ?? [];
+    const leftIndex = ids.indexOf("sidebar.toggle");
+    const rightIndex = ids.indexOf("rightDock.toggle");
+    expect(leftIndex).toBeGreaterThanOrEqual(0);
+    expect(rightIndex).toBe(leftIndex + 1);
+  });
+
+  it("still lists toggle right sidebar when another command claims the same chord", () => {
+    const notTerminalFocus = {
+      type: "not" as const,
+      node: { type: "identifier" as const, name: "terminalFocus" },
+    };
+    const altE = {
+      key: "e",
+      modKey: true,
+      metaKey: false,
+      ctrlKey: false,
+      shiftKey: false,
+      altKey: true,
+    };
+    const sections = buildShortcutSheetSections({
+      keybindings: [
+        {
+          command: "sidebar.toggle",
+          shortcut: {
+            key: "e",
+            modKey: true,
+            metaKey: false,
+            ctrlKey: false,
+            shiftKey: false,
+            altKey: false,
+          },
+          whenAst: notTerminalFocus,
+        },
+        {
+          command: "rightDock.toggle",
+          shortcut: altE,
+          whenAst: notTerminalFocus,
+        },
+        {
+          command: "traitsPicker.toggle",
+          shortcut: altE,
+          whenAst: notTerminalFocus,
+        },
+      ],
+      projectScripts: [],
+      platform: "Linux",
+      context: {
+        terminalFocus: false,
+        terminalOpen: false,
+        terminalWorkspaceOpen: false,
+      },
+    });
+
+    const rightSidebar = sections[0]?.entries.find((entry) => entry.id === "rightDock.toggle");
+    expect(rightSidebar?.label).toBe("Toggle right sidebar");
+    expect(rightSidebar?.shortcutLabel).toBe("Ctrl+Alt+E");
+  });
+
   it("lists the sidebar toggle regardless of platform", () => {
     const sections = buildShortcutSheetSections({
       keybindings: [

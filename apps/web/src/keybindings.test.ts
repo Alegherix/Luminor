@@ -24,6 +24,7 @@ import {
   isTerminalToggleShortcut,
   resolveShortcutCommand,
   resolveKeybindingForCommand,
+  resolveConfiguredKeybindingForCommand,
   shouldShowThreadJumpHints,
   shortcutLabelForCommand,
   spaceJumpIndexFromCommand,
@@ -45,6 +46,32 @@ function event(overrides: Partial<ShortcutEventLike> = {}): ShortcutEventLike {
 }
 
 describe("editable keybinding resolution", () => {
+  it("still resolves a configured command when a later rule claims the same chord", () => {
+    const whenAst = whenNot(whenIdentifier("terminalFocus"));
+    const altE = modShortcut("e", { altKey: true });
+    const bindings = compile([
+      { shortcut: altE, command: "rightDock.toggle", whenAst },
+      { shortcut: altE, command: "traitsPicker.toggle", whenAst },
+    ]);
+    const options = {
+      platform: "Linux",
+      context: { terminalFocus: false, terminalOpen: false, terminalWorkspaceOpen: false },
+    };
+
+    assert.isNull(resolveKeybindingForCommand(bindings, "rightDock.toggle", options));
+    const configured = resolveConfiguredKeybindingForCommand(
+      bindings,
+      "rightDock.toggle",
+      options,
+    );
+    assert.isNotNull(configured);
+    assert.strictEqual(configured?.command, "rightDock.toggle");
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "e", ctrlKey: true, altKey: true }), bindings, options),
+      "traitsPicker.toggle",
+    );
+  });
+
   it("preserves the effective platform condition as editable text", () => {
     const binding = resolveKeybindingForCommand([], "chat.new", {
       platform: "MacIntel",
@@ -236,6 +263,11 @@ const DEFAULT_BINDINGS = compile([
     command: "sidebar.toggle",
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
+  {
+    shortcut: modShortcut("e"),
+    command: "sidebar.toggle",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
   // Mirror server defaults: Cmd+K everywhere; Ctrl+K only off macOS.
   { shortcut: modShortcut("k", { metaKey: true, modKey: false }), command: "sidebar.search" },
   {
@@ -289,7 +321,7 @@ const DEFAULT_BINDINGS = compile([
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
   {
-    shortcut: modShortcut("e"),
+    shortcut: modShortcut("e", { shiftKey: true }),
     command: "rightDock.toggle",
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
@@ -314,7 +346,7 @@ const DEFAULT_BINDINGS = compile([
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
   {
-    shortcut: modShortcut("e", { shiftKey: true }),
+    shortcut: modShortcut("e", { altKey: true }),
     command: "traitsPicker.toggle",
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
@@ -1098,11 +1130,11 @@ describe("shortcutLabelForCommand", () => {
     assert.strictEqual(shortcutLabelForCommand(DEFAULT_BINDINGS, "diff.toggle", "Linux"), "Ctrl+D");
     assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "rightDock.toggle", "Linux"),
-      "Ctrl+E",
+      "Ctrl+Shift+E",
     );
     assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "sidebar.toggle", "MacIntel"),
-      "⌘B",
+      "⌘E",
     );
     assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "sidebar.search", "MacIntel"),
@@ -1123,7 +1155,7 @@ describe("shortcutLabelForCommand", () => {
     );
     assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "traitsPicker.toggle", "MacIntel"),
-      "⇧⌘E",
+      "⌥⌘E",
     );
     assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "composer.focus.toggle", "MacIntel"),
@@ -1433,6 +1465,18 @@ describe("chat/editor shortcuts", () => {
         context: { terminalFocus: false },
       }),
     );
+    assert.isTrue(
+      isSidebarToggleShortcut(event({ key: "e", metaKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: false },
+      }),
+    );
+    assert.isTrue(
+      isSidebarToggleShortcut(event({ key: "e", ctrlKey: true }), DEFAULT_BINDINGS, {
+        platform: "Linux",
+        context: { terminalFocus: false },
+      }),
+    );
     assert.isFalse(
       isSidebarToggleShortcut(event({ key: "b", metaKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
@@ -1498,21 +1542,39 @@ describe("chat/editor shortcuts", () => {
 
   it("matches rightDock.toggle shortcut outside terminal focus", () => {
     assert.isTrue(
-      isRightDockToggleShortcut(event({ key: "e", metaKey: true }), DEFAULT_BINDINGS, {
-        platform: "MacIntel",
-        context: { terminalFocus: false },
-      }),
+      isRightDockToggleShortcut(
+        event({ key: "e", metaKey: true, shiftKey: true }),
+        DEFAULT_BINDINGS,
+        {
+          platform: "MacIntel",
+          context: { terminalFocus: false },
+        },
+      ),
     );
     assert.isTrue(
-      isRightDockToggleShortcut(event({ key: "e", ctrlKey: true }), DEFAULT_BINDINGS, {
-        platform: "Linux",
-        context: { terminalFocus: false },
-      }),
+      isRightDockToggleShortcut(
+        event({ key: "e", ctrlKey: true, shiftKey: true }),
+        DEFAULT_BINDINGS,
+        {
+          platform: "Linux",
+          context: { terminalFocus: false },
+        },
+      ),
+    );
+    assert.isFalse(
+      isRightDockToggleShortcut(
+        event({ key: "e", metaKey: true, shiftKey: true }),
+        DEFAULT_BINDINGS,
+        {
+          platform: "MacIntel",
+          context: { terminalFocus: true },
+        },
+      ),
     );
     assert.isFalse(
       isRightDockToggleShortcut(event({ key: "e", metaKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
-        context: { terminalFocus: true },
+        context: { terminalFocus: false },
       }),
     );
   });
@@ -1704,7 +1766,7 @@ describe("resolveShortcutCommand", () => {
       "modelPicker.toggle",
     );
     assert.strictEqual(
-      resolveShortcutCommand(event({ key: "e", metaKey: true, shiftKey: true }), legacyBindings, {
+      resolveShortcutCommand(event({ key: "e", metaKey: true, altKey: true }), legacyBindings, {
         platform: "MacIntel",
         context: { terminalFocus: false },
       }),

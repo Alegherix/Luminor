@@ -72,8 +72,39 @@ const SIDEBAR_SEARCH_DEFAULT_KEYBINDINGS = [
   { key: "ctrl+k", command: "sidebar.search", when: "!isMac" },
 ] as const satisfies ReadonlyArray<KeybindingRule>;
 
-export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
+const SIDEBAR_TOGGLE_DEFAULT_KEYBINDINGS = [
+  // Keep Ctrl/Cmd+B for VS Code muscle memory and the desktop View menu.
   { key: "mod+b", command: "sidebar.toggle", when: "!terminalFocus" },
+  // Ctrl/Cmd+E is the primary left-sidebar toggle; right dock uses Shift+E.
+  { key: "mod+e", command: "sidebar.toggle", when: "!terminalFocus" },
+] as const satisfies ReadonlyArray<KeybindingRule>;
+
+const RIGHT_DOCK_TOGGLE_DEFAULT_KEYBINDING = {
+  key: "mod+shift+e",
+  command: "rightDock.toggle",
+  when: "!terminalFocus",
+} as const satisfies KeybindingRule;
+
+const TRAITS_PICKER_TOGGLE_DEFAULT_KEYBINDING = {
+  key: "mod+alt+e",
+  command: "traitsPicker.toggle",
+  when: "!terminalFocus",
+} as const satisfies KeybindingRule;
+
+// Older defaults that shipped before the left/right sidebar E-chord split.
+const OUTDATED_RIGHT_DOCK_TOGGLE_KEYBINDING = {
+  key: "mod+e",
+  command: "rightDock.toggle",
+  when: "!terminalFocus",
+} as const satisfies KeybindingRule;
+const OUTDATED_TRAITS_PICKER_TOGGLE_KEYBINDING = {
+  key: "mod+shift+e",
+  command: "traitsPicker.toggle",
+  when: "!terminalFocus",
+} as const satisfies KeybindingRule;
+
+export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
+  ...SIDEBAR_TOGGLE_DEFAULT_KEYBINDINGS,
   ...SIDEBAR_SEARCH_DEFAULT_KEYBINDINGS,
   { key: "mod+alt+u", command: "sidebar.activity", when: "!terminalFocus || isMac" },
   { key: "mod+shift+o", command: "sidebar.addProject", when: "!terminalFocus" },
@@ -108,14 +139,14 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+2", command: "terminal.workspace.chat", when: "terminalWorkspaceOpen" },
   { key: "mod+shift+b", command: "browser.toggle", when: "!terminalFocus" },
   { key: "mod+d", command: "diff.toggle", when: "!terminalFocus" },
-  { key: "mod+e", command: "rightDock.toggle", when: "!terminalFocus" },
+  RIGHT_DOCK_TOGGLE_DEFAULT_KEYBINDING,
   // Cmd-only instead of mod so Ctrl+L remains available to shells on non-macOS.
   { key: "cmd+l", command: "composer.focus.toggle", when: "!terminalFocus" },
   { key: "mod+shift+m", command: "modelPicker.toggle", when: "!terminalFocus" },
   // Cycle models within the active provider (favorites first, then remaining list).
   { key: "alt+]", command: "model.next", when: "!terminalFocus" },
   { key: "alt+[", command: "model.previous", when: "!terminalFocus" },
-  { key: "mod+shift+e", command: "traitsPicker.toggle", when: "!terminalFocus" },
+  TRAITS_PICKER_TOGGLE_DEFAULT_KEYBINDING,
   { key: "mod+s", command: "settings.open", when: "!terminalFocus" },
   { key: "mod+shift+u", command: "settings.usage", when: "!terminalFocus" },
   { key: "mod+/", command: "shortcuts.show" },
@@ -467,7 +498,14 @@ function keybindingShortcutContext(rule: KeybindingRule): string | null {
   if (!parsed) return null;
   const encoded = encodeShortcut(parsed);
   if (!encoded) return null;
-  return `${encoded}\u0000${rule.when ?? ""}`;
+  // Normalize `when` through the AST so `!terminalFocus` and `!(terminalFocus)`
+  // (and other equivalent spellings) collide as the same shortcut context.
+  if (rule.when === undefined) {
+    return `${encoded}\u0000`;
+  }
+  const whenAst = parseKeybindingWhenExpression(rule.when);
+  if (!whenAst) return null;
+  return `${encoded}\u0000${encodeWhenAst(whenAst)}`;
 }
 
 function hasSameShortcutContext(left: KeybindingRule, right: KeybindingRule): boolean {
@@ -731,6 +769,122 @@ function migrateOutdatedSidebarSearchDefault(rules: readonly KeybindingRule[]): 
     return SIDEBAR_SEARCH_DEFAULT_KEYBINDINGS.map((binding) => ({ ...binding }));
   });
   return { rules: next, migratedCount };
+}
+
+function matchesOutdatedDefaultChord(
+  rule: KeybindingRule,
+  outdated: KeybindingRule,
+): boolean {
+  // Match on command + key only so synced/minimal configs without an explicit
+  // `when` still pick up the chord move; the replacement writes the current default.
+  return rule.command === outdated.command && rule.key === outdated.key;
+}
+
+function shortcutContextIsClaimed(
+  rules: readonly KeybindingRule[],
+  candidate: KeybindingRule,
+  exceptIndex?: number,
+): boolean {
+  return rules.some(
+    (rule, index) => index !== exceptIndex && hasSameShortcutContext(rule, candidate),
+  );
+}
+
+// Split the E-family chords: left sidebar keeps plain Mod+E, right dock takes
+// Mod+Shift+E, and the reasoning picker moves to Mod+Alt+E. Only rewrite the
+// previously-shipped default keys so intentional custom chords stay put.
+function migrateSidebarDockAndTraitsPickerDefaults(rules: readonly KeybindingRule[]): {
+  readonly rules: KeybindingRule[];
+  readonly migratedCount: number;
+} {
+  let migratedCount = 0;
+  const next: KeybindingRule[] = rules.map((rule) => {
+    if (!matchesOutdatedDefaultChord(rule, OUTDATED_TRAITS_PICKER_TOGGLE_KEYBINDING)) {
+      return rule;
+    }
+    if (shortcutContextIsClaimed(rules, TRAITS_PICKER_TOGGLE_DEFAULT_KEYBINDING)) {
+      return rule;
+    }
+    migratedCount += 1;
+    return { ...TRAITS_PICKER_TOGGLE_DEFAULT_KEYBINDING };
+  });
+
+  let migratedRightDockOffModE = false;
+  const withRightDock = next.map((rule, index) => {
+    if (!matchesOutdatedDefaultChord(rule, OUTDATED_RIGHT_DOCK_TOGGLE_KEYBINDING)) {
+      return rule;
+    }
+    if (shortcutContextIsClaimed(next, RIGHT_DOCK_TOGGLE_DEFAULT_KEYBINDING, index)) {
+      return rule;
+    }
+    migratedCount += 1;
+    migratedRightDockOffModE = true;
+    return { ...RIGHT_DOCK_TOGGLE_DEFAULT_KEYBINDING };
+  });
+
+  const sidebarModE = SIDEBAR_TOGGLE_DEFAULT_KEYBINDINGS.find(
+    (binding) => binding.key === "mod+e",
+  );
+  let afterSidebar = withRightDock;
+  if (
+    migratedRightDockOffModE &&
+    sidebarModE &&
+    !withRightDock.some(
+      (rule) => rule.command === sidebarModE.command && rule.key === sidebarModE.key,
+    ) &&
+    !shortcutContextIsClaimed(withRightDock, sidebarModE)
+  ) {
+    migratedCount += 1;
+    afterSidebar = [...withRightDock, { ...sidebarModE }];
+  }
+
+  // Repair an earlier migration that moved traitsPicker onto Mod+Alt+E even when
+  // another command already owned that chord under an equivalent `when` spelling
+  // (e.g. `!(terminalFocus)` vs `!terminalFocus`). Give the custom binding the
+  // chord back and park traitsPicker on Mod+Shift+E when that slot is free.
+  const repaired = repairTraitsPickerChordStolenByEquivalentWhen(afterSidebar);
+  return {
+    rules: repaired.rules,
+    migratedCount: migratedCount + repaired.migratedCount,
+  };
+}
+
+function matchesTraitsPickerNewDefaultChord(rule: KeybindingRule): boolean {
+  return (
+    rule.command === TRAITS_PICKER_TOGGLE_DEFAULT_KEYBINDING.command &&
+    rule.key === TRAITS_PICKER_TOGGLE_DEFAULT_KEYBINDING.key &&
+    hasSameShortcutContext(rule, TRAITS_PICKER_TOGGLE_DEFAULT_KEYBINDING)
+  );
+}
+
+function repairTraitsPickerChordStolenByEquivalentWhen(rules: readonly KeybindingRule[]): {
+  readonly rules: KeybindingRule[];
+  readonly migratedCount: number;
+} {
+  const traitsIndex = rules.findIndex(matchesTraitsPickerNewDefaultChord);
+  if (traitsIndex < 0) {
+    return { rules, migratedCount: 0 };
+  }
+
+  const traitsRule = rules[traitsIndex];
+  if (!traitsRule) {
+    return { rules, migratedCount: 0 };
+  }
+
+  const chordStolen = rules.some(
+    (rule, index) => index !== traitsIndex && hasSameShortcutContext(rule, traitsRule),
+  );
+  if (!chordStolen) {
+    return { rules, migratedCount: 0 };
+  }
+
+  if (shortcutContextIsClaimed(rules, OUTDATED_TRAITS_PICKER_TOGGLE_KEYBINDING, traitsIndex)) {
+    return { rules, migratedCount: 0 };
+  }
+
+  const next = rules.slice();
+  next[traitsIndex] = { ...OUTDATED_TRAITS_PICKER_TOGGLE_KEYBINDING };
+  return { rules: next, migratedCount: 1 };
 }
 
 // Add the `|| isMac` escape hatch to new-surface creation commands still pinned to the
@@ -1010,7 +1164,11 @@ const makeKeybindings = Effect.gen(function* () {
 
     const sidebarSearchMigration = migrateOutdatedSidebarSearchDefault(keybindings);
     migratedDefaultRuleCount += sidebarSearchMigration.migratedCount;
-    const relaxed = relaxCreationCommandTerminalGuards(sidebarSearchMigration.rules);
+    const sidebarDockMigration = migrateSidebarDockAndTraitsPickerDefaults(
+      sidebarSearchMigration.rules,
+    );
+    migratedDefaultRuleCount += sidebarDockMigration.migratedCount;
+    const relaxed = relaxCreationCommandTerminalGuards(sidebarDockMigration.rules);
     migratedDefaultRuleCount += relaxed.migratedCount;
 
     return {

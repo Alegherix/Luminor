@@ -102,7 +102,7 @@ it.effect("parses keybinding rules", () =>
     assert.strictEqual(parsedBrowserToggle.command, "browser.toggle");
 
     const parsedRightDockToggle = yield* decode(KeybindingRule, {
-      key: "mod+e",
+      key: "mod+shift+e",
       command: "rightDock.toggle",
     });
     assert.strictEqual(parsedRightDockToggle.command, "rightDock.toggle");
@@ -126,7 +126,7 @@ it.effect("parses keybinding rules", () =>
     assert.strictEqual(parsedPreviousModel.command, "model.previous");
 
     const parsedTraitsPickerToggle = yield* decode(KeybindingRule, {
-      key: "mod+shift+e",
+      key: "mod+alt+e",
       command: "traitsPicker.toggle",
     });
     assert.strictEqual(parsedTraitsPickerToggle.command, "traitsPicker.toggle");

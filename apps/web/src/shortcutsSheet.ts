@@ -9,7 +9,7 @@ import {
   type ResolvedKeybindingRule,
   type ResolvedKeybindingsConfig,
 } from "@luminor/contracts";
-import { formatShortcutLabel, resolveKeybindingForCommand } from "./keybindings";
+import { formatShortcutLabel, resolveConfiguredKeybindingForCommand } from "./keybindings";
 import { commandForProjectScript } from "./projectScripts";
 import type { ProjectScript } from "./types";
 
@@ -200,11 +200,6 @@ const AVAILABLE_NOW_DEFINITIONS: readonly ShortcutDefinition[] = [
     description: "Reveal the built-in browser panel for the active thread.",
   },
   {
-    command: "rightDock.toggle",
-    label: "Toggle right sidebar",
-    description: "Open or fold the right side menu for the active thread.",
-  },
-  {
     command: "device.toggle",
     label: "Toggle iOS Simulator",
     description: "Reveal the iOS Simulator panel for the active thread. macOS servers only.",
@@ -270,8 +265,14 @@ const WORKSPACE_DEFINITIONS: readonly ShortcutDefinition[] = [
 
 const SIDEBAR_TOGGLE_DEFINITION: ShortcutDefinition = {
   command: "sidebar.toggle",
-  label: "Toggle sidebar",
-  description: "Collapse or reveal the sidebar shell.",
+  label: "Toggle left sidebar",
+  description: "Collapse or reveal the left thread sidebar.",
+};
+
+const RIGHT_SIDEBAR_TOGGLE_DEFINITION: ShortcutDefinition = {
+  command: "rightDock.toggle",
+  label: "Toggle right sidebar",
+  description: "Open or fold the right side menu for the active thread.",
 };
 
 export interface EditableShortcutDefinition {
@@ -285,6 +286,7 @@ export function listEditableShortcutDefinitions(): EditableShortcutDefinition[] 
   const definitionsByCommand = new Map<KeybindingCommand, EditableShortcutDefinition>();
   for (const definition of [
     SIDEBAR_TOGGLE_DEFINITION,
+    RIGHT_SIDEBAR_TOGGLE_DEFINITION,
     ...AVAILABLE_NOW_DEFINITIONS,
     ...WORKSPACE_DEFINITIONS,
     ...THREAD_JUMP_DEFINITIONS,
@@ -312,6 +314,7 @@ export function listEditableShortcutDefinitions(): EditableShortcutDefinition[] 
 /** Human-readable sheet label for a keybinding command, e.g. `chat.new` → "New thread". */
 export function shortcutSheetCommandLabel(command: KeybindingCommand): string | null {
   for (const definitions of [
+    [SIDEBAR_TOGGLE_DEFINITION, RIGHT_SIDEBAR_TOGGLE_DEFINITION],
     AVAILABLE_NOW_DEFINITIONS,
     WORKSPACE_DEFINITIONS,
     THREAD_JUMP_DEFINITIONS,
@@ -335,7 +338,8 @@ function definitionToEntry(
   const commands = Array.isArray(definition.command) ? definition.command : [definition.command];
   const binding = commands.reduce<ResolvedKeybindingRule | null>(
     (resolved, command) =>
-      resolved ?? resolveKeybindingForCommand(keybindings, command, { platform, context }),
+      resolved ??
+      resolveConfiguredKeybindingForCommand(keybindings, command, { platform, context }),
     null,
   );
   if (!binding) return null;
@@ -380,6 +384,17 @@ export function buildShortcutSheetSections(
   );
   if (sidebarToggle) {
     currentEntries.splice(1, 0, sidebarToggle);
+  }
+
+  const rightSidebarToggle = definitionToEntry(
+    RIGHT_SIDEBAR_TOGGLE_DEFINITION,
+    options.keybindings,
+    options.platform,
+    options.context,
+  );
+  if (rightSidebarToggle) {
+    // Keep left/right sidebar toggles adjacent so both stay easy to find and rebind.
+    currentEntries.splice(sidebarToggle ? 2 : 1, 0, rightSidebarToggle);
   }
 
   const currentNavigationEntries = options.context.terminalWorkspaceOpen
@@ -436,7 +451,7 @@ export function buildShortcutSheetSections(
   const projectScriptEntries = options.projectScripts
     .map<ShortcutSheetEntry | null>((script) => {
       const command = commandForProjectScript(script.id);
-      const binding = resolveKeybindingForCommand(options.keybindings, command, {
+      const binding = resolveConfiguredKeybindingForCommand(options.keybindings, command, {
         platform: options.platform,
       });
       if (!binding) return null;

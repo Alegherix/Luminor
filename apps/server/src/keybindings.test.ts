@@ -712,8 +712,154 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       );
       assert.isTrue(
         persisted.some(
+          (entry) => entry.key === "mod+alt+e" && entry.command === "traitsPicker.toggle",
+        ),
+      );
+    }).pipe(Effect.provide(makeKeybindingsLayer())),
+  );
+
+  it.effect(
+    "keeps a custom right-dock Alt+E binding when traits picker uses an equivalent when spelling",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const { keybindingsConfigPath } = yield* ServerConfig;
+        yield* fs.writeFileString(
+          keybindingsConfigPath,
+          JSON.stringify([
+            { key: "mod+e", command: "sidebar.toggle", when: "!(terminalFocus)" },
+            { key: "mod+alt+e", command: "rightDock.toggle", when: "!(terminalFocus)" },
+            { key: "mod+shift+e", command: "traitsPicker.toggle", when: "!terminalFocus" },
+          ]),
+        );
+
+        yield* Effect.gen(function* () {
+          const keybindings = yield* Keybindings;
+          yield* keybindings.syncDefaultKeybindingsOnStartup;
+        });
+
+        const persisted = yield* readKeybindingsConfig(keybindingsConfigPath);
+        assert.isTrue(
+          persisted.some(
+            (entry) => entry.key === "mod+alt+e" && entry.command === "rightDock.toggle",
+          ),
+        );
+        assert.isFalse(
+          persisted.some(
+            (entry) => entry.key === "mod+alt+e" && entry.command === "traitsPicker.toggle",
+          ),
+        );
+        assert.isTrue(
+          persisted.some(
+            (entry) => entry.key === "mod+shift+e" && entry.command === "traitsPicker.toggle",
+          ),
+        );
+      }).pipe(Effect.provide(makeKeybindingsLayer())),
+  );
+
+  it.effect("repairs a traits picker chord that stole an equivalent custom Alt+E binding", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const { keybindingsConfigPath } = yield* ServerConfig;
+      yield* fs.writeFileString(
+        keybindingsConfigPath,
+        JSON.stringify([
+          { key: "mod+e", command: "sidebar.toggle", when: "!(terminalFocus)" },
+          { key: "mod+alt+e", command: "rightDock.toggle", when: "!(terminalFocus)" },
+          { key: "mod+alt+e", command: "traitsPicker.toggle", when: "!terminalFocus" },
+        ]),
+      );
+
+      yield* Effect.gen(function* () {
+        const keybindings = yield* Keybindings;
+        yield* keybindings.syncDefaultKeybindingsOnStartup;
+      });
+
+      const persisted = yield* readKeybindingsConfig(keybindingsConfigPath);
+      assert.isTrue(
+        persisted.some(
+          (entry) => entry.key === "mod+alt+e" && entry.command === "rightDock.toggle",
+        ),
+      );
+      assert.isFalse(
+        persisted.some(
+          (entry) => entry.key === "mod+alt+e" && entry.command === "traitsPicker.toggle",
+        ),
+      );
+      assert.isTrue(
+        persisted.some(
           (entry) => entry.key === "mod+shift+e" && entry.command === "traitsPicker.toggle",
         ),
+      );
+    }).pipe(Effect.provide(makeKeybindingsLayer())),
+  );
+
+  it.effect("migrates shipped E-chord defaults to left/right sidebar split", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const { keybindingsConfigPath } = yield* ServerConfig;
+      yield* fs.writeFileString(
+        keybindingsConfigPath,
+        JSON.stringify([
+          { key: "mod+b", command: "sidebar.toggle", when: "!terminalFocus" },
+          { key: "mod+e", command: "rightDock.toggle", when: "!terminalFocus" },
+          { key: "mod+shift+e", command: "traitsPicker.toggle", when: "!terminalFocus" },
+        ]),
+      );
+
+      const configState = yield* Effect.gen(function* () {
+        const keybindings = yield* Keybindings;
+        return yield* keybindings.loadConfigState;
+      });
+
+      assert.deepEqual(configState.issues, []);
+      assert.isTrue(
+        configState.keybindings.some(
+          (entry) =>
+            entry.command === "rightDock.toggle" &&
+            entry.shortcut.key === "e" &&
+            entry.shortcut.shiftKey === true,
+        ),
+      );
+      assert.isTrue(
+        configState.keybindings.some(
+          (entry) =>
+            entry.command === "sidebar.toggle" &&
+            entry.shortcut.key === "e" &&
+            entry.shortcut.shiftKey !== true &&
+            entry.shortcut.altKey !== true,
+        ),
+      );
+      assert.isTrue(
+        configState.keybindings.some(
+          (entry) =>
+            entry.command === "traitsPicker.toggle" &&
+            entry.shortcut.key === "e" &&
+            entry.shortcut.altKey === true,
+        ),
+      );
+
+      yield* Effect.gen(function* () {
+        const keybindings = yield* Keybindings;
+        yield* keybindings.syncDefaultKeybindingsOnStartup;
+      });
+
+      const persisted = yield* readKeybindingsConfig(keybindingsConfigPath);
+      assert.isTrue(
+        persisted.some(
+          (entry) => entry.key === "mod+shift+e" && entry.command === "rightDock.toggle",
+        ),
+      );
+      assert.isTrue(
+        persisted.some((entry) => entry.key === "mod+e" && entry.command === "sidebar.toggle"),
+      );
+      assert.isTrue(
+        persisted.some(
+          (entry) => entry.key === "mod+alt+e" && entry.command === "traitsPicker.toggle",
+        ),
+      );
+      assert.isFalse(
+        persisted.some((entry) => entry.key === "mod+e" && entry.command === "rightDock.toggle"),
       );
     }).pipe(Effect.provide(makeKeybindingsLayer())),
   );
