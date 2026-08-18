@@ -471,14 +471,55 @@ function isStaleCodexResumeError(error: unknown): boolean {
   );
 }
 
-function isStaleClaudeResumeError(error: unknown): boolean {
-  if (Schema.is(ProviderAdapterRequestError)(error)) {
-    return (
-      error.provider === "claudeAgent" &&
-      error.detail.toLowerCase().includes("no conversation found with session id")
-    );
+/**
+ * Native provider resume/load can die across Luminor restarts (Cursor ACP),
+ * session-file races (Claude), or missing on-disk session paths (Grok). These
+ * are recoverable: clear the dead resume cursor and rebuild context from the
+ * retained Luminor transcript instead of failing the turn.
+ */
+function isStaleProviderResumeError(error: unknown, provider: ProviderKind): boolean {
+  if (Schema.is(ProviderAdapterRequestError)(error) && error.provider !== provider) {
+    return false;
   }
-  return String(error).toLowerCase().includes("no conversation found with session id");
+  const message = (
+    Schema.is(ProviderAdapterRequestError)(error)
+      ? `${error.method} ${error.detail}`
+      : error instanceof Error
+        ? error.message
+        : String(error)
+  ).toLowerCase();
+
+  switch (provider) {
+    case "claudeAgent":
+      return message.includes("no conversation found with session id");
+    case "cursor":
+      return (
+        (message.includes("session") && message.includes("not found")) ||
+        (message.includes("invalid params") && message.includes("not found"))
+      );
+    case "grok":
+      return (
+        (message.includes("session") && message.includes("not found")) ||
+        message.includes("unknown session") ||
+        message.includes("no such session") ||
+        ((message.includes("path not found") || message.includes("no such file")) &&
+          (message.includes("session/start") ||
+            message.includes("session/resume") ||
+            message.includes("session/load") ||
+            message.includes("session startup")))
+      );
+    case "droid":
+      return (
+        message.includes("could not resume the requested native session") ||
+        (message.includes("session") && message.includes("not found"))
+      );
+    default:
+      return false;
+  }
+}
+
+function isStaleClaudeResumeError(error: unknown): boolean {
+  return isStaleProviderResumeError(error, "claudeAgent");
 }
 
 function isRollbackStillInProgressError(error: unknown): boolean {
@@ -1232,6 +1273,36 @@ const make = Effect.gen(function* () {
         ...(resumeCursor !== undefined ? { resumeCursor } : {}),
       });
 
+    // Cursor/Grok (and friends) fail at session/start when a persisted resume id
+    // is gone after a Luminor restart. Clear the dead cursor once, mark the
+    // thread for retained-transcript bootstrap, and open a fresh native session.
+    const startProviderSessionRecoveringStaleResume = (resumeCursor?: unknown) =>
+      startProviderSession(resumeCursor).pipe(
+        Effect.catch((error: ProviderServiceError) =>
+          Effect.gen(function* () {
+            if (!isStaleProviderResumeError(error, preferredProvider)) {
+              return yield* Effect.fail(error);
+            }
+            yield* clearStaleProviderResumeState({
+              threadId,
+              cause: error,
+            });
+            if (shouldRegisterContextBootstrap) {
+              freshSessionContextBootstrapThreadIds.add(threadId);
+            }
+            yield* Effect.logWarning(
+              "provider command reactor retrying session start after stale resume",
+              {
+                threadId,
+                provider: preferredProvider,
+                bootstrappedPriorTranscript: shouldRegisterContextBootstrap,
+              },
+            );
+            return yield* startProviderSession();
+          }),
+        ),
+      );
+
     const bindSessionToThread = (session: ProviderSession) =>
       setThreadSession({
         threadId,
@@ -1319,7 +1390,7 @@ const make = Effect.gen(function* () {
         shouldRestartForModelSelectionChange,
         hasResumeCursor: resumeCursor !== undefined,
       });
-      const restartedSession = yield* startProviderSession(resumeCursor);
+      const restartedSession = yield* startProviderSessionRecoveringStaleResume(resumeCursor);
       if (
         shouldRegisterContextBootstrap &&
         currentProvider === "droid" &&
@@ -1393,7 +1464,7 @@ const make = Effect.gen(function* () {
       sidechatContextBootstrapThreadIds.add(threadId);
     }
 
-    const startedSession = yield* startProviderSession();
+    const startedSession = yield* startProviderSessionRecoveringStaleResume();
     // Record the exact selection the session was spawned with so later
     // restart-necessity checks compare against the live spawn state even when
     // the spawning dispatch carried no explicit model selection.
@@ -1846,8 +1917,8 @@ const make = Effect.gen(function* () {
         preserveActiveRuntime = false,
       ) =>
         Effect.gen(function* () {
-          // Claude cannot continue from a missing native session; clear the
-          // dead cursor and replay once with Luminor transcript context.
+          // Native resume is gone; clear the dead cursor and replay once with
+          // Luminor transcript context so the model still sees prior turns.
           yield* clearStaleProviderResumeState({
             threadId: input.threadId,
             cause,
@@ -1874,10 +1945,11 @@ const make = Effect.gen(function* () {
           );
 
           yield* Effect.logWarning(
-            "provider command reactor retrying claude turn after stale resume",
+            "provider command reactor retrying turn after stale resume",
             {
               threadId: input.threadId,
               messageId: input.messageId,
+              provider: selectedProvider,
               bootstrappedPriorTranscript: retryBootstrapText !== null,
             },
           );
@@ -1886,14 +1958,26 @@ const make = Effect.gen(function* () {
       const sentTurn = yield* sendQueuedProviderTurn(normalizedInput).pipe(
         Effect.catch((error) =>
           Effect.gen(function* () {
-            if (selectedProvider !== "claudeAgent" || !isStaleClaudeResumeError(error)) {
+            const resumeProvider = Schema.is(ProviderKind)(selectedProvider)
+              ? selectedProvider
+              : undefined;
+            if (
+              resumeProvider === undefined ||
+              !isStaleProviderResumeError(error, resumeProvider)
+            ) {
               return yield* Effect.fail(error);
             }
 
-            // Stale-resume errors can be transient CLI/session-file races, so
-            // retry the native resume id once before paying the transcript
-            // bootstrap. This must preserve the provider binding: startSession
-            // recovers the cursor from it when the fresh runtime is spawned.
+            // Claude stale-resume errors can be transient CLI/session-file races,
+            // so retry the native resume id once before paying the transcript
+            // bootstrap. Cursor/Grok "session not found" is durable across
+            // process restarts, so go straight to the transcript rebuild.
+            if (resumeProvider !== "claudeAgent") {
+              return yield* replayWithTranscriptBootstrap(error);
+            }
+
+            // This must preserve the provider binding: startSession recovers
+            // the cursor from it when the fresh runtime is spawned.
             if (!providerService.stopRuntimeSession) {
               return yield* replayWithTranscriptBootstrap(error);
             }

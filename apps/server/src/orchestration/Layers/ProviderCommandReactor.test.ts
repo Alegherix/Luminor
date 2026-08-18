@@ -4923,6 +4923,147 @@ describe("ProviderCommandReactor", () => {
     });
   });
 
+  it("recovers Cursor session/start when the native ACP session is gone", async () => {
+    const harness = await createHarness({
+      threadModelSelection: { provider: "cursor", model: "auto" },
+    });
+    const now = new Date().toISOString();
+    harness.startSession.mockImplementationOnce(() =>
+      Effect.fail(
+        new ProviderAdapterRequestError({
+          provider: "cursor",
+          method: "session/start",
+          detail:
+            'Cursor session startup failed: Invalid params — Session "09bfa2c6-860e-4d72-9d06-67ed05ba1f37" not found (JSON-RPC -32602)',
+        }),
+      ),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.messages.import",
+        commandId: CommandId.makeUnsafe("cmd-import-cursor-stale-resume-history"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        messages: [
+          {
+            messageId: asMessageId("user-message-cursor-history"),
+            role: "user",
+            text: "How do I set a custom Omarchy background?",
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            messageId: asMessageId("assistant-message-cursor-history"),
+            role: "assistant",
+            text: "Put images under ~/.config/omarchy/backgrounds/<theme>/.",
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+        createdAt: now,
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-cursor-stale-resume"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-cursor-stale-resume"),
+          role: "user",
+          text: "Can you set this image as my background instead?",
+          attachments: [],
+        },
+        modelSelection: { provider: "cursor", model: "auto" },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    expect(harness.clearSessionResumeCursor).toHaveBeenCalledWith({
+      threadId: ThreadId.makeUnsafe("thread-1"),
+    });
+    expect(harness.startSession.mock.calls.length).toBe(2);
+    expect(harness.startSession.mock.calls[1]?.[1]).not.toHaveProperty("resumeCursor");
+    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { readonly input?: string };
+    expect(sendInput.input).toContain("<thread_context>");
+    expect(sendInput.input).toContain("How do I set a custom Omarchy background?");
+    expect(sendInput.input).toContain("<latest_user_message>");
+    expect(sendInput.input).toContain("Can you set this image as my background instead?");
+  });
+
+  it("recovers Grok session/start when the on-disk session path is missing", async () => {
+    const harness = await createHarness({
+      threadModelSelection: { provider: "grok", model: "grok-4.6" },
+    });
+    const now = new Date().toISOString();
+    harness.startSession.mockImplementationOnce(() =>
+      Effect.fail(
+        new ProviderAdapterRequestError({
+          provider: "grok",
+          method: "session/start",
+          detail: "Path not found. No such file or directory (os error 2)",
+        }),
+      ),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.messages.import",
+        commandId: CommandId.makeUnsafe("cmd-import-grok-stale-resume-history"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        messages: [
+          {
+            messageId: asMessageId("user-message-grok-history"),
+            role: "user",
+            text: "Compare Omarchy and EndeavourOS.",
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            messageId: asMessageId("assistant-message-grok-history"),
+            role: "assistant",
+            text: "Omarchy is opinionated Hyprland; EndeavourOS is more DIY.",
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+        createdAt: now,
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-grok-stale-resume"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-grok-stale-resume"),
+          role: "user",
+          text: "Which one should I keep for daily driving?",
+          attachments: [],
+        },
+        modelSelection: { provider: "grok", model: "grok-4.6" },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    expect(harness.clearSessionResumeCursor).toHaveBeenCalledWith({
+      threadId: ThreadId.makeUnsafe("thread-1"),
+    });
+    expect(harness.startSession.mock.calls.length).toBe(2);
+    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { readonly input?: string };
+    expect(sendInput.input).toContain("<thread_context>");
+    expect(sendInput.input).toContain("Compare Omarchy and EndeavourOS.");
+    expect(sendInput.input).toContain("Which one should I keep for daily driving?");
+  });
+
   it("marks the thread session errored when normal turn start fails", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
