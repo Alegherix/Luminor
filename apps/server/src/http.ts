@@ -32,6 +32,7 @@ import { AuthError, ServerAuth } from "./auth/Services/ServerAuth";
 import { SessionCredentialService } from "./auth/Services/SessionCredentialService";
 import { deriveAuthClientMetadata } from "./auth/utils";
 import { ServerConfig, type ServerConfigShape } from "./config";
+import { makeInboundNewChatEffectRouteLayer } from "./inbound/newChat";
 import { resolveCachedEditorIcon } from "./editorAppIcons";
 import { LOCAL_IMAGE_ROUTE_PATH, resolveAllowedLocalPreviewFile } from "./localImageFiles.ts";
 import { ProjectFaviconResolver } from "./project/Services/ProjectFaviconResolver";
@@ -208,6 +209,7 @@ export function makeEffectHttpRouteLayer(
     localImageEffectRouteLayer,
     binaryUploadEffectRouteLayer,
     attachmentsEffectRouteLayer,
+    makeInboundNewChatEffectRouteLayer(requireAuthenticatedMutationRequest),
     staticAndDevEffectRouteLayer,
   );
 }
