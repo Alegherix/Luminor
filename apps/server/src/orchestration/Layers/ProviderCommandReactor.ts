@@ -57,6 +57,11 @@ import {
   formatProviderDeliveryBlockDetail,
   PROVIDER_DELIVERY_BLOCK_SUMMARY,
 } from "@luminor/shared/providerDeliveryBlock";
+import {
+  formatOrphanedUserInputContinuation,
+  shouldContinueOrphanedUserInputAsTurn,
+  type OrphanedUserInputQuestion,
+} from "@luminor/shared/orphanedUserInputContinuation";
 import { buildStalePendingRequestFailureDetail } from "@luminor/shared/threadSummary";
 import { resolveThreadWorkspaceState } from "@luminor/shared/threadEnvironment";
 
@@ -3194,6 +3199,9 @@ const make = Effect.gen(function* () {
     }
     const providerThread = yield* resolveProviderSessionThread(event.payload.threadId);
     if (!providerThread) {
+      if (input.interactionKind === "userInput") {
+        return null;
+      }
       // The claim above already marked the row `responding`; bailing without a
       // settlement would orphan it and silently swallow every future response.
       yield* appendInteractionResponseFailure(event, {
@@ -3204,6 +3212,9 @@ const make = Effect.gen(function* () {
       return null;
     }
     if (providerThread.session?.status !== "stopped") return providerThread.id;
+    if (input.interactionKind === "userInput") {
+      return null;
+    }
     yield* appendInteractionResponseFailure(event, {
       interactionKind: input.interactionKind,
       detail: "No active provider session is bound to this thread.",
@@ -3246,6 +3257,101 @@ const make = Effect.gen(function* () {
       );
   });
 
+  const questionsForUserInputRequest = (
+    thread: OrchestrationThread | undefined,
+    requestId: string,
+  ): ReadonlyArray<OrphanedUserInputQuestion> => {
+    if (!thread) {
+      return [];
+    }
+    for (let index = thread.activities.length - 1; index >= 0; index -= 1) {
+      const activity = thread.activities[index];
+      if (activity?.kind !== "user-input.requested") {
+        continue;
+      }
+      const payload =
+        activity.payload && typeof activity.payload === "object"
+          ? (activity.payload as Record<string, unknown>)
+          : null;
+      if (payload?.requestId !== requestId || !Array.isArray(payload.questions)) {
+        continue;
+      }
+      return payload.questions.flatMap((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return [];
+        }
+        const question = entry as Record<string, unknown>;
+        if (
+          typeof question.id !== "string" ||
+          typeof question.header !== "string" ||
+          typeof question.question !== "string"
+        ) {
+          return [];
+        }
+        return [
+          {
+            id: question.id,
+            header: question.header,
+            question: question.question,
+          },
+        ];
+      });
+    }
+    return [];
+  };
+
+  const continueOrphanedUserInputAsTurn = Effect.fnUntraced(function* (
+    event: Extract<ProviderIntentEvent, { type: "thread.user-input-response-requested" }>,
+  ) {
+    const thread = yield* resolveThread(event.payload.threadId);
+    if (!thread || event.commandId === null) {
+      return;
+    }
+    const createdAt = event.payload.createdAt;
+    const continuationKey = event.commandId;
+    yield* orchestrationEngine.dispatch({
+      type: "thread.activity.append",
+      commandId: CommandId.makeUnsafe(`server:orphaned-user-input-resolved:${continuationKey}`),
+      threadId: event.payload.threadId,
+      activity: {
+        id: EventId.makeUnsafe(`orphaned-user-input-resolved:${continuationKey}`),
+        tone: "info",
+        kind: "user-input.resolved",
+        summary: "User input submitted",
+        payload: {
+          requestId: event.payload.requestId,
+          answers: event.payload.answers,
+          ...(event.payload.lifecycleGeneration === undefined
+            ? {}
+            : { lifecycleGeneration: event.payload.lifecycleGeneration }),
+        },
+        turnId: null,
+        createdAt,
+      },
+      createdAt,
+    });
+    yield* orchestrationEngine.dispatch({
+      type: "thread.turn.start",
+      commandId: CommandId.makeUnsafe(
+        `server:orphaned-user-input-continue-turn:${continuationKey}`,
+      ),
+      threadId: event.payload.threadId,
+      message: {
+        messageId: MessageId.makeUnsafe(`orphaned-user-input:${continuationKey}`),
+        role: "user",
+        text: formatOrphanedUserInputContinuation({
+          questions: questionsForUserInputRequest(thread, event.payload.requestId),
+          answers: event.payload.answers,
+        }),
+        attachments: [],
+      },
+      runtimeMode: thread.runtimeMode,
+      interactionMode: thread.interactionMode,
+      dispatchMode: "queue",
+      createdAt,
+    });
+  });
+
   const processUserInputResponseRequested = Effect.fnUntraced(function* (
     event: Extract<ProviderIntentEvent, { type: "thread.user-input-response-requested" }>,
   ) {
@@ -3254,7 +3360,28 @@ const make = Effect.gen(function* () {
       interactionKind: "userInput",
       decision: null,
     });
-    if (providerThreadId === null) return;
+    const thread = yield* resolveThread(event.payload.threadId);
+    if (providerThreadId === null) {
+      const pending = yield* pendingInteractions.getByIdentity({
+        threadId: event.payload.threadId,
+        interactionKind: "userInput",
+        requestId: event.payload.requestId,
+      });
+      const claimedByThisCommand =
+        event.commandId !== null &&
+        Option.isSome(pending) &&
+        pending.value.status === "responding" &&
+        pending.value.responseCommandId === event.commandId;
+      if (
+        claimedByThisCommand &&
+        shouldContinueOrphanedUserInputAsTurn({
+          sessionStatus: thread?.session?.status,
+        })
+      ) {
+        yield* continueOrphanedUserInputAsTurn(event);
+      }
+      return;
+    }
 
     yield* providerService
       .respondToUserInput({
@@ -3268,12 +3395,21 @@ const make = Effect.gen(function* () {
       .pipe(
         Effect.asVoid,
         Effect.catchCause((cause) => {
+          const failureDetail = Cause.pretty(cause);
+          if (
+            shouldContinueOrphanedUserInputAsTurn({
+              sessionStatus: thread?.session?.status,
+              failureDetail,
+            })
+          ) {
+            return continueOrphanedUserInputAsTurn(event);
+          }
           const unknownPendingRequest = isUnknownPendingUserInputRequestError(cause);
           return appendInteractionResponseFailure(event, {
             interactionKind: "userInput",
             detail: unknownPendingRequest
               ? buildStalePendingRequestFailureDetail("user-input", event.payload.requestId)
-              : Cause.pretty(cause),
+              : failureDetail,
             settlementStatus: interactionFailureSettlementStatus(cause, unknownPendingRequest),
           });
         }),

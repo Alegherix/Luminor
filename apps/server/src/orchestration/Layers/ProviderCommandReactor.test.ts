@@ -8901,31 +8901,143 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await waitFor(async () => {
-      const readModel = await Effect.runPromise(harness.engine.getReadModel());
-      const thread = readModel.threads.find(
-        (entry) => entry.id === ThreadId.makeUnsafe("thread-1"),
-      );
-      return (
-        thread?.activities.some(
-          (activity) => activity.kind === "provider.user-input.respond.failed",
-        ) ?? false
-      );
-    });
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
     expect(harness.respondToUserInput).not.toHaveBeenCalled();
-    const retryableUserInput = await Effect.runPromise(
+    const thread = await readHarnessThread(harness);
+    expect(
+      thread?.messages.some(
+        (message) => message.role === "user" && message.text.includes("- input: continue"),
+      ),
+    ).toBe(true);
+    const settledUserInput = await Effect.runPromise(
       harness.pendingInteractionRepository.getByIdentity({
         threadId: ThreadId.makeUnsafe("thread-1"),
         interactionKind: "userInput",
         requestId: asApprovalRequestId("user-input-request-stopped"),
       }),
     );
-    expect(Option.getOrUndefined(retryableUserInput)).toMatchObject({
-      status: "retryable",
-      responseCommandId: "cmd-user-input-respond-stopped",
-      decision: null,
-      resolvedAt: null,
-    });
+    expect(Option.getOrUndefined(settledUserInput)?.status).toBe("confirmed");
+  });
+
+  it("continues orphaned user-input answers as a new turn in the same thread", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+    harness.respondToUserInput.mockImplementation(() =>
+      Effect.fail(
+        new ProviderValidationError({
+          operation: "ProviderService.respondToUserInput",
+          issue: `Cannot route thread 'thread-1' because no persisted provider binding exists.`,
+        }),
+      ),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.session.set",
+        commandId: CommandId.makeUnsafe("cmd-session-set-interrupted-user-input"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        session: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          status: "interrupted",
+          providerName: "claudeAgent",
+          runtimeMode: "approval-required",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: now,
+        },
+        createdAt: now,
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.activity.append",
+        commandId: CommandId.makeUnsafe("cmd-user-input-requested-orphaned"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        activity: {
+          id: EventId.makeUnsafe("activity-user-input-requested-orphaned"),
+          tone: "info",
+          kind: "user-input.requested",
+          summary: "User input requested",
+          payload: {
+            requestId: "user-input-request-orphaned",
+            questions: [
+              {
+                id: "license",
+                header: "License",
+                question: "Which license should the project use?",
+                options: [
+                  {
+                    label: "MIT / Apache",
+                    description: "Dual license",
+                  },
+                ],
+              },
+              {
+                id: "shell",
+                header: "Shell",
+                question: "Which shell architecture?",
+                options: [
+                  {
+                    label: "QueueRail + PeekDock",
+                    description: "Keep the current shell split",
+                  },
+                ],
+              },
+            ],
+          },
+          turnId: null,
+          createdAt: now,
+        },
+        createdAt: now,
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.user-input.respond",
+        commandId: CommandId.makeUnsafe("cmd-user-input-respond-orphaned"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        requestId: asApprovalRequestId("user-input-request-orphaned"),
+        answers: {
+          license: "MIT / Apache",
+          shell: "QueueRail + PeekDock",
+        },
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    const thread = await readHarnessThread(harness);
+    expect(thread).toBeDefined();
+    const continuationMessage = thread?.messages.find(
+      (message) =>
+        message.role === "user" &&
+        message.text.includes("Continue with these answers:") &&
+        message.text.includes("License: MIT / Apache") &&
+        message.text.includes("Shell: QueueRail + PeekDock"),
+    );
+    expect(continuationMessage).toBeDefined();
+    expect(continuationMessage?.source).toBe("native");
+    expect(
+      thread?.activities.some(
+        (activity) =>
+          activity.kind === "user-input.resolved" &&
+          typeof activity.payload === "object" &&
+          activity.payload !== null &&
+          (activity.payload as Record<string, unknown>).requestId === "user-input-request-orphaned",
+      ),
+    ).toBe(true);
+    const settledUserInput = await Effect.runPromise(
+      harness.pendingInteractionRepository.getByIdentity({
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        interactionKind: "userInput",
+        requestId: asApprovalRequestId("user-input-request-orphaned"),
+      }),
+    );
+    expect(Option.getOrUndefined(settledUserInput)?.status).toBe("confirmed");
+    expect(harness.respondToUserInput).toHaveBeenCalledTimes(1);
   });
 
   it("preserves array and mixed answer shapes through the runtime path", async () => {
