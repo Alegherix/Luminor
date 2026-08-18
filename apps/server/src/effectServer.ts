@@ -16,7 +16,9 @@ import {
   persistServerRuntimeState,
 } from "./serverRuntimeState";
 import { remoteAccessPolicyError, ServerConfig } from "./config";
-import { resolveListeningPort } from "./startupAccess";
+import { formatHostForUrl, resolveListeningPort } from "./startupAccess";
+import { resolveRemoteListenTargetFromConfig } from "./remoteListen";
+import { ServerAuth } from "./auth/Services/ServerAuth";
 import { patchBunWebSocketCloseEventCompatibility } from "./bunWebSocketCompatibility";
 import { makeEffectHttpRouteLayer } from "./http";
 import { Keybindings } from "./keybindings";
@@ -54,6 +56,7 @@ export interface ServerShape {
     ServerLifecycleError | ServerSettingsError,
     | Scope.Scope
     | ServerConfig
+    | ServerAuth
     | AgentGatewayCredentials
     | ExternalMcpGateway
     | ExternalMcpService
@@ -219,6 +222,56 @@ export const createEffectServer = Effect.fn(function* (
   );
   yield* Effect.addFinalizer(() => clearPersistedServerRuntimeState(config.serverRuntimeStatePath));
   yield* readiness.markHttpListening;
+
+  const remoteListenTarget = resolveRemoteListenTargetFromConfig(config);
+  if (remoteListenTarget.kind === "skip") {
+    yield* Effect.logInfo("Luminor remote listen skipped", {
+      reason: remoteListenTarget.reason,
+    });
+  } else {
+    const remoteResult = yield* Effect.flatMap(
+      makeBoundedNodeHttpServer(() => http.createServer(), {
+        host: remoteListenTarget.host,
+        port: remoteListenTarget.port,
+      }),
+      (remoteHttpServer) => remoteHttpServer.serve(httpApp),
+    ).pipe(Effect.result);
+    if (remoteResult._tag === "Failure") {
+      yield* Effect.logError("Luminor remote listen failed; continuing with loopback only", {
+        host: remoteListenTarget.host,
+        port: remoteListenTarget.port,
+        cause: remoteResult.failure,
+      });
+    } else {
+      const remoteUrl = `http://${formatHostForUrl(remoteListenTarget.host)}:${remoteListenTarget.port}`;
+      const serverAuth = yield* ServerAuth;
+      const pairingResult = yield* serverAuth.issueStartupPairingUrl(remoteUrl).pipe(Effect.result);
+      const pairingUrl = pairingResult._tag === "Success" ? pairingResult.success : undefined;
+      if (pairingResult._tag === "Failure") {
+        yield* Effect.logError("Failed to create the remote-access startup pairing link", {
+          url: remoteUrl,
+          cause: pairingResult.failure,
+        });
+      }
+      if (config.allowInsecureRemote && !config.publicUrl) {
+        yield* Effect.logWarning(
+          "INSECURE REMOTE ACCESS ENABLED: credentials and session traffic are unencrypted (LUMINOR_ALLOW_INSECURE_REMOTE=1)",
+          {
+            url: remoteUrl,
+            ...(pairingUrl ? { pairingUrl } : {}),
+            hint: "Use only on a trusted Tailscale overlay. Never put LUMINOR_AUTH_TOKEN in a client URL.",
+          },
+        );
+      }
+      yield* Effect.logInfo("Luminor remote listen ready", {
+        url: remoteUrl,
+        ...(pairingUrl ? { pairingUrl } : {}),
+        hint: pairingUrl
+          ? "Open this one-time URL to establish the first owner session."
+          : "Remote listen is up; create a pairing link from an owner session.",
+      });
+    }
+  }
 
   const subscriptionsScope = yield* Scope.make("sequential");
   yield* Effect.addFinalizer(() =>

@@ -93,6 +93,8 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly mode: RuntimeMode;
   readonly port: number;
   readonly host: string | undefined;
+  readonly remoteHost?: string;
+  readonly remotePort?: number;
   readonly cwd: string;
   readonly homeDir: string;
   readonly chatWorkspaceRoot: string;

@@ -109,10 +109,39 @@ it.effect("preserves the legacy query token for loopback desktop sessions", () =
         url: new URL("http://127.0.0.1:3773/ws?token=desktop-secret"),
       },
       serverAuth: { authenticateWebSocketUpgrade },
+      localAddress: "127.0.0.1",
     });
 
     assert.equal(session, null);
     assert.equal(authenticateWebSocketUpgrade.mock.calls.length, 0);
+  }),
+);
+
+it.effect("rejects a legacy query token on a remote companion socket of a loopback process", () =>
+  Effect.gen(function* () {
+    const authenticateWebSocketUpgrade = vi.fn(() =>
+      Effect.fail(
+        new AuthError({
+          message: "Authentication required.",
+          status: 401,
+        }),
+      ),
+    );
+
+    const error = yield* authenticateRpcWebSocketUpgrade({
+      config: { host: "127.0.0.1", authToken: "desktop-secret", publicUrl: undefined },
+      legacyToken: "desktop-secret",
+      request: {
+        headers: {},
+        cookies: {},
+        url: new URL("http://100.64.1.20:3773/ws?token=desktop-secret"),
+      },
+      serverAuth: { authenticateWebSocketUpgrade },
+      localAddress: "100.64.1.20",
+    }).pipe(Effect.flip);
+
+    assert.equal(error.status, 401);
+    assert.equal(authenticateWebSocketUpgrade.mock.calls.length, 1);
   }),
 );
 

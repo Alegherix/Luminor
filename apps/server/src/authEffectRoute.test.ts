@@ -289,6 +289,43 @@ describe("authEffectRouteLayer", () => {
     });
   });
 
+  it("accepts bearer pairing on a remote companion bind and ignores a legacy token query", async () => {
+    const sideEffects = { count: 0 };
+    const config = {
+      host: "127.0.0.1",
+      remoteHost: "100.64.1.20",
+      allowInsecureRemote: true,
+      authToken: "desktop-secret",
+      publicUrl: undefined,
+    } as ServerConfigShape;
+    await withAuthEffectServer(config, makeServerAuth(sideEffects), async (serverOrigin) => {
+      const tokenQuerySession = await fetch(
+        `${serverOrigin}/api/auth/session?token=desktop-secret`,
+      );
+      expect(tokenQuerySession.status).toBe(200);
+      await expect(tokenQuerySession.json()).resolves.toMatchObject({ authenticated: false });
+
+      const pairingResponse = await fetch(`${serverOrigin}/api/auth/bootstrap/bearer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential: "PAIRINGTOKEN" }),
+      });
+      expect(pairingResponse.status).toBe(200);
+      await expect(pairingResponse.json()).resolves.toMatchObject({
+        authenticated: true,
+        sessionMethod: "bearer-session-token",
+        sessionToken: "bearer-token",
+      });
+      expect(sideEffects.count).toBe(1);
+
+      const authed = await fetch(`${serverOrigin}/api/auth/ws-token`, {
+        method: "POST",
+        headers: { Authorization: "Bearer bearer-token" },
+      });
+      expect(authed.status).toBe(200);
+    });
+  });
+
   it("allows trusted-origin cookies and originless explicit bearer credentials", async () => {
     const sideEffects = { count: 0 };
     const config = { host: "127.0.0.1", publicUrl: undefined } as ServerConfigShape;

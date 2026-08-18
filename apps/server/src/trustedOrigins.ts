@@ -11,7 +11,7 @@ import {
 } from "@luminor/shared/desktopIdentity";
 
 import type { ServerConfigShape } from "./config";
-import { isLoopbackHost, isWildcardHost } from "./startupAccess";
+import { isLoopbackAddress, isLoopbackHost, isWildcardHost } from "./startupAccess";
 
 export const DESKTOP_APP_CORS_ORIGINS: ReadonlySet<string> = new Set([
   LUMINOR_DESKTOP_ORIGIN,
@@ -42,8 +42,16 @@ function normalizeHostForComparison(host: string): string {
 
 // Same-origin is trusted for local loopback, explicitly configured hosts, and
 // wildcard binds where remote-reachable auth/session policy is the real gate.
-function isTrustedRequestOriginHost(requestOrigin: string, config: ServerConfigShape): boolean {
-  if (config.publicUrl && !isLoopbackHost(config.host)) {
+function isTrustedRequestOriginHost(
+  requestOrigin: string,
+  config: ServerConfigShape,
+  localAddress?: string | undefined,
+): boolean {
+  const remoteSocket = localAddress !== undefined && !isLoopbackAddress(localAddress);
+  if (
+    config.publicUrl &&
+    (remoteSocket || (localAddress === undefined && !isLoopbackHost(config.host)))
+  ) {
     return false;
   }
   let requestHost: string;
@@ -53,6 +61,15 @@ function isTrustedRequestOriginHost(requestOrigin: string, config: ServerConfigS
     return false;
   }
   if (isLoopbackHost(requestHost)) {
+    return true;
+  }
+  if (remoteSocket && localAddress) {
+    return normalizeHostForComparison(requestHost) === normalizeHostForComparison(localAddress);
+  }
+  if (
+    config.remoteHost &&
+    normalizeHostForComparison(requestHost) === normalizeHostForComparison(config.remoteHost)
+  ) {
     return true;
   }
   if (!config.host) {
@@ -70,12 +87,13 @@ export function isTrustedAppOrigin(input: {
   readonly origin: string | null;
   readonly requestOrigin: string;
   readonly config: ServerConfigShape;
+  readonly localAddress?: string | undefined;
 }) {
   return (
     !input.origin ||
     input.origin === input.config.publicUrl?.origin ||
     (input.origin === input.requestOrigin &&
-      isTrustedRequestOriginHost(input.requestOrigin, input.config)) ||
+      isTrustedRequestOriginHost(input.requestOrigin, input.config, input.localAddress)) ||
     input.origin === input.config.devUrl?.origin ||
     DESKTOP_APP_CORS_ORIGINS.has(input.origin)
   );
@@ -88,6 +106,7 @@ export function shouldRejectUntrustedRequestOrigin(input: {
   readonly rawOrigin: string | ReadonlyArray<string> | undefined;
   readonly requestOrigin: string;
   readonly config: ServerConfigShape;
+  readonly localAddress?: string | undefined;
 }) {
   if (input.rawOrigin === undefined) {
     return false;
@@ -99,6 +118,7 @@ export function shouldRejectUntrustedRequestOrigin(input: {
       origin,
       requestOrigin: input.requestOrigin,
       config: input.config,
+      localAddress: input.localAddress,
     })
   );
 }
@@ -108,6 +128,7 @@ export function shouldRejectAuthMutationOrigin(input: {
   readonly requestOrigin: string;
   readonly config: ServerConfigShape;
   readonly credentialSource: "bearer" | "cookie";
+  readonly localAddress?: string | undefined;
 }) {
   if (input.rawOrigin === undefined) {
     return input.credentialSource !== "bearer";
@@ -118,6 +139,13 @@ export function shouldRejectAuthMutationOrigin(input: {
 /** Remote-reachable sockets always require a real authenticated session. */
 export function requiresWebSocketAuthentication(
   config: Pick<ServerConfigShape, "authToken" | "host" | "publicUrl">,
+  localAddress?: string | undefined,
 ): boolean {
-  return Boolean(config.authToken) || Boolean(config.publicUrl) || !isLoopbackHost(config.host);
+  if (Boolean(config.authToken) || Boolean(config.publicUrl)) {
+    return true;
+  }
+  if (localAddress !== undefined) {
+    return !isLoopbackAddress(localAddress);
+  }
+  return !isLoopbackHost(config.host);
 }

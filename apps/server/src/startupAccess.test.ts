@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatHostForUrl,
+  isLoopbackAddress,
   isLoopbackHost,
   isWildcardHost,
+  requestLocalAddress,
   resolveListeningPort,
 } from "./startupAccess";
 
@@ -21,6 +23,21 @@ describe("startupAccess", () => {
     expect(isLoopbackHost("[::1]")).toBe(true);
     expect(isLoopbackHost("0.0.0.0")).toBe(false);
     expect(isLoopbackHost("192.168.1.50")).toBe(false);
+  });
+
+  it("classifies accepted sockets by localAddress rather than bind config", () => {
+    expect(isLoopbackAddress("127.0.0.1")).toBe(true);
+    expect(isLoopbackAddress("::1")).toBe(true);
+    expect(isLoopbackAddress("[::1]")).toBe(true);
+    expect(isLoopbackAddress("::ffff:127.0.0.1")).toBe(true);
+    expect(isLoopbackAddress(undefined)).toBe(false);
+    expect(isLoopbackAddress("100.64.1.20")).toBe(false);
+    expect(isLoopbackAddress("0.0.0.0")).toBe(false);
+    expect(isLoopbackAddress("127.0.0.2")).toBe(false);
+    expect(requestLocalAddress({ source: { socket: { localAddress: "100.64.1.20" } } })).toBe(
+      "100.64.1.20",
+    );
+    expect(requestLocalAddress({ source: {} })).toBeUndefined();
   });
 
   it("formats IPv6 hosts for URLs", () => {

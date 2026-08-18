@@ -197,6 +197,44 @@ describe("trustedOrigins", () => {
         publicUrl: new URL("https://luminor.example.test/"),
       }),
     ).toBe(true);
+    expect(
+      requiresWebSocketAuthentication(
+        { host: "127.0.0.1", authToken: undefined, publicUrl: undefined },
+        "127.0.0.1",
+      ),
+    ).toBe(false);
+    expect(
+      requiresWebSocketAuthentication(
+        { host: "127.0.0.1", authToken: undefined, publicUrl: undefined },
+        "100.64.1.20",
+      ),
+    ).toBe(true);
+  });
+
+  it("trusts same-origin traffic on the remote companion bind without weakening CORS", () => {
+    expect(
+      isTrustedAppOrigin({
+        origin: "http://100.64.1.20:3773",
+        requestOrigin: "http://100.64.1.20:3773",
+        config: { ...config, host: "127.0.0.1", remoteHost: "100.64.1.20" },
+      }),
+    ).toBe(true);
+    expect(
+      isTrustedAppOrigin({
+        origin: "http://100.64.1.20:3773",
+        requestOrigin: "http://100.64.1.20:3773",
+        config: { ...config, host: "127.0.0.1" },
+        localAddress: "100.64.1.20",
+      }),
+    ).toBe(true);
+    expect(
+      isTrustedAppOrigin({
+        origin: "https://example.test",
+        requestOrigin: "http://100.64.1.20:3773",
+        config: { ...config, host: "127.0.0.1", remoteHost: "100.64.1.20" },
+        localAddress: "100.64.1.20",
+      }),
+    ).toBe(false);
   });
 
   it("requires browser mutations to have a trusted origin or explicit bearer provenance", () => {

@@ -17,7 +17,7 @@ interface StoredBootstrapGrant extends BootstrapGrant {
   readonly remainingUses: number | "unbounded";
 }
 
-const DEFAULT_ONE_TIME_TOKEN_TTL = Duration.minutes(5);
+const DEFAULT_ONE_TIME_TOKEN_TTL = Duration.hours(1);
 const PAIRING_TOKEN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const PAIRING_TOKEN_LENGTH = 12;
 

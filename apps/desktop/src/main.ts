@@ -62,6 +62,8 @@ import { RotatingFileSink } from "@luminor/shared/logging";
 import { ensureStaticSnapshot, findAsarArchivePath } from "@luminor/shared/staticSnapshot";
 import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness";
 import { resolveBackendNodeArgs } from "./backendNodeOptions";
+import { withDesktopRemoteAccessEnv } from "./backendRemoteAccess";
+import { applyLinuxElectronDisplayEnvironment } from "./linuxDisplayEnv";
 import {
   retainLiveBackendAfterShutdownFailure,
   requireWindowsBackendExit,
@@ -240,6 +242,10 @@ const startupBundleIdentity = captureStartupBundleIdentity();
 // silently relocate an existing user's profile and data directory.
 // (The probe also carries PATH, SSH_AUTH_SOCK and HOMEBREW_* for later provider spawns.
 // APPDATA on Windows is inherited from the process env, not hydrated here.)
+applyLinuxElectronDisplayEnvironment(process.env, {
+  appendSwitch: (name, value) => app.commandLine.appendSwitch(name, value),
+});
+
 const shellEnvironmentSync = syncShellEnvironment();
 
 const IPC = DESKTOP_IPC_CHANNELS;
@@ -3053,7 +3059,9 @@ function backendEnv(): NodeJS.ProcessEnv {
   // until it returns, so an unmarked child serializes a second ~1s hydration behind ours.
   // Written explicitly in both directions: an inherited marker must never suppress a
   // probe when our own hydration failed and the child's PATH is the raw launch one.
-  return applyShellEnvironmentHydrationMarker(env, shellEnvironmentSync.pathHydrated);
+  return withDesktopRemoteAccessEnv(
+    applyShellEnvironmentHydrationMarker(env, shellEnvironmentSync.pathHydrated),
+  );
 }
 
 function scheduleBackendRestart(reason: string): void {
@@ -3331,6 +3339,9 @@ function startBackend(trigger: BackendStartTrigger = "lifecycle"): void {
   writeBackendSessionBoundary(
     "START",
     `pid=${child.pid ?? "unknown"} port=${backendPort} cwd=${resolveBackendCwd()}`,
+  );
+  writeDesktopLogHeader(
+    "backend remote bind enabled LUMINOR_ALLOW_INSECURE_REMOTE=1 (plaintext HTTP on Tailscale)",
   );
   const backendLogDestination = backendLogSink;
   const backendOutputCapture = captureBackendProcessOutput({

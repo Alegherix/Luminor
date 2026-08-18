@@ -44,6 +44,19 @@ describe("ServerAuthPolicyLive", () => {
     expect(descriptor.sessionCookieName).toBe("luminor_session_3773");
   });
 
+  it("uses remote-reachable policy when desktop keeps loopback and adds a remote bind", async () => {
+    const descriptor = await getDescriptor.pipe(
+      Effect.provide(
+        makeLayer({ mode: "desktop", host: "127.0.0.1", port: 4123, remoteHost: "100.64.1.20" }),
+      ),
+      Effect.scoped,
+      Effect.runPromise,
+    );
+
+    expect(descriptor.policy).toBe("remote-reachable");
+    expect(descriptor.bootstrapMethods).toEqual(["desktop-bootstrap", "one-time-token"]);
+  });
+
   it("uses remote-reachable policy for wildcard desktop mode", async () => {
     const descriptor = await getDescriptor.pipe(
       Effect.provide(makeLayer({ mode: "desktop", host: "0.0.0.0" })),

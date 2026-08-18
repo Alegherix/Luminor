@@ -40,7 +40,7 @@ import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnap
 import { ProviderAdapterRegistry } from "./provider/Services/ProviderAdapterRegistry";
 import { threadArchiveChunks, threadArchiveFileName } from "./orchestration/exportThreadArchive";
 import type { ServerReadiness } from "./server/readiness";
-import { isLoopbackHost } from "./startupAccess";
+import { isLoopbackAddress, isLoopbackHost, requestLocalAddress } from "./startupAccess";
 import {
   attachmentPrincipalForSession,
   LOCAL_LOOPBACK_ATTACHMENT_PRINCIPAL,
@@ -178,7 +178,12 @@ function localPreviewCorsHeaders(input: {
   const origin = normalizeCorsOrigin(input.request.headers.origin);
   if (
     !origin ||
-    !isTrustedAppOrigin({ origin, requestOrigin: input.url.origin, config: input.config })
+    !isTrustedAppOrigin({
+      origin,
+      requestOrigin: input.url.origin,
+      config: input.config,
+      localAddress: requestLocalAddress(input.request),
+    })
   ) {
     return {};
   }
@@ -294,6 +299,7 @@ const requireAuthenticatedMutationRequest = Effect.gen(function* () {
       requestOrigin: url.origin,
       config,
       credentialSource: session.credentialSource,
+      localAddress: requestLocalAddress(request),
     })
   ) {
     return yield* Effect.fail({
@@ -311,7 +317,14 @@ function trustedMutationCorsHeaders(input: {
 }): Record<string, string> | null {
   const origin = normalizeCorsOrigin(input.request.headers.origin);
   if (!origin) return {};
-  if (!isTrustedAppOrigin({ origin, requestOrigin: input.url.origin, config: input.config })) {
+  if (
+    !isTrustedAppOrigin({
+      origin,
+      requestOrigin: input.url.origin,
+      config: input.config,
+      localAddress: requestLocalAddress(input.request),
+    })
+  ) {
     return null;
   }
   return {
@@ -326,8 +339,16 @@ function trustedMutationCorsHeaders(input: {
 export function isLegacyTokenAuthorized(input: {
   readonly config: ServerConfigShape;
   readonly url: URL;
+  readonly localAddress?: string | undefined;
 }): boolean {
-  if (!isLoopbackHost(input.config.host) || input.config.publicUrl) {
+  if (input.config.publicUrl) {
+    return false;
+  }
+  const loopbackSocket =
+    input.localAddress !== undefined
+      ? isLoopbackAddress(input.localAddress)
+      : isLoopbackHost(input.config.host);
+  if (!loopbackSocket) {
     return false;
   }
   const legacyToken = input.url.searchParams.get("token");
@@ -656,7 +677,7 @@ const siteFaviconEffectRouteLayer = HttpRouter.add(
     // same startup-token rule the local-image/attachments routes use so favicons
     // load in local dev without a session cookie.
     const config = yield* ServerConfig;
-    if (!isLegacyTokenAuthorized({ config, url })) {
+    if (!isLegacyTokenAuthorized({ config, url, localAddress: requestLocalAddress(request) })) {
       yield* requireAuthenticatedRequest;
     }
 
@@ -702,7 +723,7 @@ const threadExportEffectRouteLayer = HttpRouter.add(
     if (!url) return HttpServerResponse.text("Bad Request", { status: 400 });
 
     const config = yield* ServerConfig;
-    if (!isLegacyTokenAuthorized({ config, url })) {
+    if (!isLegacyTokenAuthorized({ config, url, localAddress: requestLocalAddress(request) })) {
       yield* requireAuthenticatedRequest;
     }
 
@@ -757,7 +778,7 @@ export const editorIconEffectRouteLayer = HttpRouter.add(
     if (!url) return HttpServerResponse.text("Bad Request", { status: 400 });
 
     const config = yield* ServerConfig;
-    if (!isLegacyTokenAuthorized({ config, url })) {
+    if (!isLegacyTokenAuthorized({ config, url, localAddress: requestLocalAddress(request) })) {
       yield* requireAuthenticatedRequest;
     }
 
@@ -800,7 +821,7 @@ export const localImageEffectRouteLayer = HttpRouter.add(
     if (!url) return HttpServerResponse.text("Bad Request", { status: 400 });
 
     const config = yield* ServerConfig;
-    if (!isLegacyTokenAuthorized({ config, url })) {
+    if (!isLegacyTokenAuthorized({ config, url, localAddress: requestLocalAddress(request) })) {
       yield* requireAuthenticatedRequest;
     }
 
@@ -861,7 +882,11 @@ const binaryUploadEffectHandler = Effect.gen(function* () {
   if (request.method !== "POST") {
     return HttpServerResponse.text("Method Not Allowed", { status: 405, headers: corsHeaders });
   }
-  const attachmentPrincipal = isLegacyTokenAuthorized({ config, url })
+  const attachmentPrincipal = isLegacyTokenAuthorized({
+    config,
+    url,
+    localAddress: requestLocalAddress(request),
+  })
     ? LOCAL_LOOPBACK_ATTACHMENT_PRINCIPAL
     : attachmentPrincipalForSession((yield* requireAuthenticatedMutationRequest).sessionId);
 
@@ -1055,7 +1080,7 @@ export const attachmentsEffectRouteLayer = HttpRouter.add(
     const config = yield* ServerConfig;
     // Desktop image tags cannot attach Authorization headers; preserve the same
     // startup token rule that the WebSocket route already accepts.
-    if (!isLegacyTokenAuthorized({ config, url })) {
+    if (!isLegacyTokenAuthorized({ config, url, localAddress: requestLocalAddress(request) })) {
       yield* requireAuthenticatedRequest;
     }
 

@@ -146,6 +146,14 @@ const CliEnvConfig = Config.all({
   ),
   port: Config.port("LUMINOR_PORT").pipe(Config.option, Config.map(Option.getOrUndefined)),
   host: Config.string("LUMINOR_HOST").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  remoteHost: Config.string("LUMINOR_REMOTE_HOST").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  remotePort: Config.string("LUMINOR_REMOTE_PORT").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
   luminorHome: Config.string("LUMINOR_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
   devUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
   publicUrl: Config.url("LUMINOR_PUBLIC_URL").pipe(
@@ -252,6 +260,15 @@ const ServerConfigLive = (input: CliInput) =>
       // the server beyond the local machine on common platforms. Keep every
       // mode loopback-only unless remote access is explicit and authenticated.
       const host = Option.getOrUndefined(input.host) ?? env.host ?? "127.0.0.1";
+      const remoteHost = env.remoteHost?.trim() || undefined;
+      const parsedRemotePort = env.remotePort ? Number.parseInt(env.remotePort, 10) : undefined;
+      const remotePort =
+        parsedRemotePort !== undefined &&
+        Number.isInteger(parsedRemotePort) &&
+        parsedRemotePort >= 1 &&
+        parsedRemotePort <= 65535
+          ? parsedRemotePort
+          : undefined;
       const remotePolicyError = remoteAccessPolicyError({
         host,
         authToken,
@@ -276,6 +293,8 @@ const ServerConfigLive = (input: CliInput) =>
         chatWorkspaceRoot,
         studioWorkspaceRoot,
         host,
+        ...(remoteHost ? { remoteHost } : {}),
+        ...(remotePort !== undefined ? { remotePort } : {}),
         baseDir,
         ...derivedPaths,
         staticDir,

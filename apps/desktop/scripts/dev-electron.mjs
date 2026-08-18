@@ -4,6 +4,7 @@ import { join } from "node:path";
 import waitOn from "wait-on";
 
 import { desktopDir, resolveElectronPath } from "./electron-launcher.mjs";
+import { applyLinuxElectronDisplayEnvironment } from "./linux-display-env.mjs";
 
 const port = Number(process.env.ELECTRON_RENDERER_PORT ?? 5733);
 const devServerUrl = `http://localhost:${port}`;
@@ -58,7 +59,7 @@ await waitOn({
   resources: [`tcp:${port}`, ...requiredFiles.map((filePath) => `file:${filePath}`)],
 });
 
-const childEnv = { ...process.env };
+const childEnv = applyLinuxElectronDisplayEnvironment({ ...process.env });
 delete childEnv.ELECTRON_RUN_AS_NODE;
 
 let shuttingDown = false;

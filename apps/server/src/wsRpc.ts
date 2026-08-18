@@ -133,7 +133,7 @@ import { ExternalMcpService } from "./externalMcp/Services/ExternalMcpService";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents";
 import { ServerRuntimeStartup } from "./serverRuntimeStartup";
 import { ServerSettingsService } from "./serverSettings";
-import { isLoopbackHost } from "./startupAccess";
+import { isLoopbackAddress, isLoopbackHost, requestLocalAddress } from "./startupAccess";
 import { TerminalManager } from "./terminal/Services/Manager";
 import { TerminalThreadTitleTracker } from "./terminal/terminalThreadTitleTracker";
 import { resolveOutOfRootFileReference } from "./workspace/outOfRootFileReference";
@@ -2200,6 +2200,7 @@ function trustedWebSocketRequestUrl(
       rawOrigin: request.headers.origin,
       requestOrigin: url.origin,
       config,
+      localAddress: requestLocalAddress(request),
     })
     ? url
     : null;
@@ -2210,12 +2211,15 @@ export function authenticateRpcWebSocketUpgrade(input: {
   readonly legacyToken: string | null;
   readonly request: AuthRequest;
   readonly serverAuth: Pick<ServerAuthShape, "authenticateWebSocketUpgrade">;
+  readonly localAddress?: string | undefined;
 }): Effect.Effect<AuthenticatedSession | null, AuthError> {
+  const loopbackSocket =
+    input.localAddress !== undefined
+      ? isLoopbackAddress(input.localAddress)
+      : isLoopbackHost(input.config.host);
   if (
-    !requiresWebSocketAuthentication(input.config) ||
-    (isLoopbackHost(input.config.host) &&
-      !input.config.publicUrl &&
-      input.legacyToken === input.config.authToken)
+    !requiresWebSocketAuthentication(input.config, input.localAddress) ||
+    (loopbackSocket && !input.config.publicUrl && input.legacyToken === input.config.authToken)
   ) {
     return Effect.succeed(null);
   }
@@ -2233,6 +2237,7 @@ export function authorizeDeviceFrameWebSocketUpgrade(input: {
   readonly legacyToken: string | null;
   readonly request: AuthRequest;
   readonly serverAuth: Pick<ServerAuthShape, "authenticateWebSocketUpgrade">;
+  readonly localAddress?: string | undefined;
 }): Effect.Effect<boolean> {
   return authenticateRpcWebSocketUpgrade(input).pipe(
     Effect.as(true),
@@ -2302,6 +2307,7 @@ export function makeWebsocketRpcRouteLayer<R>(
             legacyToken,
             request: makeEffectAuthRequest(request),
             serverAuth,
+            localAddress: requestLocalAddress(request),
           });
 
           if (!authenticatedSession) {
@@ -2367,7 +2373,13 @@ function makeWsNegotiateHttpRouteLayer() {
           // origins the WS upgrade itself would trust.
           const origin = normalizeCorsOrigin(request.headers.origin);
           const corsHeaders =
-            origin && isTrustedAppOrigin({ origin, requestOrigin: url.origin, config })
+            origin &&
+            isTrustedAppOrigin({
+              origin,
+              requestOrigin: url.origin,
+              config,
+              localAddress: requestLocalAddress(request),
+            })
               ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" }
               : {};
           const headers = { "Cache-Control": "no-store", ...corsHeaders };
@@ -2445,6 +2457,7 @@ const deviceFrameRouteLayer = makeDeviceFrameRouteLayer({
         legacyToken: url.searchParams.get("token"),
         request: makeEffectAuthRequest(request),
         serverAuth,
+        localAddress: requestLocalAddress(request),
       });
     }),
 });

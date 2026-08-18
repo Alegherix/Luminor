@@ -239,6 +239,28 @@ it.layer(testLayer)("server CLI command", (it) => {
     }),
   );
 
+  it.effect("keeps the loopback bind when a companion remote host is configured", () =>
+    Effect.gen(function* () {
+      yield* runCli([], {
+        LUMINOR_MODE: "desktop",
+        LUMINOR_HOST: "127.0.0.1",
+        LUMINOR_PORT: "4123",
+        LUMINOR_REMOTE_HOST: "100.64.1.20",
+        LUMINOR_REMOTE_PORT: "3773",
+        LUMINOR_ALLOW_INSECURE_REMOTE: "1",
+        LUMINOR_AUTH_TOKEN: "desktop-secret",
+        LUMINOR_NO_BROWSER: "true",
+      });
+
+      assert.equal(start.mock.calls.length, 1);
+      assert.equal(resolvedConfig?.host, "127.0.0.1");
+      assert.equal(resolvedConfig?.port, 4123);
+      assert.equal(resolvedConfig?.remoteHost, "100.64.1.20");
+      assert.equal(resolvedConfig?.remotePort, 3773);
+      assert.equal(resolvedConfig?.allowInsecureRemote, true);
+    }),
+  );
+
   it.effect("uses env fallbacks when flags are not provided", () =>
     Effect.gen(function* () {
       const envHome = makeTempHome("luminor-main-env-");
