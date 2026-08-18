@@ -631,10 +631,13 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           command,
           projectId: command.owner.projectId,
         });
-        if (project.deletedAt !== null || project.kind !== "project") {
+        if (
+          project.deletedAt !== null ||
+          (project.kind !== "project" && project.kind !== "chat")
+        ) {
           return yield* new OrchestrationCommandInvariantError({
             commandType: command.type,
-            detail: "Folders can only be created under an active project or space.",
+            detail: "Folders can only be created under an active project, chat container, or space.",
           });
         }
       } else {

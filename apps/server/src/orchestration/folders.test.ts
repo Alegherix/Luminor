@@ -133,6 +133,83 @@ async function createSpaceFolderFixture() {
 }
 
 describe("Folders", () => {
+  it("creates a folder under a chat-kind container and files a thread there", async () => {
+    const createdAt = "2026-08-18T20:00:00.000Z";
+    const chatProjectId = ProjectId.makeUnsafe("project-chats");
+    const folderId = FolderId.makeUnsafe("folder-crashes");
+    const threadId = ThreadId.makeUnsafe("thread-crash");
+    let readModel = createEmptyReadModel(createdAt);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-chat-container-create"),
+      projectId: chatProjectId,
+      kind: "chat",
+      title: "Chats",
+      workspaceRoot: "/tmp/luminor-chats",
+      createdAt,
+    }));
+
+    const creation = await dispatch(readModel, {
+      type: "folder.create",
+      commandId: CommandId.makeUnsafe("cmd-crashes-folder-create"),
+      folderId,
+      owner: projectFolderOwner(chatProjectId),
+      name: "Crashes",
+      createdAt,
+    });
+    readModel = creation.readModel;
+    expect(creation.events.map((event) => event.type)).toEqual(["folder.created"]);
+    expect(readModel.folders[0]).toEqual(
+      expect.objectContaining({
+        id: folderId,
+        owner: projectFolderOwner(chatProjectId),
+        name: "Crashes",
+        deletedAt: null,
+      }),
+    );
+
+    const thread = await dispatch(readModel, {
+      ...threadCreateCommand({
+        commandId: "cmd-crash-thread-create",
+        threadId,
+        projectId: chatProjectId,
+        title: "Process crashed: node",
+        createdAt,
+      }),
+      folderId,
+    });
+    expect(thread.events.map((event) => event.type)).toEqual(["thread.created"]);
+    expect(thread.readModel.threads[0]?.folderId).toBe(folderId);
+  });
+
+  it("rejects folder create under a studio container", async () => {
+    const createdAt = "2026-08-18T20:05:00.000Z";
+    const studioProjectId = ProjectId.makeUnsafe("project-studio");
+    let readModel = createEmptyReadModel(createdAt);
+
+    ({ readModel } = await dispatch(readModel, {
+      type: "project.create",
+      commandId: CommandId.makeUnsafe("cmd-studio-create"),
+      projectId: studioProjectId,
+      kind: "studio",
+      title: "Studio",
+      workspaceRoot: "/tmp/luminor-studio",
+      createdAt,
+    }));
+
+    await expect(
+      dispatch(readModel, {
+        type: "folder.create",
+        commandId: CommandId.makeUnsafe("cmd-studio-folder-create"),
+        folderId: FolderId.makeUnsafe("folder-studio"),
+        owner: projectFolderOwner(studioProjectId),
+        name: "Crashes",
+        createdAt,
+      }),
+    ).rejects.toThrow(/chat container|project or space/i);
+  });
+
   it("projects create, rename, and delete commands into the read model", async () => {
     const createdAt = "2026-08-10T10:00:00.000Z";
     const projectId = ProjectId.makeUnsafe("project-folders");
