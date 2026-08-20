@@ -499,6 +499,10 @@ const readGitHubProvisioningServerCapability = () => false;
 const THREAD_PREVIEW_LIMIT = 5;
 // Each "Show more" click reveals this many extra rows; "Show less" hides them again page by page.
 const THREAD_PREVIEW_PAGE_SIZE = 5;
+// Quiet text links — stacked, same indent as thread titles. Never flex-split across the row
+// (that put "Show less" on the right with a different visual weight).
+const THREAD_LIST_PAGING_BUTTON_CLASS_NAME =
+  "h-7 w-full translate-x-0 justify-start rounded-lg pr-2 pl-8 text-left text-[length:var(--app-font-size-ui,12px)] font-normal text-muted-foreground/79 hover:bg-transparent hover:text-foreground active:bg-transparent active:text-foreground";
 // Mouse clicks must not focus the paging buttons, or the focus ring lingers as a solid block
 // after the click; they should only light up on hover/press. Keyboard focus is unaffected.
 const preventFocusOnMouseDown = (event: React.MouseEvent) => {
@@ -5780,13 +5784,13 @@ export default function Sidebar() {
 
               {(canShowMoreThreads || canShowLessThreads) && (
                 <SidebarMenuSubItem className="w-full">
-                  <div className="flex w-full items-center gap-1">
+                  <div className="flex w-full flex-col items-stretch">
                     {canShowMoreThreads && (
                       <SidebarMenuSubButton
                         render={<button type="button" />}
                         data-thread-selection-safe
                         size="sm"
-                        className="h-7 flex-1 translate-x-0 justify-start rounded-lg pr-2 pl-8 text-left text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/79 hover:bg-transparent hover:text-foreground active:bg-transparent active:text-foreground"
+                        className={THREAD_LIST_PAGING_BUTTON_CLASS_NAME}
                         onMouseDown={preventFocusOnMouseDown}
                         onClick={() => {
                           showMoreThreadsForProject(project.cwd, threadListExtraPages);
@@ -5800,11 +5804,7 @@ export default function Sidebar() {
                         render={<button type="button" />}
                         data-thread-selection-safe
                         size="sm"
-                        className={cn(
-                          "h-7 translate-x-0 justify-start rounded-lg text-left text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/79 hover:bg-transparent hover:text-foreground active:bg-transparent active:text-foreground",
-                          // Keep the left indent when "Show less" is the only affordance left.
-                          canShowMoreThreads ? "w-auto flex-none px-2" : "flex-1 pr-2 pl-8",
-                        )}
+                        className={THREAD_LIST_PAGING_BUTTON_CLASS_NAME}
                         onMouseDown={preventFocusOnMouseDown}
                         onClick={() => {
                           showLessThreadsForProject(project.cwd, threadListExtraPages);
@@ -7081,11 +7081,11 @@ export default function Sidebar() {
                     )}
                     {canShowMoreChatThreads || canShowLessChatThreads ? (
                       <SidebarMenuItem className="w-full">
-                        <div className="flex w-full items-center gap-1">
+                        <div className="flex w-full flex-col items-stretch">
                           {canShowMoreChatThreads ? (
                             <SidebarMenuButton
                               size="sm"
-                              className="h-7 flex-1 justify-start rounded-lg pr-2 pl-8 text-left text-[length:var(--app-font-size-ui,12px)] font-normal text-muted-foreground/79 hover:bg-transparent hover:text-foreground active:bg-transparent active:text-foreground"
+                              className={THREAD_LIST_PAGING_BUTTON_CLASS_NAME}
                               onMouseDown={preventFocusOnMouseDown}
                               onClick={() =>
                                 setChatThreadListExtraPages(chatThreadListEffectiveExtraPages + 1)
@@ -7097,13 +7097,7 @@ export default function Sidebar() {
                           {canShowLessChatThreads ? (
                             <SidebarMenuButton
                               size="sm"
-                              className={cn(
-                                "h-7 justify-start rounded-lg text-left text-[length:var(--app-font-size-ui,12px)] font-normal text-muted-foreground/79 hover:bg-transparent hover:text-foreground active:bg-transparent active:text-foreground",
-                                // Keep the left indent when "Show less" is the only affordance left.
-                                canShowMoreChatThreads
-                                  ? "w-auto flex-none px-2"
-                                  : "flex-1 pr-2 pl-8",
-                              )}
+                              className={THREAD_LIST_PAGING_BUTTON_CLASS_NAME}
                               onMouseDown={preventFocusOnMouseDown}
                               onClick={() =>
                                 setChatThreadListExtraPages(

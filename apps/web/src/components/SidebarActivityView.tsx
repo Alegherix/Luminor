@@ -497,20 +497,16 @@ function ActivityShowMoreRow({
 }) {
   if (!canShowMore && !canShowLess) return null;
   const buttonClassName =
-    "h-7 cursor-pointer rounded-lg px-2.5 text-left text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/79 hover:text-foreground";
+    "h-7 w-full cursor-pointer rounded-lg px-2.5 text-left text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/79 hover:bg-transparent hover:text-foreground";
   return (
-    <div className="flex w-full items-center gap-1">
+    <div className="flex w-full flex-col items-stretch">
       {canShowMore ? (
-        <button type="button" className={cn(buttonClassName, "flex-1")} onClick={onShowMore}>
+        <button type="button" className={buttonClassName} onClick={onShowMore}>
           Show more
         </button>
       ) : null}
       {canShowLess ? (
-        <button
-          type="button"
-          className={cn(buttonClassName, canShowMore ? "flex-none" : "flex-1")}
-          onClick={onShowLess}
-        >
+        <button type="button" className={buttonClassName} onClick={onShowLess}>
           Show less
         </button>
       ) : null}
