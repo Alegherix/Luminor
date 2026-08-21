@@ -22,6 +22,7 @@ import {
   DEVICE_FRAME_WS_PATH,
   DEVICE_FRAME_WS_UDID_PARAM,
 } from "@luminor/shared/deviceFrame";
+import { makeBinaryFrameSink } from "@luminor/shared/frameTransport";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
@@ -65,20 +66,7 @@ export function makeDeviceFrameSink(options: {
   readonly send: (bytes: Uint8Array) => Promise<void> | void;
   readonly isOpen: () => boolean;
 }): DeviceFrameSink {
-  let inFlightBytes = 0;
-  return {
-    send: (bytes) => {
-      inFlightBytes += bytes.byteLength;
-      const settle = () => {
-        inFlightBytes = Math.max(0, inFlightBytes - bytes.byteLength);
-      };
-      const result = options.send(bytes);
-      if (result instanceof Promise) result.then(settle, settle);
-      else settle();
-    },
-    bufferedAmount: () => inFlightBytes,
-    isOpen: options.isOpen,
-  };
+  return makeBinaryFrameSink(options);
 }
 
 /**

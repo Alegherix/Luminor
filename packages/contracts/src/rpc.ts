@@ -31,6 +31,28 @@ import {
   ExternalMcpRevokeIntegrationInput,
 } from "./externalMcp";
 import {
+  BROWSER_PANE_WS_METHODS,
+  BrowserControlResult,
+  BrowserControllerAcquireRequest,
+  BrowserControllerAcquireResult,
+  BrowserControllerLeaseChangeResult,
+  BrowserControllerReleaseRequest,
+  BrowserControllerRevokeRequest,
+  BrowserFocusRequest,
+  BrowserInputDispatchRequest,
+  BrowserInputDispatchResult,
+  BrowserNavigateRequest,
+  BrowserStateSnapshotInput,
+  BrowserStateSnapshotResult,
+  BrowserStreamSubscribeInput,
+  BrowserStreamUnsubscribeInput,
+  BrowserStreamUnsubscribeResult,
+  BrowserSubscriptionStreamItem,
+  BrowserTabControlRequest,
+  BrowserTabCreateRequest,
+  BrowserViewportResizeRequest,
+} from "./browserPane";
+import {
   DEVICE_WS_METHODS,
   DeviceAttachInput,
   DeviceBootInput,
@@ -686,6 +708,122 @@ export const WsDeviceRpcGroup = RpcGroup.make(
   WsDeviceDescribeUiRpc,
   WsDeviceScrollToElementRpc,
   WsSubscribeDeviceEventsRpc,
+);
+
+export const WsBrowserSubscribeRpc = Rpc.make(BROWSER_PANE_WS_METHODS.subscribe, {
+  payload: BrowserStreamSubscribeInput,
+  success: BrowserSubscriptionStreamItem,
+  error: WsRpcError,
+  stream: true,
+});
+
+export const WsBrowserUnsubscribeRpc = Rpc.make(BROWSER_PANE_WS_METHODS.unsubscribe, {
+  payload: BrowserStreamUnsubscribeInput,
+  success: BrowserStreamUnsubscribeResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserGetStateRpc = Rpc.make(BROWSER_PANE_WS_METHODS.getState, {
+  payload: BrowserStateSnapshotInput,
+  success: BrowserStateSnapshotResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserNavigateRpc = Rpc.make(BROWSER_PANE_WS_METHODS.navigate, {
+  payload: BrowserNavigateRequest,
+  success: BrowserControlResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserGoBackRpc = Rpc.make(BROWSER_PANE_WS_METHODS.goBack, {
+  payload: BrowserTabControlRequest,
+  success: BrowserControlResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserGoForwardRpc = Rpc.make(BROWSER_PANE_WS_METHODS.goForward, {
+  payload: BrowserTabControlRequest,
+  success: BrowserControlResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserReloadRpc = Rpc.make(BROWSER_PANE_WS_METHODS.reload, {
+  payload: BrowserTabControlRequest,
+  success: BrowserControlResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserCreateTabRpc = Rpc.make(BROWSER_PANE_WS_METHODS.createTab, {
+  payload: BrowserTabCreateRequest,
+  success: BrowserControlResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserSelectTabRpc = Rpc.make(BROWSER_PANE_WS_METHODS.selectTab, {
+  payload: BrowserTabControlRequest,
+  success: BrowserControlResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserCloseTabRpc = Rpc.make(BROWSER_PANE_WS_METHODS.closeTab, {
+  payload: BrowserTabControlRequest,
+  success: BrowserControlResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserFocusRpc = Rpc.make(BROWSER_PANE_WS_METHODS.focus, {
+  payload: BrowserFocusRequest,
+  success: BrowserControlResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserResizeViewportRpc = Rpc.make(BROWSER_PANE_WS_METHODS.resizeViewport, {
+  payload: BrowserViewportResizeRequest,
+  success: BrowserControlResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserDispatchInputRpc = Rpc.make(BROWSER_PANE_WS_METHODS.dispatchInput, {
+  payload: BrowserInputDispatchRequest,
+  success: BrowserInputDispatchResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserAcquireControllerRpc = Rpc.make(BROWSER_PANE_WS_METHODS.acquireController, {
+  payload: BrowserControllerAcquireRequest,
+  success: BrowserControllerAcquireResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserReleaseControllerRpc = Rpc.make(BROWSER_PANE_WS_METHODS.releaseController, {
+  payload: BrowserControllerReleaseRequest,
+  success: BrowserControllerLeaseChangeResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserRevokeControllerRpc = Rpc.make(BROWSER_PANE_WS_METHODS.revokeController, {
+  payload: BrowserControllerRevokeRequest,
+  success: BrowserControllerLeaseChangeResult,
+  error: WsRpcError,
+});
+
+export const WsBrowserPaneRpcGroup = RpcGroup.make(
+  WsBrowserSubscribeRpc,
+  WsBrowserUnsubscribeRpc,
+  WsBrowserGetStateRpc,
+  WsBrowserNavigateRpc,
+  WsBrowserGoBackRpc,
+  WsBrowserGoForwardRpc,
+  WsBrowserReloadRpc,
+  WsBrowserCreateTabRpc,
+  WsBrowserSelectTabRpc,
+  WsBrowserCloseTabRpc,
+  WsBrowserFocusRpc,
+  WsBrowserResizeViewportRpc,
+  WsBrowserDispatchInputRpc,
+  WsBrowserAcquireControllerRpc,
+  WsBrowserReleaseControllerRpc,
+  WsBrowserRevokeControllerRpc,
 );
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
