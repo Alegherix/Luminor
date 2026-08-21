@@ -45,8 +45,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentGatewayOperationRepositoryLive } from "../../agentGateway/Layers/AgentGatewayOperationRepository.ts";
 import { AgentGatewayOperationRepository } from "../../agentGateway/Services/AgentGatewayOperationRepository.ts";
+import {
+  planManagedWorktreeBranchName,
+  planManagedWorktreePath,
+} from "../../agentGateway/creationUtils.ts";
 import { deriveServerPaths, ServerConfig } from "../../config.ts";
-import { TextGenerationError } from "../../git/Errors.ts";
+import { GitCommandError, TextGenerationError } from "../../git/Errors.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
@@ -214,7 +218,7 @@ describe("ProviderCommandReactor", () => {
     const now = new Date().toISOString();
     const baseDir = input?.baseDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "luminor-reactor-"));
     createdBaseDirs.add(baseDir);
-    const { stateDir } = deriveServerPathsSync(baseDir, undefined);
+    const { stateDir, worktreesDir } = deriveServerPathsSync(baseDir, undefined);
     createdStateDirs.add(stateDir);
     const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
     let nextSessionIndex = 1;
@@ -436,10 +440,19 @@ describe("ProviderCommandReactor", () => {
       Effect.tryPromise({
         try: async () => {
           await fs.promises.mkdir(worktreePath, { recursive: true });
-          await fs.promises.writeFile(path.join(worktreePath, ".git"), "gitdir: /tmp/test-worktree\n");
+          await fs.promises.writeFile(
+            path.join(worktreePath, ".git"),
+            "gitdir: /tmp/test-worktree\n",
+          );
           return worktreePath;
         },
-        catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+        catch: (cause) =>
+          new GitCommandError({
+            operation: "materializeWorktreeCheckout",
+            command: "git worktree add",
+            cwd: worktreePath,
+            detail: cause instanceof Error ? cause.message : String(cause),
+          }),
       });
     const createWorktree = vi.fn<GitCoreShape["createWorktree"]>((input) =>
       materializeWorktreeCheckout(input.path ?? "/tmp/provider-worktree").pipe(
@@ -458,6 +471,13 @@ describe("ProviderCommandReactor", () => {
           },
         })),
       ),
+    );
+    const execute = vi.fn<GitCoreShape["execute"]>(() =>
+      Effect.succeed({
+        code: 0,
+        stdout: "0123456789abcdef0123456789abcdef01234567\n",
+        stderr: "",
+      }),
     );
     const generateBranchName = vi.fn<TextGenerationShape["generateBranchName"]>(() =>
       Effect.fail(
@@ -548,6 +568,7 @@ describe("ProviderCommandReactor", () => {
           listLocalBranchNames,
           createWorktree,
           createDetachedWorktree,
+          execute,
         } as unknown as GitCoreShape),
       ),
       Layer.provideMerge(
@@ -677,6 +698,11 @@ describe("ProviderCommandReactor", () => {
       clearSessionResumeCursor,
       renameBranch,
       publishBranch,
+      listLocalBranchNames,
+      createWorktree,
+      createDetachedWorktree,
+      execute,
+      worktreesDir,
       generateBranchName,
       generateThreadTitle,
       captureStudioOutputBaseline,
@@ -5505,6 +5531,75 @@ describe("ProviderCommandReactor", () => {
       associatedWorktreePath: "/tmp/provider-project/.worktrees/cb661f0d",
       associatedWorktreeBranch: "luminor/app-startup-crash",
       associatedWorktreeRef: "luminor/app-startup-crash",
+    });
+  });
+
+  it("materializes a pending managed worktree at turn start", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.meta.update",
+        commandId: CommandId.makeUnsafe("cmd-thread-gpui-worktree-pending"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        envMode: "worktree",
+        branch: "main",
+      }),
+    );
+
+    const expectedWorktreePath = planManagedWorktreePath(harness.worktreesDir, {
+      threadId: "thread-1",
+    });
+    const expectedBranch = planManagedWorktreeBranchName({ threadId: "thread-1" });
+    const expectedBaseRef = "0123456789abcdef0123456789abcdef01234567";
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-worktree-pending"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-worktree-pending"),
+          role: "user",
+          text: "Start a turn in the pending managed worktree",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    expect(harness.execute).toHaveBeenCalledTimes(1);
+    expect(harness.execute.mock.calls[0]?.[0]).toMatchObject({
+      cwd: "/tmp/provider-project",
+      args: ["rev-parse", "--verify", "--end-of-options", "HEAD^{commit}"],
+    });
+    expect(harness.createDetachedWorktree).toHaveBeenCalledTimes(1);
+    expect(harness.createDetachedWorktree.mock.calls[0]?.[0]).toMatchObject({
+      cwd: "/tmp/provider-project",
+      ref: expectedBaseRef,
+      path: expectedWorktreePath,
+      newBranch: expectedBranch,
+    });
+
+    await waitFor(async () => Boolean((await readHarnessThread(harness))?.worktreePath));
+    const thread = await readHarnessThread(harness);
+    expect(thread).toMatchObject({
+      envMode: "worktree",
+      branch: expectedBranch,
+      worktreePath: expectedWorktreePath,
+      associatedWorktreePath: expectedWorktreePath,
+      associatedWorktreeBranch: expectedBranch,
+      associatedWorktreeRef: expectedBaseRef,
+    });
+
+    expect(harness.startSession).toHaveBeenCalledTimes(1);
+    expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
+      cwd: expectedWorktreePath,
     });
   });
 

@@ -73,6 +73,10 @@ import {
 import { CheckpointStore } from "../../checkpointing/Services/CheckpointStore.ts";
 import { AgentGatewayOperationRepository } from "../../agentGateway/Services/AgentGatewayOperationRepository.ts";
 import {
+  planManagedWorktreeBranchName,
+  planManagedWorktreePath,
+} from "../../agentGateway/creationUtils.ts";
+import {
   ensureManagedWorktreeCheckout,
   ManagedWorktreeCheckoutError,
 } from "../../ensureManagedWorktreeCheckout.ts";
@@ -1245,17 +1249,83 @@ const make = Effect.gen(function* () {
     const resolvedProviderOptions = providerStartOptionsFromServerSettings(
       settingsSnapshot.settings,
     );
-    const effectiveCwd = yield* resolveProjectedThreadWorkspaceCwd(thread);
     const workspaceState = resolveThreadWorkspaceState({
       envMode: thread.envMode,
       worktreePath: thread.worktreePath,
     });
+    let pendingManagedWorktree: {
+      readonly worktreePath: string;
+      readonly branch: string;
+    } | null = null;
     if (workspaceState === "worktree-pending") {
-      return yield* new ProviderAdapterValidationError({
-        provider: threadProvider,
-        operation: "thread.turn.start",
-        issue: `Thread '${threadId}' targets a worktree that has not been created yet.`,
+      const project = yield* resolveThreadWorkspaceProject(thread);
+      if (!project?.workspaceRoot) {
+        return yield* new ProviderAdapterValidationError({
+          provider: threadProvider,
+          operation: "thread.turn.start",
+          issue: `Thread '${threadId}' targets a managed worktree but its project workspace root is unavailable.`,
+        });
+      }
+      const worktreePath = planManagedWorktreePath(serverConfig.worktreesDir, { threadId });
+      const branch = planManagedWorktreeBranchName({ threadId });
+      const baseRefCommit = yield* git
+        .execute({
+          operation: "Orchestration.resolvePendingManagedWorktreeBaseRef",
+          cwd: project.workspaceRoot,
+          args: ["rev-parse", "--verify", "--end-of-options", "HEAD^{commit}"],
+          timeoutMs: 5_000,
+        })
+        .pipe(
+          Effect.map((result) => result.stdout.trim()),
+          Effect.filterOrFail(
+            (commit) => commit.length > 0,
+            () => new Error("git returned an empty commit id"),
+          ),
+          Effect.mapError(
+            (cause) =>
+              new ProviderAdapterValidationError({
+                provider: threadProvider,
+                operation: "thread.turn.start",
+                issue: `Could not resolve the base commit for the managed worktree of thread '${threadId}'. ${
+                  cause instanceof Error ? cause.message : String(cause)
+                }`,
+                cause,
+              }),
+          ),
+        );
+      yield* ensureManagedWorktreeCheckout({
+        projectCwd: project.workspaceRoot,
+        worktreePath,
+        branch,
+        associatedWorktreeRef: baseRefCommit,
+        git,
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProviderAdapterValidationError({
+              provider: threadProvider,
+              operation: "thread.turn.start",
+              issue: cause instanceof ManagedWorktreeCheckoutError ? cause.message : String(cause),
+              cause,
+            }),
+        ),
+      );
+      yield* orchestrationEngine.dispatch({
+        type: "thread.meta.update",
+        commandId: serverCommandId("pending-managed-worktree-materialized"),
+        threadId,
+        branch,
+        worktreePath,
+        associatedWorktreePath: worktreePath,
+        associatedWorktreeBranch: branch,
+        associatedWorktreeRef: baseRefCommit,
       });
+      yield* Effect.logInfo("provider command reactor materialized pending managed worktree", {
+        threadId,
+        worktreePath,
+        branch,
+      });
+      pendingManagedWorktree = { worktreePath, branch };
     }
     // Archive retention (and some handoff failures) can delete the on-disk
     // worktree while the thread still records worktreePath. Rematerialize from
@@ -1281,12 +1351,7 @@ const make = Effect.gen(function* () {
             new ProviderAdapterValidationError({
               provider: threadProvider,
               operation: "thread.turn.start",
-              issue:
-                cause instanceof ManagedWorktreeCheckoutError
-                  ? cause.message
-                  : cause instanceof Error
-                    ? cause.message
-                    : String(cause),
+              issue: cause instanceof ManagedWorktreeCheckoutError ? cause.message : String(cause),
               cause,
             }),
         ),
@@ -1299,6 +1364,15 @@ const make = Effect.gen(function* () {
         });
       }
     }
+    const effectiveCwd = yield* resolveProjectedThreadWorkspaceCwd(
+      pendingManagedWorktree
+        ? {
+            ...thread,
+            worktreePath: pendingManagedWorktree.worktreePath,
+            branch: pendingManagedWorktree.branch,
+          }
+        : thread,
+    );
     const providerSessionOptions = {
       threadId,
       ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
@@ -1990,15 +2064,12 @@ const make = Effect.gen(function* () {
               : null,
           );
 
-          yield* Effect.logWarning(
-            "provider command reactor retrying turn after stale resume",
-            {
-              threadId: input.threadId,
-              messageId: input.messageId,
-              provider: selectedProvider,
-              bootstrappedPriorTranscript: retryBootstrapText !== null,
-            },
-          );
+          yield* Effect.logWarning("provider command reactor retrying turn after stale resume", {
+            threadId: input.threadId,
+            messageId: input.messageId,
+            provider: selectedProvider,
+            bootstrappedPriorTranscript: retryBootstrapText !== null,
+          });
           return yield* sendQueuedProviderTurn(retryNormalizedInput);
         });
       const sentTurn = yield* sendQueuedProviderTurn(normalizedInput).pipe(

@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
+import { join } from "node:path";
 
 import { CommandId, MessageId, ThreadId } from "@luminor/contracts";
+import { WORKTREE_BRANCH_PREFIX } from "@luminor/shared/git";
 
 export function slugifyAgentTask(value: string): string {
   return (
@@ -29,6 +31,20 @@ export function canonicalJson(value: unknown): string {
 
 export function stableGatewayDigest(value: unknown, length = 32): string {
   return createHash("sha256").update(canonicalJson(value)).digest("hex").slice(0, length);
+}
+
+export function planManagedWorktreePath(
+  worktreesDir: string,
+  digestSeed: Record<string, unknown>,
+): string {
+  return join(worktreesDir, stableGatewayDigest(digestSeed, 12));
+}
+
+export function planManagedWorktreeBranchName(digestSeed: Record<string, unknown>): string {
+  return `${WORKTREE_BRANCH_PREFIX}/${stableGatewayDigest(
+    { ...digestSeed, resource: "worktree-branch" },
+    8,
+  )}`;
 }
 
 export function makeAgentCreationIds(operationId: string, index: number) {

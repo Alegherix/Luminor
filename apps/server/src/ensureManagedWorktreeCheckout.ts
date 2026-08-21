@@ -8,7 +8,10 @@ import type { GitCoreShape } from "./git/Services/GitCore.ts";
 export class ManagedWorktreeCheckoutError extends Error {
   readonly _tag = "ManagedWorktreeCheckoutError";
 
-  constructor(message: string, readonly cause?: unknown) {
+  constructor(
+    message: string,
+    override readonly cause?: unknown,
+  ) {
     super(message);
     this.name = "ManagedWorktreeCheckoutError";
   }
@@ -50,9 +53,7 @@ const pathExists = (targetPath: string): Effect.Effect<boolean, never> =>
  * Returns true when `worktreePath` is a usable linked Git checkout (has a `.git`
  * entry). Empty husks left after `git worktree remove` count as missing.
  */
-export const isUsableManagedWorktreeCheckout = (
-  worktreePath: string,
-): Effect.Effect<boolean> =>
+export const isUsableManagedWorktreeCheckout = (worktreePath: string): Effect.Effect<boolean> =>
   Effect.gen(function* () {
     if (!(yield* pathExists(worktreePath))) {
       return false;
@@ -105,18 +106,19 @@ export const ensureManagedWorktreeCheckout = (
     const parentDir = nodePath.dirname(input.worktreePath);
     yield* Effect.tryPromise({
       try: () => fs.mkdir(parentDir, { recursive: true }),
-      catch: (cause) =>
-        toCheckoutError(`Could not prepare worktree parent '${parentDir}'.`, cause),
+      catch: (cause) => toCheckoutError(`Could not prepare worktree parent '${parentDir}'.`, cause),
     });
 
-    const localBranches = yield* input.git.listLocalBranchNames(input.projectCwd).pipe(
-      Effect.mapError((cause) =>
-        toCheckoutError(
-          `Could not list local branches while rematerializing '${input.worktreePath}'.`,
-          cause,
+    const localBranches = yield* input.git
+      .listLocalBranchNames(input.projectCwd)
+      .pipe(
+        Effect.mapError((cause) =>
+          toCheckoutError(
+            `Could not list local branches while rematerializing '${input.worktreePath}'.`,
+            cause,
+          ),
         ),
-      ),
-    );
+      );
     const branch = input.branch?.trim() || null;
     const associatedRef = input.associatedWorktreeRef?.trim() || null;
 

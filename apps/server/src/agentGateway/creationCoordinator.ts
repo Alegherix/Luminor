@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 
 import {
   CommandId,
@@ -17,7 +16,6 @@ import {
   LUMINOR_GATEWAY_MAX_THREADS_PER_TURN,
 } from "@luminor/contracts";
 import { buildPromptThreadTitleFallback } from "@luminor/shared/chatThreads";
-import { WORKTREE_BRANCH_PREFIX } from "@luminor/shared/git";
 import { parseGitHubRepositoryNameWithOwnerFromPullRequestUrl } from "@luminor/shared/githubRepository";
 import { runtimeModeEscalatesPrivilege } from "@luminor/shared/runtimeMode";
 import { Cause, Effect, Option, Semaphore } from "effect";
@@ -41,6 +39,8 @@ import {
   canonicalJson,
   gatewayIsoNow,
   makeAgentCreationIds,
+  planManagedWorktreeBranchName,
+  planManagedWorktreePath,
   stableGatewayDigest,
 } from "./creationUtils.ts";
 import { mcpToolResultError, mcpToolResultJson, type McpToolCallResult } from "./protocol.ts";
@@ -683,10 +683,10 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
                 Effect.mapError((error) => new ToolInputError(errorText(error))),
               );
             copyChangesFrom = sourceHead === worktreeRef ? sourceCwd : null;
-            plannedWorktreePath = join(
-              serverConfig.worktreesDir,
-              stableGatewayDigest({ operationId, index }, 12),
-            );
+            plannedWorktreePath = planManagedWorktreePath(serverConfig.worktreesDir, {
+              operationId,
+              index,
+            });
             if (existsSync(plannedWorktreePath)) {
               return yield* Effect.fail(
                 new ToolInputError(
@@ -713,7 +713,7 @@ export const makeCreateThreadsHandler = Effect.fn(function* (
             // The 8-hex-digit token keeps it a temporary luminor/* branch.
             newBranch:
               environment === "worktree"
-                ? `${WORKTREE_BRANCH_PREFIX}/${stableGatewayDigest({ operationId, index, resource: "worktree-branch" }, 8)}`
+                ? planManagedWorktreeBranchName({ operationId, index })
                 : null,
             plannedWorktreePath,
             ownershipPreflightPassed: true,
