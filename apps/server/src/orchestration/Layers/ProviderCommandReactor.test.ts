@@ -429,6 +429,34 @@ describe("ProviderCommandReactor", () => {
     );
     const publishBranch = vi.fn(() => Effect.void);
     const withMutation: GitCoreShape["withMutation"] = (_cwd, effect) => effect;
+    const listLocalBranchNames = vi.fn(() => Effect.succeed([] as string[]));
+    const materializeWorktreeCheckout = (worktreePath: string) =>
+      Effect.tryPromise({
+        try: async () => {
+          await fs.promises.mkdir(worktreePath, { recursive: true });
+          await fs.promises.writeFile(path.join(worktreePath, ".git"), "gitdir: /tmp/test-worktree\n");
+          return worktreePath;
+        },
+        catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+      });
+    const createWorktree = vi.fn<GitCoreShape["createWorktree"]>((input) =>
+      materializeWorktreeCheckout(input.path ?? "/tmp/provider-worktree").pipe(
+        Effect.map((worktreePath) => ({
+          worktree: { path: worktreePath, branch: input.newBranch ?? input.branch },
+        })),
+      ),
+    );
+    const createDetachedWorktree = vi.fn<GitCoreShape["createDetachedWorktree"]>((input) =>
+      materializeWorktreeCheckout(input.path ?? "/tmp/provider-worktree").pipe(
+        Effect.map((worktreePath) => ({
+          worktree: {
+            path: worktreePath,
+            branch: input.newBranch ?? null,
+            ref: input.ref,
+          },
+        })),
+      ),
+    );
     const generateBranchName = vi.fn<TextGenerationShape["generateBranchName"]>(() =>
       Effect.fail(
         new TextGenerationError({
@@ -515,6 +543,9 @@ describe("ProviderCommandReactor", () => {
           renameBranch,
           publishBranch,
           withMutation,
+          listLocalBranchNames,
+          createWorktree,
+          createDetachedWorktree,
         } as unknown as GitCoreShape),
       ),
       Layer.provideMerge(

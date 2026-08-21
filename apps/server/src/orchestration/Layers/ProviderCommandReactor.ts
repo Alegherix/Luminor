@@ -72,6 +72,10 @@ import {
 } from "../../checkpointing/Utils.ts";
 import { CheckpointStore } from "../../checkpointing/Services/CheckpointStore.ts";
 import { AgentGatewayOperationRepository } from "../../agentGateway/Services/AgentGatewayOperationRepository.ts";
+import {
+  ensureManagedWorktreeCheckout,
+  ManagedWorktreeCheckoutError,
+} from "../../ensureManagedWorktreeCheckout.ts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import {
   ProviderAdapterRequestError,
@@ -1252,6 +1256,48 @@ const make = Effect.gen(function* () {
         operation: "thread.turn.start",
         issue: `Thread '${threadId}' targets a worktree that has not been created yet.`,
       });
+    }
+    // Archive retention (and some handoff failures) can delete the on-disk
+    // worktree while the thread still records worktreePath. Rematerialize from
+    // the branch/ref before spawning a provider that requires that cwd.
+    if (workspaceState === "worktree-ready" && thread.worktreePath) {
+      const project = yield* resolveThreadWorkspaceProject(thread);
+      if (!project?.workspaceRoot) {
+        return yield* new ProviderAdapterValidationError({
+          provider: threadProvider,
+          operation: "thread.turn.start",
+          issue: `Thread '${threadId}' targets worktree '${thread.worktreePath}' but its project workspace root is unavailable.`,
+        });
+      }
+      const rematerialized = yield* ensureManagedWorktreeCheckout({
+        projectCwd: project.workspaceRoot,
+        worktreePath: thread.worktreePath,
+        branch: thread.branch ?? thread.associatedWorktreeBranch ?? null,
+        associatedWorktreeRef: thread.associatedWorktreeRef ?? null,
+        git,
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProviderAdapterValidationError({
+              provider: threadProvider,
+              operation: "thread.turn.start",
+              issue:
+                cause instanceof ManagedWorktreeCheckoutError
+                  ? cause.message
+                  : cause instanceof Error
+                    ? cause.message
+                    : String(cause),
+              cause,
+            }),
+        ),
+      );
+      if (rematerialized.kind === "rematerialized") {
+        yield* Effect.logInfo("provider command reactor rematerialized missing thread worktree", {
+          threadId,
+          worktreePath: thread.worktreePath,
+          branch: thread.branch ?? null,
+        });
+      }
     }
     const providerSessionOptions = {
       threadId,
