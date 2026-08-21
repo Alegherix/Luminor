@@ -1,3 +1,5 @@
+import * as Crypto from "node:crypto";
+
 import type { BrowserTabId } from "@luminor/contracts";
 import type { WebContents } from "electron";
 
@@ -21,6 +23,111 @@ interface CdpEvaluationResult {
 }
 
 const cancelledError = (): Error => new Error("Browser operation cancelled.");
+
+export type CdpMessageListener = (method: string, params: Record<string, unknown>) => void;
+export type CdpDetachListener = (reason: string) => void;
+
+export class CdpSessionInvalidatedError extends Error {}
+
+export class DebuggerSessionCoordinator {
+  private sessionId: string | null = null;
+  private readonly messageListeners = new Set<CdpMessageListener>();
+  private readonly detachListeners = new Set<CdpDetachListener>();
+
+  constructor(private readonly webContents: WebContents) {
+    if (typeof webContents.debugger.on === "function") {
+      webContents.debugger.on("message", this.handleMessage);
+      webContents.debugger.on("detach", this.handleDetach);
+    }
+    if (typeof webContents.once === "function") webContents.once("destroyed", this.handleDestroyed);
+  }
+
+  currentSessionId(): string | null {
+    return this.sessionId;
+  }
+
+  ensureAttached(): string {
+    if (this.webContents.isDestroyed()) throw new CdpSessionInvalidatedError("Target destroyed");
+    if (!this.webContents.debugger.isAttached()) this.webContents.debugger.attach("1.3");
+    this.sessionId ??= Crypto.randomUUID();
+    return this.sessionId;
+  }
+
+  async sendCommand<Result = unknown>(
+    method: string,
+    params?: Record<string, unknown>,
+    expectedSessionId?: string,
+  ): Promise<Result> {
+    const sessionId = this.ensureAttached();
+    if (expectedSessionId && expectedSessionId !== sessionId) {
+      throw new CdpSessionInvalidatedError("Debugger session replaced");
+    }
+    const result = (await (params === undefined
+      ? this.webContents.debugger.sendCommand(method)
+      : this.webContents.debugger.sendCommand(method, params))) as Result;
+    if (
+      this.webContents.isDestroyed() ||
+      !this.webContents.debugger.isAttached() ||
+      this.sessionId !== sessionId
+    ) {
+      throw new CdpSessionInvalidatedError("Debugger command completed after session invalidation");
+    }
+    return result;
+  }
+
+  detach(reason = "explicit-detach"): void {
+    if (this.webContents.isDestroyed()) {
+      this.invalidate("target-destroyed");
+      return;
+    }
+    if (this.webContents.debugger.isAttached()) this.webContents.debugger.detach();
+    this.invalidate(reason);
+  }
+
+  subscribeMessages(listener: CdpMessageListener): () => void {
+    this.messageListeners.add(listener);
+    return () => this.messageListeners.delete(listener);
+  }
+
+  subscribeDetach(listener: CdpDetachListener): () => void {
+    this.detachListeners.add(listener);
+    return () => this.detachListeners.delete(listener);
+  }
+
+  private readonly handleMessage = (
+    _event: Electron.Event,
+    method: string,
+    params: Record<string, unknown>,
+  ): void => {
+    for (const listener of this.messageListeners) listener(method, params);
+  };
+
+  private readonly handleDetach = (_event: Electron.Event, reason: string): void => {
+    this.invalidate(reason);
+  };
+
+  private readonly handleDestroyed = (): void => {
+    this.invalidate("target-destroyed");
+    this.messageListeners.clear();
+    this.detachListeners.clear();
+  };
+
+  private invalidate(reason: string): void {
+    if (this.sessionId === null) return;
+    this.sessionId = null;
+    for (const listener of this.detachListeners) listener(reason);
+  }
+}
+
+const debuggerSessions = new WeakMap<WebContents, DebuggerSessionCoordinator>();
+
+export const getCdpSessionCoordinator = (webContents: WebContents): DebuggerSessionCoordinator => {
+  const existing = debuggerSessions.get(webContents);
+  if (existing) return existing;
+  const coordinator = new DebuggerSessionCoordinator(webContents);
+  debuggerSessions.set(webContents, coordinator);
+  return coordinator;
+};
 
 export const abortReason = (signal: AbortSignal): Error =>
   signal.reason instanceof Error ? signal.reason : cancelledError();
@@ -98,9 +205,8 @@ export const ensureCdpAttached = (webContents: WebContents): void => {
       effectMayHaveCommitted: false,
     });
   }
-  if (webContents.debugger.isAttached()) return;
   try {
-    webContents.debugger.attach("1.3");
+    getCdpSessionCoordinator(webContents).ensureAttached();
   } catch {
     browserHostError({
       code: "BrowserDebuggerConflict",
@@ -124,7 +230,8 @@ export const sendCdpCommand = async <Result = unknown>(
   throwIfAborted(signal);
   ensureCdpAttached(runtime.webContents);
   try {
-    const operation = runtime.webContents.debugger.sendCommand(method, params) as Promise<Result>;
+    const coordinator = getCdpSessionCoordinator(runtime.webContents);
+    const operation = coordinator.sendCommand<Result>(method, params);
     return await drainOnAbort(
       operation,
       signal,
@@ -132,7 +239,7 @@ export const sendCdpCommand = async <Result = unknown>(
         ? () => {
             if (runtime.webContents.isDestroyed() || !runtime.webContents.debugger.isAttached())
               return;
-            return runtime.webContents.debugger.sendCommand("Runtime.terminateExecution").then(
+            return coordinator.sendCommand("Runtime.terminateExecution").then(
               () => undefined,
               () => undefined,
             );

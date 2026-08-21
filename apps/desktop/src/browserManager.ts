@@ -32,6 +32,7 @@ import type {
   BrowserTabInput,
   BrowserTabState,
   BrowserThreadInput,
+  BrowserViewport,
   ThreadBrowserState,
   ThreadId,
 } from "@luminor/contracts";
@@ -57,6 +58,7 @@ import {
   isLocalHtmlPreviewUrl,
   isSameLocalHtmlPreviewGrant,
 } from "./localHtmlPreviewProtocol";
+import { getCdpSessionCoordinator } from "./browserAutomation/cdpRuntime";
 
 export { BROWSER_SESSION_PARTITION } from "./browserSessionPolicy";
 const BROWSER_INACTIVE_TAB_SUSPEND_DELAY_MS = 1_500;
@@ -116,6 +118,8 @@ interface LiveTabRuntime {
   tabId: string;
   webContents: WebContents;
   view: WebContentsView | null;
+  hostWindow: BrowserWindow | null;
+  placement: "attached" | "offscreen" | "renderer";
   ownsWebContents: boolean;
   listenerDisposers: Array<() => void>;
 }
@@ -224,6 +228,15 @@ export interface BrowserAutomationDownloadEvent {
 export interface DesktopBrowserManagerOptions {
   beforeInputEvent?: (event: Electron.Event, input: Electron.Input) => boolean;
   annotationPreloadPath?: string;
+  offscreenPreloadPath?: string;
+}
+
+export interface BrowserRemoteRuntime {
+  readonly threadId: ThreadId;
+  readonly tabId: string;
+  readonly webContents: WebContents;
+  readonly placement: "offscreen";
+  readonly viewport: BrowserViewport;
 }
 
 function createBrowserTab(url = ABOUT_BLANK_URL): BrowserTabState {
@@ -433,6 +446,7 @@ export class DesktopBrowserManager {
   >();
   private readonly pendingStatePublicationsByKey = new Map<string, PendingStatePublication>();
   private readonly runtimes = new Map<string, LiveTabRuntime>();
+  private readonly remoteViewportByThreadId = new Map<ThreadId, BrowserViewport>();
   private readonly rendererOnlyRuntimeKeys = new Set<string>();
   private readonly automationRuntimeKeys = new Set<string>();
   private readonly automationRuntimeProtectedUntilByKey = new Map<string, number>();
@@ -510,6 +524,85 @@ export class DesktopBrowserManager {
     return () => {
       this.listeners.delete(listener);
     };
+  }
+
+  async activateRemoteRuntime(
+    threadId: ThreadId,
+    viewport: BrowserViewport,
+  ): Promise<BrowserRemoteRuntime | null> {
+    this.remoteViewportByThreadId.set(threadId, viewport);
+    this.clearSuspendTimer(threadId);
+    const state = this.states.get(threadId);
+    const tab = state ? this.getActiveTab(state) : null;
+    if (!state?.open || !tab) return null;
+    const key = buildRuntimeKey(threadId, tab.id);
+    const existing = this.runtimes.get(key);
+    if (existing && existing.placement !== "offscreen") {
+      this.syncRuntimeState(threadId, tab.id);
+      this.destroyRuntime(threadId, tab.id, { annotationReason: "replaced" });
+    }
+    const runtime = this.ensureLiveRuntime(threadId, tab.id);
+    runtime.hostWindow?.setContentSize(viewport.width, viewport.height);
+    const expectedUrl = normalizeUrlInput(tab.lastCommittedUrl ?? tab.url);
+    const currentUrl = this.sessionPolicy.resolveDisplayUrl(runtime.webContents.getURL());
+    if (currentUrl.length === 0 || currentUrl !== expectedUrl) {
+      await this.loadTab(threadId, tab.id, { force: true, runtime });
+    }
+    return {
+      threadId,
+      tabId: tab.id,
+      webContents: runtime.webContents,
+      placement: "offscreen",
+      viewport,
+    };
+  }
+
+  deactivateRemoteRuntime(threadId: ThreadId): void {
+    this.remoteViewportByThreadId.delete(threadId);
+    const state = this.states.get(threadId);
+    for (const runtime of [...this.runtimes.values()]) {
+      if (runtime.threadId !== threadId || runtime.placement !== "offscreen") continue;
+      this.syncRuntimeState(threadId, runtime.tabId);
+      this.destroyRuntime(threadId, runtime.tabId, { annotationReason: "replaced" });
+      const tab = state ? this.getTab(state, runtime.tabId) : null;
+      if (tab) suspendTabState(tab);
+    }
+    const bounds = this.getVisibleBoundsForThread(threadId);
+    if (state?.open && this.activeThreadId === threadId && bounds) {
+      this.attachActiveTab(threadId, bounds, { forceLoad: true });
+    }
+    this.markThreadStateChanged(threadId);
+    this.emitState(threadId);
+  }
+
+  resizeRemoteRuntime(threadId: ThreadId, viewport: BrowserViewport): BrowserRemoteRuntime | null {
+    this.remoteViewportByThreadId.set(threadId, viewport);
+    const state = this.states.get(threadId);
+    const tab = state ? this.getActiveTab(state) : null;
+    if (!tab) return null;
+    const runtime = this.runtimes.get(buildRuntimeKey(threadId, tab.id));
+    if (!runtime || runtime.placement !== "offscreen") return null;
+    runtime.hostWindow?.setContentSize(viewport.width, viewport.height);
+    return {
+      threadId,
+      tabId: tab.id,
+      webContents: runtime.webContents,
+      placement: "offscreen",
+      viewport,
+    };
+  }
+
+  markRemoteHumanControl(threadId: ThreadId): void {
+    this.markHumanControl(threadId);
+  }
+
+  focusRemoteRuntime(threadId: ThreadId, focused: boolean): void {
+    const state = this.states.get(threadId);
+    const tab = state ? this.getActiveTab(state) : null;
+    const runtime = tab ? this.runtimes.get(buildRuntimeKey(threadId, tab.id)) : null;
+    if (!runtime?.hostWindow || runtime.hostWindow.isDestroyed()) return;
+    if (focused) runtime.hostWindow.focus();
+    else runtime.hostWindow.blur();
   }
 
   subscribeCopyLink(listener: BrowserCopyLinkListener): () => void {
@@ -655,7 +748,7 @@ export class DesktopBrowserManager {
 
   private configureWindowOpenHandling(
     webContents: WebContents,
-    context: OAuthPopupContext,
+    context: OAuthPopupContext & { readonly placement?: LiveTabRuntime["placement"] },
     listenerDisposers: Array<() => void>,
   ): void {
     const { threadId, tabId } = context;
@@ -709,6 +802,16 @@ export class DesktopBrowserManager {
         features: details.features,
         disposition: details.disposition,
       });
+      if (context.placement === "offscreen") {
+        this.scheduleWindowOpenTab({
+          threadId,
+          sourceTabId: tabId,
+          sourceWebContents: webContents,
+          url,
+          automationGestureActive,
+        });
+        return { action: "deny" };
+      }
       if (kind === "popup") {
         if (automationGestureActive) {
           this.emitAutomationWindowOpen({
@@ -1149,6 +1252,7 @@ export class DesktopBrowserManager {
     this.rendererOnlyRuntimeKeys.clear();
     this.automationRuntimeKeys.clear();
     this.automationRuntimeProtectedUntilByKey.clear();
+    this.remoteViewportByThreadId.clear();
     this.listeners.clear();
     this.copyLinkListeners.clear();
     this.states.clear();
@@ -1473,6 +1577,7 @@ export class DesktopBrowserManager {
   close(input: BrowserThreadInput): ThreadBrowserState {
     this.markHumanControl(input.threadId);
     this.clearSuspendTimer(input.threadId);
+    this.remoteViewportByThreadId.delete(input.threadId);
 
     if (this.activeThreadId === input.threadId) {
       this.detachAttachedRuntime();
@@ -1660,6 +1765,8 @@ export class DesktopBrowserManager {
         tabId: tab.id,
         webContents,
         view: null,
+        hostWindow: null,
+        placement: "renderer",
         ownsWebContents: false,
         listenerDisposers: [],
       };
@@ -2471,6 +2578,39 @@ export class DesktopBrowserManager {
   }
 
   private createLiveRuntime(threadId: ThreadId, tabId: string): LiveTabRuntime {
+    const remoteViewport = this.remoteViewportByThreadId.get(threadId);
+    if (remoteViewport) {
+      const hostWindow = new BrowserWindow({
+        show: false,
+        width: remoteViewport.width,
+        height: remoteViewport.height,
+        webPreferences: {
+          offscreen: true,
+          backgroundThrottling: false,
+          partition: BROWSER_SESSION_PARTITION,
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+          ...(this.options.offscreenPreloadPath
+            ? { preload: this.options.offscreenPreloadPath }
+            : {}),
+        },
+      });
+      hostWindow.webContents.setFrameRate(30);
+      const runtime: LiveTabRuntime = {
+        key: buildRuntimeKey(threadId, tabId),
+        threadId,
+        tabId,
+        webContents: hostWindow.webContents,
+        view: null,
+        hostWindow,
+        placement: "offscreen",
+        ownsWebContents: true,
+        listenerDisposers: [],
+      };
+      this.configureRuntimeWebContents(runtime);
+      return runtime;
+    }
     const view = new WebContentsView({
       webPreferences: {
         partition: BROWSER_SESSION_PARTITION,
@@ -2488,6 +2628,8 @@ export class DesktopBrowserManager {
       tabId,
       webContents: view.webContents,
       view,
+      hostWindow: null,
+      placement: "attached",
       ownsWebContents: true,
       listenerDisposers: [],
     };
@@ -2898,13 +3040,14 @@ export class DesktopBrowserManager {
         (runtime.ownsWebContents || !options.preserveRendererDebugger)
       ) {
         try {
-          webContents.debugger.detach();
+          getCdpSessionCoordinator(webContents).detach("runtime-destroyed");
         } catch {
           // The guest/runtime is being torn down anyway; ignore stale cleanup noise.
         }
       }
       if (runtime.ownsWebContents) {
-        webContents.close({ waitForBeforeUnload: false });
+        if (runtime.hostWindow && !runtime.hostWindow.isDestroyed()) runtime.hostWindow.destroy();
+        else webContents.close({ waitForBeforeUnload: false });
       }
       // A renderer-owned WebView may be rebound to another logical tab without
       // replacing its physical WebContents. That explicit path preserves CDP.

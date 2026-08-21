@@ -206,6 +206,12 @@ import {
   LUMINOR_BROWSER_HOST_PIPE_PATH,
   resolveBrowserHostPipeBackendEnv,
 } from "./browserUsePipeServer";
+import { BrowserRemoteFrameController } from "./browserFrame/controller";
+import {
+  BrowserFramePipeServer,
+  LUMINOR_BROWSER_FRAME_PIPE_PATH,
+  resolveBrowserFramePipeBackendEnv,
+} from "./browserFrame/framePipeServer";
 import { normalizeDesktopWsUrl, resolveDesktopWsUrlFromEnv } from "./desktopWsBridge";
 import {
   repairBrowserProfileFromBridgeManifest,
@@ -279,6 +285,8 @@ const APP_RUN_ID = Crypto.randomBytes(6).toString("hex");
 const DESKTOP_BACKEND_SHUTDOWN_TOKEN = Crypto.randomBytes(32).toString("hex");
 const DESKTOP_BROWSER_HOST_CAPABILITY = Crypto.randomBytes(32).toString("base64url");
 const DESKTOP_BROWSER_HOST_CAPABILITY_FD = 3;
+const DESKTOP_BROWSER_FRAME_CAPABILITY = Crypto.randomBytes(32).toString("base64url");
+const DESKTOP_BROWSER_FRAME_CAPABILITY_FD = 4;
 // Electron's single-instance lock is scoped through userData on Windows/Linux.
 // Set the flavor-specific profile first so Stable, Dev, and Canary never contend
 // for the same lock even when they use the same Electron executable.
@@ -353,11 +361,13 @@ let restoreStdIoCapture: (() => void) | null = null;
 let unreadBackgroundNotificationCount = 0;
 let browserPerfInterval: ReturnType<typeof setInterval> | null = null;
 const annotationGuestPreload = Path.join(__dirname, "guestPreload.js");
+const offscreenGuestPreload = Path.join(__dirname, "offscreenGuestPreload.js");
 const meetingWebViewManager = new MeetingWebViewManager({
   getWindow: () => mainWindow,
 });
 const browserManager = new DesktopBrowserManager({
   annotationPreloadPath: annotationGuestPreload,
+  offscreenPreloadPath: offscreenGuestPreload,
   beforeInputEvent: (event, input) => {
     if (
       isKeyboardShortcutsHelpChord(
@@ -386,7 +396,11 @@ const browserManager = new DesktopBrowserManager({
     return target ? handleDesktopPhysicalZoomShortcut(event, input, target) : false;
   },
 });
+const browserRemoteFrameController = new BrowserRemoteFrameController(browserManager, {
+  workerPath: Path.join(__dirname, "browserFrame", "jpegWorker.js"),
+});
 let browserHostPipeServer: BrowserHostPipeServer | null = null;
+let browserFramePipeServer: BrowserFramePipeServer | null = null;
 let configuredUpdaterCacheDirName: string | null = null;
 
 browserManager.subscribe((state) => {
@@ -435,6 +449,7 @@ async function ensureBrowserHostPipeServer(): Promise<void> {
   }
   const server = new BrowserHostPipeServer(browserManager, {
     capability: DESKTOP_BROWSER_HOST_CAPABILITY,
+    remoteFrameController: browserRemoteFrameController,
     requestOpenPanel: (threadId) => {
       if (!threadId) return;
       mainWindow?.webContents.send(IPC.browser.requestOpenPanel, { threadId });
@@ -442,6 +457,15 @@ async function ensureBrowserHostPipeServer(): Promise<void> {
   });
   await server.start();
   browserHostPipeServer = server;
+}
+
+async function ensureBrowserFramePipeServer(): Promise<void> {
+  if (browserFramePipeServer || !LUMINOR_BROWSER_FRAME_PIPE_PATH) return;
+  const server = new BrowserFramePipeServer(browserRemoteFrameController, {
+    capability: DESKTOP_BROWSER_FRAME_CAPABILITY,
+  });
+  await server.start();
+  browserFramePipeServer = server;
 }
 
 let destructiveMenuIconCache: Electron.NativeImage | null | undefined;
@@ -3131,10 +3155,14 @@ function backendNodeArgs(): string[] {
 function backendEnv(): NodeJS.ProcessEnv {
   const servedStaticRoot = resolveServedStaticRoot();
   const env: NodeJS.ProcessEnv = {
-    ...resolveBrowserHostPipeBackendEnv(
-      process.env,
-      browserHostPipeServer ? LUMINOR_BROWSER_HOST_PIPE_PATH : null,
-      browserHostPipeServer ? DESKTOP_BROWSER_HOST_CAPABILITY_FD : null,
+    ...resolveBrowserFramePipeBackendEnv(
+      resolveBrowserHostPipeBackendEnv(
+        process.env,
+        browserHostPipeServer ? LUMINOR_BROWSER_HOST_PIPE_PATH : null,
+        browserHostPipeServer ? DESKTOP_BROWSER_HOST_CAPABILITY_FD : null,
+      ),
+      browserFramePipeServer ? LUMINOR_BROWSER_FRAME_PIPE_PATH : null,
+      browserFramePipeServer ? DESKTOP_BROWSER_FRAME_CAPABILITY_FD : null,
     ),
     // Point the backend's HTTP static route at the same swap-immune snapshot the
     // luminor:// protocol serves, so both surfaces survive app.asar being replaced.
@@ -3401,10 +3429,7 @@ function startBackend(trigger: BackendStartTrigger = "lifecycle"): void {
       ELECTRON_RUN_AS_NODE: "1",
       LUMINOR_SERVER_ENTRY: backendEntry,
     },
-    // Keep output piped in every environment so startup blockers and readiness
-    // are observable even when packaged log setup is unavailable. The fourth
-    // pipe carries the browser-host capability and must never be inherited.
-    stdio: ["ignore", "pipe", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"],
   });
   const capabilityPipe = child.stdio[DESKTOP_BROWSER_HOST_CAPABILITY_FD];
   if (capabilityPipe && "end" in capabilityPipe) {
@@ -3417,6 +3442,19 @@ function startBackend(trigger: BackendStartTrigger = "lifecycle"): void {
   } else {
     child.kill();
     scheduleBackendRestart("browser host capability pipe was unavailable");
+    return;
+  }
+  const frameCapabilityPipe = child.stdio[DESKTOP_BROWSER_FRAME_CAPABILITY_FD];
+  if (frameCapabilityPipe && "end" in frameCapabilityPipe) {
+    frameCapabilityPipe.on("error", (error) => {
+      if (!isBrokenPipeError(error)) {
+        safeConsoleError("[desktop] failed to deliver browser frame capability", error);
+      }
+    });
+    frameCapabilityPipe.end(DESKTOP_BROWSER_FRAME_CAPABILITY);
+  } else {
+    child.kill();
+    scheduleBackendRestart("browser frame capability pipe was unavailable");
     return;
   }
   const listeningDetector = new ServerListeningDetector();
@@ -3571,11 +3609,13 @@ async function stopBackendAndWaitForExit(timeoutMs = BACKEND_SHUTDOWN_TIMEOUT_MS
 
 async function disposeBrowserHostPipeServerForShutdown(reason: string): Promise<void> {
   const pipeServer = browserHostPipeServer;
+  const framePipeServer = browserFramePipeServer;
   browserHostPipeServer = null;
-  if (!pipeServer) return;
+  browserFramePipeServer = null;
+  if (!pipeServer && !framePipeServer) return;
 
   try {
-    await pipeServer.dispose();
+    await Promise.all([pipeServer?.dispose(), framePipeServer?.dispose()]);
   } catch (error: unknown) {
     const message = formatErrorMessage(error);
     writeDesktopLogHeader(`${reason} browser host pipe dispose failed message=${message}`);
@@ -3599,6 +3639,7 @@ async function shutdownDesktopRuntime(reason: string): Promise<void> {
       clearUpdatePollTimer();
       cancelBackendReadinessWait();
       await disposeBrowserHostPipeServerForShutdown(reason);
+      browserRemoteFrameController.dispose();
       browserManager.dispose();
       restoreStdIoCapture?.();
       desktopShutdownComplete = true;
@@ -4415,6 +4456,7 @@ async function bootstrap(): Promise<void> {
   registerIpcHandlers();
   writeDesktopLogHeader("bootstrap ipc handlers registered");
   try {
+    await ensureBrowserFramePipeServer();
     await ensureBrowserHostPipeServer();
   } catch (error) {
     console.warn("[Luminor browser] Failed to start browser host pipe", error);

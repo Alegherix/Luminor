@@ -85,7 +85,7 @@ describe("browser diagnostics store", () => {
     await diagnostics.observe(runtime);
 
     expect(debuggerListenerCount()).toBe(1);
-    expect(lifecycleListenerCount()).toBe(1);
+    expect(lifecycleListenerCount()).toBe(2);
     expect(destroy).not.toThrow();
     expect(lifecycleListenerCount()).toBe(0);
     expect(() => diagnostics.dispose(runtime)).not.toThrow();
@@ -98,21 +98,22 @@ describe("browser diagnostics store", () => {
     await diagnostics.observe(runtime);
 
     diagnostics.dispose(runtime);
-    expect(debuggerListenerCount()).toBe(0);
-    expect(lifecycleListenerCount()).toBe(0);
+    expect(debuggerListenerCount()).toBe(1);
+    expect(lifecycleListenerCount()).toBe(1);
     expect(() => diagnostics.dispose(runtime)).not.toThrow();
     expect(destroy).not.toThrow();
   });
 
-  it("does not mask cleanup errors while WebContents is alive", async () => {
-    const { runtime } = createDestroyableRuntime({
+  it("releases diagnostics without removing the shared debugger listener", async () => {
+    const { runtime, debuggerListenerCount } = createDestroyableRuntime({
       removeListenerError: new Error("debugger listener cleanup failed"),
     });
     const diagnostics = new BrowserDiagnosticsStore();
     await diagnostics.observe(runtime);
 
-    expect(() => diagnostics.dispose(runtime)).toThrow("debugger listener cleanup failed");
-    expect(() => diagnostics.dispose(runtime)).toThrow("debugger listener cleanup failed");
+    expect(() => diagnostics.dispose(runtime)).not.toThrow();
+    expect(() => diagnostics.dispose(runtime)).not.toThrow();
+    expect(debuggerListenerCount()).toBe(1);
   });
 
   it("captures bounded console and network metadata without headers or bodies", async () => {

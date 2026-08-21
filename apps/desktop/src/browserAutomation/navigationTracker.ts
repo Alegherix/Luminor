@@ -4,6 +4,7 @@ import type { WebContents } from "electron";
 import type { BrowserAutomationVisibleRuntime } from "../browserManager";
 import {
   abortReason,
+  getCdpSessionCoordinator,
   loadStateForReadyState,
   observePage,
   sendCdpCommand,
@@ -117,10 +118,13 @@ class BrowserNavigationTracker {
   private mainFrameUrl: string;
   private initialized: Promise<void> | undefined;
   private disposed = false;
+  private readonly releaseDebuggerMessages: () => void;
 
   constructor(private readonly webContents: WebContents) {
     this.mainFrameUrl = webContents.getURL();
-    webContents.debugger.on("message", this.onMessage);
+    this.releaseDebuggerMessages = getCdpSessionCoordinator(webContents).subscribeMessages(
+      this.onMessage,
+    );
     const lifecycle = webContents as WebContents & {
       once?: (event: "destroyed", listener: () => void) => void;
     };
@@ -246,8 +250,8 @@ class BrowserNavigationTracker {
     this.disposed = true;
     // A destroyed WebContents also invalidates Electron's debugger wrapper;
     // Chromium has already released its listeners in that case.
+    this.releaseDebuggerMessages();
     if (!this.webContents.isDestroyed()) {
-      this.webContents.debugger.removeListener("message", this.onMessage);
       this.webContents.removeListener("destroyed", this.dispose);
     }
     trackerByWebContents.delete(this.webContents);
@@ -281,7 +285,7 @@ class BrowserNavigationTracker {
     this.lastNetworkActivityAt = performance.now();
   }
 
-  private readonly onMessage = (_event: unknown, method: string, rawParams: unknown): void => {
+  private readonly onMessage = (method: string, rawParams: Record<string, unknown>): void => {
     if (this.disposed || !rawParams || typeof rawParams !== "object") return;
     const params = rawParams as DebuggerMessageParams;
     const now = performance.now();
@@ -446,8 +450,10 @@ export const stopBrowserNavigation = async (
   runtime: BrowserAutomationVisibleRuntime,
 ): Promise<void> => {
   if (runtime.webContents.isDestroyed() || !runtime.webContents.debugger.isAttached()) return;
-  await runtime.webContents.debugger.sendCommand("Page.stopLoading").then(
-    () => undefined,
-    () => undefined,
-  );
+  await getCdpSessionCoordinator(runtime.webContents)
+    .sendCommand("Page.stopLoading")
+    .then(
+      () => undefined,
+      () => undefined,
+    );
 };

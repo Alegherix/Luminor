@@ -63,6 +63,10 @@ async function withPipeServer(
     readonly maxInFlightRequests?: number;
     readonly maxQueuedOutputBytes?: number;
     readonly automationHost?: { executeTool: (request: unknown) => Promise<unknown> };
+    readonly remoteFrameController?: {
+      handleRequest: (request: never) => Promise<unknown>;
+      subscribeState: (listener: never) => () => void;
+    };
   },
   run: (socket: Socket) => Promise<void>,
 ): Promise<void> {
@@ -78,6 +82,9 @@ async function withPipeServer(
       ? {}
       : { maxQueuedOutputBytes: options.maxQueuedOutputBytes }),
     ...(options.automationHost ? { automationHost: options.automationHost as never } : {}),
+    ...(options.remoteFrameController
+      ? { remoteFrameController: options.remoteFrameController as never }
+      : {}),
   });
   await server.start();
   const socket = await connect(pipePath);
@@ -161,6 +168,67 @@ describe("canonical browser host pipe resolution", () => {
 });
 
 describe("canonical browser host RPC", () => {
+  it("scopes multiple remote threads and releases them on disconnect", async () => {
+    const handleRequest = vi.fn(async (request: { type: string; input: Record<string, unknown> }) =>
+      request.type === "unsubscribe"
+        ? { type: "unsubscribed", result: { released: true } }
+        : {
+            type: "subscribed",
+            result: {
+              subscriptionId: `desktop-${String(request.input.threadId)}`,
+              authorization: "viewer",
+              state: {},
+            },
+          },
+    );
+    await withPipeServer(
+      {
+        automationHost: { executeTool: async () => ({}) },
+        remoteFrameController: {
+          handleRequest: handleRequest as never,
+          subscribeState: () => () => undefined,
+        },
+      },
+      async (socket) => {
+        await request(socket, {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "getInfo",
+          params: { session_id: "browser-pane", capability: TEST_CAPABILITY },
+        });
+        for (const [id, threadId] of [
+          [2, "thread-1"],
+          [3, "thread-2"],
+        ] as const) {
+          await expect(
+            request(socket, {
+              jsonrpc: "2.0",
+              id,
+              method: "browserControl",
+              params: {
+                type: "subscribe",
+                input: {
+                  threadId,
+                  viewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
+                },
+              },
+            }),
+          ).resolves.toMatchObject({ id, result: { type: "subscribed" } });
+        }
+        socket.destroy();
+        await vi.waitFor(() => {
+          expect(handleRequest).toHaveBeenCalledTimes(4);
+        });
+        expect(
+          handleRequest.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.type === "unsubscribe")
+            .map((call) => call.input.threadId),
+        ).toEqual(["thread-1", "thread-2"]);
+      },
+    );
+  });
+
   it("accepts every client in a maximum-size gateway batch", async () => {
     const directory = await mkdtemp(join(tmpdir(), "luminor-browser-host-capacity-test-"));
     const pipePath = join(directory, "browser.sock");

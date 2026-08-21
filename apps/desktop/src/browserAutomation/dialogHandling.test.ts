@@ -236,8 +236,8 @@ describe("browser JavaScript dialog handling", () => {
     await rejected;
 
     expect(operation).not.toHaveBeenCalled();
-    expect(debuggerInstance.listenerCount("message")).toBe(0);
-    expect((runtime.webContents as unknown as EventEmitter).listenerCount("destroyed")).toBe(0);
+    expect(debuggerInstance.listenerCount("message")).toBe(1);
+    expect((runtime.webContents as unknown as EventEmitter).listenerCount("destroyed")).toBe(1);
     expect(debuggerInstance.commands.map(({ method }) => method)).toEqual(["Page.enable"]);
   });
 
@@ -267,8 +267,8 @@ describe("browser JavaScript dialog handling", () => {
     await rejected;
 
     expect(operation).not.toHaveBeenCalled();
-    expect(debuggerInstance.listenerCount("message")).toBe(0);
-    expect((runtime.webContents as unknown as EventEmitter).listenerCount("destroyed")).toBe(0);
+    expect(debuggerInstance.listenerCount("message")).toBe(1);
+    expect((runtime.webContents as unknown as EventEmitter).listenerCount("destroyed")).toBe(1);
     expect(debuggerInstance.commands.map(({ method }) => method)).toEqual([
       "Page.enable",
       "Page.handleJavaScriptDialog",
@@ -291,15 +291,15 @@ describe("browser JavaScript dialog handling", () => {
     const runtime = makeRuntime(debuggerInstance);
 
     await expect(withDialogHandling(runtime, async () => "first")).rejects.toThrow();
-    expect(debuggerInstance.listenerCount("message")).toBe(0);
-    expect((runtime.webContents as unknown as EventEmitter).listenerCount("destroyed")).toBe(0);
+    expect(debuggerInstance.listenerCount("message")).toBe(1);
+    expect((runtime.webContents as unknown as EventEmitter).listenerCount("destroyed")).toBe(1);
 
     await expect(withDialogHandling(runtime, async () => "second")).resolves.toMatchObject({
       value: "second",
     });
     expect(enableAttempts).toBe(2);
     expect(debuggerInstance.listenerCount("message")).toBe(1);
-    expect((runtime.webContents as unknown as EventEmitter).listenerCount("destroyed")).toBe(1);
+    expect((runtime.webContents as unknown as EventEmitter).listenerCount("destroyed")).toBe(2);
   });
 
   it("does not touch Electron's invalid debugger wrapper after WebContents is destroyed", async () => {
@@ -358,9 +358,9 @@ describe("browser JavaScript dialog handling", () => {
     await expect(withDialogHandling(failedRuntime, async () => "unreachable")).rejects.toThrow(
       "debugger detached",
     );
-    expect(failedDebugger.listenerCount("message")).toBe(0);
+    expect(failedDebugger.listenerCount("message")).toBe(1);
     expect((failedRuntime.webContents as unknown as EventEmitter).listenerCount("destroyed")).toBe(
-      0,
+      1,
     );
   });
 });

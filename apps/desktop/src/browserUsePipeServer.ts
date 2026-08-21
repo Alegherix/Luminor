@@ -8,7 +8,15 @@ import * as Net from "node:net";
 import * as OS from "node:os";
 import * as Path from "node:path";
 
-import type { BrowserToolName, ThreadId } from "@luminor/contracts";
+import {
+  BROWSER_HOST_CONTROL_METHOD,
+  BROWSER_HOST_STATE_METHOD,
+  BrowserDesktopControlRequest,
+  type BrowserStateStreamEvent,
+  type BrowserToolName,
+  type ThreadId,
+} from "@luminor/contracts";
+import { Schema } from "effect";
 
 import {
   DesktopBrowserAutomationHost,
@@ -16,6 +24,7 @@ import {
 } from "./browserAutomation/desktopBrowserAutomationHost";
 import { BrowserAutomationHostError } from "./browserAutomation/hostErrors";
 import type { DesktopBrowserManager } from "./browserManager";
+import type { BrowserRemoteFrameController } from "./browserFrame/controller";
 
 const FRAME_HEADER_BYTES = 4;
 // 8 MiB PNG sidecars expand to about 10.7 MiB in base64; 12 MiB keeps the
@@ -53,6 +62,8 @@ interface PipeClient {
   sessionId: string | null;
   threadId: ThreadId | null;
   outputBackpressured: boolean;
+  stateSubscription: (() => void) | null;
+  readonly remoteSubscriptionIds: Map<ThreadId, Set<string>>;
   readonly abortControllers: Map<RpcId, AbortController>;
 }
 
@@ -64,6 +75,10 @@ export interface BrowserHostPipeServerOptions {
   readonly automationHost?: Pick<DesktopBrowserAutomationHost, "executeTool">;
   readonly maxInFlightRequests?: number;
   readonly maxQueuedOutputBytes?: number;
+  readonly remoteFrameController?: Pick<
+    BrowserRemoteFrameController,
+    "handleRequest" | "subscribeState"
+  >;
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -229,6 +244,7 @@ export class BrowserHostPipeServer {
   private readonly maxInFlightRequests: number;
   private readonly maxQueuedOutputBytes: number;
   private readonly capability: string;
+  private readonly remoteFrameController: BrowserHostPipeServerOptions["remoteFrameController"];
   private started = false;
 
   constructor(
@@ -245,6 +261,7 @@ export class BrowserHostPipeServer {
     this.capability = capability;
     this.maxInFlightRequests = normalized.maxInFlightRequests ?? MAX_IN_FLIGHT_REQUESTS;
     this.maxQueuedOutputBytes = normalized.maxQueuedOutputBytes ?? MAX_QUEUED_OUTPUT_BYTES;
+    this.remoteFrameController = normalized.remoteFrameController;
     const hostOptions = normalized.requestOpenPanel
       ? { requestOpenPanel: normalized.requestOpenPanel }
       : {};
@@ -280,6 +297,9 @@ export class BrowserHostPipeServer {
         controller.abort();
       }
       client.abortControllers.clear();
+      client.stateSubscription?.();
+      client.stateSubscription = null;
+      this.releaseRemoteSubscriptions(client);
     }
     this.sockets.clear();
     this.clients.clear();
@@ -302,14 +322,22 @@ export class BrowserHostPipeServer {
       sessionId: null,
       threadId: null,
       outputBackpressured: false,
+      stateSubscription: null,
+      remoteSubscriptionIds: new Map(),
       abortControllers: new Map(),
     };
     this.sockets.add(socket);
     this.clients.set(socket, client);
     socket.on("data", (chunk) => this.handleData(client, chunk));
+    let released = false;
     const release = () => {
+      if (released) return;
+      released = true;
       for (const controller of client.abortControllers.values()) controller.abort();
       client.abortControllers.clear();
+      client.stateSubscription?.();
+      client.stateSubscription = null;
+      this.releaseRemoteSubscriptions(client);
       this.sockets.delete(socket);
       this.clients.delete(socket);
     };
@@ -398,6 +426,8 @@ export class BrowserHostPipeServer {
         return this.getInfo(client, params);
       case "executeTool":
         return this.executeTool(client, params, signal);
+      case BROWSER_HOST_CONTROL_METHOD:
+        return this.browserControl(client, params);
       default:
         throw new Error(`No handler registered for method: ${method}`);
     }
@@ -433,7 +463,7 @@ export class BrowserHostPipeServer {
         sessionId,
         protocolVersion: 1,
         physicalScope: "visible-shared-electron-webview",
-        methods: ["executeTool"],
+        methods: ["executeTool", BROWSER_HOST_CONTROL_METHOD, BROWSER_HOST_STATE_METHOD],
       },
     };
   }
@@ -466,6 +496,61 @@ export class BrowserHostPipeServer {
       ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
       signal,
     } satisfies BrowserAutomationToolRequest);
+  }
+
+  private async browserControl(client: PipeClient, params: unknown): Promise<unknown> {
+    if (!client.sessionId || !this.remoteFrameController) {
+      throw new BrowserAutomationHostError({
+        code: "BrowserAuthorizationDenied",
+        retryable: false,
+        phase: "auth",
+        effectMayHaveCommitted: false,
+      });
+    }
+    const request = Schema.decodeUnknownSync(BrowserDesktopControlRequest)(params);
+    if (request.type !== "subscribe" && !client.remoteSubscriptionIds.has(request.input.threadId)) {
+      throw new BrowserAutomationHostError({
+        code: "BrowserTabScopeViolation",
+        retryable: false,
+        phase: "routing",
+        effectMayHaveCommitted: false,
+      });
+    }
+    if (!client.stateSubscription) {
+      client.stateSubscription = this.remoteFrameController.subscribeState(
+        (event: BrowserStateStreamEvent) => {
+          const eventThreadId =
+            event.type === "browser.state.invalidated" ? event.threadId : event.state.threadId;
+          if (!client.remoteSubscriptionIds.has(eventThreadId)) return;
+          this.write(client, { jsonrpc: "2.0", method: BROWSER_HOST_STATE_METHOD, params: event });
+        },
+      );
+    }
+    const response = await this.remoteFrameController.handleRequest(request);
+    if (response.type === "subscribed") {
+      const ids = client.remoteSubscriptionIds.get(request.input.threadId) ?? new Set<string>();
+      ids.add(response.result.subscriptionId);
+      client.remoteSubscriptionIds.set(request.input.threadId, ids);
+    } else if (request.type === "unsubscribe" && response.type === "unsubscribed") {
+      const ids = client.remoteSubscriptionIds.get(request.input.threadId);
+      ids?.delete(request.input.subscriptionId);
+      if (ids?.size === 0) client.remoteSubscriptionIds.delete(request.input.threadId);
+    }
+    return response;
+  }
+
+  private releaseRemoteSubscriptions(client: PipeClient): void {
+    if (!this.remoteFrameController) return;
+    const releases = [...client.remoteSubscriptionIds].flatMap(([threadId, ids]) =>
+      [...ids].map((subscriptionId) =>
+        this.remoteFrameController!.handleRequest({
+          type: "unsubscribe",
+          input: { threadId, subscriptionId },
+        }),
+      ),
+    );
+    client.remoteSubscriptionIds.clear();
+    void Promise.allSettled(releases);
   }
 
   private write(client: PipeClient, message: unknown): WriteResult {

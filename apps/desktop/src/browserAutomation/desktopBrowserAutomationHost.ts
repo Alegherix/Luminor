@@ -41,7 +41,13 @@ import type {
   BrowserAutomationVisibleRuntime,
   DesktopBrowserManager,
 } from "../browserManager";
-import { abortReason, observePage, sendCdpCommand, throwIfAborted } from "./cdpRuntime";
+import {
+  abortReason,
+  getCdpSessionCoordinator,
+  observePage,
+  sendCdpCommand,
+  throwIfAborted,
+} from "./cdpRuntime";
 import { BrowserAutomationHostError, browserHostError } from "./hostErrors";
 import {
   clickBrowserTarget,
@@ -814,10 +820,11 @@ export class DesktopBrowserAutomationHost {
     const eventPromise = new Promise<BrowserAutomationWindowOpenEvent>((resolve) => {
       resolveEvent = resolve;
     });
-    const onDebuggerMessage = (...args: unknown[]) => {
-      if (args[1] === "Page.windowOpen") pageAnnouncedWindowOpen = true;
-    };
-    runtime.webContents.debugger.on("message", onDebuggerMessage);
+    const releaseDebuggerMessages = getCdpSessionCoordinator(runtime.webContents).subscribeMessages(
+      (method) => {
+        if (method === "Page.windowOpen") pageAnnouncedWindowOpen = true;
+      },
+    );
     const releaseManagerTracking = this.browserManager.trackAutomationWindowOpen(
       { threadId: runtime.threadId, tabId: runtime.tabId },
       (event) => {
@@ -841,7 +848,7 @@ export class DesktopBrowserAutomationHost {
       dispose: () => {
         if (disposed) return;
         disposed = true;
-        runtime.webContents.debugger.off("message", onDebuggerMessage);
+        releaseDebuggerMessages();
         releaseManagerTracking();
       },
     };

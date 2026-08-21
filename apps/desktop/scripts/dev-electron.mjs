@@ -12,13 +12,16 @@ const requiredFiles = [
   "dist-electron/main.js",
   "dist-electron/preload.js",
   "dist-electron/guestPreload.js",
+  "dist-electron/offscreenGuestPreload.js",
+  "dist-electron/browserFrame/jpegWorker.js",
   "../server/dist/index.mjs",
 ];
 const watchedDirectories = [
   {
     directory: "dist-electron",
-    files: new Set(["main.js", "preload.js", "guestPreload.js"]),
+    files: new Set(["main.js", "preload.js", "guestPreload.js", "offscreenGuestPreload.js"]),
   },
+  { directory: "dist-electron/browserFrame", files: new Set(["jpegWorker.js"]) },
   { directory: "../server/dist", files: new Set(["index.mjs"]) },
 ];
 const forcedShutdownTimeoutMs = 1_500;
