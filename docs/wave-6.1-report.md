@@ -270,3 +270,27 @@ test files and 24 tests skipped. Package totals were:
 | `@luminor/desktop`   | 73 passed, 1 skipped  | 629 passed, 5 skipped    |
 | `@luminor/web`       | 349 passed            | 4,277 passed             |
 | `@luminor/cli`       | 366 passed, 3 skipped | 4,013 passed, 18 skipped |
+
+## Review fixes 2026-08-21
+
+All ten independent-review findings were applied. Feature-WebSocket input is
+stamped as human, live-generation input accepts displayed sequences at or below
+the latest produced sequence, connection close now disconnects browser-pane
+clients, cleanup is failure-proof, leases release before desktop I/O, and
+reconnecting frame subscribers are primed from a generation-scoped latest-frame
+cache. Owner-only third-party revocation, wheel arbitration, timing-safe legacy
+token checks, current-seam reconnect coverage, and replace-latest mouse movement
+are also covered by regression tests.
+
+Sharp remains the JPEG encoder because its work runs in the existing worker
+thread and its maintained cross-platform prebuilds avoid blocking Electron's
+main thread. `@julusian/jpeg-turbo` would add a less established native binding,
+while `nativeImage.toJPEG` would move encoding onto Electron's main process. In
+this Linux x64 checkout, `sharp` plus the installed glibc and musl `@img`
+bindings and libvips prebuilds occupy 34 MB in `node_modules` (33 MB is the two
+libvips variants). Desktop packaging now includes `THIRD_PARTY_NOTICES.md`,
+which records Sharp's Apache-2.0 license and the dynamically linked
+LGPL-3.0-or-later libvips prebuilds with a corresponding-source link.
+
+The review-fix gate finished with 887 passing test files and 9,839 passing
+tests; four files and 24 tests remained skipped.
