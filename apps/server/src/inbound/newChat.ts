@@ -7,6 +7,7 @@ import {
   MessageId,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   ThreadId,
+  type ClientOrchestrationCommand,
   type GrokModelSelection,
   type OrchestrationCommand,
   type OrchestrationProject,
@@ -188,7 +189,12 @@ export function makeInboundNewChatEffectRouteLayer<R>(
       const readModel = yield* engine.getReadModel();
       return HttpServerResponse.jsonUnsafe(
         yield* handleInboundNewChat({
-          body: decoded,
+          body: {
+            prompt: decoded.prompt,
+            submit: decoded.submit,
+            ...(decoded.title === undefined ? {} : { title: decoded.title }),
+            ...(decoded.folderName === undefined ? {} : { folderName: decoded.folderName }),
+          },
           readModel,
           workspacePaths: {
             homeDir: config.homeDir,
@@ -197,7 +203,7 @@ export function makeInboundNewChatEffectRouteLayer<R>(
           dispatch: (command) =>
             Effect.gen(function* () {
               const { command: normalizedCommand, prepareWorkspaceRoot } = yield* normalize({
-                command,
+                command: command as ClientOrchestrationCommand,
               });
               const result = yield* engine.dispatch(normalizedCommand);
               if (prepareWorkspaceRoot) {

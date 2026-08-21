@@ -2,12 +2,14 @@ import { assert, describe, it } from "@effect/vitest";
 
 import {
   createDesktopPlatformBuildConfig,
+  DESKTOP_NATIVE_ASAR_UNPACK_GLOBS,
   MAC_DEVICE_HELPER_RESOURCE_PATH,
   MAC_DEVICE_HELPER_STAGE_PATH,
   MAC_ENTITLEMENTS_PATH,
   MAC_INHERITED_ENTITLEMENTS_PATH,
   MICROPHONE_USAGE_DESCRIPTION,
   NODE_PTY_ASAR_UNPACK_GLOBS,
+  THIRD_PARTY_NOTICES_PATH,
   validateDesktopNativeBuildHost,
   WINDOWS_INSTALLER_GUID,
 } from "./lib/desktop-platform-build-config.ts";
@@ -26,7 +28,7 @@ describe("createDesktopPlatformBuildConfig", () => {
 
     assert.deepStrictEqual(mac.target, ["dmg", "zip"]);
     assert.equal(mac.icon, "icon.icns");
-    assert.deepStrictEqual(config.asarUnpack, ["node_modules/node-pty/**"]);
+    assert.deepStrictEqual(config.asarUnpack, [...DESKTOP_NATIVE_ASAR_UNPACK_GLOBS]);
     assert.equal(mac.hardenedRuntime, true);
     assert.equal(mac.notarize, true);
     assert.equal(dmg.sign, true);
@@ -37,6 +39,10 @@ describe("createDesktopPlatformBuildConfig", () => {
     assert.equal(mac.x64ArchFiles, undefined);
     assert.equal(config.files, undefined);
     assert.deepStrictEqual(config.extraFiles, [
+      {
+        from: THIRD_PARTY_NOTICES_PATH,
+        to: THIRD_PARTY_NOTICES_PATH,
+      },
       {
         from: MAC_DEVICE_HELPER_STAGE_PATH,
         to: MAC_DEVICE_HELPER_RESOURCE_PATH,
@@ -68,8 +74,10 @@ describe("createDesktopPlatformBuildConfig", () => {
     });
 
     assert.equal(linux.mac, undefined);
-    assert.equal("extraFiles" in linux, false);
-    assert.deepStrictEqual(linux.asarUnpack, ["node_modules/node-pty/**"]);
+    assert.deepStrictEqual(linux.extraFiles, [
+      { from: THIRD_PARTY_NOTICES_PATH, to: THIRD_PARTY_NOTICES_PATH },
+    ]);
+    assert.deepStrictEqual(linux.asarUnpack, [...DESKTOP_NATIVE_ASAR_UNPACK_GLOBS]);
     assert.deepStrictEqual(linux.linux, {
       target: ["AppImage"],
       executableName: "luminor",
@@ -83,8 +91,10 @@ describe("createDesktopPlatformBuildConfig", () => {
     });
 
     assert.equal(win.mac, undefined);
-    assert.equal("extraFiles" in win, false);
-    assert.deepStrictEqual(win.asarUnpack, ["node_modules/node-pty/**"]);
+    assert.deepStrictEqual(win.extraFiles, [
+      { from: THIRD_PARTY_NOTICES_PATH, to: THIRD_PARTY_NOTICES_PATH },
+    ]);
+    assert.deepStrictEqual(win.asarUnpack, [...DESKTOP_NATIVE_ASAR_UNPACK_GLOBS]);
     assert.equal(WINDOWS_INSTALLER_GUID, "368107a8-afe6-5db5-ab3b-d4f331684868");
     assert.deepStrictEqual(win.nsis, {
       guid: WINDOWS_INSTALLER_GUID,
@@ -109,14 +119,14 @@ describe("createDesktopPlatformBuildConfig", () => {
     });
   });
 
-  it("keeps node-pty unpacked from ASAR in generated build config", () => {
+  it("keeps native dependencies unpacked from ASAR in generated build config", () => {
     const config = createDesktopPlatformBuildConfig({
       platform: "linux",
       target: "AppImage",
     });
 
     assert.deepStrictEqual([...NODE_PTY_ASAR_UNPACK_GLOBS], ["node_modules/node-pty/**"]);
-    assert.deepStrictEqual(config.asarUnpack, [...NODE_PTY_ASAR_UNPACK_GLOBS]);
+    assert.deepStrictEqual(config.asarUnpack, [...DESKTOP_NATIVE_ASAR_UNPACK_GLOBS]);
   });
 
   it("blocks unsupported or non-matching Linux native build hosts", () => {

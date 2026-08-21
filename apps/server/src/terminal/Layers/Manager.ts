@@ -28,7 +28,7 @@ import {
   type TerminalAgentHookEventType,
   type TerminalCliKind,
 } from "@luminor/shared/terminalThreads";
-import { Effect, Encoding, Layer, Schema } from "effect";
+import { Effect, Encoding, Layer, Result, Schema } from "effect";
 
 import { createLogger } from "../../logger";
 import { PtyAdapter, PtyAdapterShape, type PtyExitEvent, type PtyProcess } from "../Services/PTY";
@@ -1277,17 +1277,24 @@ export class TerminalManagerRuntime extends EventEmitter<TerminalManagerEvents> 
       });
       let lastSpawnError: unknown = null;
 
-      const spawnWithCandidate = (candidate: ShellCandidate) =>
-        Effect.runPromise(
-          this.ptyAdapter.spawn({
-            shell: candidate.shell,
-            ...(candidate.args ? { args: candidate.args } : {}),
-            cwd: session.cwd,
-            cols: session.cols,
-            rows: session.rows,
-            env: terminalEnv,
-          }),
+      const spawnWithCandidate = async (candidate: ShellCandidate) => {
+        const result = await Effect.runPromise(
+          Effect.result(
+            this.ptyAdapter.spawn({
+              shell: candidate.shell,
+              ...(candidate.args ? { args: candidate.args } : {}),
+              cwd: session.cwd,
+              cols: session.cols,
+              rows: session.rows,
+              env: terminalEnv,
+            }),
+          ),
         );
+        if (Result.isFailure(result)) {
+          throw result.failure;
+        }
+        return result.success;
+      };
 
       const trySpawn = async (
         candidates: ShellCandidate[],

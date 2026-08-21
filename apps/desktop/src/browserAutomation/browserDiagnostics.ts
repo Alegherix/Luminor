@@ -9,7 +9,7 @@ import type {
 import type { WebContents } from "electron";
 
 import type { BrowserAutomationVisibleRuntime } from "../browserManager";
-import { sendCdpCommand, throwIfAborted } from "./cdpRuntime";
+import { getCdpSessionCoordinator, sendCdpCommand, throwIfAborted } from "./cdpRuntime";
 
 const MAX_CAPTURED_ENTRIES = 1_000;
 const MAX_TRACKED_REQUESTS = 2_048;
@@ -32,7 +32,7 @@ interface DiagnosticsState {
   readonly requests: Map<string, TrackedRequest>;
   droppedCount: number;
   initialized: Promise<void>;
-  readonly onMessage: (_event: unknown, method: string, params: unknown) => void;
+  readonly onMessage: (method: string, params: Record<string, unknown>) => void;
   readonly dispose: () => void;
 }
 
@@ -153,9 +153,7 @@ export class BrowserDiagnosticsStore {
         state.droppedCount = Math.min(1_000_000_000, state.droppedCount + removed);
       }
     };
-    const onMessage = (_event: unknown, method: string, raw: unknown): void => {
-      if (!raw || typeof raw !== "object") return;
-      const params = raw as Record<string, unknown>;
+    const onMessage = (method: string, params: Record<string, unknown>): void => {
       if (method === "Runtime.consoleAPICalled") {
         const frames = (
           params.stackTrace as
@@ -277,16 +275,17 @@ export class BrowserDiagnosticsStore {
         if (requestId) state.requests.delete(requestId);
       }
     };
-    const debuggerSession = runtime.webContents.debugger;
+    const coordinator = getCdpSessionCoordinator(runtime.webContents);
     const lifecycle = runtime.webContents as WebContents & {
       once?: (event: "destroyed", listener: () => void) => void;
       removeListener?: (event: "destroyed", listener: () => void) => void;
     };
     let disposed = false;
+    let releaseDebuggerMessages = (): void => undefined;
     const dispose = (): void => {
       if (disposed) return;
+      releaseDebuggerMessages();
       if (!runtime.webContents.isDestroyed()) {
-        debuggerSession.removeListener("message", onMessage);
         lifecycle.removeListener?.("destroyed", dispose);
       }
       disposed = true;
@@ -306,7 +305,7 @@ export class BrowserDiagnosticsStore {
       initialized: Promise.resolve(),
     };
     this.stateByWebContents.set(runtime.webContents, state);
-    debuggerSession.on("message", onMessage);
+    releaseDebuggerMessages = coordinator.subscribeMessages(onMessage);
     lifecycle.once?.("destroyed", dispose);
     state.initialized = (async () => {
       await sendCdpCommand(runtime, "Runtime.enable", {}, signal);

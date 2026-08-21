@@ -788,27 +788,6 @@ describe("WsTransport", () => {
     expect(isRuntimeInterruptFailure("All fibers interrupted without error")).toBe(false);
   });
 
-  it("rejects an in-flight unary request with a typed retryable error across a reconnect", async () => {
-    // Regression for "sign-in is broken": a transport reconnect used to leak
-    // the raw squashed interrupt (`Error("All fibers interrupted without
-    // error")`) to unary callers, indistinguishable from a server error.
-    const { transport, internals } = makeBareTransport();
-    const client = { "some.method": () => Effect.never };
-    Object.assign(internals, {
-      getClient: vi.fn(async () => client),
-      getClientRuntime: () => ({
-        runPromise: () => Promise.reject(new Error("All fibers interrupted without error")),
-      }),
-    });
-
-    await expect(transport.request("some.method", {}, { timeoutMs: null })).rejects.toMatchObject({
-      _tag: "WsTransportRequestInterruptedError",
-      code: "WS_REQUEST_RECONNECTED",
-      method: "some.method",
-      retryable: true,
-    });
-  });
-
   it("retries capacity-rejected streams in place with the server-provided delay", () => {
     expect(
       getStreamCapacityRetryDelayMs(
@@ -1441,6 +1420,25 @@ describe("WsTransport", () => {
     });
     // 1 initial attempt + MAX_RPC_INTERRUPT_RETRIES (2).
     expect(executeRequestOnce).toHaveBeenCalledTimes(3);
+  });
+
+  it("maps current executeRequestOnce runtime disposal to WS_REQUEST_RECONNECTED", async () => {
+    const transport = Object.create(WsTransport.prototype) as WsTransport;
+    const executeRequestOnce = vi.fn(async () => {
+      throw new Error("ManagedRuntime disposed during WebSocket reconnect");
+    });
+    Object.assign(transport, {
+      disposed: false,
+      executeRequestOnce,
+    });
+
+    await expect(transport.request("orchestration.dispatchCommand", {})).rejects.toMatchObject({
+      _tag: "WsTransportRequestInterruptedError",
+      code: "WS_REQUEST_RECONNECTED",
+      method: "orchestration.dispatchCommand",
+      retryable: true,
+    });
+    expect(executeRequestOnce).toHaveBeenCalledOnce();
   });
 
   it("keeps the shared lifecycle stream while either lifecycle channel is active", () => {

@@ -135,11 +135,11 @@ describe("AcpSessionRuntime", () => {
             args: [mockAgentPath],
             env: {
               VITEST: "true",
-              SYNARA_ACP_FAIL_SESSION_NEW_ONCE: "1",
+              LUMINOR_ACP_FAIL_SESSION_NEW_ONCE: "1",
             },
           },
           cwd: process.cwd(),
-          clientInfo: { name: "synara-test", version: "0.0.0" },
+          clientInfo: { name: "luminor-test", version: "0.0.0" },
           authMethodId: "test",
           freshSessionRetry: {
             shouldRetry: (error) =>
@@ -384,12 +384,12 @@ describe("AcpSessionRuntime", () => {
             args: [mockAgentPath],
             env: {
               VITEST: "true",
-              SYNARA_ACP_SUPPORT_SESSION_FORK: "1",
-              SYNARA_ACP_SUPPORT_SESSION_LOAD: "0",
+              LUMINOR_ACP_SUPPORT_SESSION_FORK: "1",
+              LUMINOR_ACP_SUPPORT_SESSION_LOAD: "0",
             },
           },
           cwd: process.cwd(),
-          clientInfo: { name: "synara-test", version: "0.0.0" },
+          clientInfo: { name: "luminor-test", version: "0.0.0" },
           authMethodId: "test",
           requestLogger: (event) =>
             Effect.sync(() => {

@@ -1,9 +1,16 @@
+import { EventEmitter } from "node:events";
+
 import { ThreadId } from "@luminor/contracts";
 import type { WebContents } from "electron";
 import { describe, expect, it, vi } from "vitest";
 
 import type { BrowserAutomationVisibleRuntime } from "../browserManager";
-import { callFunctionOn, drainOnAbort, evaluateInContext } from "./cdpRuntime";
+import {
+  callFunctionOn,
+  DebuggerSessionCoordinator,
+  drainOnAbort,
+  evaluateInContext,
+} from "./cdpRuntime";
 
 const runtimeWithFailure = (): BrowserAutomationVisibleRuntime => ({
   threadId: ThreadId.makeUnsafe("thread-cdp-errors"),
@@ -104,5 +111,67 @@ describe("CDP ambiguous effects", () => {
         effectMayHaveCommitted: true,
       },
     });
+  });
+});
+
+describe("DebuggerSessionCoordinator", () => {
+  const createTarget = () => {
+    const debuggerSession = new EventEmitter() as EventEmitter & {
+      isAttached: () => boolean;
+      attach: () => void;
+      sendCommand: ReturnType<typeof vi.fn>;
+    };
+    let attached = false;
+    let destroyed = false;
+    debuggerSession.isAttached = () => attached;
+    debuggerSession.attach = () => {
+      attached = true;
+    };
+    debuggerSession.sendCommand = vi.fn(async () => ({}));
+    const webContents = new EventEmitter() as EventEmitter & {
+      debugger: typeof debuggerSession;
+      isDestroyed: () => boolean;
+    };
+    webContents.debugger = debuggerSession;
+    webContents.isDestroyed = () => destroyed;
+    return {
+      debuggerSession,
+      webContents: webContents as unknown as WebContents,
+      detach: (reason = "replaced-with-devtools") => {
+        attached = false;
+        debuggerSession.emit("detach", {}, reason);
+      },
+      destroy: () => {
+        destroyed = true;
+        webContents.emit("destroyed");
+      },
+    };
+  };
+
+  it("rejects a command carrying a stale debugger session id", async () => {
+    const target = createTarget();
+    const coordinator = new DebuggerSessionCoordinator(target.webContents);
+    const firstSessionId = coordinator.ensureAttached();
+    target.detach();
+    coordinator.ensureAttached();
+    await expect(coordinator.sendCommand("Page.enable", {}, firstSessionId)).rejects.toThrow(
+      "Debugger session replaced",
+    );
+  });
+
+  it("never acknowledges a late command after target destruction", async () => {
+    const target = createTarget();
+    let resolveCommand!: (value: unknown) => void;
+    target.debuggerSession.sendCommand = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveCommand = resolve;
+        }),
+    );
+    const coordinator = new DebuggerSessionCoordinator(target.webContents);
+    const command = coordinator.sendCommand("Page.enable");
+    target.destroy();
+    resolveCommand({});
+    await expect(command).rejects.toThrow("session invalidation");
   });
 });

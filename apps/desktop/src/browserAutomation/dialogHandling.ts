@@ -5,6 +5,7 @@ import {
   drainOnAbort,
   ensureCdpAttached,
   evaluateInContext,
+  getCdpSessionCoordinator,
   sendCdpCommand,
   throwIfAborted,
 } from "./cdpRuntime";
@@ -166,7 +167,8 @@ const ensureDialogMonitor = async (
   const monitorPromise = (async (): Promise<DialogMonitor> => {
     ensureCdpAttached(webContents);
     const monitor: DialogMonitor = { captures: new Set() };
-    const onMessage = (_event: Electron.Event, method: string, params: Record<string, unknown>) => {
+    const coordinator = getCdpSessionCoordinator(webContents);
+    const onMessage = (method: string, params: Record<string, unknown>) => {
       if (method !== "Page.javascriptDialogOpening") return;
       const dialog = normalizeDialog(params);
       const policy = DIALOG_POLICY[dialog.kind];
@@ -175,7 +177,7 @@ const ensureDialogMonitor = async (
       // Attach rejection handling directly to Electron's promise. Wrapping the
       // call in a detached microtask leaves a narrow unhandled-rejection race
       // when Chromium auto-closes the dialog before the queued command runs.
-      const handling = webContents.debugger
+      const handling = coordinator
         .sendCommand("Page.handleJavaScriptDialog", {
           accept: policy.accept,
         })
@@ -188,7 +190,7 @@ const ensureDialogMonitor = async (
     };
     const tracksDestruction =
       typeof webContents.once === "function" && typeof webContents.removeListener === "function";
-    const debuggerSession = webContents.debugger;
+    const unsubscribeMessages = coordinator.subscribeMessages(onMessage);
     let disposed = false;
     const dispose = () => {
       if (disposed) return;
@@ -199,13 +201,12 @@ const ensureDialogMonitor = async (
       // object is already releasing every listener in that path, so explicit
       // listener cleanup is only necessary while WebContents is still alive.
       if (!webContents.isDestroyed()) {
-        debuggerSession.removeListener("message", onMessage);
+        unsubscribeMessages();
         if (tracksDestruction) webContents.removeListener("destroyed", dispose);
       }
       monitor.captures.clear();
       dialogMonitors.delete(webContents);
     };
-    debuggerSession.on("message", onMessage);
     if (tracksDestruction) webContents.once("destroyed", dispose);
     try {
       await sendCdpCommand(runtime, "Page.enable", {}, signal);
@@ -213,7 +214,7 @@ const ensureDialogMonitor = async (
       // Keep this command direct so it can bypass the blocked page command,
       // but drain it before releasing the tab lock if cancellation races it.
       await drainOnAbort(
-        webContents.debugger
+        coordinator
           .sendCommand("Page.handleJavaScriptDialog", { accept: false })
           .catch((error: unknown) => {
             if (isNoDialogOpenError(error)) return;
@@ -235,6 +236,12 @@ const ensureDialogMonitor = async (
     dialogMonitors.delete(webContents);
     throw error;
   }
+};
+
+export const ensureDialogSuppression = async (
+  runtime: BrowserAutomationVisibleRuntime,
+): Promise<void> => {
+  await ensureDialogMonitor(runtime);
 };
 
 const installDialogShim = async (
@@ -291,7 +298,8 @@ export const withDialogHandling = async <T>(
   let dialogShimInstalled = false;
   let documentReplaced = false;
   let shimDialogs: BrowserHandledDialog[] = [];
-  const onDocumentLifecycle = (_event: unknown, method: string, rawParams: unknown) => {
+  let unsubscribeDocumentLifecycle: () => void = () => undefined;
+  const onDocumentLifecycle = (method: string, rawParams: Record<string, unknown>) => {
     if (method === "Runtime.executionContextsCleared") {
       documentReplaced = true;
       return;
@@ -303,7 +311,9 @@ export const withDialogHandling = async <T>(
   try {
     await installDialogShim(runtime, signal);
     dialogShimInstalled = true;
-    runtime.webContents.debugger.on("message", onDocumentLifecycle);
+    unsubscribeDocumentLifecycle = getCdpSessionCoordinator(runtime.webContents).subscribeMessages(
+      onDocumentLifecycle,
+    );
     const value = await operation();
     throwIfAborted(signal);
     return { value, dialogs: capture.dialogs };
@@ -312,7 +322,7 @@ export const withDialogHandling = async <T>(
     // before this block runs. Ignore the caller's cancelled signal for the
     // bounded restore so main-world dialog APIs never remain overridden after
     // the per-tab lock is released.
-    runtime.webContents.debugger.removeListener("message", onDocumentLifecycle);
+    unsubscribeDocumentLifecycle();
     const mayIssueCleanupCommands = !documentReplaced;
     if (dialogShimInstalled && mayIssueCleanupCommands && !signal?.aborted) {
       shimDialogs = await drainDialogShim(runtime);

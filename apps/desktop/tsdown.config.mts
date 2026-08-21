@@ -37,4 +37,8 @@ export default defineConfig([
     ...shared,
     entry: ["src/browserAnnotations/guestPreload.ts"],
   },
+  {
+    ...shared,
+    entry: ["src/offscreenGuestPreload.ts", "src/browserFrame/jpegWorker.ts"],
+  },
 ]);

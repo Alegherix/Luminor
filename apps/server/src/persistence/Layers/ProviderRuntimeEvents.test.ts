@@ -301,11 +301,11 @@ layer("ProviderRuntimeEventRepository", (it) => {
       }
       const rawPayload = persisted.event.raw?.payload as
         | {
-            readonly synaraTruncated?: unknown;
+            readonly luminorTruncated?: unknown;
             readonly originalBytes?: unknown;
           }
         | undefined;
-      assert.deepInclude(rawPayload, { synaraTruncated: true });
+      assert.deepInclude(rawPayload, { luminorTruncated: true });
       const originalBytes = rawPayload?.originalBytes;
       assert.isNumber(originalBytes);
       if (typeof originalBytes === "number") {

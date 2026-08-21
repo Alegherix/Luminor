@@ -316,6 +316,18 @@
       "types": "./src/deviceFrame.ts",
       "import": "./src/deviceFrame.ts"
     },
+    "./frameEnvelope": {
+      "types": "./src/frameEnvelope.ts",
+      "import": "./src/frameEnvelope.ts"
+    },
+    "./frameTransport": {
+      "types": "./src/frameTransport.ts",
+      "import": "./src/frameTransport.ts"
+    },
+    "./browserStreamLifecycle": {
+      "types": "./src/browserStreamLifecycle.ts",
+      "import": "./src/browserStreamLifecycle.ts"
+    },
     "./deviceHelperCache": {
       "types": "./src/deviceHelperCache.ts",
       "import": "./src/deviceHelperCache.ts"

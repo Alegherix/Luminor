@@ -74,6 +74,7 @@ export function resolveRemoteListenTarget(input: {
   const policyError = remoteAccessPolicyError({
     host,
     authToken: input.authToken,
+    devUrl: undefined,
     publicUrl: input.publicUrl,
     allowInsecureRemote: input.allowInsecureRemote,
   });

@@ -6011,7 +6011,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
           usage: {
             usedTokens: 321,
             lastUsedTokens: 321,
-            maxTokens: 200_000,
+            maxTokens: 1_000_000,
             toolUses: 2,
             durationMs: 654,
           },
@@ -6084,7 +6084,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
             lastUsedTokens: 24542,
             inputTokens: 23863,
             outputTokens: 679,
-            maxTokens: 200000,
+            maxTokens: 1_000_000,
           },
         });
       }
@@ -6094,7 +6094,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
     );
   });
 
-  it.effect("clamps oversized Claude usage to the reported context window", () => {
+  it.effect("retains usage below the resolved Claude model context window", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
@@ -6144,10 +6144,9 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
       if (usageEvent?.type === "thread.token-usage.updated") {
         assert.deepEqual(usageEvent.payload, {
           usage: {
-            usedTokens: 200000,
-            lastUsedTokens: 200000,
-            totalProcessedTokens: 535000,
-            maxTokens: 200000,
+            usedTokens: 535000,
+            lastUsedTokens: 535000,
+            maxTokens: 1_000_000,
           },
         });
       }
@@ -6227,7 +6226,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
               usedTokens: 190000,
               lastUsedTokens: 190000,
               totalProcessedTokens: 535000,
-              maxTokens: 200000,
+              maxTokens: 1_000_000,
             },
           });
         }
@@ -6306,7 +6305,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
             usedTokens: 190000,
             lastUsedTokens: 190000,
             totalProcessedTokens: 535000,
-            maxTokens: 200000,
+            maxTokens: 1_000_000,
           },
         });
       }
@@ -6383,7 +6382,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
           usage: {
             usedTokens: 190000,
             lastUsedTokens: 190000,
-            maxTokens: 200_000,
+            maxTokens: 1_000_000,
             totalProcessedTokens: 535000,
           },
         });
@@ -8484,7 +8483,7 @@ await agent("Draft the spec", { label: "delta-agent", phase: "Two" });
             content: [{ type: "text", text: "working" }],
             usage: {
               input_tokens: 2,
-              cache_read_input_tokens: 170_000,
+              cache_read_input_tokens: 850_000,
               output_tokens: 5,
             },
           },

@@ -42,13 +42,12 @@ describe("frame socket sink", () => {
       isOpen: () => true,
     });
 
-    sink.send(new Uint8Array(500));
+    const pendingSend = sink.send(new Uint8Array(500));
 
     // The transport reads this to decide whether the client is keeping up.
     expect(sink.bufferedAmount()).toBe(500);
     settle?.();
-    await Promise.resolve();
-    await Promise.resolve();
+    await pendingSend;
     expect(sink.bufferedAmount()).toBe(0);
   });
 
@@ -58,9 +57,7 @@ describe("frame socket sink", () => {
       isOpen: () => true,
     });
 
-    sink.send(new Uint8Array(64));
-    await Promise.resolve();
-    await Promise.resolve();
+    await expect(sink.send(new Uint8Array(64))).rejects.toThrow("socket gone");
 
     // A rejected write must not leave phantom bytes that permanently mark the
     // subscriber as slow.

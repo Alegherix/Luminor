@@ -1,8 +1,19 @@
+import { randomUUID } from "node:crypto";
 import * as FS from "node:fs";
 import * as Net from "node:net";
 import * as OS from "node:os";
 
-import type { BrowserToolName, ProviderKind, ThreadId } from "@luminor/contracts";
+import {
+  BROWSER_HOST_CONTROL_METHOD,
+  BROWSER_HOST_STATE_METHOD,
+  BrowserDesktopControlResponse,
+  BrowserStateStreamEvent,
+  type BrowserDesktopControlRequest,
+  type BrowserToolName,
+  type ProviderKind,
+  type ThreadId,
+} from "@luminor/contracts";
+import { Schema } from "effect";
 
 const FRAME_HEADER_BYTES = 4;
 // A bounded 8 MiB PNG expands to roughly 10.7 MiB as base64 inside the
@@ -87,6 +98,8 @@ class BrowserHostRpcConnection {
   private buffer = Buffer.alloc(0);
   private nextId = 1;
   private terminalError: Error | null = null;
+  private readonly notificationListeners = new Map<string, Set<(params: unknown) => void>>();
+  private readonly closeListeners = new Set<(error: Error) => void>();
 
   private constructor(socket: Net.Socket) {
     this.socket = socket;
@@ -195,6 +208,21 @@ class BrowserHostRpcConnection {
     this.socket.end();
   }
 
+  subscribeNotification(method: string, listener: (params: unknown) => void): () => void {
+    const listeners = this.notificationListeners.get(method) ?? new Set();
+    listeners.add(listener);
+    this.notificationListeners.set(method, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) this.notificationListeners.delete(method);
+    };
+  }
+
+  subscribeClose(listener: (error: Error) => void): () => void {
+    this.closeListeners.add(listener);
+    return () => this.closeListeners.delete(listener);
+  }
+
   private onData(chunk: Buffer): void {
     this.buffer = Buffer.concat([this.buffer, chunk]);
     while (this.buffer.byteLength >= FRAME_HEADER_BYTES) {
@@ -221,7 +249,14 @@ class BrowserHostRpcConnection {
       return;
     }
     const record = asRecord(value);
-    if (!record || typeof record.id !== "number") return;
+    if (!record) return;
+    if (typeof record.id !== "number") {
+      if (typeof record.method !== "string") return;
+      for (const listener of this.notificationListeners.get(record.method) ?? []) {
+        listener(record.params);
+      }
+      return;
+    }
     const pending = this.pending.get(record.id);
     if (!pending) return;
     this.pending.delete(record.id);
@@ -250,6 +285,9 @@ class BrowserHostRpcConnection {
     this.terminalError = error;
     for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
+    for (const listener of this.closeListeners) listener(error);
+    this.closeListeners.clear();
+    this.notificationListeners.clear();
   }
 }
 
@@ -267,7 +305,11 @@ export interface BrowserHostToolCall {
   readonly signal?: AbortSignal;
 }
 
-function assertCompatibleHostInfo(value: unknown, expectedSessionId: string): void {
+function assertCompatibleHostInfo(
+  value: unknown,
+  expectedSessionId: string,
+  requiredMethod = "executeTool",
+): void {
   const info = asRecord(value);
   const metadata = asRecord(info?.metadata);
   const protocolVersion = metadata?.protocolVersion ?? info?.protocolVersion;
@@ -277,13 +319,62 @@ function assertCompatibleHostInfo(value: unknown, expectedSessionId: string): vo
     protocolVersion !== 1 ||
     (info?.type !== undefined && info.type !== "luminor-browser-host") ||
     (sessionId !== undefined && sessionId !== expectedSessionId) ||
-    (methods !== undefined && (!Array.isArray(methods) || !methods.includes("executeTool")))
+    (methods !== undefined && (!Array.isArray(methods) || !methods.includes(requiredMethod)))
   ) {
     throw new BrowserHostRpcError(
       "malformed",
       "The visible browser host uses an incompatible protocol.",
     );
   }
+}
+
+export interface BrowserHostControlConnection {
+  readonly request: (
+    request: BrowserDesktopControlRequest,
+    timeoutMs?: number,
+  ) => Promise<typeof BrowserDesktopControlResponse.Type>;
+  readonly subscribeState: (
+    listener: (event: typeof BrowserStateStreamEvent.Type) => void,
+  ) => () => void;
+  readonly subscribeClose: (listener: (error: Error) => void) => () => void;
+  readonly close: () => void;
+}
+
+export async function connectBrowserHostControl(input: {
+  readonly pipePath: string;
+  readonly capability: string;
+  readonly timeoutMs?: number;
+}): Promise<BrowserHostControlConnection> {
+  const timeoutMs = input.timeoutMs ?? 5_000;
+  const sessionId = `browser-pane:${process.pid}:${randomUUID()}`;
+  const connection = await BrowserHostRpcConnection.connect(input.pipePath, timeoutMs);
+  try {
+    const info = await connection.request(
+      "getInfo",
+      { session_id: sessionId, capability: input.capability },
+      timeoutMs,
+    );
+    assertCompatibleHostInfo(info, sessionId, BROWSER_HOST_CONTROL_METHOD);
+  } catch (error) {
+    connection.close();
+    throw error;
+  }
+  return {
+    request: async (request, requestTimeoutMs = 30_000) =>
+      Schema.decodeUnknownSync(BrowserDesktopControlResponse)(
+        await connection.request(
+          BROWSER_HOST_CONTROL_METHOD,
+          request as unknown as Record<string, unknown>,
+          requestTimeoutMs,
+        ),
+      ),
+    subscribeState: (listener) =>
+      connection.subscribeNotification(BROWSER_HOST_STATE_METHOD, (params) => {
+        if (Schema.is(BrowserStateStreamEvent)(params)) listener(params);
+      }),
+    subscribeClose: (listener) => connection.subscribeClose(listener),
+    close: () => connection.close(),
+  };
 }
 
 export async function callBrowserHostTool(input: BrowserHostToolCall): Promise<unknown> {

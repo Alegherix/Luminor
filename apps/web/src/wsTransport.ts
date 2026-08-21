@@ -872,6 +872,27 @@ export class WsTransport {
       return undefined as T;
     }
 
+    const forceShellRestart =
+      method === ORCHESTRATION_WS_METHODS.subscribeShell &&
+      this.shellSubscribed &&
+      this.shellSnapshotDelivered;
+    let threadSubscription:
+      | { readonly threadId: string; readonly input: unknown; readonly forceRestart: boolean }
+      | undefined;
+    if (method === ORCHESTRATION_WS_METHODS.subscribeShell) {
+      this.shellSubscribed = true;
+    } else if (method === ORCHESTRATION_WS_METHODS.subscribeThread) {
+      const threadId = (params as { threadId: string }).threadId;
+      const existingInput = this.threadSubscriptions.get(threadId);
+      const input = threadStreamInputsEqual(existingInput, params) ? existingInput : params;
+      threadSubscription = {
+        threadId,
+        input,
+        forceRestart: existingInput !== undefined,
+      };
+      this.threadSubscriptions.set(threadId, input);
+    }
+
     const client = await awaitWithAbort(this.getClient(), signal);
 
     if (method === WS_METHODS.gitRunStackedAction) {
@@ -885,22 +906,20 @@ export class WsTransport {
     }
 
     if (method === ORCHESTRATION_WS_METHODS.subscribeShell) {
-      this.shellSubscribed = true;
       this.resetStreamCapacityRetry("orchestration.shell");
       this.resetStreamCompletionRetry("orchestration.shell");
-      await this.startShellStream(client, this.shellSnapshotDelivered);
+      await this.startShellStream(client, forceShellRestart);
       return undefined as T;
     }
-    if (method === ORCHESTRATION_WS_METHODS.subscribeThread) {
-      const threadId = (params as { threadId: string }).threadId;
-      this.resetStreamCapacityRetry(`orchestration.thread:${threadId}`);
-      this.resetStreamCompletionRetry(`orchestration.thread:${threadId}`);
-      // Preserve the stored input identity across explicit refreshes so stale
-      // restart callbacks cannot supersede the newly requested stream.
-      const existingInput = this.threadSubscriptions.get(threadId);
-      const input = threadStreamInputsEqual(existingInput, params) ? existingInput : params;
-      this.threadSubscriptions.set(threadId, input);
-      await this.startThreadStream(client, threadId, input as never, true);
+    if (threadSubscription) {
+      this.resetStreamCapacityRetry(`orchestration.thread:${threadSubscription.threadId}`);
+      this.resetStreamCompletionRetry(`orchestration.thread:${threadSubscription.threadId}`);
+      await this.startThreadStream(
+        client,
+        threadSubscription.threadId,
+        threadSubscription.input as never,
+        threadSubscription.forceRestart,
+      );
       return undefined as T;
     }
 

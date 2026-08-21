@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 
 import { IsoDateTime, NonNegativeInt, ThreadId, TrimmedNonEmptyString } from "./baseSchemas";
+import { BrowserFrameHeader } from "./browserPane";
 
 // ── WebSocket surface ────────────────────────────────────────────────
 
@@ -684,3 +685,43 @@ export const DeviceFrameDecodeErrorReason = Schema.Literals([
   "invalid-device-id",
 ]);
 export type DeviceFrameDecodeErrorReason = typeof DeviceFrameDecodeErrorReason.Type;
+
+export const BINARY_FRAME_ENVELOPE_MAGIC = 0x4c554d46;
+export const BINARY_FRAME_ENVELOPE_VERSION = 1;
+export const BINARY_FRAME_ENVELOPE_FIXED_BYTES = 14;
+export const BINARY_FRAME_ENVELOPE_MAX_HEADER_BYTES = 64 * 1024;
+export const BINARY_FRAME_ENVELOPE_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024;
+
+export const BinaryFramePayloadType = Schema.Literals(["device", "browser"]);
+export type BinaryFramePayloadType = typeof BinaryFramePayloadType.Type;
+
+export const DeviceFrameEnvelopeHeader = Schema.Struct({
+  payloadType: Schema.Literal("device"),
+  frame: DeviceFrameHeader,
+});
+export type DeviceFrameEnvelopeHeader = typeof DeviceFrameEnvelopeHeader.Type;
+
+export const BrowserFrameEnvelopeHeader = Schema.Struct({
+  payloadType: Schema.Literal("browser"),
+  frame: BrowserFrameHeader,
+});
+export type BrowserFrameEnvelopeHeader = typeof BrowserFrameEnvelopeHeader.Type;
+
+export const BinaryFrameEnvelopeHeader = Schema.Union([
+  DeviceFrameEnvelopeHeader,
+  BrowserFrameEnvelopeHeader,
+]);
+export type BinaryFrameEnvelopeHeader = typeof BinaryFrameEnvelopeHeader.Type;
+
+export const BinaryFrameEnvelopeDecodeErrorReason = Schema.Literals([
+  "truncated-header",
+  "bad-magic",
+  "unsupported-version",
+  "invalid-payload-type",
+  "invalid-header-length",
+  "invalid-payload-length",
+  "truncated-frame",
+  "invalid-header-json",
+  "invalid-header-schema",
+]);
+export type BinaryFrameEnvelopeDecodeErrorReason = typeof BinaryFrameEnvelopeDecodeErrorReason.Type;

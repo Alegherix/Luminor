@@ -51,6 +51,7 @@ export const BrowserViewport = closedStruct({
   height: boundedInt(1, 2_160),
   deviceScaleFactor: Schema.Finite.check(Schema.isBetween({ minimum: 0.25, maximum: 8 })),
 });
+export type BrowserViewport = typeof BrowserViewport.Type;
 
 export const BrowserTabSummary = closedStruct({
   tabId: BrowserTabId,

@@ -20,6 +20,7 @@
  * @module device/deviceFrameTransport
  */
 import { encodeDeviceFrame } from "@luminor/shared/deviceFrame";
+import { BinaryFrameTransport, type BinaryFrameSink } from "@luminor/shared/frameTransport";
 
 import type { DeviceStreamFrame } from "./DeviceBackend.ts";
 
@@ -28,13 +29,8 @@ export const DEVICE_FRAME_QUEUE_LIMIT = 8;
 /** Socket backlog above which a subscriber is considered too slow to write to. */
 export const DEVICE_FRAME_SOCKET_BUDGET_BYTES = 2 * 1024 * 1024;
 
-export interface DeviceFrameSink {
-  /** Deliver one encoded envelope. */
+export interface DeviceFrameSink extends BinaryFrameSink {
   readonly send: (bytes: Uint8Array) => void;
-  /** Bytes already queued on the underlying socket, if the transport knows. */
-  readonly bufferedAmount: () => number;
-  /** False once the connection is gone; the subscriber is then dropped. */
-  readonly isOpen: () => boolean;
 }
 
 export interface DeviceFrameSubscriberStats {
@@ -42,17 +38,6 @@ export interface DeviceFrameSubscriberStats {
   readonly dropped: number;
   readonly awaitingKeyframe: boolean;
   readonly queued: number;
-}
-
-interface Subscriber {
-  readonly id: string;
-  readonly deviceId: string;
-  readonly sink: DeviceFrameSink;
-  readonly queue: Uint8Array[];
-  queuedBytes: number;
-  awaitingKeyframe: boolean;
-  sent: number;
-  dropped: number;
 }
 
 export interface DeviceFrameTransportOptions {
@@ -65,25 +50,25 @@ export interface DeviceFrameTransportOptions {
  * subscribers name the device they want.
  */
 export class DeviceFrameTransport {
-  private readonly subscribers = new Map<string, Subscriber>();
-  private readonly subscribersByDevice = new Map<string, Set<Subscriber>>();
+  private readonly transport: BinaryFrameTransport<string, null>;
+  private readonly subscriberIdsByDevice = new Map<string, Set<string>>();
   private readonly latestKeyframe = new Map<string, Uint8Array>();
   private readonly codecConfig = new Map<string, Uint8Array>();
-  private readonly queueLimit: number;
-  private readonly socketBudgetBytes: number;
-  private nextSubscriberId = 1;
 
   constructor(options: DeviceFrameTransportOptions = {}) {
-    this.queueLimit = options.queueLimit ?? DEVICE_FRAME_QUEUE_LIMIT;
-    this.socketBudgetBytes = options.socketBudgetBytes ?? DEVICE_FRAME_SOCKET_BUDGET_BYTES;
+    this.transport = new BinaryFrameTransport({
+      queueLimit: options.queueLimit ?? DEVICE_FRAME_QUEUE_LIMIT,
+      socketBudgetBytes: options.socketBudgetBytes ?? DEVICE_FRAME_SOCKET_BUDGET_BYTES,
+      overflowPolicy: "drop-until-keyframe",
+    });
   }
 
   get subscriberCount(): number {
-    return this.subscribers.size;
+    return this.transport.subscriberCount();
   }
 
   deviceSubscriberCount(deviceId: string): number {
-    return this.subscribersByDevice.get(deviceId)?.size ?? 0;
+    return this.transport.subscriberCount(deviceId);
   }
 
   /**
@@ -92,35 +77,24 @@ export class DeviceFrameTransport {
    * keyframe when the stream has already produced them.
    */
   subscribe(deviceId: string, sink: DeviceFrameSink): () => void {
-    const subscriber: Subscriber = {
-      id: `device-frame-subscriber:${this.nextSubscriberId++}`,
-      deviceId,
-      sink,
-      queue: [],
-      queuedBytes: 0,
-      // Priming below clears this when a keyframe is available; otherwise the
-      // subscriber correctly waits for the encoder's next one.
-      awaitingKeyframe: true,
-      sent: 0,
-      dropped: 0,
-    };
-    this.subscribers.set(subscriber.id, subscriber);
-    let deviceSubscribers = this.subscribersByDevice.get(deviceId);
-    if (!deviceSubscribers) {
-      deviceSubscribers = new Set();
-      this.subscribersByDevice.set(deviceId, deviceSubscribers);
-    }
-    deviceSubscribers.add(subscriber);
-
     const config = this.codecConfig.get(deviceId);
-    if (config) this.deliver(subscriber, config);
     const keyframe = this.latestKeyframe.get(deviceId);
-    if (keyframe) {
-      subscriber.awaitingKeyframe = false;
-      this.deliver(subscriber, keyframe);
-    }
-
-    return () => this.removeSubscriber(subscriber);
+    const initialFrames = [
+      ...(config ? [{ bytes: config, bypassKeyframeGate: true }] : []),
+      ...(keyframe ? [{ bytes: keyframe, keyframe: true }] : []),
+    ];
+    const id = this.transport.subscribe(deviceId, null, sink, {
+      initialFrames,
+      awaitingKeyframe: !keyframe,
+    });
+    const ids = this.subscriberIdsByDevice.get(deviceId) ?? new Set<string>();
+    ids.add(id);
+    this.subscriberIdsByDevice.set(deviceId, ids);
+    return () => {
+      this.transport.unsubscribe(id);
+      ids.delete(id);
+      if (ids.size === 0) this.subscriberIdsByDevice.delete(deviceId);
+    };
   }
 
   /** Encode one frame and fan it out to every subscriber of that device. */
@@ -141,100 +115,30 @@ export class DeviceFrameTransport {
     if (frame.codecConfig) this.codecConfig.set(deviceId, encoded);
     else if (frame.keyframe) this.latestKeyframe.set(deviceId, encoded);
 
-    const deviceSubscribers = this.subscribersByDevice.get(deviceId);
-    if (!deviceSubscribers || deviceSubscribers.size === 0) return;
-
-    // Snapshotted: a closed sink is removed from the set during the walk.
-    for (const subscriber of Array.from(deviceSubscribers)) {
-      if (!subscriber.sink.isOpen()) {
-        this.removeSubscriber(subscriber);
-        continue;
-      }
-      // Codec config is never dropped: without it nothing downstream decodes.
-      if (frame.codecConfig) {
-        this.deliver(subscriber, encoded);
-        continue;
-      }
-      if (subscriber.awaitingKeyframe) {
-        if (!frame.keyframe) {
-          subscriber.dropped += 1;
-          continue;
-        }
-        subscriber.awaitingKeyframe = false;
-      }
-      this.deliver(subscriber, encoded);
-    }
+    this.transport.publish(deviceId, {
+      bytes: encoded,
+      keyframe: frame.keyframe,
+      bypassKeyframeGate: frame.codecConfig,
+    });
   }
 
   /** Forget cached keyframes for a device whose stream ended. */
   resetDevice(deviceId: string): void {
     this.latestKeyframe.delete(deviceId);
     this.codecConfig.delete(deviceId);
-    for (const subscriber of this.subscribersByDevice.get(deviceId) ?? []) {
-      subscriber.queue.length = 0;
-      subscriber.queuedBytes = 0;
-      subscriber.awaitingKeyframe = true;
-    }
+    this.transport.resetKey(deviceId, true);
   }
 
   statsFor(deviceId: string): readonly DeviceFrameSubscriberStats[] {
-    return [...(this.subscribersByDevice.get(deviceId) ?? [])].map((subscriber) => ({
-      sent: subscriber.sent,
-      dropped: subscriber.dropped,
-      awaitingKeyframe: subscriber.awaitingKeyframe,
-      queued: subscriber.queue.length,
-    }));
-  }
-
-  // ── Internals ──────────────────────────────────────────────────────
-
-  /**
-   * Write when the socket has room, otherwise queue; a full queue discards the
-   * whole backlog and waits for the next keyframe rather than shipping frames
-   * whose references are already gone.
-   */
-  private deliver(subscriber: Subscriber, encoded: Uint8Array): void {
-    if (!subscriber.sink.isOpen()) {
-      this.removeSubscriber(subscriber);
-      return;
-    }
-
-    if (subscriber.sink.bufferedAmount() <= this.socketBudgetBytes) {
-      this.flush(subscriber);
-      subscriber.sink.send(encoded);
-      subscriber.sent += 1;
-      return;
-    }
-
-    if (subscriber.queue.length >= this.queueLimit) {
-      subscriber.dropped += subscriber.queue.length + 1;
-      subscriber.queue.length = 0;
-      subscriber.queuedBytes = 0;
-      subscriber.awaitingKeyframe = true;
-      return;
-    }
-    subscriber.queue.push(encoded);
-    subscriber.queuedBytes += encoded.byteLength;
-  }
-
-  private flush(subscriber: Subscriber): void {
-    if (subscriber.queue.length === 0) return;
-    for (const queued of subscriber.queue) {
-      subscriber.sink.send(queued);
-      subscriber.sent += 1;
-    }
-    subscriber.queue.length = 0;
-    subscriber.queuedBytes = 0;
-  }
-
-  private removeSubscriber(subscriber: Subscriber): void {
-    this.subscribers.delete(subscriber.id);
-    const deviceSubscribers = this.subscribersByDevice.get(subscriber.deviceId);
-    deviceSubscribers?.delete(subscriber);
-    if (deviceSubscribers && deviceSubscribers.size === 0) {
-      this.subscribersByDevice.delete(subscriber.deviceId);
-    }
-    subscriber.queue.length = 0;
-    subscriber.queuedBytes = 0;
+    const ids = this.subscriberIdsByDevice.get(deviceId) ?? [];
+    return [...ids]
+      .map((id) => this.transport.getStats(id))
+      .filter((stats): stats is NonNullable<typeof stats> => stats !== null)
+      .map(({ sent, dropped, awaitingKeyframe, queued }) => ({
+        sent,
+        dropped,
+        awaitingKeyframe,
+        queued,
+      }));
   }
 }

@@ -6,7 +6,13 @@ import type {
   BrowserAutomationVisibleRuntime,
 } from "../browserManager";
 import type { ActionablePoint } from "./actionability";
-import { abortReason, drainOnAbort, sendCdpCommand, throwIfAborted } from "./cdpRuntime";
+import {
+  abortReason,
+  drainOnAbort,
+  getCdpSessionCoordinator,
+  sendCdpCommand,
+  throwIfAborted,
+} from "./cdpRuntime";
 
 export type TrustedMouseButton = "left" | "right" | "middle";
 export type TrustedInputModifier = "Alt" | "Control" | "Meta" | "Shift";
@@ -199,10 +205,9 @@ export const dispatchTrustedDrag = async (
   void dragDataPromise.catch(() => undefined);
   let interceptedDragData: Record<string, unknown> | undefined;
   let dragListenerActive = true;
-  const onDebuggerMessage = (...args: unknown[]) => {
-    if (args[1] !== "Input.dragIntercepted") return;
-    const params = args[2];
-    if (!params || typeof params !== "object" || Array.isArray(params)) return;
+  const coordinator = getCdpSessionCoordinator(runtime.webContents);
+  const onDebuggerMessage = (method: string, params: Record<string, unknown>) => {
+    if (method !== "Input.dragIntercepted") return;
     const data = (params as { readonly data?: unknown }).data;
     if (!data || typeof data !== "object" || Array.isArray(data)) return;
     interceptedDragData = data as Record<string, unknown>;
@@ -216,10 +221,10 @@ export const dispatchTrustedDrag = async (
   const releaseDragListener = () => {
     if (!dragListenerActive) return;
     dragListenerActive = false;
-    runtime.webContents.debugger.off("message", onDebuggerMessage);
+    releaseDebuggerMessages();
     signal?.removeEventListener("abort", onAbort);
   };
-  runtime.webContents.debugger.on("message", onDebuggerMessage);
+  const releaseDebuggerMessages = coordinator.subscribeMessages(onDebuggerMessage);
   signal?.addEventListener("abort", onAbort, { once: true });
 
   let interceptionEnabled = false;
@@ -328,7 +333,7 @@ export const dispatchTrustedDrag = async (
     releaseDragListener();
     if (!dropped && (dragStarted || interceptionEnabled) && !runtime.webContents.isDestroyed()) {
       try {
-        await runtime.webContents.debugger.sendCommand("Input.cancelDragging");
+        await coordinator.sendCommand("Input.cancelDragging");
       } catch {
         // Older Chromium builds may not expose cancelDragging. Pointer release
         // and disabling interception below still restore a safe input state.
@@ -350,7 +355,7 @@ export const dispatchTrustedDrag = async (
     }
     if (interceptionEnabled && !runtime.webContents.isDestroyed()) {
       try {
-        await runtime.webContents.debugger.sendCommand("Input.setInterceptDrags", {
+        await coordinator.sendCommand("Input.setInterceptDrags", {
           enabled: false,
         });
       } catch {
@@ -586,14 +591,17 @@ export const dispatchTrustedKeySequence = async (
           if (downTransport && !runtime.webContents.isDestroyed()) {
             if (downTransport === "cdp") {
               try {
-                await runtime.webContents.debugger.sendCommand("Input.dispatchKeyEvent", {
-                  type: "keyUp",
-                  modifiers: modifierMask(key.modifiers),
-                  key: "a",
-                  code: "KeyA",
-                  windowsVirtualKeyCode: 65,
-                  nativeVirtualKeyCode: 65,
-                });
+                await getCdpSessionCoordinator(runtime.webContents).sendCommand(
+                  "Input.dispatchKeyEvent",
+                  {
+                    type: "keyUp",
+                    modifiers: modifierMask(key.modifiers),
+                    key: "a",
+                    code: "KeyA",
+                    windowsVirtualKeyCode: 65,
+                    nativeVirtualKeyCode: 65,
+                  },
+                );
               } catch {
                 // The guest may have navigated or closed after the editing command.
               }

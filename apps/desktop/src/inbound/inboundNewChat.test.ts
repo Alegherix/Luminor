@@ -29,12 +29,14 @@ function createRuntime(options?: {
   readonly readError?: Error;
   readonly unlinkError?: Error;
   readonly wait?: Promise<void>;
-  readonly fetchImpl?: typeof fetch;
+  readonly fetchImpl?: ReturnType<typeof vi.fn<typeof fetch>>;
   readonly threadId?: string;
   readonly status?: number;
   readonly body?: unknown;
 }) {
-  const files = new Map<string, string>([["/tmp/luminor-inbound.md", options?.prompt ?? "hello\n"]]);
+  const files = new Map<string, string>([
+    ["/tmp/luminor-inbound.md", options?.prompt ?? "hello\n"],
+  ]);
   const log = vi.fn();
   const navigateToThread = vi.fn();
   const unlinked: string[] = [];

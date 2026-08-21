@@ -71,6 +71,8 @@ export function statusUpstreamRefreshCacheTimeToLive(
 }
 const DEFAULT_BASE_BRANCH_CANDIDATES = ["main", "master"] as const;
 const EMPTY_TREE_OBJECT_ID = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+const STANDARD_PATCH_PREFIX_ARGS = ["--src-prefix=a/", "--dst-prefix=b/"] as const;
+const PULL_FAST_FORWARD_ARGS = ["pull", "--ff-only", "--no-rebase"] as const;
 const WORKING_TREE_DIFF_TIMEOUT_MS = 15_000;
 const MAX_UNTRACKED_DIFF_CONCURRENCY = 4;
 const MAX_QUEUED_REPOSITORY_MUTATIONS = 64;
@@ -1636,7 +1638,7 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
         const trackedPatch = yield* executeGit(
           "GitCore.readUnstagedPatch.trackedPatch",
           cwd,
-          ["diff", "--patch", "--no-color", "--no-ext-diff"],
+          ["diff", "--patch", "--no-color", "--no-ext-diff", ...STANDARD_PATCH_PREFIX_ARGS],
           {
             allowNonZeroExit: true,
             timeoutMs: WORKING_TREE_DIFF_TIMEOUT_MS,
@@ -1653,7 +1655,14 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
       executeGit(
         "GitCore.readStagedPatch",
         cwd,
-        ["diff", "--cached", "--patch", "--no-color", "--no-ext-diff"],
+        [
+          "diff",
+          "--cached",
+          "--patch",
+          "--no-color",
+          "--no-ext-diff",
+          ...STANDARD_PATCH_PREFIX_ARGS,
+        ],
         {
           allowNonZeroExit: true,
           timeoutMs: WORKING_TREE_DIFF_TIMEOUT_MS,
@@ -1673,8 +1682,22 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
           "GitCore.readWorkingTreePatch.trackedPatch",
           cwd,
           headExists
-            ? ["diff", "--patch", "--no-color", "--no-ext-diff", "HEAD"]
-            : ["diff", "--patch", "--no-color", "--no-ext-diff", EMPTY_TREE_OBJECT_ID],
+            ? [
+                "diff",
+                "--patch",
+                "--no-color",
+                "--no-ext-diff",
+                ...STANDARD_PATCH_PREFIX_ARGS,
+                "HEAD",
+              ]
+            : [
+                "diff",
+                "--patch",
+                "--no-color",
+                "--no-ext-diff",
+                ...STANDARD_PATCH_PREFIX_ARGS,
+                EMPTY_TREE_OBJECT_ID,
+              ],
           {
             allowNonZeroExit: true,
             timeoutMs: WORKING_TREE_DIFF_TIMEOUT_MS,
@@ -1727,7 +1750,15 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
         const trackedPatch = yield* executeGit(
           "GitCore.readBranchPatch.trackedPatch",
           cwd,
-          ["diff", "--patch", "--minimal", "--no-color", "--no-ext-diff", mergeBase],
+          [
+            "diff",
+            "--patch",
+            "--minimal",
+            "--no-color",
+            "--no-ext-diff",
+            ...STANDARD_PATCH_PREFIX_ARGS,
+            mergeBase,
+          ],
           {
             timeoutMs: WORKING_TREE_DIFF_TIMEOUT_MS,
             maxOutputBytes: 10_000_000,
@@ -1924,7 +1955,7 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
           return yield* createGitCommandError(
             "GitCore.pullCurrentBranch",
             cwd,
-            ["pull", "--ff-only"],
+            PULL_FAST_FORWARD_ARGS,
             "Cannot pull from detached HEAD.",
           );
         }
@@ -1932,7 +1963,7 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
           return yield* createGitCommandError(
             "GitCore.pullCurrentBranch",
             cwd,
-            ["pull", "--ff-only"],
+            PULL_FAST_FORWARD_ARGS,
             "Current branch has no upstream configured. Push with upstream first.",
           );
         }
@@ -1942,7 +1973,7 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
           ["rev-parse", "HEAD"],
           true,
         ).pipe(Effect.map((stdout) => stdout.trim()));
-        yield* executeGit("GitCore.pullCurrentBranch.pull", cwd, ["pull", "--ff-only"], {
+        yield* executeGit("GitCore.pullCurrentBranch.pull", cwd, PULL_FAST_FORWARD_ARGS, {
           timeoutMs: 30_000,
           fallbackErrorMessage: "git pull failed",
         }).pipe(
@@ -1952,7 +1983,7 @@ export const makeGitCore = (options?: { executeOverride?: GitCoreShape["execute"
             return createGitCommandError(
               "GitCore.pullCurrentBranch.pull",
               cwd,
-              ["pull", "--ff-only"],
+              PULL_FAST_FORWARD_ARGS,
               friendlyDetail,
               error,
             );
