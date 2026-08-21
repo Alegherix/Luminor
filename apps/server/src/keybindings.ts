@@ -771,10 +771,7 @@ function migrateOutdatedSidebarSearchDefault(rules: readonly KeybindingRule[]): 
   return { rules: next, migratedCount };
 }
 
-function matchesOutdatedDefaultChord(
-  rule: KeybindingRule,
-  outdated: KeybindingRule,
-): boolean {
+function matchesOutdatedDefaultChord(rule: KeybindingRule, outdated: KeybindingRule): boolean {
   // Match on command + key only so synced/minimal configs without an explicit
   // `when` still pick up the chord move; the replacement writes the current default.
   return rule.command === outdated.command && rule.key === outdated.key;
@@ -822,9 +819,7 @@ function migrateSidebarDockAndTraitsPickerDefaults(rules: readonly KeybindingRul
     return { ...RIGHT_DOCK_TOGGLE_DEFAULT_KEYBINDING };
   });
 
-  const sidebarModE = SIDEBAR_TOGGLE_DEFAULT_KEYBINDINGS.find(
-    (binding) => binding.key === "mod+e",
-  );
+  const sidebarModE = SIDEBAR_TOGGLE_DEFAULT_KEYBINDINGS.find((binding) => binding.key === "mod+e");
   let afterSidebar = withRightDock;
   if (
     migratedRightDockOffModE &&
@@ -863,23 +858,23 @@ function repairTraitsPickerChordStolenByEquivalentWhen(rules: readonly Keybindin
 } {
   const traitsIndex = rules.findIndex(matchesTraitsPickerNewDefaultChord);
   if (traitsIndex < 0) {
-    return { rules, migratedCount: 0 };
+    return { rules: [...rules], migratedCount: 0 };
   }
 
   const traitsRule = rules[traitsIndex];
   if (!traitsRule) {
-    return { rules, migratedCount: 0 };
+    return { rules: [...rules], migratedCount: 0 };
   }
 
   const chordStolen = rules.some(
     (rule, index) => index !== traitsIndex && hasSameShortcutContext(rule, traitsRule),
   );
   if (!chordStolen) {
-    return { rules, migratedCount: 0 };
+    return { rules: [...rules], migratedCount: 0 };
   }
 
   if (shortcutContextIsClaimed(rules, OUTDATED_TRAITS_PICKER_TOGGLE_KEYBINDING, traitsIndex)) {
-    return { rules, migratedCount: 0 };
+    return { rules: [...rules], migratedCount: 0 };
   }
 
   const next = rules.slice();

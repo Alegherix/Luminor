@@ -81,7 +81,7 @@ describe("deriveThreadGitMetadataPatch", () => {
       deriveThreadGitMetadataPatch({
         currentBranch: pullRequest.headBranch,
         currentPullRequest: pullRequest,
-        observedBranch: "synara/deadbeef",
+        observedBranch: "luminor/deadbeef",
         pullRequestLookup: { status: "resolved", pullRequest: null },
       }),
     ).toBeNull();

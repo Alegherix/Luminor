@@ -16,6 +16,10 @@ import { describe, expect, it } from "vitest";
 import { AuthError } from "../auth/Services/ServerAuth";
 import { resolveDefaultChatWorkspaceRoot, ServerConfig, type ServerConfigShape } from "../config";
 import {
+  OrchestrationEngineService,
+  type OrchestrationEngineShape,
+} from "../orchestration/Services/OrchestrationEngine";
+import {
   handleInboundNewChat,
   INBOUND_NEW_CHAT_MODEL_SELECTION,
   INBOUND_NEW_CHAT_ROUTE_PATH,
@@ -395,6 +399,7 @@ async function withInboundServer(run: (origin: string) => Promise<void>): Promis
                 chatWorkspaceRoot: resolveDefaultChatWorkspaceRoot({ homeDir: "/Users/demo" }),
                 attachmentsDir: "/tmp/luminor-inbound/attachments",
               } as ServerConfigShape),
+              Layer.succeed(OrchestrationEngineService, {} as OrchestrationEngineShape),
               NodeHttpServer.layerHttpServices,
             ),
           ),

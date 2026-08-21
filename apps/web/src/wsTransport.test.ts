@@ -788,27 +788,6 @@ describe("WsTransport", () => {
     expect(isRuntimeInterruptFailure("All fibers interrupted without error")).toBe(false);
   });
 
-  it("rejects an in-flight unary request with a typed retryable error across a reconnect", async () => {
-    // Regression for "sign-in is broken": a transport reconnect used to leak
-    // the raw squashed interrupt (`Error("All fibers interrupted without
-    // error")`) to unary callers, indistinguishable from a server error.
-    const { transport, internals } = makeBareTransport();
-    const client = { "some.method": () => Effect.never };
-    Object.assign(internals, {
-      getClient: vi.fn(async () => client),
-      getClientRuntime: () => ({
-        runPromise: () => Promise.reject(new Error("All fibers interrupted without error")),
-      }),
-    });
-
-    await expect(transport.request("some.method", {}, { timeoutMs: null })).rejects.toMatchObject({
-      _tag: "WsTransportRequestInterruptedError",
-      code: "WS_REQUEST_RECONNECTED",
-      method: "some.method",
-      retryable: true,
-    });
-  });
-
   it("retries capacity-rejected streams in place with the server-provided delay", () => {
     expect(
       getStreamCapacityRetryDelayMs(

@@ -226,44 +226,46 @@ describe("ProviderCommandReactor", () => {
       provider: "codex",
       model: "gpt-5-codex",
     };
-    const startSession = vi.fn((_: unknown, input: unknown) => {
-      const sessionIndex = nextSessionIndex++;
-      const sessionModelSelection =
-        typeof input === "object" && input !== null && "modelSelection" in input
-          ? ((input as { modelSelection?: ModelSelection }).modelSelection ?? modelSelection)
-          : modelSelection;
-      const resumeCursor =
-        typeof input === "object" && input !== null && "resumeCursor" in input
-          ? input.resumeCursor
-          : undefined;
-      const threadId =
-        typeof input === "object" &&
-        input !== null &&
-        "threadId" in input &&
-        typeof input.threadId === "string"
-          ? ThreadId.makeUnsafe(input.threadId)
-          : ThreadId.makeUnsafe(`thread-${sessionIndex}`);
-      const session: ProviderSession = {
-        provider: sessionModelSelection.provider,
-        status: "ready" as const,
-        runtimeMode:
+    const startSession = vi.fn(
+      (_: unknown, input: unknown): Effect.Effect<ProviderSession, ProviderAdapterRequestError> => {
+        const sessionIndex = nextSessionIndex++;
+        const sessionModelSelection =
+          typeof input === "object" && input !== null && "modelSelection" in input
+            ? ((input as { modelSelection?: ModelSelection }).modelSelection ?? modelSelection)
+            : modelSelection;
+        const resumeCursor =
+          typeof input === "object" && input !== null && "resumeCursor" in input
+            ? input.resumeCursor
+            : undefined;
+        const threadId =
           typeof input === "object" &&
           input !== null &&
-          "runtimeMode" in input &&
-          (input.runtimeMode === "approval-required" || input.runtimeMode === "full-access")
-            ? input.runtimeMode
-            : "full-access",
-        ...(sessionModelSelection.model !== undefined
-          ? { model: sessionModelSelection.model }
-          : {}),
-        threadId,
-        resumeCursor: resumeCursor ?? { opaque: `resume-${sessionIndex}` },
-        createdAt: now,
-        updatedAt: now,
-      };
-      runtimeSessions.push(session);
-      return Effect.succeed(session);
-    });
+          "threadId" in input &&
+          typeof input.threadId === "string"
+            ? ThreadId.makeUnsafe(input.threadId)
+            : ThreadId.makeUnsafe(`thread-${sessionIndex}`);
+        const session: ProviderSession = {
+          provider: sessionModelSelection.provider,
+          status: "ready" as const,
+          runtimeMode:
+            typeof input === "object" &&
+            input !== null &&
+            "runtimeMode" in input &&
+            (input.runtimeMode === "approval-required" || input.runtimeMode === "full-access")
+              ? input.runtimeMode
+              : "full-access",
+          ...(sessionModelSelection.model !== undefined
+            ? { model: sessionModelSelection.model }
+            : {}),
+          threadId,
+          resumeCursor: resumeCursor ?? { opaque: `resume-${sessionIndex}` },
+          createdAt: now,
+          updatedAt: now,
+        };
+        runtimeSessions.push(session);
+        return Effect.succeed(session);
+      },
+    );
     const sendTurn = vi.fn<ProviderServiceShape["sendTurn"]>((_: unknown) =>
       Effect.succeed({
         threadId: ThreadId.makeUnsafe("thread-1"),

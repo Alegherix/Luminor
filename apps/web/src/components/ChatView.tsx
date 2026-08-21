@@ -9609,7 +9609,9 @@ export default function ChatView({
       resolveComposerContextWindowSnapshot({
         activeSnapshot: activeContextWindow,
         selectedValue: composerTraitSelection.contextWindow,
-        contextWindowTokens: composerTraitSelection.caps.contextWindowTokens,
+        ...(composerTraitSelection.caps.contextWindowTokens === undefined
+          ? {}
+          : { contextWindowTokens: composerTraitSelection.caps.contextWindowTokens }),
       }),
     [
       activeContextWindow,
