@@ -5,6 +5,7 @@ import { vi } from "vitest";
 import { AuthError } from "./auth/Services/ServerAuth";
 import {
   authenticateRpcWebSocketUpgrade,
+  authorizeBrowserFrameWebSocketUpgrade,
   authorizeDeviceFrameWebSocketUpgrade,
   canManageExternalMcp,
 } from "./wsRpc";
@@ -164,6 +165,69 @@ it.effect("preserves the legacy loopback token on the device frame socket", () =
 
     assert.isTrue(authorized);
     assert.equal(authenticateWebSocketUpgrade.mock.calls.length, 0);
+  }),
+);
+
+it.effect("retains a principal for a loopback browser frame socket", () =>
+  Effect.gen(function* () {
+    const authenticateWebSocketUpgrade = vi.fn(() =>
+      Effect.fail(new AuthError({ message: "Unexpected authentication call.", status: 500 })),
+    );
+    const principal = yield* authorizeBrowserFrameWebSocketUpgrade({
+      config: { host: "127.0.0.1", authToken: "desktop-secret", publicUrl: undefined },
+      legacyToken: "desktop-secret",
+      request: {
+        headers: {},
+        cookies: {},
+        url: new URL("http://127.0.0.1:3773/ws/browser-frames?token=desktop-secret"),
+      },
+      serverAuth: { authenticateWebSocketUpgrade },
+    });
+    assert.deepStrictEqual(principal, {
+      ownerKind: "local-loopback",
+      ownerId: "local-loopback",
+    });
+    assert.equal(authenticateWebSocketUpgrade.mock.calls.length, 0);
+  }),
+);
+
+it.effect("refuses an anonymous browser frame socket even on loopback", () =>
+  Effect.gen(function* () {
+    const authenticateWebSocketUpgrade = vi.fn(() =>
+      Effect.fail(new AuthError({ message: "Authentication required.", status: 401 })),
+    );
+    const principal = yield* authorizeBrowserFrameWebSocketUpgrade({
+      config: { host: "127.0.0.1", authToken: "desktop-secret", publicUrl: undefined },
+      legacyToken: null,
+      request: {
+        headers: {},
+        cookies: {},
+        url: new URL("http://127.0.0.1:3773/ws/browser-frames"),
+      },
+      serverAuth: { authenticateWebSocketUpgrade },
+    });
+    assert.isNull(principal);
+    assert.equal(authenticateWebSocketUpgrade.mock.calls.length, 1);
+  }),
+);
+
+it.effect("does not treat two missing browser frame tokens as authentication", () =>
+  Effect.gen(function* () {
+    const authenticateWebSocketUpgrade = vi.fn(() =>
+      Effect.fail(new AuthError({ message: "Authentication required.", status: 401 })),
+    );
+    const principal = yield* authorizeBrowserFrameWebSocketUpgrade({
+      config: { host: "127.0.0.1", authToken: undefined, publicUrl: undefined },
+      legacyToken: null,
+      request: {
+        headers: {},
+        cookies: {},
+        url: new URL("http://127.0.0.1:3773/ws/browser-frames"),
+      },
+      serverAuth: { authenticateWebSocketUpgrade },
+    });
+    assert.isNull(principal);
+    assert.equal(authenticateWebSocketUpgrade.mock.calls.length, 1);
   }),
 );
 

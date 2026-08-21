@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 
 import {
   CommandId,
+  BROWSER_PANE_WS_METHODS,
   DEFAULT_TERMINAL_ID,
   DEVICE_WS_METHODS,
   ORCHESTRATION_WS_METHODS,
@@ -12,12 +13,16 @@ import {
   WS_NEGOTIATE_HTTP_PATH,
   WS_METHODS,
   WsBootstrapRpcGroup,
+  WsBrowserPaneRpcGroup,
   WsCompatibilityError,
   WsDeviceRpcGroup,
   WsFeatureRpcGroup,
   WsRpcError,
   PullRequestsUnavailableError,
   type DeviceEvent,
+  type BrowserDesktopControlRequest,
+  type BrowserSubscriptionStreamItem,
+  type BrowserViewerPrincipal,
   type GitActionProgressEvent,
   type GitHubProjectProvisionProgressEvent,
   type GitWorktreeSetupProgressEvent,
@@ -78,6 +83,8 @@ import { ThreadPreviewManager } from "./threadPreviewManager";
 import { DeviceService } from "./device/Services/DeviceService";
 import { makeWsDeviceHandlers } from "./device/wsDeviceHandlers";
 import { makeDeviceFrameRouteLayer } from "./device/deviceFrameRoute";
+import { makeBrowserFrameRouteLayer } from "./browserPane/browserFrameRoute";
+import { browserPaneManager } from "./browserPane/browserPaneManager";
 import { GitCore } from "./git/Services/GitCore";
 import { GitHubCli } from "./git/Services/GitHubCli";
 import { GitManager } from "./git/Services/GitManager";
@@ -205,9 +212,9 @@ class WsRequestAdmissionMiddleware extends RpcMiddleware.Service<WsRequestAdmiss
 // The device group is defined separately in contracts because its engine is
 // macOS-only, but it is served on the same socket: one connection, one
 // admission middleware, one exhaustive handler map.
-const AdmittedWsFeatureRpcGroup = WsFeatureRpcGroup.merge(WsDeviceRpcGroup).middleware(
-  WsRequestAdmissionMiddleware,
-);
+const AdmittedWsFeatureRpcGroup = WsFeatureRpcGroup.merge(WsDeviceRpcGroup)
+  .merge(WsBrowserPaneRpcGroup)
+  .middleware(WsRequestAdmissionMiddleware);
 
 const wsRequestAdmissionMiddlewareLayer = Layer.effect(
   WsRequestAdmissionMiddleware,
@@ -906,7 +913,141 @@ const makeWsRpcHandlersLayer = () =>
         }
       });
 
+      const browserPaneEffect = <A>(operation: () => Promise<A>, message: string) =>
+        Effect.tryPromise(operation).pipe(
+          Effect.mapError(
+            (error) =>
+              new WsRpcError({
+                message: `${message}: ${error instanceof Error ? error.message : String(error)}`,
+              }),
+          ),
+        );
+
+      const requireBrowserThread = (threadId: ThreadId) =>
+        projectionReadModelQuery.getThreadDetailSnapshotById(threadId).pipe(
+          Effect.flatMap((thread) =>
+            Option.isSome(thread)
+              ? Effect.void
+              : Effect.fail(new WsRpcError({ message: "Browser thread was not found." })),
+          ),
+          Effect.mapError((error) =>
+            error instanceof WsRpcError
+              ? error
+              : new WsRpcError({ message: `Failed to authorize browser thread: ${String(error)}` }),
+          ),
+        );
+
+      const browserControl = (clientId: string | number, request: BrowserDesktopControlRequest) =>
+        browserPaneEffect(
+          () => browserPaneManager.controlForViewer(clientId, request),
+          "Browser control failed",
+        ).pipe(
+          Effect.flatMap((response) =>
+            response.type === "controlled"
+              ? Effect.succeed(response.result)
+              : Effect.fail(
+                  new WsRpcError({ message: "Desktop returned an invalid control result." }),
+                ),
+          ),
+        );
+
       return AdmittedWsFeatureRpcGroup.of({
+        [BROWSER_PANE_WS_METHODS.subscribe]: (input, { clientId }) =>
+          streamAdmission.guard(
+            clientId,
+            { key: `browser.state:${input.threadId}` },
+            Stream.unwrap(
+              Effect.gen(function* () {
+                yield* requireBrowserThread(input.threadId);
+                const principal = yield* CurrentManagedAttachmentPrincipal;
+                const subscribed = yield* browserPaneEffect(
+                  () =>
+                    browserPaneManager.subscribeViewer(
+                      clientId,
+                      principal as BrowserViewerPrincipal,
+                      input,
+                    ),
+                  "Browser subscribe failed",
+                );
+                return Stream.concat(
+                  Stream.make({
+                    type: "browser.subscription.ready",
+                    subscription: subscribed.result,
+                  } satisfies BrowserSubscriptionStreamItem),
+                  Stream.callback((queue) =>
+                    Effect.gen(function* () {
+                      const unsubscribeState = browserPaneManager.subscribeState(
+                        input.threadId,
+                        (event) => Effect.runFork(Queue.offer(queue, event).pipe(Effect.asVoid)),
+                      );
+                      yield* Effect.addFinalizer(() =>
+                        Effect.promise(() =>
+                          browserPaneManager
+                            .unsubscribeViewer(clientId, input.threadId, subscribed.subscriptionId)
+                            .then(() => unsubscribeState()),
+                        ).pipe(Effect.orElseSucceed(() => unsubscribeState())),
+                      );
+                    }),
+                  ),
+                );
+              }),
+            ),
+          ),
+        [BROWSER_PANE_WS_METHODS.unsubscribe]: (input, { clientId }) =>
+          browserPaneEffect(
+            () =>
+              browserPaneManager.unsubscribeViewer(clientId, input.threadId, input.subscriptionId),
+            "Browser unsubscribe failed",
+          ),
+        [BROWSER_PANE_WS_METHODS.getState]: (input, { clientId }) =>
+          Effect.gen(function* () {
+            if (!browserPaneManager.hasViewer(clientId, input.threadId)) {
+              return yield* Effect.fail(
+                new WsRpcError({ message: "Browser viewer is not authorized." }),
+              );
+            }
+            return { state: browserPaneManager.getState(input.threadId) };
+          }),
+        [BROWSER_PANE_WS_METHODS.navigate]: (input, { clientId }) =>
+          browserControl(clientId, { type: "navigate", input }),
+        [BROWSER_PANE_WS_METHODS.goBack]: (input, { clientId }) =>
+          browserControl(clientId, { type: "goBack", input }),
+        [BROWSER_PANE_WS_METHODS.goForward]: (input, { clientId }) =>
+          browserControl(clientId, { type: "goForward", input }),
+        [BROWSER_PANE_WS_METHODS.reload]: (input, { clientId }) =>
+          browserControl(clientId, { type: "reload", input }),
+        [BROWSER_PANE_WS_METHODS.createTab]: (input, { clientId }) =>
+          browserControl(clientId, { type: "createTab", input }),
+        [BROWSER_PANE_WS_METHODS.selectTab]: (input, { clientId }) =>
+          browserControl(clientId, { type: "selectTab", input }),
+        [BROWSER_PANE_WS_METHODS.closeTab]: (input, { clientId }) =>
+          browserControl(clientId, { type: "closeTab", input }),
+        [BROWSER_PANE_WS_METHODS.focus]: (input, { clientId }) =>
+          browserControl(clientId, { type: "focus", input }),
+        [BROWSER_PANE_WS_METHODS.resizeViewport]: (input, { clientId }) =>
+          browserControl(clientId, { type: "resizeViewport", input }),
+        [BROWSER_PANE_WS_METHODS.dispatchInput]: (input, { clientId }) =>
+          browserPaneEffect(
+            () => browserPaneManager.dispatchInput(clientId, input),
+            "Browser input dispatch failed",
+          ),
+        [BROWSER_PANE_WS_METHODS.acquireController]: (input, { clientId }) =>
+          Effect.gen(function* () {
+            const principal = yield* CurrentManagedAttachmentPrincipal;
+            return browserPaneManager.acquireController(
+              clientId,
+              principal as BrowserViewerPrincipal,
+              input.threadId,
+            );
+          }),
+        [BROWSER_PANE_WS_METHODS.releaseController]: (input, { clientId }) =>
+          Effect.sync(() =>
+            browserPaneManager.releaseController(clientId, input.threadId, input.leaseId),
+          ),
+        [BROWSER_PANE_WS_METHODS.revokeController]: (input, { clientId }) =>
+          Effect.sync(() =>
+            browserPaneManager.releaseController(clientId, input.threadId, input.leaseId),
+          ),
         [ORCHESTRATION_WS_METHODS.dispatchCommand]: (command) =>
           rpcEffect(
             Effect.gen(function* () {
@@ -2245,6 +2386,34 @@ export function authorizeDeviceFrameWebSocketUpgrade(input: {
   );
 }
 
+export function authorizeBrowserFrameWebSocketUpgrade(input: {
+  readonly config: Pick<ServerConfigShape, "authToken" | "host" | "publicUrl">;
+  readonly legacyToken: string | null;
+  readonly request: AuthRequest;
+  readonly serverAuth: Pick<ServerAuthShape, "authenticateWebSocketUpgrade">;
+  readonly localAddress?: string | undefined;
+}): Effect.Effect<BrowserViewerPrincipal | null> {
+  const loopbackSocket =
+    input.localAddress !== undefined
+      ? isLoopbackAddress(input.localAddress)
+      : isLoopbackHost(input.config.host);
+  if (
+    loopbackSocket &&
+    !input.config.publicUrl &&
+    typeof input.config.authToken === "string" &&
+    input.config.authToken.trim().length > 0 &&
+    input.legacyToken === input.config.authToken
+  ) {
+    return Effect.succeed(LOCAL_LOOPBACK_ATTACHMENT_PRINCIPAL as BrowserViewerPrincipal);
+  }
+  return input.serverAuth.authenticateWebSocketUpgrade(input.request).pipe(
+    Effect.map(
+      (session) => attachmentPrincipalForSession(session.sessionId) as BrowserViewerPrincipal,
+    ),
+    Effect.orElseSucceed(() => null),
+  );
+}
+
 export function makeWebsocketRpcRouteLayer<R>(
   rpcWebSocketHttpEffectSource: Effect.Effect<
     Effect.Effect<
@@ -2462,8 +2631,26 @@ const deviceFrameRouteLayer = makeDeviceFrameRouteLayer({
     }),
 });
 
+const browserFrameRouteLayer = makeBrowserFrameRouteLayer({
+  authorizeUpgrade: (request) =>
+    Effect.gen(function* () {
+      const config = yield* ServerConfig;
+      const serverAuth = yield* ServerAuth;
+      const url = trustedWebSocketRequestUrl(request, config);
+      if (url === null) return null;
+      return yield* authorizeBrowserFrameWebSocketUpgrade({
+        config,
+        legacyToken: url.searchParams.get("token"),
+        request: makeEffectAuthRequest(request),
+        serverAuth,
+        localAddress: requestLocalAddress(request),
+      });
+    }),
+});
+
 export const websocketRpcRouteLayer = Layer.mergeAll(
   deviceFrameRouteLayer,
+  browserFrameRouteLayer,
   makeWebsocketNegotiationRouteLayer(),
   // The registry must be provided here so the upgrade route and the RPC
   // middleware (built from the same source effect) share one instance.

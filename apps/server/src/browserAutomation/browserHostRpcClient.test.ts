@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   BrowserHostRpcError,
   callBrowserHostTool,
+  connectBrowserHostControl,
   resolveBrowserHostCapability,
   resolveBrowserHostPipePath,
 } from "./browserHostRpcClient.ts";
@@ -317,5 +318,61 @@ describe("browser host RPC client", () => {
         LUMINOR_BROWSER_HOST_CAPABILITY: "too-short",
       }),
     ).toBeNull();
+  });
+
+  it("routes browser control over an authenticated persistent host connection", async () => {
+    const methods: unknown[] = [];
+    await withRpcServer(
+      (request) => {
+        methods.push(request.method);
+        if (request.method === "getInfo") {
+          return {
+            jsonrpc: "2.0",
+            id: request.id,
+            result: {
+              type: "luminor-browser-host",
+              metadata: { protocolVersion: 1, methods: ["browserControl"] },
+            },
+          };
+        }
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            type: "state",
+            result: {
+              state: {
+                threadId: "thread-control",
+                version: 1,
+                open: false,
+                activeTabId: null,
+                tabs: [],
+                lastError: null,
+                stream: {
+                  lifecycle: "stopped",
+                  identity: null,
+                  generationReason: null,
+                  viewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
+                  subscriberCount: 0,
+                },
+              },
+            },
+          },
+        };
+      },
+      async (pipePath) => {
+        const connection = await connectBrowserHostControl({
+          pipePath,
+          capability: TEST_CAPABILITY,
+        });
+        const response = await connection.request({
+          type: "getState",
+          input: { threadId: "thread-control" as never },
+        });
+        expect(response.type).toBe("state");
+        connection.close();
+      },
+    );
+    expect(methods).toEqual(["getInfo", "browserControl"]);
   });
 });
