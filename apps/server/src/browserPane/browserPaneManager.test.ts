@@ -1,6 +1,7 @@
 import type {
   BrowserDesktopControlResponse,
   BrowserFrameHeader,
+  BrowserStateStreamEvent,
   BrowserViewerPrincipal,
   ThreadBrowserStateSnapshot,
 } from "@luminor/contracts";
@@ -116,6 +117,65 @@ describe("BrowserPaneManager controller leases", () => {
     ).toBe(true);
   });
 
+  it("releases a lease before a failing desktop unsubscribe", async () => {
+    const connection = createConnection();
+    vi.mocked(connection.request).mockImplementation(async (request) => {
+      if (request.type === "unsubscribe") throw new Error("desktop unavailable");
+      if (request.type === "subscribe") {
+        return {
+          type: "subscribed",
+          result: { subscriptionId: "desktop-sub-1", state: state(), authorization: "viewer" },
+        };
+      }
+      return { type: "controlled", result: { state: state() } };
+    });
+    const manager = new BrowserPaneManager({}, { connectControl: async () => connection });
+    const first = await manager.subscribeViewer(1, principal, {
+      threadId: state().threadId,
+      viewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
+    });
+    expect(manager.acquireController(1, principal, state().threadId).granted).toBe(true);
+    await expect(
+      manager.unsubscribeViewer(1, state().threadId, first.subscriptionId),
+    ).rejects.toThrow("desktop unavailable");
+
+    await manager.subscribeViewer(
+      2,
+      { ownerKind: "session", ownerId: "session-2" },
+      {
+        threadId: state().threadId,
+        viewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
+      },
+    );
+    expect(
+      manager.acquireController(2, { ownerKind: "session", ownerId: "session-2" }, state().threadId)
+        .granted,
+    ).toBe(true);
+  });
+
+  it("allows authorized third-party controller revocation", async () => {
+    const manager = new BrowserPaneManager({}, { connectControl: async () => createConnection() });
+    await manager.subscribeViewer(1, principal, {
+      threadId: state().threadId,
+      viewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
+    });
+    const secondPrincipal: BrowserViewerPrincipal = {
+      ownerKind: "session",
+      ownerId: "session-2",
+    };
+    await manager.subscribeViewer(2, secondPrincipal, {
+      threadId: state().threadId,
+      viewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
+    });
+    const acquired = manager.acquireController(1, principal, state().threadId);
+    if (!acquired.granted) throw new Error("Expected controller lease");
+
+    expect(manager.revokeController(state().threadId, acquired.lease.leaseId)).toEqual({
+      released: true,
+    });
+    expect(manager.acquireController(2, secondPrincipal, state().threadId).granted).toBe(true);
+  });
+
   it("keeps viewers read-only without a lease", async () => {
     const manager = new BrowserPaneManager({}, { connectControl: async () => createConnection() });
     await manager.subscribeViewer(1, principal, {
@@ -204,5 +264,45 @@ describe("browser frame generation fence", () => {
       identity: null,
       generationReason: "desktop-restart",
     });
+  });
+
+  it("invalidates the cached frame when the live generation changes", async () => {
+    let stateListener: ((event: BrowserStateStreamEvent) => void) | undefined;
+    const connection: BrowserHostControlConnection = {
+      ...createConnection(),
+      subscribeState: (listener) => {
+        stateListener = listener;
+        return () => undefined;
+      },
+    };
+    const manager = new BrowserPaneManager({}, { connectControl: async () => connection });
+    await manager.subscribeViewer(1, principal, {
+      threadId: state().threadId,
+      viewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
+    });
+    manager.frames.publish(state().threadId, new Uint8Array([9]));
+    const currentState = state();
+    const nextState: ThreadBrowserStateSnapshot = {
+      ...currentState,
+      stream: {
+        ...currentState.stream,
+        identity: {
+          ...currentState.stream.identity!,
+          generation: 2 as BrowserFrameHeader["generation"],
+        },
+      },
+    };
+    stateListener?.({ type: "browser.state.snapshot", state: nextState, reason: "resync" });
+
+    const sent: number[] = [];
+    manager.frames.subscribe(state().threadId, principal, {
+      send: (bytes) => {
+        sent.push(bytes[0] ?? -1);
+      },
+      bufferedAmount: () => 0,
+      isOpen: () => true,
+    });
+    await Promise.resolve();
+    expect(sent).toEqual([]);
   });
 });

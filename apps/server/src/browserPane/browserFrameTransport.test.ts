@@ -43,4 +43,40 @@ describe("BrowserFrameTransport", () => {
     await Promise.resolve();
     expect(sent).toEqual([1, 3]);
   });
+
+  it("primes reconnecting subscribers with the latest frame until invalidated", async () => {
+    const transport = new BrowserFrameTransport();
+    const threadId = "thread-1" as ThreadId;
+    transport.publish(threadId, new Uint8Array([7]));
+    const first: number[] = [];
+    transport.subscribe(
+      threadId,
+      { ownerKind: "session", ownerId: "session-1" },
+      {
+        send: (bytes) => {
+          first.push(bytes[0] ?? -1);
+        },
+        bufferedAmount: () => 0,
+        isOpen: () => true,
+      },
+    );
+    await Promise.resolve();
+    expect(first).toEqual([7]);
+
+    transport.invalidate(threadId);
+    const second: number[] = [];
+    transport.subscribe(
+      threadId,
+      { ownerKind: "session", ownerId: "session-1" },
+      {
+        send: (bytes) => {
+          second.push(bytes[0] ?? -1);
+        },
+        bufferedAmount: () => 0,
+        isOpen: () => true,
+      },
+    );
+    await Promise.resolve();
+    expect(second).toEqual([]);
+  });
 });

@@ -1422,6 +1422,25 @@ describe("WsTransport", () => {
     expect(executeRequestOnce).toHaveBeenCalledTimes(3);
   });
 
+  it("maps current executeRequestOnce runtime disposal to WS_REQUEST_RECONNECTED", async () => {
+    const transport = Object.create(WsTransport.prototype) as WsTransport;
+    const executeRequestOnce = vi.fn(async () => {
+      throw new Error("ManagedRuntime disposed during WebSocket reconnect");
+    });
+    Object.assign(transport, {
+      disposed: false,
+      executeRequestOnce,
+    });
+
+    await expect(transport.request("orchestration.dispatchCommand", {})).rejects.toMatchObject({
+      _tag: "WsTransportRequestInterruptedError",
+      code: "WS_REQUEST_RECONNECTED",
+      method: "orchestration.dispatchCommand",
+      retryable: true,
+    });
+    expect(executeRequestOnce).toHaveBeenCalledOnce();
+  });
+
   it("keeps the shared lifecycle stream while either lifecycle channel is active", () => {
     expect(shouldKeepServerLifecycleStream(new Set([WS_CHANNELS.serverWelcome]))).toBe(true);
     expect(shouldKeepServerLifecycleStream(new Set([WS_CHANNELS.serverMaintenanceUpdated]))).toBe(

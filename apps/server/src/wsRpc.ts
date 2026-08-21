@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import * as Crypto from "node:crypto";
 
 import {
   CommandId,
@@ -21,6 +22,7 @@ import {
   PullRequestsUnavailableError,
   type DeviceEvent,
   type BrowserDesktopControlRequest,
+  type BrowserInputDispatchRequest,
   type BrowserSubscriptionStreamItem,
   type BrowserViewerPrincipal,
   type GitActionProgressEvent,
@@ -194,6 +196,28 @@ export function canManageExternalMcp(role: "owner" | "client"): boolean {
   return role === "owner";
 }
 
+export function canRevokeBrowserController(role: "owner" | "client"): boolean {
+  return role === "owner";
+}
+
+export function stampBrowserWsInputOrigin(
+  input: BrowserInputDispatchRequest,
+  principal: BrowserViewerPrincipal,
+): BrowserInputDispatchRequest {
+  if (principal.ownerKind !== "session" && principal.ownerKind !== "local-loopback") return input;
+  return { ...input, origin: "human" };
+}
+
+export function finalizeBrowserPaneSubscription(input: {
+  readonly unsubscribeViewer: () => Promise<unknown>;
+  readonly unsubscribeState: () => void;
+}) {
+  return Effect.tryPromise(input.unsubscribeViewer).pipe(
+    Effect.ignore,
+    Effect.ensuring(Effect.sync(input.unsubscribeState)),
+  );
+}
+
 const MAX_DIAGNOSTIC_CHILD_PROCESSES = 80;
 const MAX_DIAGNOSTIC_ARGS_CHARS = 500;
 
@@ -225,10 +249,9 @@ const wsRequestAdmissionMiddlewareLayer = Layer.effect(
       // Handler fibers descend from the RPC server fiber (forked at layer build),
       // not from the connection's HTTP upgrade fiber, so connection-scoped
       // services must be re-provided here from the connection-session registry.
-      const scoped = provideWsConnectionSession(
-        effect,
-        connectionSessions.lookup(Headers.get(options.headers, WS_CONNECTION_SESSION_HEADER)),
-      );
+      const sessionKey = Headers.get(options.headers, WS_CONNECTION_SESSION_HEADER);
+      connectionSessions.observeClient(sessionKey, options.clientId);
+      const scoped = provideWsConnectionSession(effect, connectionSessions.lookup(sessionKey));
       return RpcSchema.isStreamSchema(options.rpc.successSchema)
         ? scoped
         : admission.guard(options.clientId, options.rpc._tag, scoped);
@@ -981,11 +1004,15 @@ const makeWsRpcHandlersLayer = () =>
                         (event) => Effect.runFork(Queue.offer(queue, event).pipe(Effect.asVoid)),
                       );
                       yield* Effect.addFinalizer(() =>
-                        Effect.promise(() =>
-                          browserPaneManager
-                            .unsubscribeViewer(clientId, input.threadId, subscribed.subscriptionId)
-                            .then(() => unsubscribeState()),
-                        ).pipe(Effect.orElseSucceed(() => unsubscribeState())),
+                        finalizeBrowserPaneSubscription({
+                          unsubscribeViewer: () =>
+                            browserPaneManager.unsubscribeViewer(
+                              clientId,
+                              input.threadId,
+                              subscribed.subscriptionId,
+                            ),
+                          unsubscribeState,
+                        }),
                       );
                     }),
                   ),
@@ -1027,10 +1054,17 @@ const makeWsRpcHandlersLayer = () =>
         [BROWSER_PANE_WS_METHODS.resizeViewport]: (input, { clientId }) =>
           browserControl(clientId, { type: "resizeViewport", input }),
         [BROWSER_PANE_WS_METHODS.dispatchInput]: (input, { clientId }) =>
-          browserPaneEffect(
-            () => browserPaneManager.dispatchInput(clientId, input),
-            "Browser input dispatch failed",
-          ),
+          Effect.gen(function* () {
+            const principal = yield* CurrentManagedAttachmentPrincipal;
+            return yield* browserPaneEffect(
+              () =>
+                browserPaneManager.dispatchInput(
+                  clientId,
+                  stampBrowserWsInputOrigin(input, principal as BrowserViewerPrincipal),
+                ),
+              "Browser input dispatch failed",
+            );
+          }),
         [BROWSER_PANE_WS_METHODS.acquireController]: (input, { clientId }) =>
           Effect.gen(function* () {
             const principal = yield* CurrentManagedAttachmentPrincipal;
@@ -1044,10 +1078,15 @@ const makeWsRpcHandlersLayer = () =>
           Effect.sync(() =>
             browserPaneManager.releaseController(clientId, input.threadId, input.leaseId),
           ),
-        [BROWSER_PANE_WS_METHODS.revokeController]: (input, { clientId }) =>
-          Effect.sync(() =>
-            browserPaneManager.releaseController(clientId, input.threadId, input.leaseId),
-          ),
+        [BROWSER_PANE_WS_METHODS.revokeController]: (input) =>
+          Effect.gen(function* () {
+            if (!canRevokeBrowserController(yield* CurrentWsSessionRole)) {
+              return yield* Effect.fail(
+                new WsRpcError({ message: "Owner authorization is required for this operation." }),
+              );
+            }
+            return browserPaneManager.revokeController(input.threadId, input.leaseId);
+          }),
         [ORCHESTRATION_WS_METHODS.dispatchCommand]: (command) =>
           rpcEffect(
             Effect.gen(function* () {
@@ -2360,7 +2399,9 @@ export function authenticateRpcWebSocketUpgrade(input: {
       : isLoopbackHost(input.config.host);
   if (
     !requiresWebSocketAuthentication(input.config, input.localAddress) ||
-    (loopbackSocket && !input.config.publicUrl && input.legacyToken === input.config.authToken)
+    (loopbackSocket &&
+      !input.config.publicUrl &&
+      timingSafeTokenEqual(input.legacyToken, input.config.authToken))
   ) {
     return Effect.succeed(null);
   }
@@ -2402,7 +2443,7 @@ export function authorizeBrowserFrameWebSocketUpgrade(input: {
     !input.config.publicUrl &&
     typeof input.config.authToken === "string" &&
     input.config.authToken.trim().length > 0 &&
-    input.legacyToken === input.config.authToken
+    timingSafeTokenEqual(input.legacyToken, input.config.authToken)
   ) {
     return Effect.succeed(LOCAL_LOOPBACK_ATTACHMENT_PRINCIPAL as BrowserViewerPrincipal);
   }
@@ -2412,6 +2453,13 @@ export function authorizeBrowserFrameWebSocketUpgrade(input: {
     ),
     Effect.orElseSucceed(() => null),
   );
+}
+
+function timingSafeTokenEqual(left: string | null, right: string | undefined): boolean {
+  if (left === null || right === undefined) return false;
+  const leftBytes = Buffer.from(left);
+  const rightBytes = Buffer.from(right);
+  return leftBytes.length === rightBytes.length && Crypto.timingSafeEqual(leftBytes, rightBytes);
 }
 
 export function makeWebsocketRpcRouteLayer<R>(
@@ -2441,7 +2489,9 @@ export function makeWebsocketRpcRouteLayer<R>(
         session: WsConnectionSession,
       ) =>
         Effect.gen(function* () {
-          const sessionKey = yield* connectionSessions.register(session);
+          const sessionKey = yield* connectionSessions.register(session, (clientId) =>
+            browserPaneManager.disconnect(clientId),
+          );
           return yield* rpcWebSocketHttpEffect.pipe(
             Effect.provideService(
               HttpServerRequest.HttpServerRequest,

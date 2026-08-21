@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import type { BrowserInputDispatchRequest } from "@luminor/contracts";
 import { Effect } from "effect";
 import { vi } from "vitest";
 
@@ -8,12 +9,47 @@ import {
   authorizeBrowserFrameWebSocketUpgrade,
   authorizeDeviceFrameWebSocketUpgrade,
   canManageExternalMcp,
+  canRevokeBrowserController,
+  finalizeBrowserPaneSubscription,
+  stampBrowserWsInputOrigin,
 } from "./wsRpc";
 
 it("reserves external MCP management for owner sessions", () => {
   assert.isTrue(canManageExternalMcp("owner"));
   assert.isFalse(canManageExternalMcp("client"));
 });
+
+it("reserves third-party browser controller revocation for owner sessions", () => {
+  assert.isTrue(canRevokeBrowserController("owner"));
+  assert.isFalse(canRevokeBrowserController("client"));
+});
+
+it("stamps session WebSocket input as human even when the client claims agent origin", () => {
+  const input = {
+    desktopInstanceId: "11111111-1111-4111-8111-111111111111",
+    threadId: "thread-1",
+    tabId: "22222222-2222-4222-8222-222222222222",
+    generation: 1,
+    seq: 4,
+    origin: "agent",
+    event: { kind: "insertText", text: "hello" },
+  } as BrowserInputDispatchRequest;
+  assert.equal(
+    stampBrowserWsInputOrigin(input, { ownerKind: "session", ownerId: "session-1" }).origin,
+    "human",
+  );
+});
+
+it.effect("always removes the browser state listener when desktop unsubscribe fails", () =>
+  Effect.gen(function* () {
+    const unsubscribeState = vi.fn();
+    yield* finalizeBrowserPaneSubscription({
+      unsubscribeViewer: () => Promise.reject(new Error("desktop unavailable")),
+      unsubscribeState,
+    });
+    assert.equal(unsubscribeState.mock.calls.length, 1);
+  }),
+);
 
 it.effect("rejects an unauthorized websocket upgrade on a non-loopback bind", () =>
   Effect.gen(function* () {
@@ -165,6 +201,28 @@ it.effect("preserves the legacy loopback token on the device frame socket", () =
 
     assert.isTrue(authorized);
     assert.equal(authenticateWebSocketUpgrade.mock.calls.length, 0);
+  }),
+);
+
+it.effect("rejects different-length legacy tokens on both frame sockets", () =>
+  Effect.gen(function* () {
+    const authenticateWebSocketUpgrade = vi.fn(() =>
+      Effect.fail(new AuthError({ message: "Authentication required.", status: 401 })),
+    );
+    const common = {
+      config: { host: "127.0.0.1", authToken: "desktop-secret", publicUrl: undefined },
+      legacyToken: "short",
+      request: {
+        headers: {},
+        cookies: {},
+        url: new URL("http://127.0.0.1:3773/ws?token=short"),
+      },
+      serverAuth: { authenticateWebSocketUpgrade },
+    } as const;
+
+    assert.isFalse(yield* authorizeDeviceFrameWebSocketUpgrade(common));
+    assert.isNull(yield* authorizeBrowserFrameWebSocketUpgrade(common));
+    assert.equal(authenticateWebSocketUpgrade.mock.calls.length, 2);
   }),
 );
 

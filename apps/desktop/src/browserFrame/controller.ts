@@ -33,11 +33,7 @@ interface RemoteThreadSession {
   runtime: BrowserRemoteRuntime | null;
   acquisition: BrowserFrameAcquisition | null;
   lastFrameSeq: BrowserFrameSequence | null;
-  pendingMouseMove: {
-    readonly generation: BrowserGeneration;
-    readonly seq: BrowserFrameSequence;
-    readonly result: Promise<BrowserInputDispatchResult>;
-  } | null;
+  readonly mouseMoveCoalescer: BrowserMouseMoveCoalescer;
   operation: Promise<void>;
   recoveryTimer: ReturnType<typeof setTimeout> | null;
 }
@@ -64,8 +60,75 @@ export function validateBrowserInputFence(
   if (!state.streaming) return "target-detached";
   if (request.tabId !== state.tabId) return "wrong-tab";
   if (request.generation !== state.generation) return "stale-generation";
-  if (request.seq !== state.seq) return "stale-frame";
+  if (state.seq === null || request.seq > state.seq) return "stale-frame";
   return null;
+}
+
+interface PendingMouseMoveDispatch {
+  readonly generation: BrowserGeneration;
+  readonly seq: BrowserFrameSequence;
+  latest: BrowserInputDispatchRequest | null;
+  result: Promise<BrowserInputDispatchResult>;
+}
+
+export class BrowserMouseMoveCoalescer {
+  private pending: PendingMouseMoveDispatch | null = null;
+
+  dispatch(
+    request: BrowserInputDispatchRequest,
+    send: (request: BrowserInputDispatchRequest) => Promise<BrowserInputDispatchResult>,
+  ): Promise<BrowserInputDispatchResult> {
+    if (this.pending?.generation === request.generation && this.pending.seq === request.seq) {
+      this.pending.latest = request;
+      return this.pending.result;
+    }
+
+    const pending: PendingMouseMoveDispatch = {
+      generation: request.generation,
+      seq: request.seq,
+      latest: null,
+      result: Promise.resolve({
+        accepted: true,
+        generation: request.generation,
+        seq: request.seq,
+      }),
+    };
+    pending.result = this.drain(request, pending, send).finally(() => {
+      if (this.pending === pending) this.pending = null;
+    });
+    this.pending = pending;
+    return pending.result;
+  }
+
+  private async drain(
+    initial: BrowserInputDispatchRequest,
+    pending: PendingMouseMoveDispatch,
+    send: (request: BrowserInputDispatchRequest) => Promise<BrowserInputDispatchResult>,
+  ): Promise<BrowserInputDispatchResult> {
+    let request: BrowserInputDispatchRequest | null = initial;
+    let result: BrowserInputDispatchResult = {
+      accepted: true,
+      generation: initial.generation,
+      seq: initial.seq,
+    };
+    while (request) {
+      result = await send(request);
+      request = pending.latest;
+      pending.latest = null;
+    }
+    return result;
+  }
+}
+
+export function marksRemoteHumanControl(request: BrowserInputDispatchRequest): boolean {
+  const event = request.event;
+  return (
+    request.origin === "human" &&
+    (event.kind === "key" ||
+      event.kind === "insertText" ||
+      event.kind === "wheel" ||
+      (event.kind === "mouse" && event.type === "mousePressed"))
+  );
 }
 
 export interface BrowserRemoteFrameControllerOptions {
@@ -256,7 +319,7 @@ export class BrowserRemoteFrameController {
       runtime: null,
       acquisition: null,
       lastFrameSeq: null,
-      pendingMouseMove: null,
+      mouseMoveCoalescer: new BrowserMouseMoveCoalescer(),
       operation: Promise.resolve(),
       recoveryTimer: null,
     };
@@ -458,20 +521,9 @@ export class BrowserRemoteFrameController {
     if (rejection) return this.rejectedInput(session, rejection);
     if (!session || !runtime) return this.rejectedInput(session, "target-detached");
     if (request.event.kind === "mouse" && request.event.type === "mouseMoved") {
-      if (
-        session.pendingMouseMove?.generation === request.generation &&
-        session.pendingMouseMove.seq === request.seq
-      ) {
-        return session.pendingMouseMove.result;
-      }
-      const result = this.dispatchInputEvent(session, runtime, request);
-      const pending = { generation: request.generation, seq: request.seq, result };
-      session.pendingMouseMove = pending;
-      try {
-        return await result;
-      } finally {
-        if (session.pendingMouseMove === pending) session.pendingMouseMove = null;
-      }
+      return session.mouseMoveCoalescer.dispatch(request, (next) =>
+        this.dispatchInputEvent(session, runtime, next),
+      );
     }
     return this.dispatchInputEvent(session, runtime, request);
   }
@@ -482,12 +534,7 @@ export class BrowserRemoteFrameController {
     request: BrowserInputDispatchRequest,
   ): Promise<BrowserInputDispatchResult> {
     const event = request.event;
-    if (
-      request.origin === "human" &&
-      (event.kind === "key" ||
-        event.kind === "insertText" ||
-        (event.kind === "mouse" && event.type === "mousePressed"))
-    ) {
+    if (marksRemoteHumanControl(request)) {
       this.browserManager.markRemoteHumanControl(request.threadId);
     }
     try {

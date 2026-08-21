@@ -161,7 +161,7 @@ export class BrowserPaneManager {
         viewerIds: new Set(),
       };
       this.subscriptionsByThread.set(input.threadId, threadState);
-      this.states.set(input.threadId, response.result.state);
+      this.storeState(input.threadId, response.result.state);
       state = response.result.state;
     } else {
       state = this.requireState(input.threadId);
@@ -176,7 +176,7 @@ export class BrowserPaneManager {
     this.viewerSubscriptions.set(subscriptionId, subscription);
     threadState.viewerIds.add(subscriptionId);
     state = this.withSubscriberCount(state, threadState.viewerIds.size);
-    this.states.set(input.threadId, state);
+    this.storeState(input.threadId, state);
     this.audit("browser-viewer-subscribed", {
       clientId,
       subscriptionId,
@@ -212,6 +212,7 @@ export class BrowserPaneManager {
     this.viewerSubscriptions.delete(subscriptionId);
     const threadState = this.subscriptionsByThread.get(threadId);
     threadState?.viewerIds.delete(subscriptionId);
+    this.releaseLeaseForClient(clientId, threadId);
     if (threadState?.viewerIds.size === 0) {
       this.subscriptionsByThread.delete(threadId);
       await this.control({
@@ -223,9 +224,8 @@ export class BrowserPaneManager {
         this.requireState(threadId),
         threadState.viewerIds.size,
       );
-      this.states.set(threadId, state);
+      this.storeState(threadId, state);
     }
-    this.releaseLeaseForClient(clientId, threadId);
     this.audit("browser-viewer-unsubscribed", { clientId, subscriptionId, threadId });
     return { released: true };
   }
@@ -276,7 +276,7 @@ export class BrowserPaneManager {
     }
     const response = await this.control(request);
     if (response.type === "controlled" || response.type === "state") {
-      this.states.set(request.input.threadId, response.result.state);
+      this.storeState(request.input.threadId, response.result.state);
     }
     return response;
   }
@@ -342,6 +342,20 @@ export class BrowserPaneManager {
     return { released: true };
   }
 
+  revokeController(threadId: ThreadId, leaseId?: string): BrowserControllerLeaseChangeResult {
+    const existing = this.leases.get(threadId);
+    if (!existing || (leaseId && existing.lease.leaseId !== leaseId)) {
+      return { released: false };
+    }
+    this.leases.delete(threadId);
+    this.audit("browser-controller-revoked", {
+      clientId: existing.clientId,
+      threadId,
+      leaseId: existing.lease.leaseId,
+    });
+    return { released: true };
+  }
+
   disconnect(clientId: BrowserClientId): void {
     const subscriptions = [...this.viewerSubscriptions.values()].filter(
       (subscription) => subscription.clientId === clientId,
@@ -390,10 +404,12 @@ export class BrowserPaneManager {
     const threadId =
       event.type === "browser.state.invalidated" ? event.threadId : event.state.threadId;
     let emitted = event;
-    if (event.type !== "browser.state.invalidated") {
+    if (event.type === "browser.state.invalidated") {
+      this.frames.invalidate(threadId);
+    } else {
       const count = this.subscriptionsByThread.get(threadId)?.viewerIds.size ?? 0;
       const state = this.withSubscriberCount(event.state, count);
-      this.states.set(threadId, state);
+      this.storeState(threadId, state);
       emitted =
         event.type === "browser.state.snapshot"
           ? { ...event, state }
@@ -426,13 +442,14 @@ export class BrowserPaneManager {
       if (response.type !== "subscribed") throw new Error("Desktop resubscribe failed");
       subscription.desktopSubscriptionId = response.result.subscriptionId;
       const state = this.withSubscriberCount(response.result.state, subscription.viewerIds.size);
-      this.states.set(threadId, state);
+      this.storeState(threadId, state);
       this.emit(threadId, { type: "browser.state.snapshot", state, reason: "desktop-restart" });
     }
   }
 
   private invalidateAll(reason: "desktop-restart"): void {
     for (const [threadId, state] of this.states) {
+      this.frames.invalidate(threadId);
       const identity = state.stream.identity;
       if (!identity) continue;
       this.states.set(threadId, {
@@ -469,6 +486,21 @@ export class BrowserPaneManager {
     subscriberCount: number,
   ): ThreadBrowserStateSnapshot {
     return { ...state, stream: { ...state.stream, subscriberCount } };
+  }
+
+  private storeState(threadId: ThreadId, state: ThreadBrowserStateSnapshot): void {
+    const previous = this.states.get(threadId)?.stream.identity;
+    const next = state.stream.identity;
+    if (
+      previous &&
+      (!next ||
+        previous.desktopInstanceId !== next.desktopInstanceId ||
+        previous.tabId !== next.tabId ||
+        previous.generation !== next.generation)
+    ) {
+      this.frames.invalidate(threadId);
+    }
+    this.states.set(threadId, state);
   }
 
   private isController(clientId: BrowserClientId, threadId: ThreadId): boolean {

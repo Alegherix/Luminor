@@ -14,9 +14,9 @@ import {
 } from "@luminor/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Duration, Effect, Exit, Layer, Schema, Scope } from "effect";
-import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
-import { Rpc, RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc";
-import { afterEach, describe, expect, it } from "vitest";
+import { Headers, HttpRouter, HttpServerRequest } from "effect/unstable/http";
+import { Rpc, RpcGroup, RpcMiddleware, RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket, { type RawData } from "ws";
 
 import { ServerAuth, AuthError, type ServerAuthShape } from "./auth/Services/ServerAuth";
@@ -31,6 +31,7 @@ import {
 } from "./auth/Services/SessionCredentialService";
 import { ServerConfig } from "./config";
 import { makeBoundedNodeHttpServer, MAX_WEBSOCKET_MESSAGE_BYTES } from "./nodeHttpServer";
+import { browserPaneManager } from "./browserPane/browserPaneManager";
 import { SqlitePersistenceMemory } from "./persistence/Layers/Sqlite";
 import { makeWebsocketNegotiationRouteLayer, makeWebsocketRpcRouteLayer } from "./wsRpc";
 import {
@@ -50,6 +51,11 @@ const SlowRpc = Rpc.make("test.slow", {
   success: Schema.String,
 });
 const PingRpcGroup = RpcGroup.make(PingRpc, SlowRpc);
+class ObserveConnectionMiddleware extends RpcMiddleware.Service<ObserveConnectionMiddleware>()(
+  "luminor/test/ObserveConnectionMiddleware",
+  { requiredForClient: false },
+) {}
+const ObservedPingRpcGroup = PingRpcGroup.middleware(ObserveConnectionMiddleware);
 
 interface RunningTestServer {
   readonly origin: string;
@@ -234,6 +240,7 @@ async function startTestServer(): Promise<RunningTestServer> {
   const transportFinalizers = { count: 0 };
   const observedRpc = { decoderCalls: 0, handlerCalls: 0 };
   const observedSlowRpc = { started: 0, completed: 0, finalized: 0 };
+  const connectionSessions = await Effect.runPromise(makeWsConnectionSessions);
   const serializationLayer = Layer.succeed(RpcSerialization.RpcSerialization, {
     contentType: RpcSerialization.json.contentType,
     includesFraming: RpcSerialization.json.includesFraming,
@@ -248,7 +255,7 @@ async function startTestServer(): Promise<RunningTestServer> {
       };
     },
   });
-  const handlerLayer = PingRpcGroup.toLayer(
+  const handlerLayer = ObservedPingRpcGroup.toLayer(
     Effect.succeed({
       "test.ping": (_input: { readonly label: string }) =>
         Effect.sync(() => {
@@ -270,10 +277,21 @@ async function startTestServer(): Promise<RunningTestServer> {
         ),
     }),
   );
-  const connectionSessions = await Effect.runPromise(makeWsConnectionSessions);
+  const observeConnectionLayer = Layer.succeed(ObserveConnectionMiddleware, (effect, options) => {
+    connectionSessions.observeClient(
+      Headers.get(options.headers, WS_CONNECTION_SESSION_HEADER),
+      options.clientId,
+    );
+    return effect;
+  });
   const observedConnectionSessionKeys: string[] = [];
-  const rpcHttpEffectSource = RpcServer.toHttpEffectWebsocket(PingRpcGroup).pipe(
-    Effect.provide(handlerLayer.pipe(Layer.provideMerge(serializationLayer))),
+  const rpcHttpEffectSource = RpcServer.toHttpEffectWebsocket(ObservedPingRpcGroup).pipe(
+    Effect.provide(
+      handlerLayer.pipe(
+        Layer.provideMerge(serializationLayer),
+        Layer.provideMerge(observeConnectionLayer),
+      ),
+    ),
     Effect.map((httpEffect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
@@ -808,6 +826,7 @@ describe("websocket permessage-deflate negotiation", () => {
 describe("websocketRpcRouteLayer connection lifecycle", () => {
   it("exposes the authenticated session to RPC handlers for the connection lifetime", async () => {
     const server = await startTestServer();
+    const disconnect = vi.spyOn(browserPaneManager, "disconnect");
     try {
       // Regression: RPC handlers run on fibers forked from the layer-build
       // scope, so the upgrade's authenticated role/principal must travel via
@@ -826,10 +845,17 @@ describe("websocketRpcRouteLayer connection lifecycle", () => {
         attachmentPrincipal: { ownerKind: "session", ownerId: issued.sessionId },
       });
 
+      const exit = waitForRpcExit(socket, "199");
+      socket.send(makeRpcFrame(256, "199"));
+      await exit;
+
       socket.close();
       await waitForClose(socket);
       await waitForObserved(() => server.connectionSessions.lookup(sessionKey) === undefined);
+      await waitForObserved(() => disconnect.mock.calls.length === 1);
+      expect(disconnect).toHaveBeenCalledWith(expect.anything());
     } finally {
+      disconnect.mockRestore();
       await server.close();
     }
   }, 4_000);

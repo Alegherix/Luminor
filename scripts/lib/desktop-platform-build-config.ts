@@ -15,6 +15,7 @@ export const MAC_APPSNAP_HELPER_BUNDLE_PATH = "Contents/Helpers/luminor-appsnap-
 export const MAC_DEVICE_HELPER_STAGE_PATH = "apps/server/dist/device-helper";
 export const MAC_DEVICE_HELPER_RESOURCE_PATH = "Resources/device-helper";
 export const WINDOWS_INSTALLER_GUID = "368107a8-afe6-5db5-ab3b-d4f331684868";
+export const THIRD_PARTY_NOTICES_PATH = "THIRD_PARTY_NOTICES.md";
 const MAC_DMG_ICON_PATH = "icon.icns";
 export const NODE_PTY_ASAR_UNPACK_GLOBS = ["node_modules/node-pty/**"] as const;
 export const DESKTOP_NATIVE_ASAR_UNPACK_GLOBS = [
@@ -65,7 +66,10 @@ export function validateDesktopNativeBuildHost(input: DesktopNativeBuildHostInpu
 export function createDesktopPlatformBuildConfig(
   input: CreateDesktopPlatformBuildConfigInput,
 ): DesktopPlatformBuildConfig {
-  const nativePackaging = { asarUnpack: [...DESKTOP_NATIVE_ASAR_UNPACK_GLOBS] };
+  const nativePackaging = {
+    asarUnpack: [...DESKTOP_NATIVE_ASAR_UNPACK_GLOBS],
+    extraFiles: [{ from: THIRD_PARTY_NOTICES_PATH, to: THIRD_PARTY_NOTICES_PATH }],
+  };
 
   if (input.platform === "mac") {
     const mac = {
@@ -91,6 +95,7 @@ export function createDesktopPlatformBuildConfig(
         writeUpdateInfo: false,
       },
       extraFiles: [
+        ...nativePackaging.extraFiles,
         {
           from: MAC_DEVICE_HELPER_STAGE_PATH,
           to: MAC_DEVICE_HELPER_RESOURCE_PATH,

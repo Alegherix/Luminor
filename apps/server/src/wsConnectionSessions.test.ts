@@ -1,5 +1,5 @@
 import { Effect, Exit, Scope } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   CurrentManagedAttachmentPrincipal,
@@ -48,6 +48,21 @@ describe("WsConnectionSessions", () => {
     expect(first).not.toEqual(second);
     expect(sessions.lookup(second)?.role).toBe("client");
     await Effect.runPromise(Scope.close(scope, Exit.void));
+  });
+
+  it("notifies every observed RPC client when the connection scope closes", async () => {
+    const sessions = await Effect.runPromise(makeWsConnectionSessions);
+    const scope = await Effect.runPromise(Scope.make());
+    const onClientClose = vi.fn();
+    const key = await Effect.runPromise(
+      Scope.provide(sessions.register(OWNER_SESSION, onClientClose), scope),
+    );
+    sessions.observeClient(key, 11);
+    sessions.observeClient(key, 11);
+    sessions.observeClient(key, "client-12");
+
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+    expect(onClientClose.mock.calls).toEqual([[11], ["client-12"]]);
   });
 
   it("provides role and attachment principal to the wrapped effect", async () => {

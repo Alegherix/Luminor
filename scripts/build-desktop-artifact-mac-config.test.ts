@@ -9,6 +9,7 @@ import {
   MAC_INHERITED_ENTITLEMENTS_PATH,
   MICROPHONE_USAGE_DESCRIPTION,
   NODE_PTY_ASAR_UNPACK_GLOBS,
+  THIRD_PARTY_NOTICES_PATH,
   validateDesktopNativeBuildHost,
   WINDOWS_INSTALLER_GUID,
 } from "./lib/desktop-platform-build-config.ts";
@@ -38,6 +39,10 @@ describe("createDesktopPlatformBuildConfig", () => {
     assert.equal(mac.x64ArchFiles, undefined);
     assert.equal(config.files, undefined);
     assert.deepStrictEqual(config.extraFiles, [
+      {
+        from: THIRD_PARTY_NOTICES_PATH,
+        to: THIRD_PARTY_NOTICES_PATH,
+      },
       {
         from: MAC_DEVICE_HELPER_STAGE_PATH,
         to: MAC_DEVICE_HELPER_RESOURCE_PATH,
@@ -69,7 +74,9 @@ describe("createDesktopPlatformBuildConfig", () => {
     });
 
     assert.equal(linux.mac, undefined);
-    assert.equal("extraFiles" in linux, false);
+    assert.deepStrictEqual(linux.extraFiles, [
+      { from: THIRD_PARTY_NOTICES_PATH, to: THIRD_PARTY_NOTICES_PATH },
+    ]);
     assert.deepStrictEqual(linux.asarUnpack, [...DESKTOP_NATIVE_ASAR_UNPACK_GLOBS]);
     assert.deepStrictEqual(linux.linux, {
       target: ["AppImage"],
@@ -84,7 +91,9 @@ describe("createDesktopPlatformBuildConfig", () => {
     });
 
     assert.equal(win.mac, undefined);
-    assert.equal("extraFiles" in win, false);
+    assert.deepStrictEqual(win.extraFiles, [
+      { from: THIRD_PARTY_NOTICES_PATH, to: THIRD_PARTY_NOTICES_PATH },
+    ]);
     assert.deepStrictEqual(win.asarUnpack, [...DESKTOP_NATIVE_ASAR_UNPACK_GLOBS]);
     assert.equal(WINDOWS_INSTALLER_GUID, "368107a8-afe6-5db5-ab3b-d4f331684868");
     assert.deepStrictEqual(win.nsis, {

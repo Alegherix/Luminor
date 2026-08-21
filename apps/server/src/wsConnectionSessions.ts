@@ -37,8 +37,12 @@ export const WS_CONNECTION_SESSION_HEADER = "x-luminor-ws-connection-session";
 
 export interface WsConnectionSessionsShape {
   /** Registers the session for the lifetime of the connection scope. */
-  readonly register: (session: WsConnectionSession) => Effect.Effect<string, never, Scope.Scope>;
+  readonly register: (
+    session: WsConnectionSession,
+    onClientClose?: (clientId: string | number) => void,
+  ) => Effect.Effect<string, never, Scope.Scope>;
   readonly lookup: (key: string | undefined) => WsConnectionSession | undefined;
+  readonly observeClient: (key: string | undefined, clientId: string | number) => void;
 }
 
 export class WsConnectionSessions extends ServiceMap.Service<
@@ -47,16 +51,33 @@ export class WsConnectionSessions extends ServiceMap.Service<
 >()("luminor/ws/WsConnectionSessions") {}
 
 export const makeWsConnectionSessions = Effect.sync(() => {
-  const sessions = new Map<string, WsConnectionSession>();
+  const sessions = new Map<
+    string,
+    {
+      readonly session: WsConnectionSession;
+      readonly clientIds: Set<string | number>;
+      readonly onClientClose: ((clientId: string | number) => void) | undefined;
+    }
+  >();
   return {
-    register: (session: WsConnectionSession) =>
+    register: (session: WsConnectionSession, onClientClose?: (clientId: string | number) => void) =>
       Effect.gen(function* () {
         const key = randomUUID();
-        sessions.set(key, session);
-        yield* Effect.addFinalizer(() => Effect.sync(() => sessions.delete(key)));
+        const entry = { session, clientIds: new Set<string | number>(), onClientClose };
+        sessions.set(key, entry);
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            sessions.delete(key);
+            for (const clientId of entry.clientIds) entry.onClientClose?.(clientId);
+          }),
+        );
         return key;
       }),
-    lookup: (key: string | undefined) => (key === undefined ? undefined : sessions.get(key)),
+    lookup: (key: string | undefined) =>
+      key === undefined ? undefined : sessions.get(key)?.session,
+    observeClient: (key: string | undefined, clientId: string | number) => {
+      if (key !== undefined) sessions.get(key)?.clientIds.add(clientId);
+    },
   } satisfies WsConnectionSessionsShape;
 });
 
