@@ -56,10 +56,7 @@ import {
 import { SkillsSettingsPanel } from "../components/settings/SkillsSettingsPanel";
 import { ThemeModePicker } from "../components/settings/ThemeModePicker";
 import { ThemePackEditor } from "../components/ThemePackEditor";
-import {
-  CHAT_CONTENT_CARD_CLASS_NAME,
-  CHAT_MAIN_VIEWPORT_SHELL_CLASS_NAME,
-} from "../components/chat/composerPickerStyles";
+import { CHAT_CONTENT_CARD_CLASS_NAME } from "../components/chat/composerPickerStyles";
 import {
   CHAT_SURFACE_HEADER_HEIGHT_CLASS,
   CHAT_SURFACE_HEADER_PADDING_X_CLASS,
@@ -1049,14 +1046,12 @@ function SettingsRouteView() {
   };
 
   return (
-    <div
-      className={cn(
-        CHAT_MAIN_VIEWPORT_SHELL_CLASS_NAME,
+    <RouteInsetSurface
+      surfaceClassName={cn(
         SETTINGS_PAGE_BACKGROUND_CLASS_NAME,
         CHAT_CONTENT_CARD_CLASS_NAME,
       )}
     >
-      <RouteInsetSurface surfaceClassName={SETTINGS_PAGE_BACKGROUND_CLASS_NAME}>
         {/* Companion sidebar trigger so settings is reachable-and-exitable even when the
           sidebar is collapsed (web/mobile have no global Back arrow). Pinned to the
           card's top-left — at the same header height + traffic-light gutter as the
@@ -1158,8 +1153,7 @@ function SettingsRouteView() {
           onOpenChange={setReleaseHistoryOpen}
           defaultExpandedVersion={APP_VERSION}
         />
-      </RouteInsetSurface>
-    </div>
+    </RouteInsetSurface>
   );
 }
 
