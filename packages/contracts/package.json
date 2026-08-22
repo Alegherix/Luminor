@@ -20,6 +20,8 @@
     "dev": "tsdown src/index.ts --format cjs --watch --clean",
     "build": "tsdown src/index.ts --format esm,cjs --dts --clean",
     "prepare": "effect-language-service patch",
+    "schema:protocol": "bun run scripts/export-protocol-schema.ts",
+    "schema:protocol:full": "bun run scripts/export-protocol-schema.ts --full",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
