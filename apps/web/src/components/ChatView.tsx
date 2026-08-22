@@ -352,6 +352,7 @@ import {
 import { runProjectCommandInTerminal } from "~/projectTerminalRunner";
 import { newCommandId, newMessageId, newProjectId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
+import { resolveProjectForComposerSend } from "~/lib/resolveProjectForComposerSend";
 import { promoteThreadCreate } from "~/lib/threadCreatePromotion";
 import { readFavoriteModelSlugs } from "~/lib/modelFavorites";
 import {
@@ -7521,7 +7522,35 @@ export default function ChatView({
       }
       return false;
     }
-    if (!activeProject) return false;
+    let projectForSend = activeProject ?? null;
+    if (!projectForSend && activeProjectId) {
+      projectForSend = await resolveProjectForComposerSend({
+        api,
+        projectId: activeProjectId,
+        syncShellSnapshot: syncServerShellSnapshot,
+      });
+    }
+    if (!projectForSend) {
+      toastManager.add({
+        type: "error",
+        title: "Can't send yet",
+        description: activeProjectId
+          ? "This chat's project is still syncing. Try again in a moment."
+          : "No project is available for this chat.",
+      });
+      return false;
+    }
+    const homeChatContainerForSend = isHomeChatContainerProject(projectForSend, {
+      homeDir,
+      chatWorkspaceRoot,
+    });
+    const studioContainerForSend = isStudioContainerProject(projectForSend, {
+      homeDir,
+      chatWorkspaceRoot,
+      studioWorkspaceRoot,
+    });
+    const containerLandingProjectForSend =
+      homeChatContainerForSend || studioContainerForSend;
     if (queuedChatTurn === null && !isLivePlanFollowUpSubmission) {
       const conversation = pendingAutomationConversation;
       // While gathering missing details, fold the reply into the cleaned request so it
@@ -7532,7 +7561,7 @@ export default function ChatView({
         : trimmedPromptForSend;
       const automationRequest = await resolveComposerAutomationRequest({
         message: messageForAutomation,
-        cwd: threadWorkspaceCwd ?? activeProject.cwd,
+        cwd: threadWorkspaceCwd ?? projectForSend.cwd,
         generateIntent: (request) => api.server.generateAutomationIntent(request),
       });
       // Drop a stale resolve: bail if the user switched threads, or cancelled/changed the
@@ -7595,10 +7624,10 @@ export default function ChatView({
           automationIntent.executionScope === "thread" ? activeThread.id : null;
         const automationDraft = buildComposerAutomationDraft({
           resolution: automationRequest.resolution,
-          projectId: activeProject.id,
+          projectId: projectForSend.id,
           projectModelSelection: automationProjectModelSelection(
             automationProjects,
-            activeProject.id,
+            projectForSend.id,
           ),
           selectedModelSelection: selectedModelSelectionForSend,
           targetThreadId: automationTargetThreadId,
@@ -7841,16 +7870,16 @@ export default function ChatView({
     // validates this best-effort target and degrades genuinely stale/deleted ids to Void.
     const activeSpaceIdForSend = readActiveSpaceId();
     const firstSendTarget = resolveFirstSendTarget({
-      activeProject,
+      activeProject: projectForSend,
       chatWorkspaceRoot,
       createdAt: firstSendCreatedAt,
       isFirstMessage,
-      isHomeChatContainer,
-      isStudioContainer,
+      isHomeChatContainer: homeChatContainerForSend,
+      isStudioContainer: studioContainerForSend,
       projects: currentStoreState.projects,
       // Studio reference folders change the thread cwd without moving the chat out of
       // the managed Studio project. Home-chat folder selection keeps its project routing.
-      selectedWorkspaceRoot: isHomeChatContainer ? (resolvedThreadWorktreePath ?? null) : null,
+      selectedWorkspaceRoot: homeChatContainerForSend ? (resolvedThreadWorktreePath ?? null) : null,
       title,
       titleSeed,
     });
@@ -7862,27 +7891,27 @@ export default function ChatView({
       targetProjectDefaultModelSelection: targetProjectDefaultModelSelectionForSend,
     } = firstSendTarget.kind === "create-project"
       ? {
-          targetProjectId: activeProject.id,
-          targetProjectKind: activeProject.kind,
-          targetProjectCwd: activeProject.cwd,
-          targetProjectScripts: activeProject.kind === "project" ? activeProject.scripts : [],
-          targetProjectDefaultModelSelection: activeProject.defaultModelSelection ?? null,
+          targetProjectId: projectForSend.id,
+          targetProjectKind: projectForSend.kind,
+          targetProjectCwd: projectForSend.cwd,
+          targetProjectScripts: projectForSend.kind === "project" ? projectForSend.scripts : [],
+          targetProjectDefaultModelSelection: projectForSend.defaultModelSelection ?? null,
         }
       : firstSendTarget.target;
     let nextRuntimeModeForSend = runtimeModeForSend;
     let nextThreadEnvMode = envModeForSend;
-    let nextThreadBranch = isStudioContainer ? null : activeThread.branch;
-    let nextThreadWorktreePath = isStudioContainer ? null : activeThread.worktreePath;
-    let nextThreadWorkingDirectory = isStudioContainer
+    let nextThreadBranch = studioContainerForSend ? null : activeThread.branch;
+    let nextThreadWorktreePath = studioContainerForSend ? null : activeThread.worktreePath;
+    let nextThreadWorkingDirectory = studioContainerForSend
       ? resolvedThreadWorkingDirectory
       : (activeThread.workingDirectory ?? null);
-    let nextAssociatedWorktreePath = isStudioContainer
+    let nextAssociatedWorktreePath = studioContainerForSend
       ? null
       : (activeThread.associatedWorktreePath ?? null);
-    let nextAssociatedWorktreeBranch = isStudioContainer
+    let nextAssociatedWorktreeBranch = studioContainerForSend
       ? null
       : (activeThread.associatedWorktreeBranch ?? null);
-    let nextAssociatedWorktreeRef = isStudioContainer
+    let nextAssociatedWorktreeRef = studioContainerForSend
       ? null
       : (activeThread.associatedWorktreeRef ?? null);
     const shouldResumeSettledLocalThread =
@@ -7892,7 +7921,7 @@ export default function ChatView({
       nextThreadWorktreePath === null;
     let currentActiveGitBranchForSend = currentActiveGitBranch;
 
-    if (isFirstMessage && isContainerLandingProject && firstSendTarget.kind !== "current") {
+    if (isFirstMessage && containerLandingProjectForSend && firstSendTarget.kind !== "current") {
       if (firstSendTarget.kind === "create-project") {
         const projectId = newProjectId();
         const createdAt = firstSendCreatedAt.toISOString();
