@@ -347,6 +347,7 @@ describe("browser host RPC client", () => {
                 open: false,
                 activeTabId: null,
                 tabs: [],
+                blocking: [],
                 lastError: null,
                 stream: {
                   lifecycle: "stopped",

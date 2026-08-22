@@ -20,6 +20,7 @@ const state = (): ThreadBrowserStateSnapshot => ({
   open: true,
   activeTabId: tabId as ThreadBrowserStateSnapshot["activeTabId"],
   tabs: [],
+  blocking: [],
   lastError: null,
   stream: {
     lifecycle: "streaming",
@@ -57,6 +58,12 @@ const createConnection = (): BrowserHostControlConnection => ({
       return {
         type: "input",
         result: { accepted: true, generation: request.input.generation, seq: request.input.seq },
+      };
+    }
+    if (request.type === "revealDesktopWindow") {
+      return {
+        type: "desktopWindowRevealed",
+        result: { revealed: false, fallbackText: "Use the desktop task switcher." },
       };
     }
     if (request.type === "getState") return { type: "state", result: { state: state() } };
@@ -192,6 +199,42 @@ describe("BrowserPaneManager controller leases", () => {
       event: { kind: "insertText", text: "hello" },
     });
     expect(result).toMatchObject({ accepted: false, reason: "controller-required" });
+  });
+
+  it("lease-gates reveal and blocking resolution and returns both RPC results", async () => {
+    const connection = createConnection();
+    const manager = new BrowserPaneManager({}, { connectControl: async () => connection });
+    await manager.subscribeViewer(1, principal, {
+      threadId: state().threadId,
+      viewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
+    });
+    const reveal = {
+      threadId: state().threadId,
+      expectedGeneration: 1 as NonNullable<
+        ThreadBrowserStateSnapshot["stream"]["identity"]
+      >["generation"],
+      reason: "javascript-dialog" as const,
+    };
+    const resolve = {
+      threadId: state().threadId,
+      expectedGeneration: reveal.expectedGeneration,
+      surfaceId: "surface-1",
+      resolution: { action: "dismiss" as const },
+    };
+
+    await expect(manager.revealDesktopWindow(1, reveal)).rejects.toThrow(
+      "Browser controller lease is required",
+    );
+    await expect(manager.resolveBlockingSurface(1, resolve)).rejects.toThrow(
+      "Browser controller lease is required",
+    );
+
+    expect(manager.acquireController(1, principal, state().threadId).granted).toBe(true);
+    await expect(manager.revealDesktopWindow(1, reveal)).resolves.toEqual({
+      revealed: false,
+      fallbackText: "Use the desktop task switcher.",
+    });
+    await expect(manager.resolveBlockingSurface(1, resolve)).resolves.toEqual({ state: state() });
   });
 
   it("authorizes frame sockets by retained principal identity", async () => {

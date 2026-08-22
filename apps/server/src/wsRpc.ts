@@ -1051,6 +1051,16 @@ const makeWsRpcHandlersLayer = () =>
           browserControl(clientId, { type: "closeTab", input }),
         [BROWSER_PANE_WS_METHODS.focus]: (input, { clientId }) =>
           browserControl(clientId, { type: "focus", input }),
+        [BROWSER_PANE_WS_METHODS.revealDesktopWindow]: (input, { clientId }) =>
+          browserPaneEffect(
+            () => browserPaneManager.revealDesktopWindow(clientId, input),
+            "Browser desktop window reveal failed",
+          ),
+        [BROWSER_PANE_WS_METHODS.resolveBlockingSurface]: (input, { clientId }) =>
+          browserPaneEffect(
+            () => browserPaneManager.resolveBlockingSurface(clientId, input),
+            "Browser blocking surface resolution failed",
+          ),
         [BROWSER_PANE_WS_METHODS.resizeViewport]: (input, { clientId }) =>
           browserControl(clientId, { type: "resizeViewport", input }),
         [BROWSER_PANE_WS_METHODS.dispatchInput]: (input, { clientId }) =>

@@ -4,10 +4,14 @@ import type {
   BrowserControllerAcquireResult,
   BrowserControllerLease,
   BrowserControllerLeaseChangeResult,
+  BrowserBlockingSurfaceResolveRequest,
+  BrowserControlResult,
   BrowserDesktopControlRequest,
   BrowserDesktopControlResponse,
   BrowserInputDispatchRequest,
   BrowserInputDispatchResult,
+  BrowserDesktopWindowRevealRequest,
+  BrowserDesktopWindowRevealResult,
   BrowserFrameHeader,
   BrowserStateStreamEvent,
   BrowserStreamSubscribeInput,
@@ -296,6 +300,34 @@ export class BrowserPaneManager {
     return response.result;
   }
 
+  async revealDesktopWindow(
+    clientId: BrowserClientId,
+    request: BrowserDesktopWindowRevealRequest,
+  ): Promise<BrowserDesktopWindowRevealResult> {
+    const response = await this.controlForViewer(clientId, {
+      type: "revealDesktopWindow",
+      input: request,
+    });
+    if (response.type !== "desktopWindowRevealed") {
+      throw new Error("Desktop returned an invalid reveal response");
+    }
+    return response.result;
+  }
+
+  async resolveBlockingSurface(
+    clientId: BrowserClientId,
+    request: BrowserBlockingSurfaceResolveRequest,
+  ): Promise<BrowserControlResult> {
+    const response = await this.controlForViewer(clientId, {
+      type: "resolveBlockingSurface",
+      input: request,
+    });
+    if (response.type !== "controlled") {
+      throw new Error("Desktop returned an invalid blocking-surface response");
+    }
+    return response.result;
+  }
+
   acquireController(
     clientId: BrowserClientId,
     principal: BrowserViewerPrincipal,
@@ -406,6 +438,8 @@ export class BrowserPaneManager {
     let emitted = event;
     if (event.type === "browser.state.invalidated") {
       this.frames.invalidate(threadId);
+      const state = this.states.get(threadId);
+      if (state) this.states.set(threadId, this.withoutBlockingSurfaces(state));
     } else {
       const count = this.subscriptionsByThread.get(threadId)?.viewerIds.size ?? 0;
       const state = this.withSubscriberCount(event.state, count);
@@ -453,7 +487,7 @@ export class BrowserPaneManager {
       const identity = state.stream.identity;
       if (!identity) continue;
       this.states.set(threadId, {
-        ...state,
+        ...this.withoutBlockingSurfaces(state),
         stream: {
           ...state.stream,
           lifecycle: "detached",
@@ -486,6 +520,17 @@ export class BrowserPaneManager {
     subscriberCount: number,
   ): ThreadBrowserStateSnapshot {
     return { ...state, stream: { ...state.stream, subscriberCount } };
+  }
+
+  private withoutBlockingSurfaces(state: ThreadBrowserStateSnapshot): ThreadBrowserStateSnapshot {
+    if (state.blocking.length === 0 && state.tabs.every((tab) => !tab.hasBlockingSurface)) {
+      return state;
+    }
+    return {
+      ...state,
+      tabs: state.tabs.map((tab) => ({ ...tab, hasBlockingSurface: false })),
+      blocking: [],
+    };
   }
 
   private storeState(threadId: ThreadId, state: ThreadBrowserStateSnapshot): void {
