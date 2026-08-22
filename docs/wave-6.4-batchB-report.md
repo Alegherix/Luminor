@@ -187,6 +187,34 @@ Primary references:
 - [Chrome DevTools Protocol: Target domain](https://chromedevtools.github.io/devtools-protocol/tot/Target/)
 - [Chrome DevTools Protocol: Page.windowOpen](https://chromedevtools.github.io/devtools-protocol/1-3/Page/#event-windowOpen)
 
+## Review finding dispositions
+
+1. **Interception ordering — fixed.** Every manager-owned `BrowserWindow` and
+   `WebContentsView` now starts the persistent dialog monitor as soon as its WebContents exists.
+   The resulting readiness promise is awaited before `loadTab` and the direct `about:blank`
+   bootstrap. The ordering test covers both the first offscreen runtime and its recreated
+   WebContents.
+2. **Dialog identity confusion — fixed.** Monitor openings have stable internal identities.
+   Resolution and agent-turn dismissal clear only the identity they answered, so a chained
+   successor remains published.
+3. **In-turn answer failure — fixed.** Benign already-closed responses retain the prior
+   auto-answer semantics. Unexpected CDP rejection publishes the still-open dialog to observers
+   and omits it from the command's handled-dialog result.
+4. **Resolve versus already-closed dialog — fixed.** `No dialog is showing` is treated as a
+   successful already-closed resolution, clears the matching observed dialog, and lets the
+   controller remove the stale row without an RPC error.
+5. **Navigation row lifetime — fixed.** Navigate, back, forward, and reload clear notify-only
+   rows while retaining JavaScript-dialog rows until the monitor reports closure. Tab close still
+   clears the full tab.
+6. **Context-wipe force-clear — fixed.** Execution-context clears and main-frame navigation no
+   longer clear the monitor. Only `Page.javascriptDialogClosed` and WebContents destruction clear
+   its current dialog.
+7. **Requested coverage gaps — closed.** Focused tests cover a pre-existing dialog at turn start,
+   the max-eight append-then-slice rule, generation-bump re-observation, and end-to-end desktop
+   `promptText` forwarding.
+8. **Nits and schema drift — fixed.** The three requested explanatory comments were removed, and
+   `BrowserDesktopWindowRevealReason` now aliases the single `BrowserBlockingSurfaceKind` schema.
+
 ## Verification
 
 Final workspace verification:
@@ -198,16 +226,13 @@ Final workspace verification:
   (`@luminor/cli`) reported 367 test files passed, 3 skipped; 4,030 tests passed, 18
   skipped.
 
-The installed pinned Effect package initially lacked its declaration files, and the Electron
-package lacked its downloaded binary after the dependency repair. Both ignored `node_modules`
-artifacts were restored from their exact pinned packages before the successful typecheck/test
-runs; no lockfile or manifest changed.
-
 Focused checks completed during implementation:
 
 - Contracts browser-pane tests: 8 passed.
-- Desktop dialog, controller, native-input, and popup-provenance tests: focused suites pass after
-  the final fixes.
+- Desktop manager, dialog, and controller regression slice: 63 passed.
+- Full desktop suite: 74 test files passed, 1 skipped; 648 tests passed, 5 skipped.
+- Browser-automation directory: 147 tests passed, including all 141 pre-existing tests and 6 new
+  review-regression tests.
 - Server browser-pane manager and host-client tests: 19 passed.
 
 ## Known gaps
