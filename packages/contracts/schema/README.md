@@ -21,8 +21,8 @@ bun run --cwd packages/contracts schema:protocol:full
 ```
 
 Each entry in `methods` carries the method tag, its group, `kind` (`unary` or `stream`),
-the sorted tagged error names, and standalone payload/success (and for unary methods,
-error) JSON Schema documents with per-method rewritten `$defs`. Output keys are fully
+the sorted tagged error names, and standalone payload/success/error JSON Schema documents
+with per-method rewritten `$defs`. Output keys are fully
 sorted and an `x-luminor-effect-pin` records the Effect catalog pin, so consecutive runs
 are byte-identical and CI can diff the committed snapshot. The file is large (~6 MB)
 because every method embeds its own transitive definitions; that duplication is accepted

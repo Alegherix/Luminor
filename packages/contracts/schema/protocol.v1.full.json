@@ -95,7 +95,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/automation.archiveRun.error/$defs/WsRpcError"
+        "$ref": "#/methods/automation.archiveRun/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -1674,7 +1674,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/automation.cancelRun.error/$defs/WsRpcError"
+        "$ref": "#/methods/automation.cancelRun/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -3250,7 +3250,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/automation.create.error/$defs/WsRpcError"
+        "$ref": "#/methods/automation.create/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -6586,7 +6586,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/automation.delete.error/$defs/WsRpcError"
+        "$ref": "#/methods/automation.delete/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -6697,7 +6697,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/automation.getMemory.error/$defs/WsRpcError"
+        "$ref": "#/methods/automation.getMemory/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -6838,7 +6838,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/automation.list.error/$defs/WsRpcError"
+        "$ref": "#/methods/automation.list/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -10121,7 +10121,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/automation.markRunRead.error/$defs/WsRpcError"
+        "$ref": "#/methods/automation.markRunRead/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -11700,7 +11700,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/automation.resolveProposal.error/$defs/WsRpcError"
+        "$ref": "#/methods/automation.resolveProposal/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -13462,7 +13462,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/automation.runNow.error/$defs/WsRpcError"
+        "$ref": "#/methods/automation.runNow/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -14947,6 +14947,99 @@
       }
     },
     "automation.subscribe": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/automation.subscribe/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -21392,7 +21485,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/automation.update.error/$defs/WsRpcError"
+        "$ref": "#/methods/automation.update/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -24640,7 +24733,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/bootstrap.negotiate.error/$defs/WsCompatibilityError"
+        "$ref": "#/methods/bootstrap.negotiate/error/$defs/WsCompatibilityError"
       },
       "errors": ["WsCompatibilityError"],
       "group": "bootstrap",
@@ -24815,7 +24908,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.blocking.resolve.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.blocking.resolve/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -25556,7 +25649,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.controller.acquire.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.controller.acquire/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -25713,7 +25806,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.controller.release.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.controller.release/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -25834,7 +25927,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.controller.revoke.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.controller.revoke/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -25962,7 +26055,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.desktopWindow.reveal.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.desktopWindow.reveal/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -26128,7 +26221,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.focus.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.focus/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -26828,7 +26921,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.getState.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.getState/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -27517,7 +27610,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.goBack.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.goBack/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -28223,7 +28316,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.goForward.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.goForward/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -28929,7 +29022,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.input.dispatch.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.input.dispatch/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -29624,7 +29717,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.navigate.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.navigate/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -30338,7 +30431,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.reload.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.reload/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -30953,6 +31046,99 @@
       }
     },
     "browser.subscribe": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/browser.subscribe/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "browser",
       "kind": "stream",
@@ -32988,7 +33174,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.tab.close.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.tab.close/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -33694,7 +33880,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.tab.create.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.tab.create/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -34416,7 +34602,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.tab.select.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.tab.select/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -35122,7 +35308,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.unsubscribe.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.unsubscribe/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -35243,7 +35429,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/browser.viewport.resize.error/$defs/WsRpcError"
+        "$ref": "#/methods/browser.viewport.resize/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "browser",
@@ -35974,7 +36160,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.attach.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.attach/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -36658,7 +36844,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.boot.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.boot/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -37042,7 +37228,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.describeUi.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.describeUi/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -37089,7 +37275,7 @@
                   }
                 ],
                 "items": {
-                  "$ref": "#/$defs/device.describeUi.success/$defs/Objects_"
+                  "$ref": "#/methods/device.describeUi/success/$defs/Objects_"
                 },
                 "type": "array"
               },
@@ -37194,7 +37380,7 @@
             "type": "string"
           },
           "root": {
-            "$ref": "#/$defs/device.describeUi.success/$defs/Objects_"
+            "$ref": "#/methods/device.describeUi/success/$defs/Objects_"
           },
           "udid": {
             "type": "string"
@@ -37296,7 +37482,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.detach.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.detach/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -37977,7 +38163,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.getThreadState.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.getThreadState/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -38658,7 +38844,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.installApp.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.installApp/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -38782,7 +38968,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.keyEvent.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.keyEvent/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -38946,7 +39132,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.launchApp.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.launchApp/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -39108,7 +39294,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.list.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.list/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -39718,7 +39904,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.openUrl.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.openUrl/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -39832,7 +40018,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.pressButton.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.pressButton/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -39967,7 +40153,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.screenshot.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.screenshot/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -40154,7 +40340,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.scrollToElement.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.scrollToElement/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -40230,7 +40416,7 @@
                   }
                 ],
                 "items": {
-                  "$ref": "#/$defs/device.scrollToElement.success/$defs/Objects_"
+                  "$ref": "#/methods/device.scrollToElement/success/$defs/Objects_"
                 },
                 "type": "array"
               },
@@ -40332,7 +40518,7 @@
         "additionalProperties": false,
         "properties": {
           "element": {
-            "$ref": "#/$defs/device.scrollToElement.success/$defs/Objects_"
+            "$ref": "#/methods/device.scrollToElement/success/$defs/Objects_"
           },
           "tapPoint": {
             "additionalProperties": false,
@@ -40447,7 +40633,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.shutdown.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.shutdown/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -40558,7 +40744,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.startRecording.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.startRecording/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -40682,7 +40868,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.stopRecording.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.stopRecording/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -40733,6 +40919,99 @@
       }
     },
     "device.subscribeEvents": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/device.subscribeEvents/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "device",
       "kind": "stream",
@@ -41460,7 +41739,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.swipe.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.swipe/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -41616,7 +41895,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.tap.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.tap/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -41779,7 +42058,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/device.typeText.error/$defs/WsRpcError"
+        "$ref": "#/methods/device.typeText/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "device",
@@ -41898,7 +42177,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/filesystem.browse.error/$defs/WsRpcError"
+        "$ref": "#/methods/filesystem.browse/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -42042,7 +42321,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.checkout.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.checkout/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -42156,7 +42435,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.createBranch.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.createBranch/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -42189,6 +42468,99 @@
       }
     },
     "git.createDetachedWorktree": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/git.createDetachedWorktree/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -42430,7 +42802,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.createWorktree.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.createWorktree/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -42581,7 +42953,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.githubRepository.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.githubRepository/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -42732,7 +43104,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.handoffThread.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.handoffThread/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -43046,7 +43418,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.init.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.init/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -43157,7 +43529,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.listBranches.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.listBranches/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -43327,7 +43699,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.preparePullRequestThread.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.preparePullRequestThread/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -43589,7 +43961,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.pull.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.pull/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -43729,7 +44101,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.pullRequestSnapshot.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.pullRequestSnapshot/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -44086,7 +44458,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.readWorkingTreeDiff.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.readWorkingTreeDiff/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -44231,7 +44603,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.removeIndexLock.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.removeIndexLock/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -44342,7 +44714,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.removeWorktree.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.removeWorktree/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -44476,7 +44848,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.resolvePullRequest.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.resolvePullRequest/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -44622,6 +44994,99 @@
       }
     },
     "git.runStackedAction": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/git.runStackedAction/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -46344,7 +46809,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.stageFiles.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.stageFiles/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -46473,7 +46938,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.stashAndCheckout.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.stashAndCheckout/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -46587,7 +47052,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.stashDrop.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.stashDrop/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -46701,7 +47166,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.stashInfo.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.stashInfo/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -46841,7 +47306,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.status.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.status/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -47202,7 +47667,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.summarizeDiff.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.summarizeDiff/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -48201,7 +48666,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.unstageFiles.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.unstageFiles/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -48330,7 +48795,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/git.workingTreeDiffStats.error/$defs/WsRpcError"
+        "$ref": "#/methods/git.workingTreeDiffStats/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -48496,7 +48961,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/issues.list.error/$defs/WsRpcError"
+        "$ref": "#/methods/issues.list/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -48785,7 +49250,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/issues.view.error/$defs/WsRpcError"
+        "$ref": "#/methods/issues.view/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -49026,7 +49491,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.dispatchCommand.error/$defs/WsRpcError"
+        "$ref": "#/methods/orchestration.dispatchCommand/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -49228,13 +49693,13 @@
               },
               {
                 "items": {
-                  "$ref": "#/$defs/orchestration.dispatchCommand.payload/$defs/Union_"
+                  "$ref": "#/methods/orchestration.dispatchCommand/payload/$defs/Union_"
                 },
                 "type": "array"
               },
               {
                 "additionalProperties": {
-                  "$ref": "#/$defs/orchestration.dispatchCommand.payload/$defs/Union_"
+                  "$ref": "#/methods/orchestration.dispatchCommand/payload/$defs/Union_"
                 },
                 "type": "object"
               }
@@ -55687,7 +56152,7 @@
                 ]
               },
               "message": {
-                "$ref": "#/$defs/orchestration.dispatchCommand.payload/$defs/TurnMessageContent"
+                "$ref": "#/methods/orchestration.dispatchCommand/payload/$defs/TurnMessageContent"
               },
               "modelSelection": {
                 "anyOf": [
@@ -57782,7 +58247,7 @@
                     "type": "string"
                   },
                   "payload": {
-                    "$ref": "#/$defs/orchestration.dispatchCommand.payload/$defs/Union_"
+                    "$ref": "#/methods/orchestration.dispatchCommand/payload/$defs/Union_"
                   },
                   "sequence": {
                     "anyOf": [
@@ -57983,7 +58448,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.getFullThreadDiff.error/$defs/WsRpcError"
+        "$ref": "#/methods/orchestration.getFullThreadDiff/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -58048,7 +58513,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.getFullThreadDiff.success/$defs/OrchestrationTurnDiffRange"
+        "$ref": "#/methods/orchestration.getFullThreadDiff/success/$defs/OrchestrationTurnDiffRange"
       }
     },
     "orchestration.getShellSnapshot": {
@@ -58143,7 +58608,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.getShellSnapshot.error/$defs/WsRpcError"
+        "$ref": "#/methods/orchestration.getShellSnapshot/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -60863,7 +61328,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.getSnapshot.error/$defs/WsRpcError"
+        "$ref": "#/methods/orchestration.getSnapshot/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -60916,13 +61381,13 @@
               },
               {
                 "items": {
-                  "$ref": "#/$defs/orchestration.getSnapshot.success/$defs/Union_"
+                  "$ref": "#/methods/orchestration.getSnapshot/success/$defs/Union_"
                 },
                 "type": "array"
               },
               {
                 "additionalProperties": {
-                  "$ref": "#/$defs/orchestration.getSnapshot.success/$defs/Union_"
+                  "$ref": "#/methods/orchestration.getSnapshot/success/$defs/Union_"
                 },
                 "type": "object"
               }
@@ -61897,7 +62362,7 @@
                         "type": "string"
                       },
                       "payload": {
-                        "$ref": "#/$defs/orchestration.getSnapshot.success/$defs/Union_"
+                        "$ref": "#/methods/orchestration.getSnapshot/success/$defs/Union_"
                       },
                       "sequence": {
                         "anyOf": [
@@ -64653,7 +65118,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.getThreadDetailSnapshot.error/$defs/WsRpcError"
+        "$ref": "#/methods/orchestration.getThreadDetailSnapshot/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -64706,13 +65171,13 @@
               },
               {
                 "items": {
-                  "$ref": "#/$defs/orchestration.getThreadDetailSnapshot.success/$defs/Union_"
+                  "$ref": "#/methods/orchestration.getThreadDetailSnapshot/success/$defs/Union_"
                 },
                 "type": "array"
               },
               {
                 "additionalProperties": {
-                  "$ref": "#/$defs/orchestration.getThreadDetailSnapshot.success/$defs/Union_"
+                  "$ref": "#/methods/orchestration.getThreadDetailSnapshot/success/$defs/Union_"
                 },
                 "type": "object"
               }
@@ -64748,7 +65213,7 @@
                           "type": "string"
                         },
                         "payload": {
-                          "$ref": "#/$defs/orchestration.getThreadDetailSnapshot.success/$defs/Union_"
+                          "$ref": "#/methods/orchestration.getThreadDetailSnapshot/success/$defs/Union_"
                         },
                         "sequence": {
                           "anyOf": [
@@ -67512,7 +67977,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.getTurnDiff.error/$defs/WsRpcError"
+        "$ref": "#/methods/orchestration.getTurnDiff/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -67556,7 +68021,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.getTurnDiff.payload/$defs/OrchestrationTurnDiffRange"
+        "$ref": "#/methods/orchestration.getTurnDiff/payload/$defs/OrchestrationTurnDiffRange"
       },
       "success": {
         "$defs": {
@@ -67590,7 +68055,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.getTurnDiff.success/$defs/OrchestrationTurnDiffRange"
+        "$ref": "#/methods/orchestration.getTurnDiff/success/$defs/OrchestrationTurnDiffRange"
       }
     },
     "orchestration.importThread": {
@@ -67685,7 +68150,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.importThread.error/$defs/WsRpcError"
+        "$ref": "#/methods/orchestration.importThread/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -67806,7 +68271,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.listProviderDeliveryBlockers.error/$defs/WsRpcError"
+        "$ref": "#/methods/orchestration.listProviderDeliveryBlockers/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -68069,7 +68534,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.reconcileProviderDelivery.error/$defs/WsRpcError"
+        "$ref": "#/methods/orchestration.reconcileProviderDelivery/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -68280,7 +68745,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.repairState.error/$defs/WsRpcError"
+        "$ref": "#/methods/orchestration.repairState/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -68333,13 +68798,13 @@
               },
               {
                 "items": {
-                  "$ref": "#/$defs/orchestration.repairState.success/$defs/Union_"
+                  "$ref": "#/methods/orchestration.repairState/success/$defs/Union_"
                 },
                 "type": "array"
               },
               {
                 "additionalProperties": {
-                  "$ref": "#/$defs/orchestration.repairState.success/$defs/Union_"
+                  "$ref": "#/methods/orchestration.repairState/success/$defs/Union_"
                 },
                 "type": "object"
               }
@@ -69314,7 +69779,7 @@
                         "type": "string"
                       },
                       "payload": {
-                        "$ref": "#/$defs/orchestration.repairState.success/$defs/Union_"
+                        "$ref": "#/methods/orchestration.repairState/success/$defs/Union_"
                       },
                       "sequence": {
                         "anyOf": [
@@ -72070,7 +72535,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.replayEvents.error/$defs/WsRpcError"
+        "$ref": "#/methods/orchestration.replayEvents/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -72138,13 +72603,13 @@
               },
               {
                 "items": {
-                  "$ref": "#/$defs/orchestration.replayEvents.success/$defs/Union_"
+                  "$ref": "#/methods/orchestration.replayEvents/success/$defs/Union_"
                 },
                 "type": "array"
               },
               {
                 "additionalProperties": {
-                  "$ref": "#/$defs/orchestration.replayEvents.success/$defs/Union_"
+                  "$ref": "#/methods/orchestration.replayEvents/success/$defs/Union_"
                 },
                 "type": "object"
               }
@@ -88187,7 +88652,7 @@
                           "type": "string"
                         },
                         "payload": {
-                          "$ref": "#/$defs/orchestration.replayEvents.success/$defs/Union_"
+                          "$ref": "#/methods/orchestration.replayEvents/success/$defs/Union_"
                         },
                         "sequence": {
                           "anyOf": [
@@ -88290,6 +88755,99 @@
       }
     },
     "orchestration.subscribeDomainEvents": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/orchestration.subscribeDomainEvents/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -88341,13 +88899,13 @@
               },
               {
                 "items": {
-                  "$ref": "#/$defs/orchestration.subscribeDomainEvents.success/$defs/Union_"
+                  "$ref": "#/methods/orchestration.subscribeDomainEvents/success/$defs/Union_"
                 },
                 "type": "array"
               },
               {
                 "additionalProperties": {
-                  "$ref": "#/$defs/orchestration.subscribeDomainEvents.success/$defs/Union_"
+                  "$ref": "#/methods/orchestration.subscribeDomainEvents/success/$defs/Union_"
                 },
                 "type": "object"
               }
@@ -104389,7 +104947,7 @@
                         "type": "string"
                       },
                       "payload": {
-                        "$ref": "#/$defs/orchestration.subscribeDomainEvents.success/$defs/Union_"
+                        "$ref": "#/methods/orchestration.subscribeDomainEvents/success/$defs/Union_"
                       },
                       "sequence": {
                         "anyOf": [
@@ -104482,6 +105040,99 @@
       }
     },
     "orchestration.subscribeShell": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/orchestration.subscribeShell/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -109899,6 +110550,99 @@
       }
     },
     "orchestration.subscribeThread": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/orchestration.subscribeThread/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -109965,13 +110709,13 @@
               },
               {
                 "items": {
-                  "$ref": "#/$defs/orchestration.subscribeThread.success/$defs/Union_"
+                  "$ref": "#/methods/orchestration.subscribeThread/success/$defs/Union_"
                 },
                 "type": "array"
               },
               {
                 "additionalProperties": {
-                  "$ref": "#/$defs/orchestration.subscribeThread.success/$defs/Union_"
+                  "$ref": "#/methods/orchestration.subscribeThread/success/$defs/Union_"
                 },
                 "type": "object"
               }
@@ -110014,7 +110758,7 @@
                               "type": "string"
                             },
                             "payload": {
-                              "$ref": "#/$defs/orchestration.subscribeThread.success/$defs/Union_"
+                              "$ref": "#/methods/orchestration.subscribeThread/success/$defs/Union_"
                             },
                             "sequence": {
                               "anyOf": [
@@ -128736,7 +129480,7 @@
                                 "type": "string"
                               },
                               "payload": {
-                                "$ref": "#/$defs/orchestration.subscribeThread.success/$defs/Union_"
+                                "$ref": "#/methods/orchestration.subscribeThread/success/$defs/Union_"
                               },
                               "sequence": {
                                 "anyOf": [
@@ -128938,7 +129682,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.unsubscribeShell.error/$defs/WsRpcError"
+        "$ref": "#/methods/orchestration.unsubscribeShell/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -129049,7 +129793,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/orchestration.unsubscribeThread.error/$defs/WsRpcError"
+        "$ref": "#/methods/orchestration.unsubscribeThread/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -129160,7 +129904,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/preview.list.error/$defs/WsRpcError"
+        "$ref": "#/methods/preview.list/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -129397,7 +130141,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/preview.setUrl.error/$defs/WsRpcError"
+        "$ref": "#/methods/preview.setUrl/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -129634,7 +130378,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/preview.start.error/$defs/WsRpcError"
+        "$ref": "#/methods/preview.start/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -129868,7 +130612,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/preview.stop.error/$defs/WsRpcError"
+        "$ref": "#/methods/preview.stop/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -129895,6 +130639,99 @@
       }
     },
     "preview.subscribe": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/preview.subscribe/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -130268,7 +131105,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/projects.createLocalFilePreviewGrant.error/$defs/WsRpcError"
+        "$ref": "#/methods/projects.createLocalFilePreviewGrant/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -130389,7 +131226,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/projects.discoverScripts.error/$defs/WsRpcError"
+        "$ref": "#/methods/projects.discoverScripts/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -130567,7 +131404,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/projects.listDevServers.error/$defs/WsRpcError"
+        "$ref": "#/methods/projects.listDevServers/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -130731,7 +131568,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/projects.listDirectories.error/$defs/WsRpcError"
+        "$ref": "#/methods/projects.listDirectories/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -130841,6 +131678,99 @@
       }
     },
     "projects.provisionFromGitHub": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/projects.provisionFromGitHub/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -131618,7 +132548,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/projects.readFile.error/$defs/WsRpcError"
+        "$ref": "#/methods/projects.readFile/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -131829,7 +132759,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/projects.resolveOutOfRootFileReference.error/$defs/WsRpcError"
+        "$ref": "#/methods/projects.resolveOutOfRootFileReference/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -131957,7 +132887,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/projects.runDevServer.error/$defs/WsRpcError"
+        "$ref": "#/methods/projects.runDevServer/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -132149,7 +133079,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/projects.searchContent.error/$defs/WsRpcError"
+        "$ref": "#/methods/projects.searchContent/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -132317,7 +133247,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/projects.searchEntries.error/$defs/WsRpcError"
+        "$ref": "#/methods/projects.searchEntries/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -132503,7 +133433,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/projects.searchLocalEntries.error/$defs/WsRpcError"
+        "$ref": "#/methods/projects.searchLocalEntries/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -132690,7 +133620,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/projects.stopDevServer.error/$defs/WsRpcError"
+        "$ref": "#/methods/projects.stopDevServer/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -132717,6 +133647,99 @@
       }
     },
     "projects.subscribeDevServerEvents": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/projects.subscribeDevServerEvents/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -132970,7 +133993,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/projects.writeFile.error/$defs/WsRpcError"
+        "$ref": "#/methods/projects.writeFile/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -133158,7 +134181,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/provider.compactThread.error/$defs/WsRpcError"
+        "$ref": "#/methods/provider.compactThread/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -133269,7 +134292,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/provider.getComposerCapabilities.error/$defs/WsRpcError"
+        "$ref": "#/methods/provider.getComposerCapabilities/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -133507,7 +134530,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/provider.listAgents.error/$defs/WsRpcError"
+        "$ref": "#/methods/provider.listAgents/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -133735,7 +134758,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/provider.listCommands.error/$defs/WsRpcError"
+        "$ref": "#/methods/provider.listCommands/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -133993,7 +135016,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/provider.listModels.error/$defs/WsRpcError"
+        "$ref": "#/methods/provider.listModels/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -134549,7 +135572,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/provider.listPlugins.error/$defs/WsRpcError"
+        "$ref": "#/methods/provider.listPlugins/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -135071,7 +136094,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/provider.listSkills.error/$defs/WsRpcError"
+        "$ref": "#/methods/provider.listSkills/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -135358,7 +136381,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/provider.listSkillsCatalog.error/$defs/WsRpcError"
+        "$ref": "#/methods/provider.listSkillsCatalog/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -135571,7 +136594,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/provider.readPlugin.error/$defs/WsRpcError"
+        "$ref": "#/methods/provider.readPlugin/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -136185,10 +137208,10 @@
         },
         "anyOf": [
           {
-            "$ref": "#/$defs/pullRequests.action.error/$defs/PullRequestsUnavailableError"
+            "$ref": "#/methods/pullRequests.action/error/$defs/PullRequestsUnavailableError"
           },
           {
-            "$ref": "#/$defs/pullRequests.action.error/$defs/WsRpcError"
+            "$ref": "#/methods/pullRequests.action/error/$defs/WsRpcError"
           }
         ]
       },
@@ -136441,10 +137464,10 @@
         },
         "anyOf": [
           {
-            "$ref": "#/$defs/pullRequests.comment.error/$defs/PullRequestsUnavailableError"
+            "$ref": "#/methods/pullRequests.comment/error/$defs/PullRequestsUnavailableError"
           },
           {
-            "$ref": "#/$defs/pullRequests.comment.error/$defs/WsRpcError"
+            "$ref": "#/methods/pullRequests.comment/error/$defs/WsRpcError"
           }
         ]
       },
@@ -136653,10 +137676,10 @@
         },
         "anyOf": [
           {
-            "$ref": "#/$defs/pullRequests.detail.error/$defs/PullRequestsUnavailableError"
+            "$ref": "#/methods/pullRequests.detail/error/$defs/PullRequestsUnavailableError"
           },
           {
-            "$ref": "#/$defs/pullRequests.detail.error/$defs/WsRpcError"
+            "$ref": "#/methods/pullRequests.detail/error/$defs/WsRpcError"
           }
         ]
       },
@@ -137594,10 +138617,10 @@
         },
         "anyOf": [
           {
-            "$ref": "#/$defs/pullRequests.diff.error/$defs/PullRequestsUnavailableError"
+            "$ref": "#/methods/pullRequests.diff/error/$defs/PullRequestsUnavailableError"
           },
           {
-            "$ref": "#/$defs/pullRequests.diff.error/$defs/WsRpcError"
+            "$ref": "#/methods/pullRequests.diff/error/$defs/WsRpcError"
           }
         ]
       },
@@ -137759,10 +138782,10 @@
         },
         "anyOf": [
           {
-            "$ref": "#/$defs/pullRequests.inbox.error/$defs/PullRequestsUnavailableError"
+            "$ref": "#/methods/pullRequests.inbox/error/$defs/PullRequestsUnavailableError"
           },
           {
-            "$ref": "#/$defs/pullRequests.inbox.error/$defs/WsRpcError"
+            "$ref": "#/methods/pullRequests.inbox/error/$defs/WsRpcError"
           }
         ]
       },
@@ -138026,10 +139049,10 @@
         },
         "anyOf": [
           {
-            "$ref": "#/$defs/pullRequests.list.error/$defs/PullRequestsUnavailableError"
+            "$ref": "#/methods/pullRequests.list/error/$defs/PullRequestsUnavailableError"
           },
           {
-            "$ref": "#/$defs/pullRequests.list.error/$defs/WsRpcError"
+            "$ref": "#/methods/pullRequests.list/error/$defs/WsRpcError"
           }
         ]
       },
@@ -138577,7 +139600,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/pullRequests.markInboxNotified.error/$defs/WsRpcError"
+        "$ref": "#/methods/pullRequests.markInboxNotified/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -138699,7 +139722,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/pullRequests.markInboxViewed.error/$defs/WsRpcError"
+        "$ref": "#/methods/pullRequests.markInboxViewed/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -138856,10 +139879,10 @@
         },
         "anyOf": [
           {
-            "$ref": "#/$defs/pullRequests.reviewRequestCount.error/$defs/PullRequestsUnavailableError"
+            "$ref": "#/methods/pullRequests.reviewRequestCount/error/$defs/PullRequestsUnavailableError"
           },
           {
-            "$ref": "#/$defs/pullRequests.reviewRequestCount.error/$defs/WsRpcError"
+            "$ref": "#/methods/pullRequests.reviewRequestCount/error/$defs/WsRpcError"
           }
         ]
       },
@@ -139000,7 +140023,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/pullRequests.setPinned.error/$defs/WsRpcError"
+        "$ref": "#/methods/pullRequests.setPinned/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -139146,7 +140169,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.createExternalMcpIntegration.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.createExternalMcpIntegration/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -139624,7 +140647,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.generateAutomationIntent.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.generateAutomationIntent/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -141016,7 +142039,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.generateMeetingSummary.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.generateMeetingSummary/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -141999,7 +143022,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.generateThreadRecap.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.generateThreadRecap/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -143009,7 +144032,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.getConfig.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.getConfig/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -143051,7 +144074,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "node": {
-                    "$ref": "#/$defs/server.getConfig.success/$defs/Union_"
+                    "$ref": "#/methods/server.getConfig/success/$defs/Union_"
                   },
                   "type": {
                     "enum": ["not"],
@@ -143065,10 +144088,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "left": {
-                    "$ref": "#/$defs/server.getConfig.success/$defs/Union_"
+                    "$ref": "#/methods/server.getConfig/success/$defs/Union_"
                   },
                   "right": {
-                    "$ref": "#/$defs/server.getConfig.success/$defs/Union_"
+                    "$ref": "#/methods/server.getConfig/success/$defs/Union_"
                   },
                   "type": {
                     "enum": ["and"],
@@ -143082,10 +144105,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "left": {
-                    "$ref": "#/$defs/server.getConfig.success/$defs/Union_"
+                    "$ref": "#/methods/server.getConfig/success/$defs/Union_"
                   },
                   "right": {
-                    "$ref": "#/$defs/server.getConfig.success/$defs/Union_"
+                    "$ref": "#/methods/server.getConfig/success/$defs/Union_"
                   },
                   "type": {
                     "enum": ["or"],
@@ -143601,7 +144624,7 @@
                 "whenAst": {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/server.getConfig.success/$defs/Union_"
+                      "$ref": "#/methods/server.getConfig/success/$defs/Union_"
                     },
                     {
                       "type": "null"
@@ -144074,7 +145097,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.getDiagnostics.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.getDiagnostics/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -144362,7 +145385,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.getEnvironment.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.getEnvironment/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -144555,7 +145578,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.getProviderUsageSnapshot.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.getProviderUsageSnapshot/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -144925,7 +145948,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.getSettings.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.getSettings/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -146215,7 +147238,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.listExternalMcpIntegrations.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.listExternalMcpIntegrations/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -146526,7 +147549,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.listLocalServers.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.listLocalServers/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -146799,7 +147822,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.listProviderUsage.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.listProviderUsage/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -147171,7 +148194,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.listResourceProcesses.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.listResourceProcesses/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -147600,7 +148623,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.listWorktrees.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.listWorktrees/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -147731,7 +148754,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.prewarmVoice.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.prewarmVoice/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -147899,7 +148922,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.refreshExternalMcpPairing.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.refreshExternalMcpPairing/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -148252,7 +149275,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.refreshProviders.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.refreshProviders/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -148706,7 +149729,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.revokeExternalMcpIntegration.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.revokeExternalMcpIntegration/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -148824,7 +149847,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.stopLocalServer.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.stopLocalServer/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -148978,7 +150001,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.stopResourceLeftovers.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.stopResourceLeftovers/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -149130,7 +150153,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.stopResourceProcess.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.stopResourceProcess/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -149221,6 +150244,99 @@
       }
     },
     "server.subscribeConfig": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/server.subscribeConfig/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -149261,7 +150377,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "node": {
-                    "$ref": "#/$defs/server.subscribeConfig.success/$defs/Union_"
+                    "$ref": "#/methods/server.subscribeConfig/success/$defs/Union_"
                   },
                   "type": {
                     "enum": ["not"],
@@ -149275,10 +150391,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "left": {
-                    "$ref": "#/$defs/server.subscribeConfig.success/$defs/Union_"
+                    "$ref": "#/methods/server.subscribeConfig/success/$defs/Union_"
                   },
                   "right": {
-                    "$ref": "#/$defs/server.subscribeConfig.success/$defs/Union_"
+                    "$ref": "#/methods/server.subscribeConfig/success/$defs/Union_"
                   },
                   "type": {
                     "enum": ["and"],
@@ -149292,10 +150408,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "left": {
-                    "$ref": "#/$defs/server.subscribeConfig.success/$defs/Union_"
+                    "$ref": "#/methods/server.subscribeConfig/success/$defs/Union_"
                   },
                   "right": {
-                    "$ref": "#/$defs/server.subscribeConfig.success/$defs/Union_"
+                    "$ref": "#/methods/server.subscribeConfig/success/$defs/Union_"
                   },
                   "type": {
                     "enum": ["or"],
@@ -149816,7 +150932,7 @@
                         "whenAst": {
                           "anyOf": [
                             {
-                              "$ref": "#/$defs/server.subscribeConfig.success/$defs/Union_"
+                              "$ref": "#/methods/server.subscribeConfig/success/$defs/Union_"
                             },
                             {
                               "type": "null"
@@ -152176,6 +153292,99 @@
       }
     },
     "server.subscribeLifecycle": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/server.subscribeLifecycle/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -152397,6 +153606,99 @@
       }
     },
     "server.subscribeProviderStatuses": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/server.subscribeProviderStatuses/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -152758,6 +154060,99 @@
       }
     },
     "server.subscribeSettings": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/server.subscribeSettings/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -154053,7 +155448,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.transcribeVoice.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.transcribeVoice/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -154209,7 +155604,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.updateProvider.error/$defs/ServerProviderUpdateError"
+        "$ref": "#/methods/server.updateProvider/error/$defs/ServerProviderUpdateError"
       },
       "errors": ["ServerProviderUpdateError"],
       "group": "feature",
@@ -154700,7 +156095,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.updateSettings.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.updateSettings/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -156389,7 +157784,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/server.upsertKeybinding.error/$defs/WsRpcError"
+        "$ref": "#/methods/server.upsertKeybinding/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -157019,7 +158414,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "node": {
-                    "$ref": "#/$defs/server.upsertKeybinding.success/$defs/Union_"
+                    "$ref": "#/methods/server.upsertKeybinding/success/$defs/Union_"
                   },
                   "type": {
                     "enum": ["not"],
@@ -157033,10 +158428,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "left": {
-                    "$ref": "#/$defs/server.upsertKeybinding.success/$defs/Union_"
+                    "$ref": "#/methods/server.upsertKeybinding/success/$defs/Union_"
                   },
                   "right": {
-                    "$ref": "#/$defs/server.upsertKeybinding.success/$defs/Union_"
+                    "$ref": "#/methods/server.upsertKeybinding/success/$defs/Union_"
                   },
                   "type": {
                     "enum": ["and"],
@@ -157050,10 +158445,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "left": {
-                    "$ref": "#/$defs/server.upsertKeybinding.success/$defs/Union_"
+                    "$ref": "#/methods/server.upsertKeybinding/success/$defs/Union_"
                   },
                   "right": {
-                    "$ref": "#/$defs/server.upsertKeybinding.success/$defs/Union_"
+                    "$ref": "#/methods/server.upsertKeybinding/success/$defs/Union_"
                   },
                   "type": {
                     "enum": ["or"],
@@ -157431,7 +158826,7 @@
                 "whenAst": {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/server.upsertKeybinding.success/$defs/Union_"
+                      "$ref": "#/methods/server.upsertKeybinding/success/$defs/Union_"
                     },
                     {
                       "type": "null"
@@ -157541,7 +158936,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/shell.openInEditor.error/$defs/WsRpcError"
+        "$ref": "#/methods/shell.openInEditor/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -157764,7 +159159,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/stats.getProfileStats.error/$defs/WsRpcError"
+        "$ref": "#/methods/stats.getProfileStats/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -158542,7 +159937,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/stats.getProfileTokenStats.error/$defs/WsRpcError"
+        "$ref": "#/methods/stats.getProfileTokenStats/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -158995,7 +160390,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/studio.listThreadOutputs.error/$defs/WsRpcError"
+        "$ref": "#/methods/studio.listThreadOutputs/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -159132,7 +160527,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/terminal.ackOutput.error/$defs/WsRpcError"
+        "$ref": "#/methods/terminal.ackOutput/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -159264,7 +160659,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/terminal.clear.error/$defs/WsRpcError"
+        "$ref": "#/methods/terminal.clear/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -159385,7 +160780,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/terminal.close.error/$defs/WsRpcError"
+        "$ref": "#/methods/terminal.close/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -159516,7 +160911,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/terminal.open.error/$defs/WsRpcError"
+        "$ref": "#/methods/terminal.open/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -159825,7 +161220,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/terminal.resize.error/$defs/WsRpcError"
+        "$ref": "#/methods/terminal.resize/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -159968,7 +161363,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/terminal.restart.error/$defs/WsRpcError"
+        "$ref": "#/methods/terminal.restart/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",
@@ -160162,6 +161557,99 @@
       }
     },
     "terminal.subscribeEvents": {
+      "error": {
+        "$defs": {
+          "WsRpcError": {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": ["WsRpcError"],
+                "type": "string"
+              },
+              "cause": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stack": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["message"],
+                        "type": "object"
+                      },
+                      {}
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryAfterMs": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "enum": ["NaN"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["Infinity"],
+                        "type": "string"
+                      },
+                      {
+                        "enum": ["-Infinity"],
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retryable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["_tag", "message"],
+            "type": "object"
+          }
+        },
+        "$ref": "#/methods/terminal.subscribeEvents/error/$defs/WsRpcError"
+      },
       "errors": ["WsRpcError"],
       "group": "feature",
       "kind": "stream",
@@ -160819,7 +162307,7 @@
             "type": "object"
           }
         },
-        "$ref": "#/$defs/terminal.write.error/$defs/WsRpcError"
+        "$ref": "#/methods/terminal.write/error/$defs/WsRpcError"
       },
       "errors": ["WsRpcError"],
       "group": "feature",

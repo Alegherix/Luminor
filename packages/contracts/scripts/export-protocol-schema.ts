@@ -85,20 +85,24 @@ export const GPUI_COMMAND_TYPES = [
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
-function rewriteLocalDefinitionRefs(value: JsonValue, definitionName: string): JsonValue {
+function escapeJsonPointerToken(token: string): string {
+  return token.replace(/~/gu, "~0").replace(/\//gu, "~1");
+}
+
+function rewriteLocalDefinitionRefs(value: JsonValue, defsBasePointer: string): JsonValue {
   if (Array.isArray(value)) {
-    return value.map((item) => rewriteLocalDefinitionRefs(item, definitionName));
+    return value.map((item) => rewriteLocalDefinitionRefs(item, defsBasePointer));
   }
   if (value === null || typeof value !== "object") {
     if (typeof value === "string" && value.startsWith("#/$defs/")) {
-      return `#/$defs/${definitionName}/$defs/${value.slice("#/$defs/".length)}`;
+      return `#/${defsBasePointer}/$defs/${value.slice("#/$defs/".length)}`;
     }
     return value;
   }
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [
       key,
-      rewriteLocalDefinitionRefs(item, definitionName),
+      rewriteLocalDefinitionRefs(item, defsBasePointer),
     ]),
   );
 }
@@ -163,7 +167,11 @@ function selectGpuiCommands(schema: JsonValue): JsonValue {
   return { ...schema, anyOf: selected };
 }
 
-function exportDefinition(name: string, schema: Schema.Top): JsonValue {
+function exportEmbeddedDefinition(
+  name: string,
+  schema: Schema.Top,
+  defsBasePointer: string,
+): JsonValue {
   const document = Schema.toJsonSchemaDocument(schema, { additionalProperties: false });
   const rootSchema =
     name === "GpuiClientOrchestrationCommand"
@@ -173,7 +181,11 @@ function exportDefinition(name: string, schema: Schema.Top): JsonValue {
     ...(rootSchema as { [key: string]: JsonValue }),
     ...(Object.keys(document.definitions).length > 0 ? { $defs: document.definitions } : {}),
   } as JsonValue;
-  return rewriteLocalDefinitionRefs(standalone, name);
+  return rewriteLocalDefinitionRefs(standalone, defsBasePointer);
+}
+
+function exportDefinition(name: string, schema: Schema.Top): JsonValue {
+  return exportEmbeddedDefinition(name, schema, ["$defs", escapeJsonPointerToken(name)].join("/"));
 }
 
 export async function renderProtocolSchema(): Promise<string> {
@@ -263,15 +275,17 @@ function fullSurfaceMethod(groupName: string, rpc: RpcLike): JsonValue {
   const successSchema = streamSchemas ? streamSchemas.success : (rpc.successSchema as Schema.Top);
   const errorSource = streamSchemas ? streamSchemas.error : (rpc.errorSchema as Schema.Top);
   const taggedErrorNames = [...collectTaggedErrorNames(errorSource.ast)].sort();
+  const methodPointer = ["methods", escapeJsonPointerToken(rpc._tag)]
+    .join("/");
+  const slotDefinition = (slot: "error" | "payload" | "success", schema: Schema.Top): JsonValue =>
+    exportEmbeddedDefinition(`${rpc._tag}.${slot}`, schema, `${methodPointer}/${slot}`);
   return sortJson({
     errors: taggedErrorNames,
     group: groupName,
     kind,
-    payload: exportDefinition(`${rpc._tag}.payload`, rpc.payloadSchema as Schema.Top),
-    success: exportDefinition(`${rpc._tag}.success`, successSchema),
-    ...(streamSchemas
-      ? {}
-      : { error: exportDefinition(`${rpc._tag}.error`, errorSource) }),
+    payload: slotDefinition("payload", rpc.payloadSchema as Schema.Top),
+    success: slotDefinition("success", successSchema),
+    error: slotDefinition("error", errorSource),
   } as Record<string, JsonValue>);
 }
 

@@ -71,6 +71,57 @@ describe("full-surface protocol schema export", () => {
     expect(document.methods["git.status"].errors).toEqual(["WsRpcError"]);
   });
 
+  it("resolves every local $ref against the document root", () => {
+    const methodNames = Object.keys(document.methods);
+    const unresolved: string[] = [];
+
+    const visit = (node: JsonValue, pointer: string): void => {
+      if (Array.isArray(node)) {
+        node.forEach((item, index) => visit(item, `${pointer}/${index}`));
+        return;
+      }
+      if (node === null || typeof node !== "object") return;
+      for (const [key, value] of Object.entries(node)) {
+        if (key === "$ref" && typeof value === "string" && value.startsWith("#")) {
+          const segments = value.slice(2).split("/").map((segment) =>
+            segment.replace(/~1/gu, "/").replace(/~0/gu, "~"),
+          );
+          let current: unknown = document;
+          for (const segment of segments) {
+            if (
+              current !== null &&
+              typeof current === "object" &&
+              segment in (current as Record<string, unknown>)
+            ) {
+              current = (current as Record<string, unknown>)[segment];
+            } else {
+              unresolved.push(`${pointer} -> ${value}`);
+              break;
+            }
+          }
+          continue;
+        }
+        visit(value, `${pointer}/${key.replace(/~/gu, "~0").replace(/\//gu, "~1")}`);
+      }
+    };
+
+    visit(document, "");
+    expect(unresolved).toEqual([]);
+    expect(methodNames.length).toBeGreaterThan(0);
+  });
+
+  it("gives every method structural payload/success/error schemas", () => {
+    for (const [name, method] of Object.entries(document.methods)) {
+      expect(method.kind === "stream" || method.kind === "unary").toBe(true);
+      for (const slot of ["error", "payload", "success"] as const) {
+        const schema = method[slot];
+        expect(schema, `${name}.${slot}`).toBeDefined();
+        expect(typeof schema, `${name}.${slot}`).toBe("object");
+        expect(Array.isArray(schema), `${name}.${slot}`).toBe(false);
+      }
+    }
+  });
+
   it("is byte-identical when rendered repeatedly", async () => {
     expect(rendered).toBe(await renderFullProtocolSchema());
     expect(JSON.stringify(buildFullProtocolSurface())).toBe(
