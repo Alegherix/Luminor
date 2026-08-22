@@ -507,6 +507,9 @@ export class BrowserHostPipeServer {
         effectMayHaveCommitted: false,
       });
     }
+    // Decode every browser-pane command at the pipe boundary. This includes
+    // desktop-window reveal and blocking-surface resolution; neither may use an
+    // untyped side channel around the generation-fenced control union.
     const request = Schema.decodeUnknownSync(BrowserDesktopControlRequest)(params);
     if (request.type !== "subscribe" && !client.remoteSubscriptionIds.has(request.input.threadId)) {
       throw new BrowserAutomationHostError({

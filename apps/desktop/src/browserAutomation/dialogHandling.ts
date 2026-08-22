@@ -22,6 +22,13 @@ export interface BrowserHandledDialog {
   readonly openedAt: string;
 }
 
+export interface BrowserOpenJavaScriptDialog {
+  readonly kind: BrowserHandledDialog["kind"];
+  readonly message: string;
+  readonly defaultPrompt: string | null;
+  readonly openedAt: string;
+}
+
 interface DialogPolicy {
   readonly accept: boolean;
   readonly action: BrowserHandledDialog["action"];
@@ -41,6 +48,9 @@ interface DialogCapture {
 
 interface DialogMonitor {
   readonly captures: Set<DialogCapture>;
+  readonly listeners: Set<(dialog: BrowserOpenJavaScriptDialog | null) => void>;
+  openDialog: BrowserOpenJavaScriptDialog | null;
+  dispose: () => void;
 }
 
 const dialogMonitors = new WeakMap<WebContents, Promise<DialogMonitor>>();
@@ -66,20 +76,37 @@ const truncateUtf8 = (value: unknown): string => {
 const normalizeDialogKind = (value: unknown): BrowserHandledDialog["kind"] =>
   value === "confirm" || value === "prompt" || value === "beforeunload" ? value : "alert";
 
-const normalizeDialog = (opening: Record<string, unknown>): BrowserHandledDialog => {
+const normalizeOpenDialog = (opening: Record<string, unknown>): BrowserOpenJavaScriptDialog => {
   const kind = normalizeDialogKind(opening.type ?? opening.kind);
-  const policy = DIALOG_POLICY[kind];
   const defaultPrompt = opening.defaultPrompt ?? opening.defaultValue;
   return {
     kind,
     message: truncateUtf8(opening.message),
-    ...(defaultPrompt === undefined ? {} : { defaultPrompt: truncateUtf8(defaultPrompt) }),
-    action: policy.action,
+    defaultPrompt: defaultPrompt === undefined ? null : truncateUtf8(defaultPrompt),
     openedAt:
       typeof opening.openedAt === "string" && Number.isFinite(Date.parse(opening.openedAt))
         ? new Date(opening.openedAt).toISOString()
         : new Date().toISOString(),
   };
+};
+
+const normalizeDialog = (opening: Record<string, unknown>): BrowserHandledDialog => {
+  const dialog = normalizeOpenDialog(opening);
+  return {
+    kind: dialog.kind,
+    message: dialog.message,
+    ...(dialog.defaultPrompt === null ? {} : { defaultPrompt: dialog.defaultPrompt }),
+    action: DIALOG_POLICY[dialog.kind].action,
+    openedAt: dialog.openedAt,
+  };
+};
+
+const publishOpenDialog = (
+  monitor: DialogMonitor,
+  dialog: BrowserOpenJavaScriptDialog | null,
+): void => {
+  monitor.openDialog = dialog;
+  for (const listener of monitor.listeners) listener(dialog);
 };
 
 const DIALOG_SHIM_INSTALL = String.raw`(() => {
@@ -166,10 +193,34 @@ const ensureDialogMonitor = async (
 
   const monitorPromise = (async (): Promise<DialogMonitor> => {
     ensureCdpAttached(webContents);
-    const monitor: DialogMonitor = { captures: new Set() };
+    const monitor: DialogMonitor = {
+      captures: new Set(),
+      listeners: new Set(),
+      openDialog: null,
+      dispose: () => undefined,
+    };
     const coordinator = getCdpSessionCoordinator(webContents);
     const onMessage = (method: string, params: Record<string, unknown>) => {
+      const mainFrameNavigated =
+        method === "Page.frameNavigated" &&
+        Boolean(
+          (params as { readonly frame?: { readonly parentId?: string } }).frame &&
+          !(params as { readonly frame: { readonly parentId?: string } }).frame.parentId,
+        );
+      if (
+        method === "Page.javascriptDialogClosed" ||
+        method === "Runtime.executionContextsCleared" ||
+        mainFrameNavigated
+      ) {
+        if (monitor.openDialog) publishOpenDialog(monitor, null);
+        return;
+      }
       if (method !== "Page.javascriptDialogOpening") return;
+      const openDialog = normalizeOpenDialog(params);
+      if (monitor.captures.size === 0) {
+        publishOpenDialog(monitor, openDialog);
+        return;
+      }
       const dialog = normalizeDialog(params);
       const policy = DIALOG_POLICY[dialog.kind];
       // This path deliberately bypasses sendCdpCommand: it must be able to
@@ -205,23 +256,14 @@ const ensureDialogMonitor = async (
         if (tracksDestruction) webContents.removeListener("destroyed", dispose);
       }
       monitor.captures.clear();
+      if (monitor.openDialog) publishOpenDialog(monitor, null);
+      monitor.listeners.clear();
       dialogMonitors.delete(webContents);
     };
+    monitor.dispose = dispose;
     if (tracksDestruction) webContents.once("destroyed", dispose);
     try {
       await sendCdpCommand(runtime, "Page.enable", {}, signal);
-      // A human may have opened a dialog before the first automation command.
-      // Keep this command direct so it can bypass the blocked page command,
-      // but drain it before releasing the tab lock if cancellation races it.
-      await drainOnAbort(
-        coordinator
-          .sendCommand("Page.handleJavaScriptDialog", { accept: false })
-          .catch((error: unknown) => {
-            if (isNoDialogOpenError(error)) return;
-            throw error;
-          }),
-        signal,
-      );
       throwIfAborted(signal);
       return monitor;
     } catch (error) {
@@ -238,10 +280,50 @@ const ensureDialogMonitor = async (
   }
 };
 
-export const ensureDialogSuppression = async (
+export const observeJavaScriptDialogs = async (
   runtime: BrowserAutomationVisibleRuntime,
+  listener: (dialog: BrowserOpenJavaScriptDialog | null) => void,
+): Promise<() => void> => {
+  const monitor = await ensureDialogMonitor(runtime);
+  monitor.listeners.add(listener);
+  listener(monitor.openDialog);
+  return () => monitor.listeners.delete(listener);
+};
+
+export const resolveJavaScriptDialog = async (
+  runtime: BrowserAutomationVisibleRuntime,
+  input: { readonly accept: boolean; readonly promptText?: string },
+): Promise<boolean> => {
+  const monitor = await ensureDialogMonitor(runtime);
+  if (!monitor.openDialog) return false;
+  const coordinator = getCdpSessionCoordinator(runtime.webContents);
+  await coordinator.sendCommand("Page.handleJavaScriptDialog", {
+    accept: input.accept,
+    ...(input.promptText === undefined ? {} : { promptText: truncateUtf8(input.promptText) }),
+  });
+  if (monitor.openDialog) publishOpenDialog(monitor, null);
+  return true;
+};
+
+const dismissOpenDialogForAgentTurn = async (
+  runtime: BrowserAutomationVisibleRuntime,
+  monitor: DialogMonitor,
+  signal?: AbortSignal,
 ): Promise<void> => {
-  await ensureDialogMonitor(runtime);
+  const coordinator = getCdpSessionCoordinator(runtime.webContents);
+  // A human may have opened a dialog before this automation turn. Keep this
+  // command direct so it can bypass the blocked page command, but do not run it
+  // merely because the offscreen pane is being observed.
+  await drainOnAbort(
+    coordinator
+      .sendCommand("Page.handleJavaScriptDialog", { accept: false })
+      .catch((error: unknown) => {
+        if (isNoDialogOpenError(error)) return;
+        throw error;
+      }),
+    signal,
+  );
+  if (monitor.openDialog) publishOpenDialog(monitor, null);
 };
 
 const installDialogShim = async (
@@ -309,6 +391,13 @@ export const withDialogHandling = async <T>(
     if (frame && !frame.parentId) documentReplaced = true;
   };
   try {
+    try {
+      await dismissOpenDialogForAgentTurn(runtime, monitor, signal);
+    } catch (error) {
+      if (monitor.listeners.size === 0) monitor.dispose();
+      throw error;
+    }
+    throwIfAborted(signal);
     await installDialogShim(runtime, signal);
     dialogShimInstalled = true;
     unsubscribeDocumentLifecycle = getCdpSessionCoordinator(runtime.webContents).subscribeMessages(

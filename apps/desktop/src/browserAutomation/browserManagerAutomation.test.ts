@@ -856,6 +856,9 @@ describe("DesktopBrowserManager automation runtime boundary", () => {
     const afterAgentOpen = manager.getState({ threadId: THREAD_ID });
     expect(afterAgentOpen.tabs).toHaveLength(2);
     expect(afterAgentOpen.activeTabId).not.toBe(sourceTabId);
+    expect(
+      afterAgentOpen.tabs.find((tab) => tab.id === afterAgentOpen.activeTabId)?.openerTabId,
+    ).toBe(sourceTabId);
     expect(manager.getAutomationHumanControlEpoch(THREAD_ID)).toBe(0);
     expect(windowOpenEvents).toEqual([
       {

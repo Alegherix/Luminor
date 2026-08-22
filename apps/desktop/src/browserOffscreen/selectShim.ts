@@ -1,15 +1,11 @@
+import {
+  reportBlockedNativeInput,
+  type OffscreenNativeInputBlockedReport,
+} from "./nativeInputBlocking";
+
 const PROXY_ATTRIBUTE = "data-luminor-select-proxy";
 const SOURCE_ATTRIBUTE = "data-luminor-select-source";
 const POPUP_ATTRIBUTE = "data-luminor-select-popup";
-const NATIVE_INPUT_TYPES = new Set([
-  "color",
-  "date",
-  "datetime-local",
-  "file",
-  "month",
-  "time",
-  "week",
-]);
 
 interface SelectPair {
   readonly select: HTMLSelectElement;
@@ -152,7 +148,9 @@ const upgradeTree = (root: ParentNode): void => {
   }
 };
 
-export const installOffscreenSelectShim = (): void => {
+export const installOffscreenSelectShim = (
+  onNativeInputBlocked: (report: OffscreenNativeInputBlockedReport) => void = () => undefined,
+): void => {
   upgradeTree(document);
   new MutationObserver((records) => {
     for (const record of records) {
@@ -191,7 +189,7 @@ export const installOffscreenSelectShim = (): void => {
     (event) => {
       const input =
         event.target instanceof Element ? event.target.closest<HTMLInputElement>("input") : null;
-      if (!input || !NATIVE_INPUT_TYPES.has(input.type)) return;
+      if (!input || !reportBlockedNativeInput(input.type, onNativeInputBlocked)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
     },

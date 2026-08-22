@@ -9,7 +9,15 @@ import type {
 import type { NativeImage } from "electron";
 
 import type { BrowserRemoteRuntime } from "../browserManager";
-import { ensureDialogSuppression } from "../browserAutomation/dialogHandling";
+import {
+  observeJavaScriptDialogs,
+  type BrowserOpenJavaScriptDialog,
+} from "../browserAutomation/dialogHandling";
+import {
+  isOffscreenNativeInputBlockedReport,
+  OFFSCREEN_NATIVE_INPUT_BLOCKED_CHANNEL,
+  type OffscreenNativeInputBlockedReport,
+} from "../browserOffscreen/nativeInputBlocking";
 import { getCdpSessionCoordinator } from "../browserAutomation/cdpRuntime";
 
 interface PendingBitmap {
@@ -77,6 +85,9 @@ export interface BrowserFrameAcquisitionOptions {
   readonly runtime: BrowserRemoteRuntime;
   readonly workerPath: string;
   readonly onFrame: (frame: AcquiredBrowserFrame) => void;
+  readonly onJavaScriptDialog: (dialog: BrowserOpenJavaScriptDialog | null) => void;
+  readonly onNativeInputBlocked: (report: OffscreenNativeInputBlockedReport) => void;
+  readonly onNavigation: () => void;
   readonly onDetach: (reason: string) => void;
 }
 
@@ -92,6 +103,7 @@ export class BrowserFrameAcquisition {
   private metadataRefresh: Promise<void> | null = null;
   private lastMetadataRefreshAt = 0;
   private unsubscribeDetach: () => void = () => undefined;
+  private unsubscribeDialogs: () => void = () => undefined;
 
   constructor(private readonly options: BrowserFrameAcquisitionOptions) {
     this.worker = new Worker(options.workerPath);
@@ -104,6 +116,8 @@ export class BrowserFrameAcquisition {
     this.coordinator.ensureAttached();
     this.unsubscribeDetach = this.coordinator.subscribeDetach(this.handleDetach);
     this.options.runtime.webContents.on("paint", this.handlePaint);
+    this.options.runtime.webContents.on("ipc-message", this.handleIpcMessage);
+    this.options.runtime.webContents.on("did-start-navigation", this.handleNavigation);
     await this.coordinator.sendCommand("Emulation.setDeviceMetricsOverride", {
       width: this.options.runtime.viewport.width,
       height: this.options.runtime.viewport.height,
@@ -112,11 +126,12 @@ export class BrowserFrameAcquisition {
       screenWidth: this.options.runtime.viewport.width,
       screenHeight: this.options.runtime.viewport.height,
     });
-    await Promise.all([
+    const [, unsubscribeDialogs] = await Promise.all([
       this.coordinator.sendCommand("Page.enable"),
-      ensureDialogSuppression(this.options.runtime),
+      observeJavaScriptDialogs(this.options.runtime, this.options.onJavaScriptDialog),
       this.refreshMetadata(true),
     ]);
+    this.unsubscribeDialogs = unsubscribeDialogs;
     if (!this.options.runtime.webContents.isDestroyed()) {
       this.options.runtime.webContents.invalidate();
     }
@@ -126,8 +141,16 @@ export class BrowserFrameAcquisition {
     if (this.stopped) return;
     this.stopped = true;
     this.unsubscribeDetach();
+    this.unsubscribeDialogs();
+    this.options.onJavaScriptDialog(null);
+    this.options.onNavigation();
     if (!this.options.runtime.webContents.isDestroyed()) {
       this.options.runtime.webContents.removeListener("paint", this.handlePaint);
+      this.options.runtime.webContents.removeListener("ipc-message", this.handleIpcMessage);
+      this.options.runtime.webContents.removeListener(
+        "did-start-navigation",
+        this.handleNavigation,
+      );
     }
     this.worker.removeListener("message", this.handleWorkerMessage);
     this.worker.removeListener("error", this.handleWorkerError);
@@ -159,6 +182,25 @@ export class BrowserFrameAcquisition {
       return;
     }
     this.encode(capture);
+  };
+
+  private readonly handleIpcMessage = (
+    _event: Electron.Event,
+    channel: string,
+    ...args: unknown[]
+  ): void => {
+    if (channel !== OFFSCREEN_NATIVE_INPUT_BLOCKED_CHANNEL) return;
+    const report = args[0];
+    if (isOffscreenNativeInputBlockedReport(report)) this.options.onNativeInputBlocked(report);
+  };
+
+  private readonly handleNavigation = (
+    _event: Electron.Event,
+    _url: string,
+    _isInPlace: boolean,
+    isMainFrame: boolean,
+  ): void => {
+    if (isMainFrame && !_isInPlace) this.options.onNavigation();
   };
 
   private encode(capture: PendingBitmap): void {

@@ -239,7 +239,10 @@ export interface BrowserRemoteRuntime {
   readonly viewport: BrowserViewport;
 }
 
-function createBrowserTab(url = ABOUT_BLANK_URL): BrowserTabState {
+function createBrowserTab(
+  url = ABOUT_BLANK_URL,
+  openerTabId: string | null = null,
+): BrowserTabState {
   return {
     id: Crypto.randomUUID(),
     url,
@@ -252,6 +255,7 @@ function createBrowserTab(url = ABOUT_BLANK_URL): BrowserTabState {
     faviconUrl: null,
     lastCommittedUrl: null,
     lastError: null,
+    openerTabId,
   };
 }
 
@@ -927,7 +931,7 @@ export class DesktopBrowserManager {
       }
 
       if (input.automationGestureActive) {
-        const tab = createBrowserTab(normalizeUrlInput(input.url));
+        const tab = createBrowserTab(normalizeUrlInput(input.url), input.sourceTabId);
         const fallbackTimer = setTimeout(() => {
           this.commitPendingAutomationWindowOpen(key);
         }, BROWSER_AUTOMATION_WINDOW_OPEN_FALLBACK_MS);
@@ -950,6 +954,7 @@ export class DesktopBrowserManager {
           threadId: input.threadId,
           url: input.url,
           activate: true,
+          openerTabId: input.sourceTabId,
         });
       }
       if (!input.automationGestureActive) {
@@ -1902,7 +1907,7 @@ export class DesktopBrowserManager {
   newTab(input: BrowserNewTabInput): ThreadBrowserState {
     this.markHumanControl(input.threadId);
     const state = this.ensureWorkspace(input.threadId);
-    const tab = createBrowserTab(normalizeUrlInput(input.url));
+    const tab = createBrowserTab(normalizeUrlInput(input.url), input.openerTabId ?? null);
     state.tabs = [...state.tabs, tab];
     if (input.activate !== false || !state.activeTabId) {
       state.activeTabId = tab.id;

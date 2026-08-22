@@ -8,9 +8,13 @@ import type {
 } from "@luminor/contracts";
 import { describe, expect, it } from "vitest";
 
+import type { DesktopBrowserManager } from "../browserManager";
 import {
+  BrowserBlockingSurfaceStore,
   BrowserMouseMoveCoalescer,
+  BrowserRemoteFrameController,
   marksRemoteHumanControl,
+  requireRemotelyAnswerableSurface,
   validateBrowserInputFence,
 } from "./controller";
 
@@ -135,5 +139,113 @@ describe("browser input arbitration", () => {
     releaseFirst();
     await Promise.all([first, second, third]);
     expect(sent).toEqual([10, 30]);
+  });
+});
+
+describe("browser blocking-surface lifecycle", () => {
+  it("adds and clears dialogs, native inputs, navigations, tab closes, and generation resets", () => {
+    const store = new BrowserBlockingSurfaceStore();
+    store.setJavaScriptDialog(tabId, {
+      kind: "prompt",
+      message: "Continue?",
+      defaultPrompt: "yes",
+      openedAt: "2026-08-22T08:00:00.000Z",
+    });
+    expect(store.snapshot()).toEqual([
+      expect.objectContaining({
+        kind: "javascript-dialog",
+        dialogKind: "prompt",
+        remotelyAnswerable: true,
+      }),
+    ]);
+
+    store.addNativeInput(tabId, { kind: "file-chooser", inputType: "file" });
+    store.setJavaScriptDialog(tabId, null);
+    expect(store.snapshot()).toEqual([expect.objectContaining({ kind: "file-chooser" })]);
+
+    expect(store.snapshot()[0]).toMatchObject({ remotelyAnswerable: false });
+    expect(store.clearTab(tabId)).toBe(true);
+    expect(store.snapshot()).toEqual([]);
+
+    store.addNativeInput(tabId, { kind: "native-widget", inputType: "date" });
+    store.addPermissionDenied(tabId, "camera");
+    expect(store.snapshot()).toContainEqual(
+      expect.objectContaining({
+        kind: "permission-prompt",
+        permission: "camera",
+        autoResolution: "denied",
+      }),
+    );
+    expect(store.clearAll()).toBe(true);
+    expect(store.snapshot()).toEqual([]);
+  });
+
+  it("rejects a blocking surface that the resolve RPC cannot answer", () => {
+    const store = new BrowserBlockingSurfaceStore();
+    store.addNativeInput(tabId, { kind: "file-chooser", inputType: "file" });
+
+    expect(() => requireRemotelyAnswerableSurface(store.snapshot()[0])).toThrow(
+      "cannot be answered remotely",
+    );
+  });
+
+  it("serves reveal and rejects a non-answerable surface through desktop RPC handling", async () => {
+    const browserManager = {
+      subscribe: () => () => undefined,
+      deactivateRemoteRuntime: () => undefined,
+    } as unknown as DesktopBrowserManager;
+    const controller = new BrowserRemoteFrameController(browserManager, {
+      revealDesktopWindow: () => false,
+    });
+    const access = controller as unknown as {
+      createSession(
+        threadId: ThreadId,
+        viewport: { width: number; height: number; deviceScaleFactor: number },
+      ): {
+        lifecycle: {
+          transition(input: { type: "subscribe" }): unknown;
+          snapshot(): { generation: number };
+        };
+        blockingSurfaces: BrowserBlockingSurfaceStore;
+      };
+    };
+    const session = access.createSession(threadId, {
+      width: 1280,
+      height: 720,
+      deviceScaleFactor: 1,
+    });
+    session.lifecycle.transition({ type: "subscribe" });
+    const generation = session.lifecycle.snapshot().generation as BrowserGeneration;
+
+    await expect(
+      controller.handleRequest({
+        type: "revealDesktopWindow",
+        input: { threadId, expectedGeneration: generation, reason: "javascript-dialog" },
+      }),
+    ).resolves.toEqual({
+      type: "desktopWindowRevealed",
+      result: {
+        revealed: false,
+        fallbackText:
+          "Open Luminor from your desktop or task switcher to continue in the desktop window.",
+      },
+    });
+
+    session.blockingSurfaces.addNativeInput(tabId, {
+      kind: "file-chooser",
+      inputType: "file",
+    });
+    await expect(
+      controller.handleRequest({
+        type: "resolveBlockingSurface",
+        input: {
+          threadId,
+          expectedGeneration: generation,
+          surfaceId: session.blockingSurfaces.snapshot()[0]!.id,
+          resolution: { action: "dismiss" },
+        },
+      }),
+    ).rejects.toThrow("cannot be answered remotely");
+    controller.dispose();
   });
 });

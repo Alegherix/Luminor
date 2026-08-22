@@ -5,7 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { BrowserAutomationVisibleRuntime } from "../browserManager";
 import { evaluateInContext } from "./cdpRuntime";
-import { MAX_DIALOGS_PER_COMMAND, withDialogHandling } from "./dialogHandling";
+import {
+  MAX_DIALOGS_PER_COMMAND,
+  observeJavaScriptDialogs,
+  resolveJavaScriptDialog,
+  withDialogHandling,
+} from "./dialogHandling";
 
 class FakeDebugger extends EventEmitter {
   readonly commands: Array<{ method: string; params: Record<string, unknown> }> = [];
@@ -40,6 +45,72 @@ const makeRuntime = (debuggerInstance = new FakeDebugger()): BrowserAutomationVi
 };
 
 describe("browser JavaScript dialog handling", () => {
+  it("reports dialogs outside agent turns and only auto-answers them inside the turn scope", async () => {
+    const debuggerInstance = new FakeDebugger();
+    const runtime = makeRuntime(debuggerInstance);
+    const reports: unknown[] = [];
+    const unsubscribe = await observeJavaScriptDialogs(runtime, (dialog) => reports.push(dialog));
+
+    debuggerInstance.emit("message", {}, "Page.javascriptDialogOpening", {
+      type: "prompt",
+      message: "Human decision",
+      defaultPrompt: "suggestion",
+    });
+
+    expect(reports).toEqual([
+      null,
+      expect.objectContaining({
+        kind: "prompt",
+        message: "Human decision",
+        defaultPrompt: "suggestion",
+      }),
+    ]);
+    expect(
+      debuggerInstance.commands.filter(({ method }) => method === "Page.handleJavaScriptDialog"),
+    ).toEqual([]);
+
+    debuggerInstance.emit("message", {}, "Page.javascriptDialogClosed", {});
+    expect(reports.at(-1)).toBeNull();
+
+    const result = await withDialogHandling(runtime, async () => {
+      debuggerInstance.emit("message", {}, "Page.javascriptDialogOpening", {
+        type: "confirm",
+        message: "Agent decision",
+      });
+      return "completed";
+    });
+
+    expect(result).toMatchObject({
+      value: "completed",
+      dialogs: [expect.objectContaining({ kind: "confirm", action: "dismissed" })],
+    });
+    expect(debuggerInstance.commands).toContainEqual({
+      method: "Page.handleJavaScriptDialog",
+      params: { accept: false },
+    });
+    expect(reports).toHaveLength(3);
+    unsubscribe();
+  });
+
+  it("resolves a reported prompt with the caller-supplied answer", async () => {
+    const debuggerInstance = new FakeDebugger();
+    const runtime = makeRuntime(debuggerInstance);
+    await observeJavaScriptDialogs(runtime, () => undefined);
+    debuggerInstance.emit("message", {}, "Page.javascriptDialogOpening", {
+      type: "prompt",
+      message: "Name?",
+      defaultPrompt: "Ada",
+    });
+
+    await expect(
+      resolveJavaScriptDialog(runtime, { accept: true, promptText: "Grace" }),
+    ).resolves.toBe(true);
+    expect(debuggerInstance.commands).toContainEqual({
+      method: "Page.handleJavaScriptDialog",
+      params: { accept: true, promptText: "Grace" },
+    });
+  });
+
   it("unblocks a command through the debugger event path and applies the safe policy", async () => {
     const debuggerInstance = new FakeDebugger();
     const runtime = makeRuntime(debuggerInstance);

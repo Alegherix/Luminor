@@ -2,6 +2,8 @@ import * as Crypto from "node:crypto";
 import * as Path from "node:path";
 
 import type {
+  BrowserBlockingSurface,
+  BrowserBlockingSurfaceResolveRequest,
   BrowserControlResult,
   BrowserDesktopControlRequest,
   BrowserDesktopControlResponse,
@@ -9,6 +11,7 @@ import type {
   BrowserFrameSequence,
   BrowserGeneration,
   BrowserGenerationBumpReason,
+  BrowserDesktopWindowRevealRequest,
   BrowserInputDispatchRequest,
   BrowserInputDispatchResult,
   BrowserStateStreamEvent,
@@ -19,11 +22,152 @@ import type {
   ThreadBrowserStateSnapshot,
   ThreadId,
 } from "@luminor/contracts";
+import type { WebContents } from "electron";
 import { BrowserStreamLifecycle } from "@luminor/shared/browserStreamLifecycle";
 
 import type { BrowserRemoteRuntime, DesktopBrowserManager } from "../browserManager";
 import { getCdpSessionCoordinator } from "../browserAutomation/cdpRuntime";
+import {
+  resolveJavaScriptDialog,
+  type BrowserOpenJavaScriptDialog,
+} from "../browserAutomation/dialogHandling";
+import type { OffscreenNativeInputBlockedReport } from "../browserOffscreen/nativeInputBlocking";
 import { BrowserFrameAcquisition, type AcquiredBrowserFrame } from "./acquisition";
+
+const MAX_BLOCKING_SURFACES = 8;
+const REVEAL_FALLBACK_TEXT =
+  "Open Luminor from your desktop or task switcher to continue in the desktop window.";
+
+export function requireRemotelyAnswerableSurface(
+  surface: BrowserBlockingSurface | undefined,
+): BrowserBlockingSurface {
+  if (!surface) throw new Error("Browser blocking surface is no longer available");
+  if (!surface.remotelyAnswerable || surface.kind !== "javascript-dialog") {
+    throw new Error("Browser blocking surface cannot be answered remotely");
+  }
+  return surface;
+}
+
+export class BrowserBlockingSurfaceStore {
+  private surfaces: BrowserBlockingSurface[] = [];
+
+  snapshot(): readonly BrowserBlockingSurface[] {
+    return this.surfaces;
+  }
+
+  find(surfaceId: string): BrowserBlockingSurface | undefined {
+    return this.surfaces.find((surface) => surface.id === surfaceId);
+  }
+
+  setJavaScriptDialog(tabId: BrowserTabId, dialog: BrowserOpenJavaScriptDialog | null): boolean {
+    const withoutCurrent = this.surfaces.filter(
+      (surface) => !(surface.tabId === tabId && surface.kind === "javascript-dialog"),
+    );
+    const next = dialog
+      ? [
+          ...withoutCurrent,
+          {
+            id: Crypto.randomUUID(),
+            tabId,
+            kind: "javascript-dialog" as const,
+            dialogKind: dialog.kind,
+            message: dialog.message,
+            defaultPrompt: dialog.defaultPrompt,
+            inputType: null,
+            permission: null,
+            renderable: false,
+            remotelyAnswerable: true,
+            autoResolution: null,
+            openedAt: dialog.openedAt,
+          },
+        ].slice(-MAX_BLOCKING_SURFACES)
+      : withoutCurrent;
+    return this.replace(next);
+  }
+
+  addNativeInput(tabId: BrowserTabId, report: OffscreenNativeInputBlockedReport): boolean {
+    const withoutDuplicate = this.surfaces.filter(
+      (surface) =>
+        !(
+          surface.tabId === tabId &&
+          surface.kind === report.kind &&
+          surface.inputType === report.inputType
+        ),
+    );
+    return this.replace(
+      [
+        ...withoutDuplicate,
+        {
+          id: Crypto.randomUUID(),
+          tabId,
+          kind: report.kind,
+          dialogKind: null,
+          message: null,
+          defaultPrompt: null,
+          inputType: report.inputType,
+          permission: null,
+          renderable: false,
+          remotelyAnswerable: false,
+          autoResolution: null,
+          openedAt: new Date().toISOString(),
+        },
+      ].slice(-MAX_BLOCKING_SURFACES),
+    );
+  }
+
+  addPermissionDenied(tabId: BrowserTabId, permission: string): boolean {
+    const withoutDuplicate = this.surfaces.filter(
+      (surface) =>
+        !(
+          surface.tabId === tabId &&
+          surface.kind === "permission-prompt" &&
+          surface.permission === permission
+        ),
+    );
+    return this.replace(
+      [
+        ...withoutDuplicate,
+        {
+          id: Crypto.randomUUID(),
+          tabId,
+          kind: "permission-prompt",
+          dialogKind: null,
+          message: null,
+          defaultPrompt: null,
+          inputType: null,
+          permission: permission.slice(0, 256),
+          renderable: false,
+          remotelyAnswerable: false,
+          autoResolution: "denied",
+          openedAt: new Date().toISOString(),
+        } as const,
+      ].slice(-MAX_BLOCKING_SURFACES),
+    );
+  }
+
+  clearTab(tabId: BrowserTabId): boolean {
+    return this.replace(this.surfaces.filter((surface) => surface.tabId !== tabId));
+  }
+
+  remove(surfaceId: string): boolean {
+    return this.replace(this.surfaces.filter((surface) => surface.id !== surfaceId));
+  }
+
+  clearAll(): boolean {
+    return this.replace([]);
+  }
+
+  private replace(next: BrowserBlockingSurface[]): boolean {
+    if (
+      next.length === this.surfaces.length &&
+      next.every((surface, index) => surface === this.surfaces[index])
+    ) {
+      return false;
+    }
+    this.surfaces = next;
+    return true;
+  }
+}
 
 interface RemoteThreadSession {
   readonly threadId: ThreadId;
@@ -34,6 +178,7 @@ interface RemoteThreadSession {
   acquisition: BrowserFrameAcquisition | null;
   lastFrameSeq: BrowserFrameSequence | null;
   readonly mouseMoveCoalescer: BrowserMouseMoveCoalescer;
+  readonly blockingSurfaces: BrowserBlockingSurfaceStore;
   operation: Promise<void>;
   recoveryTimer: ReturnType<typeof setTimeout> | null;
 }
@@ -133,6 +278,9 @@ export function marksRemoteHumanControl(request: BrowserInputDispatchRequest): b
 
 export interface BrowserRemoteFrameControllerOptions {
   readonly workerPath?: string;
+  readonly revealDesktopWindow?: (
+    request: BrowserDesktopWindowRevealRequest,
+  ) => boolean | Promise<boolean>;
 }
 
 export class BrowserRemoteFrameController {
@@ -146,7 +294,7 @@ export class BrowserRemoteFrameController {
 
   constructor(
     private readonly browserManager: DesktopBrowserManager,
-    options: BrowserRemoteFrameControllerOptions = {},
+    private readonly options: BrowserRemoteFrameControllerOptions = {},
   ) {
     this.workerPath = options.workerPath ?? Path.join(__dirname, "browserFrame", "jpegWorker.js");
     this.unsubscribeManager = browserManager.subscribe((state) => {
@@ -164,6 +312,28 @@ export class BrowserRemoteFrameController {
   subscribeFrames(listener: FrameListener): () => void {
     this.frameListeners.add(listener);
     return () => this.frameListeners.delete(listener);
+  }
+
+  reportPermissionDenied(webContents: WebContents | null, permission: string): boolean {
+    if (!webContents) return false;
+    for (const session of this.sessions.values()) {
+      if (session.runtime?.webContents !== webContents || session.subscriptionIds.size === 0) {
+        continue;
+      }
+      void this.enqueue(session, async () => {
+        if (session.runtime?.webContents !== webContents) return;
+        if (
+          session.blockingSurfaces.addPermissionDenied(
+            session.runtime.tabId as BrowserTabId,
+            permission,
+          )
+        ) {
+          this.emitDelta(session);
+        }
+      });
+      return true;
+    }
+    return false;
   }
 
   async handleRequest(
@@ -195,6 +365,7 @@ export class BrowserRemoteFrameController {
         };
       case "navigate": {
         this.assertGeneration(request.input.threadId, request.input.expectedGeneration);
+        this.clearBlockingTab(request.input.threadId, request.input.tabId);
         this.browserManager.navigate(request.input);
         await this.reconcile(request.input.threadId);
         return { type: "controlled", result: { state: this.snapshot(request.input.threadId) } };
@@ -205,6 +376,9 @@ export class BrowserRemoteFrameController {
       case "selectTab":
       case "closeTab": {
         this.assertGeneration(request.input.threadId, request.input.expectedGeneration);
+        if (request.type !== "selectTab") {
+          this.clearBlockingTab(request.input.threadId, request.input.tabId);
+        }
         const method = {
           goBack: "goBack",
           goForward: "goForward",
@@ -230,6 +404,19 @@ export class BrowserRemoteFrameController {
         this.browserManager.focusRemoteRuntime(request.input.threadId, request.input.focused);
         return { type: "controlled", result: { state: this.snapshot(request.input.threadId) } };
       }
+      case "revealDesktopWindow": {
+        this.assertGeneration(request.input.threadId, request.input.expectedGeneration);
+        const revealed = (await this.options.revealDesktopWindow?.(request.input)) ?? false;
+        return {
+          type: "desktopWindowRevealed",
+          result: { revealed, fallbackText: REVEAL_FALLBACK_TEXT },
+        };
+      }
+      case "resolveBlockingSurface":
+        return {
+          type: "controlled",
+          result: await this.resolveBlockingSurface(request.input),
+        };
     }
   }
 
@@ -239,6 +426,7 @@ export class BrowserRemoteFrameController {
     this.unsubscribeManager();
     for (const session of this.sessions.values()) {
       session.acquisition?.stop();
+      session.blockingSurfaces.clearAll();
       if (session.recoveryTimer) clearTimeout(session.recoveryTimer);
       this.browserManager.deactivateRemoteRuntime(session.threadId);
     }
@@ -272,6 +460,7 @@ export class BrowserRemoteFrameController {
     } catch (error) {
       session.subscriptionIds.delete(subscriptionId);
       session.acquisition?.stop();
+      session.blockingSurfaces.clearAll();
       session.acquisition = null;
       session.runtime = null;
       if (wasEmpty) {
@@ -301,6 +490,7 @@ export class BrowserRemoteFrameController {
     if (session.recoveryTimer) clearTimeout(session.recoveryTimer);
     session.recoveryTimer = null;
     session.acquisition?.stop();
+    session.blockingSurfaces.clearAll();
     session.acquisition = null;
     session.runtime = null;
     session.lastFrameSeq = null;
@@ -320,6 +510,7 @@ export class BrowserRemoteFrameController {
       acquisition: null,
       lastFrameSeq: null,
       mouseMoveCoalescer: new BrowserMouseMoveCoalescer(),
+      blockingSurfaces: new BrowserBlockingSurfaceStore(),
       operation: Promise.resolve(),
       recoveryTimer: null,
     };
@@ -364,6 +555,32 @@ export class BrowserRemoteFrameController {
         session.lastFrameSeq = frame.header.seq;
         for (const listener of this.frameListeners) listener(frame);
       },
+      onJavaScriptDialog: (dialog) => {
+        void this.enqueue(session, async () => {
+          if (session.acquisition !== acquisition) return;
+          const changed = session.blockingSurfaces.setJavaScriptDialog(
+            runtime.tabId as BrowserTabId,
+            dialog,
+          );
+          if (changed) this.emitDelta(session);
+        });
+      },
+      onNativeInputBlocked: (report) => {
+        void this.enqueue(session, async () => {
+          if (session.acquisition !== acquisition) return;
+          if (session.blockingSurfaces.addNativeInput(runtime.tabId as BrowserTabId, report)) {
+            this.emitDelta(session);
+          }
+        });
+      },
+      onNavigation: () => {
+        void this.enqueue(session, async () => {
+          if (session.acquisition !== acquisition) return;
+          if (session.blockingSurfaces.clearTab(runtime.tabId as BrowserTabId)) {
+            this.emitDelta(session);
+          }
+        });
+      },
       onDetach: () => this.enqueue(session, () => this.recoverDetachedSession(session)),
     });
     session.acquisition = acquisition;
@@ -384,6 +601,7 @@ export class BrowserRemoteFrameController {
         const transition = session.lifecycle.transition({ type: "unsubscribe" });
         this.emitInvalidation(session, transition.invalidatedGeneration, "stop");
         session.acquisition?.stop();
+        session.blockingSurfaces.clearAll();
         session.acquisition = null;
         session.runtime = null;
         session.lastFrameSeq = null;
@@ -425,6 +643,7 @@ export class BrowserRemoteFrameController {
     >,
   ): Promise<void> {
     const transition = session.lifecycle.transition({ type: "reconfigure", reason });
+    session.blockingSurfaces.clearAll();
     this.emitInvalidation(session, transition.invalidatedGeneration, reason);
     session.acquisition?.stop();
     session.acquisition = null;
@@ -444,6 +663,7 @@ export class BrowserRemoteFrameController {
   private async recoverDetachedSession(session: RemoteThreadSession): Promise<void> {
     if (session.subscriptionIds.size === 0) return;
     session.acquisition?.stop();
+    session.blockingSurfaces.clearAll();
     session.acquisition = null;
     session.runtime = null;
     session.lastFrameSeq = null;
@@ -497,6 +717,30 @@ export class BrowserRemoteFrameController {
     session.viewport = viewport;
     await this.enqueue(session, () => this.reconfigure(session, "resize"));
     return { state: this.snapshot(threadId) };
+  }
+
+  private async resolveBlockingSurface(
+    request: BrowserBlockingSurfaceResolveRequest,
+  ): Promise<BrowserControlResult> {
+    this.assertGeneration(request.threadId, request.expectedGeneration);
+    const session = this.sessions.get(request.threadId);
+    if (!session) throw new Error("Browser blocking surface is no longer available");
+    const surface = requireRemotelyAnswerableSurface(
+      session.blockingSurfaces.find(request.surfaceId),
+    );
+    const runtime = session.runtime;
+    if (!runtime || runtime.tabId !== surface.tabId) {
+      throw new Error("Browser blocking surface target is detached");
+    }
+    const resolved = await resolveJavaScriptDialog(runtime, {
+      accept: request.resolution.action === "accept",
+      ...(request.resolution.action === "accept" && request.resolution.promptText !== undefined
+        ? { promptText: request.resolution.promptText }
+        : {}),
+    });
+    if (!resolved) throw new Error("Browser JavaScript dialog is no longer open");
+    if (session.blockingSurfaces.remove(surface.id)) this.emitDelta(session);
+    return { state: this.snapshot(request.threadId) };
   }
 
   private async dispatchInput(
@@ -575,6 +819,11 @@ export class BrowserRemoteFrameController {
     if (current !== generation) throw new Error("Stale browser generation");
   }
 
+  private clearBlockingTab(threadId: ThreadId, tabId: BrowserTabId): void {
+    const session = this.sessions.get(threadId);
+    if (session?.blockingSurfaces.clearTab(tabId)) this.emitDelta(session);
+  }
+
   private snapshot(threadId: ThreadId): ThreadBrowserStateSnapshot {
     const state = this.browserManager.getState({ threadId });
     const session = this.sessions.get(threadId);
@@ -589,7 +838,12 @@ export class BrowserRemoteFrameController {
       tabs: state.tabs.map((tab) => ({
         ...tab,
         id: tab.id as ThreadBrowserStateSnapshot["tabs"][number]["id"],
+        hasBlockingSurface:
+          session?.blockingSurfaces.snapshot().some((surface) => surface.tabId === tab.id) ?? false,
+        openerTabId: (tab.openerTabId ??
+          null) as ThreadBrowserStateSnapshot["tabs"][number]["openerTabId"],
       })),
+      blocking: session ? [...session.blockingSurfaces.snapshot()] : [],
       stream: {
         lifecycle: lifecycle.state,
         identity:

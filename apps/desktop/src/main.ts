@@ -398,6 +398,7 @@ const browserManager = new DesktopBrowserManager({
 });
 const browserRemoteFrameController = new BrowserRemoteFrameController(browserManager, {
   workerPath: Path.join(__dirname, "browserFrame", "jpegWorker.js"),
+  revealDesktopWindow: () => focusMainWindow(),
 });
 let browserHostPipeServer: BrowserHostPipeServer | null = null;
 let browserFramePipeServer: BrowserFramePipeServer | null = null;
@@ -1838,10 +1839,10 @@ function clearUnreadNotificationBadge(): void {
 
 // Reuse the existing desktop window when the app is launched again so users
 // don't end up with multiple packaged instances racing the same local state.
-function focusMainWindow(): void {
+function focusMainWindow(): boolean {
   if (!mainWindow || mainWindow.isDestroyed()) {
     mainWindow = null;
-    return;
+    return false;
   }
   if (mainWindow.isMinimized()) {
     mainWindow.restore();
@@ -1850,6 +1851,7 @@ function focusMainWindow(): void {
     mainWindow.show();
   }
   mainWindow.focus();
+  return mainWindow.isFocused();
 }
 
 // Show a native OS notification and refocus the app window when the alert is clicked.
@@ -4365,16 +4367,18 @@ function configureMediaPermissions(): void {
     {
       targetSession: session.defaultSession,
       trustedRequester: trustedMainRenderer,
+      reportDenied: false,
     },
     {
       // Browser pages are untrusted web origins. They must never inherit the
       // microphone grant used by Luminor's own voice-composer renderer.
       targetSession: session.fromPartition(BROWSER_SESSION_PARTITION),
       trustedRequester: () => null,
+      reportDenied: true,
     },
   ];
 
-  for (const { targetSession, trustedRequester } of permissionTargets) {
+  for (const { targetSession, trustedRequester, reportDenied } of permissionTargets) {
     if (!targetSession) continue;
 
     targetSession.setPermissionCheckHandler((webContents, permission, origin, details) => {
@@ -4395,6 +4399,8 @@ function configureMediaPermissions(): void {
         permission !== "media" ||
         !isTrustedMediaPermissionRequest(webContents, trustedRequester(), details)
       ) {
+        if (reportDenied)
+          browserRemoteFrameController.reportPermissionDenied(webContents, permission);
         callback(false);
         return;
       }
