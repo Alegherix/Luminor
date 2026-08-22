@@ -149,16 +149,8 @@ export const BrowserBlockingSurfaceResolutionKind = Schema.Literals([
 ]);
 export type BrowserBlockingSurfaceResolutionKind = typeof BrowserBlockingSurfaceResolutionKind.Type;
 
-export const BrowserDesktopWindowRevealReason = Schema.Literals([
-  "javascript-dialog",
-  "file-chooser",
-  "native-widget",
-  "permission-prompt",
-  "auth-prompt",
-  "print-dialog",
-  "popup-window",
-]);
-export type BrowserDesktopWindowRevealReason = typeof BrowserDesktopWindowRevealReason.Type;
+export const BrowserDesktopWindowRevealReason = BrowserBlockingSurfaceKind;
+export type BrowserDesktopWindowRevealReason = BrowserBlockingSurfaceKind;
 
 export const BrowserBlockingSurface = Schema.Struct({
   id: BrowserIdentifier,

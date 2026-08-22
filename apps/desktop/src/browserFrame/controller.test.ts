@@ -1,3 +1,5 @@
+import { EventEmitter } from "node:events";
+
 import type {
   BrowserDesktopInstanceId,
   BrowserFrameSequence,
@@ -6,9 +8,11 @@ import type {
   BrowserTabId,
   ThreadId,
 } from "@luminor/contracts";
-import { describe, expect, it } from "vitest";
+import type { WebContents } from "electron";
+import { describe, expect, it, vi } from "vitest";
 
-import type { DesktopBrowserManager } from "../browserManager";
+import type { BrowserRemoteRuntime, DesktopBrowserManager } from "../browserManager";
+import { observeJavaScriptDialogs } from "../browserAutomation/dialogHandling";
 import {
   BrowserBlockingSurfaceStore,
   BrowserMouseMoveCoalescer,
@@ -21,6 +25,41 @@ import {
 const desktopInstanceId = "11111111-1111-4111-8111-111111111111" as BrowserDesktopInstanceId;
 const threadId = "thread-1" as ThreadId;
 const tabId = "22222222-2222-4222-8222-222222222222" as BrowserTabId;
+
+class FakeDebugger extends EventEmitter {
+  readonly commands: Array<{ method: string; params: Record<string, unknown> }> = [];
+
+  isAttached = () => true;
+  sendCommand = vi.fn(async (method: string, params: Record<string, unknown> = {}) => {
+    this.commands.push({ method, params });
+    return {};
+  });
+}
+
+const makeControllerRuntime = (debuggerInstance = new FakeDebugger()): BrowserRemoteRuntime => {
+  const webContents = Object.assign(new EventEmitter(), {
+    isDestroyed: () => false,
+    debugger: debuggerInstance,
+  }) as unknown as WebContents;
+  return {
+    threadId,
+    tabId,
+    webContents,
+    placement: "offscreen",
+    viewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
+  };
+};
+
+const makeBrowserManager = () =>
+  ({
+    subscribe: () => () => undefined,
+    deactivateRemoteRuntime: () => undefined,
+    getState: () => ({ threadId, open: true, activeTabId: tabId, tabs: [{ id: tabId }] }),
+    navigate: vi.fn(),
+    goBack: vi.fn(),
+    goForward: vi.fn(),
+    reload: vi.fn(),
+  }) as unknown as DesktopBrowserManager;
 
 const request = (
   overrides: Partial<BrowserInputDispatchRequest> = {},
@@ -178,6 +217,131 @@ describe("browser blocking-surface lifecycle", () => {
     );
     expect(store.clearAll()).toBe(true);
     expect(store.snapshot()).toEqual([]);
+  });
+
+  it("keeps a new JavaScript dialog when the eight-row store is already full", () => {
+    const store = new BrowserBlockingSurfaceStore();
+    for (let index = 0; index < 8; index += 1) {
+      store.addPermissionDenied(tabId, `permission-${index}`);
+    }
+
+    store.setJavaScriptDialog(tabId, {
+      kind: "alert",
+      message: "Newest blocking surface",
+      defaultPrompt: null,
+      openedAt: "2026-08-22T08:00:00.000Z",
+    });
+
+    expect(store.snapshot()).toHaveLength(8);
+    expect(store.snapshot().at(-1)).toMatchObject({
+      kind: "javascript-dialog",
+      message: "Newest blocking surface",
+    });
+  });
+
+  it("clears notify-only rows but preserves JavaScript dialogs across navigation controls", async () => {
+    const browserManager = makeBrowserManager();
+    const controller = new BrowserRemoteFrameController(browserManager);
+    const access = controller as unknown as {
+      createSession(
+        threadId: ThreadId,
+        viewport: { width: number; height: number; deviceScaleFactor: number },
+      ): {
+        lifecycle: {
+          transition(input: { type: "subscribe" }): unknown;
+          snapshot(): { generation: number };
+        };
+        runtime: BrowserRemoteRuntime | null;
+        blockingSurfaces: BrowserBlockingSurfaceStore;
+      };
+    };
+    const session = access.createSession(threadId, {
+      width: 1280,
+      height: 720,
+      deviceScaleFactor: 1,
+    });
+    session.lifecycle.transition({ type: "subscribe" });
+    session.runtime = makeControllerRuntime();
+    const generation = session.lifecycle.snapshot().generation as BrowserGeneration;
+    const requests = [
+      {
+        type: "navigate",
+        input: { threadId, tabId, expectedGeneration: generation, url: "https://example.test" },
+      },
+      { type: "goBack", input: { threadId, tabId, expectedGeneration: generation } },
+      { type: "goForward", input: { threadId, tabId, expectedGeneration: generation } },
+      { type: "reload", input: { threadId, tabId, expectedGeneration: generation } },
+    ] as const;
+
+    for (const controlRequest of requests) {
+      session.blockingSurfaces.setJavaScriptDialog(tabId, {
+        kind: "confirm",
+        message: "Stay visible",
+        defaultPrompt: null,
+        openedAt: "2026-08-22T08:00:00.000Z",
+      });
+      session.blockingSurfaces.addPermissionDenied(tabId, "camera");
+
+      await controller.handleRequest(controlRequest);
+
+      expect(session.blockingSurfaces.snapshot()).toEqual([
+        expect.objectContaining({ kind: "javascript-dialog", message: "Stay visible" }),
+      ]);
+    }
+    controller.dispose();
+  });
+
+  it("forwards prompt text through desktop request handling", async () => {
+    const debuggerInstance = new FakeDebugger();
+    const runtime = makeControllerRuntime(debuggerInstance);
+    const browserManager = makeBrowserManager();
+    const controller = new BrowserRemoteFrameController(browserManager);
+    const access = controller as unknown as {
+      createSession(
+        threadId: ThreadId,
+        viewport: { width: number; height: number; deviceScaleFactor: number },
+      ): {
+        lifecycle: {
+          transition(input: { type: "subscribe" }): unknown;
+          snapshot(): { generation: number };
+        };
+        runtime: BrowserRemoteRuntime | null;
+        blockingSurfaces: BrowserBlockingSurfaceStore;
+      };
+    };
+    const session = access.createSession(threadId, {
+      width: 1280,
+      height: 720,
+      deviceScaleFactor: 1,
+    });
+    session.lifecycle.transition({ type: "subscribe" });
+    session.runtime = runtime;
+    await observeJavaScriptDialogs(runtime, (dialog) => {
+      session.blockingSurfaces.setJavaScriptDialog(tabId, dialog);
+    });
+    debuggerInstance.emit("message", {}, "Page.javascriptDialogOpening", {
+      type: "prompt",
+      message: "Name?",
+      defaultPrompt: "Ada",
+    });
+    const surfaceId = session.blockingSurfaces.snapshot()[0]!.id;
+
+    await controller.handleRequest({
+      type: "resolveBlockingSurface",
+      input: {
+        threadId,
+        expectedGeneration: session.lifecycle.snapshot().generation as BrowserGeneration,
+        surfaceId,
+        resolution: { action: "accept", promptText: "Grace" },
+      },
+    });
+
+    expect(debuggerInstance.commands).toContainEqual({
+      method: "Page.handleJavaScriptDialog",
+      params: { accept: true, promptText: "Grace" },
+    });
+    expect(session.blockingSurfaces.snapshot()).toEqual([]);
+    controller.dispose();
   });
 
   it("rejects a blocking surface that the resolve RPC cannot answer", () => {

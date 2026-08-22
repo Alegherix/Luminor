@@ -149,6 +149,14 @@ export class BrowserBlockingSurfaceStore {
     return this.replace(this.surfaces.filter((surface) => surface.tabId !== tabId));
   }
 
+  clearTabNotifications(tabId: BrowserTabId): boolean {
+    return this.replace(
+      this.surfaces.filter(
+        (surface) => surface.tabId !== tabId || surface.kind === "javascript-dialog",
+      ),
+    );
+  }
+
   remove(surfaceId: string): boolean {
     return this.replace(this.surfaces.filter((surface) => surface.id !== surfaceId));
   }
@@ -365,7 +373,7 @@ export class BrowserRemoteFrameController {
         };
       case "navigate": {
         this.assertGeneration(request.input.threadId, request.input.expectedGeneration);
-        this.clearBlockingTab(request.input.threadId, request.input.tabId);
+        this.clearBlockingTabNotifications(request.input.threadId, request.input.tabId);
         this.browserManager.navigate(request.input);
         await this.reconcile(request.input.threadId);
         return { type: "controlled", result: { state: this.snapshot(request.input.threadId) } };
@@ -376,8 +384,10 @@ export class BrowserRemoteFrameController {
       case "selectTab":
       case "closeTab": {
         this.assertGeneration(request.input.threadId, request.input.expectedGeneration);
-        if (request.type !== "selectTab") {
+        if (request.type === "closeTab") {
           this.clearBlockingTab(request.input.threadId, request.input.tabId);
+        } else if (request.type !== "selectTab") {
+          this.clearBlockingTabNotifications(request.input.threadId, request.input.tabId);
         }
         const method = {
           goBack: "goBack",
@@ -576,7 +586,7 @@ export class BrowserRemoteFrameController {
       onNavigation: () => {
         void this.enqueue(session, async () => {
           if (session.acquisition !== acquisition) return;
-          if (session.blockingSurfaces.clearTab(runtime.tabId as BrowserTabId)) {
+          if (session.blockingSurfaces.clearTabNotifications(runtime.tabId as BrowserTabId)) {
             this.emitDelta(session);
           }
         });
@@ -822,6 +832,11 @@ export class BrowserRemoteFrameController {
   private clearBlockingTab(threadId: ThreadId, tabId: BrowserTabId): void {
     const session = this.sessions.get(threadId);
     if (session?.blockingSurfaces.clearTab(tabId)) this.emitDelta(session);
+  }
+
+  private clearBlockingTabNotifications(threadId: ThreadId, tabId: BrowserTabId): void {
+    const session = this.sessions.get(threadId);
+    if (session?.blockingSurfaces.clearTabNotifications(tabId)) this.emitDelta(session);
   }
 
   private snapshot(threadId: ThreadId): ThreadBrowserStateSnapshot {

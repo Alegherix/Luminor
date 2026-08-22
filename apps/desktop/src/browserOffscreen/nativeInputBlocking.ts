@@ -36,7 +36,7 @@ export function reportBlockedNativeInput(
           },
     );
   } catch {
-    // Reporting is advisory; containment must still swallow the native widget.
+    return true;
   }
   return true;
 }
