@@ -13,6 +13,7 @@ import { BrowserViewport } from "./browserAutomationToolOutputs";
 const BrowserIdentifier = TrimmedNonEmptyString.check(Schema.isMaxLength(256));
 const BrowserUrl = Schema.String.check(Schema.isMaxLength(16_384));
 const BrowserText = Schema.String.check(Schema.isMaxLength(65_536));
+const BrowserDialogText = Schema.String.check(Schema.isMaxLength(4_096));
 const BrowserCoordinate = Schema.Finite;
 const BrowserDimension = Schema.Finite.check(Schema.isGreaterThan(0));
 
@@ -28,6 +29,8 @@ export const BROWSER_PANE_WS_METHODS = {
   selectTab: "browser.tab.select",
   closeTab: "browser.tab.close",
   focus: "browser.focus",
+  revealDesktopWindow: "browser.desktopWindow.reveal",
+  resolveBlockingSurface: "browser.blocking.resolve",
   resizeViewport: "browser.viewport.resize",
   dispatchInput: "browser.input.dispatch",
   acquireController: "browser.controller.acquire",
@@ -120,6 +123,59 @@ export const BrowserStreamStatus = Schema.Struct({
 });
 export type BrowserStreamStatus = typeof BrowserStreamStatus.Type;
 
+export const BrowserJavaScriptDialogKind = Schema.Literals([
+  "alert",
+  "confirm",
+  "prompt",
+  "beforeunload",
+]);
+export type BrowserJavaScriptDialogKind = typeof BrowserJavaScriptDialogKind.Type;
+
+export const BrowserBlockingSurfaceKind = Schema.Literals([
+  "javascript-dialog",
+  "file-chooser",
+  "native-widget",
+  "permission-prompt",
+  "auth-prompt",
+  "print-dialog",
+  "popup-window",
+]);
+export type BrowserBlockingSurfaceKind = typeof BrowserBlockingSurfaceKind.Type;
+
+export const BrowserBlockingSurfaceResolutionKind = Schema.Literals([
+  "accepted",
+  "dismissed",
+  "denied",
+]);
+export type BrowserBlockingSurfaceResolutionKind = typeof BrowserBlockingSurfaceResolutionKind.Type;
+
+export const BrowserDesktopWindowRevealReason = Schema.Literals([
+  "javascript-dialog",
+  "file-chooser",
+  "native-widget",
+  "permission-prompt",
+  "auth-prompt",
+  "print-dialog",
+  "popup-window",
+]);
+export type BrowserDesktopWindowRevealReason = typeof BrowserDesktopWindowRevealReason.Type;
+
+export const BrowserBlockingSurface = Schema.Struct({
+  id: BrowserIdentifier,
+  tabId: BrowserTabId,
+  kind: BrowserBlockingSurfaceKind,
+  dialogKind: Schema.NullOr(BrowserJavaScriptDialogKind),
+  message: Schema.NullOr(BrowserDialogText),
+  defaultPrompt: Schema.NullOr(BrowserDialogText),
+  inputType: Schema.NullOr(Schema.String.check(Schema.isMaxLength(256))),
+  permission: Schema.NullOr(Schema.String.check(Schema.isMaxLength(256))),
+  renderable: Schema.Boolean,
+  remotelyAnswerable: Schema.Boolean,
+  autoResolution: Schema.NullOr(BrowserBlockingSurfaceResolutionKind),
+  openedAt: IsoDateTime,
+});
+export type BrowserBlockingSurface = typeof BrowserBlockingSurface.Type;
+
 export const BrowserTabStateSnapshot = Schema.Struct({
   id: BrowserTabId,
   url: BrowserUrl,
@@ -132,6 +188,8 @@ export const BrowserTabStateSnapshot = Schema.Struct({
   faviconUrl: Schema.NullOr(BrowserUrl),
   lastCommittedUrl: Schema.NullOr(BrowserUrl),
   lastError: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4_096))),
+  hasBlockingSurface: Schema.Boolean,
+  openerTabId: Schema.NullOr(BrowserTabId),
 });
 export type BrowserTabStateSnapshot = typeof BrowserTabStateSnapshot.Type;
 
@@ -141,6 +199,7 @@ export const ThreadBrowserStateSnapshot = Schema.Struct({
   open: Schema.Boolean,
   activeTabId: Schema.NullOr(BrowserTabId),
   tabs: Schema.Array(BrowserTabStateSnapshot).check(Schema.isMaxLength(128)),
+  blocking: Schema.Array(BrowserBlockingSurface).check(Schema.isMaxLength(8)),
   lastError: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4_096))),
   stream: BrowserStreamStatus,
 });
@@ -239,6 +298,34 @@ export const BrowserFocusRequest = Schema.Struct({
   focused: Schema.Boolean,
 });
 export type BrowserFocusRequest = typeof BrowserFocusRequest.Type;
+
+export const BrowserDesktopWindowRevealRequest = Schema.Struct({
+  ...BrowserGenerationFence,
+  reason: BrowserDesktopWindowRevealReason,
+});
+export type BrowserDesktopWindowRevealRequest = typeof BrowserDesktopWindowRevealRequest.Type;
+
+export const BrowserDesktopWindowRevealResult = Schema.Struct({
+  revealed: Schema.Boolean,
+  fallbackText: BrowserDialogText,
+});
+export type BrowserDesktopWindowRevealResult = typeof BrowserDesktopWindowRevealResult.Type;
+
+export const BrowserBlockingSurfaceResolution = Schema.Union([
+  Schema.Struct({
+    action: Schema.Literal("accept"),
+    promptText: Schema.optional(BrowserDialogText),
+  }),
+  Schema.Struct({ action: Schema.Literal("dismiss") }),
+]);
+export type BrowserBlockingSurfaceResolution = typeof BrowserBlockingSurfaceResolution.Type;
+
+export const BrowserBlockingSurfaceResolveRequest = Schema.Struct({
+  ...BrowserGenerationFence,
+  surfaceId: BrowserIdentifier,
+  resolution: BrowserBlockingSurfaceResolution,
+});
+export type BrowserBlockingSurfaceResolveRequest = typeof BrowserBlockingSurfaceResolveRequest.Type;
 
 export const BrowserViewportResizeRequest = Schema.Struct({
   ...BrowserGenerationFence,
@@ -427,6 +514,14 @@ export const BrowserDesktopControlRequest = Schema.Union([
   Schema.Struct({ type: Schema.Literal("selectTab"), input: BrowserTabControlRequest }),
   Schema.Struct({ type: Schema.Literal("closeTab"), input: BrowserTabControlRequest }),
   Schema.Struct({ type: Schema.Literal("focus"), input: BrowserFocusRequest }),
+  Schema.Struct({
+    type: Schema.Literal("revealDesktopWindow"),
+    input: BrowserDesktopWindowRevealRequest,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("resolveBlockingSurface"),
+    input: BrowserBlockingSurfaceResolveRequest,
+  }),
   Schema.Struct({ type: Schema.Literal("resizeViewport"), input: BrowserViewportResizeRequest }),
   Schema.Struct({ type: Schema.Literal("dispatchInput"), input: BrowserInputDispatchRequest }),
 ]);
@@ -437,6 +532,10 @@ export const BrowserDesktopControlResponse = Schema.Union([
   Schema.Struct({ type: Schema.Literal("unsubscribed"), result: BrowserStreamUnsubscribeResult }),
   Schema.Struct({ type: Schema.Literal("state"), result: BrowserStateSnapshotResult }),
   Schema.Struct({ type: Schema.Literal("controlled"), result: BrowserControlResult }),
+  Schema.Struct({
+    type: Schema.Literal("desktopWindowRevealed"),
+    result: BrowserDesktopWindowRevealResult,
+  }),
   Schema.Struct({ type: Schema.Literal("input"), result: BrowserInputDispatchResult }),
 ]);
 export type BrowserDesktopControlResponse = typeof BrowserDesktopControlResponse.Type;

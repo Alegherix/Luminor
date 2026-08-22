@@ -351,6 +351,7 @@ export interface BrowserTabState {
   faviconUrl: string | null;
   lastCommittedUrl: string | null;
   lastError: string | null;
+  openerTabId?: string | null;
 }
 
 export interface ThreadBrowserState {
@@ -386,6 +387,7 @@ export interface BrowserNewTabInput {
   threadId: ThreadId;
   url?: string;
   activate?: boolean;
+  openerTabId?: string;
 }
 
 export interface BrowserPanelBounds {

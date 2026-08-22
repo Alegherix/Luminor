@@ -33,12 +33,15 @@ import {
 import {
   BROWSER_PANE_WS_METHODS,
   BrowserControlResult,
+  BrowserBlockingSurfaceResolveRequest,
   BrowserControllerAcquireRequest,
   BrowserControllerAcquireResult,
   BrowserControllerLeaseChangeResult,
   BrowserControllerReleaseRequest,
   BrowserControllerRevokeRequest,
   BrowserFocusRequest,
+  BrowserDesktopWindowRevealRequest,
+  BrowserDesktopWindowRevealResult,
   BrowserInputDispatchRequest,
   BrowserInputDispatchResult,
   BrowserNavigateRequest,
@@ -777,6 +780,24 @@ export const WsBrowserFocusRpc = Rpc.make(BROWSER_PANE_WS_METHODS.focus, {
   error: WsRpcError,
 });
 
+export const WsBrowserRevealDesktopWindowRpc = Rpc.make(
+  BROWSER_PANE_WS_METHODS.revealDesktopWindow,
+  {
+    payload: BrowserDesktopWindowRevealRequest,
+    success: BrowserDesktopWindowRevealResult,
+    error: WsRpcError,
+  },
+);
+
+export const WsBrowserResolveBlockingSurfaceRpc = Rpc.make(
+  BROWSER_PANE_WS_METHODS.resolveBlockingSurface,
+  {
+    payload: BrowserBlockingSurfaceResolveRequest,
+    success: BrowserControlResult,
+    error: WsRpcError,
+  },
+);
+
 export const WsBrowserResizeViewportRpc = Rpc.make(BROWSER_PANE_WS_METHODS.resizeViewport, {
   payload: BrowserViewportResizeRequest,
   success: BrowserControlResult,
@@ -819,6 +840,8 @@ export const WsBrowserPaneRpcGroup = RpcGroup.make(
   WsBrowserSelectTabRpc,
   WsBrowserCloseTabRpc,
   WsBrowserFocusRpc,
+  WsBrowserRevealDesktopWindowRpc,
+  WsBrowserResolveBlockingSurfaceRpc,
   WsBrowserResizeViewportRpc,
   WsBrowserDispatchInputRpc,
   WsBrowserAcquireControllerRpc,

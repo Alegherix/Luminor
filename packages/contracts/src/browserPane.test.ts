@@ -2,6 +2,9 @@ import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
+  BrowserBlockingSurface,
+  BrowserBlockingSurfaceResolveRequest,
+  BrowserDesktopWindowRevealRequest,
   BrowserFrameHeader,
   BrowserInputDispatchRequest,
   BrowserStateStreamEvent,
@@ -73,6 +76,7 @@ describe("browser state contracts", () => {
     open: true,
     activeTabId: null,
     tabs: [],
+    blocking: [],
     lastError: null,
     stream: {
       lifecycle: "stopped",
@@ -102,6 +106,54 @@ describe("browser state contracts", () => {
         previousDesktopInstanceId: "11111111-1111-4111-8111-111111111111",
         previousGeneration: 1,
         reason: "resize",
+      }),
+    ).toBe(true);
+  });
+
+  it("bounds and validates current blocking surfaces", () => {
+    const surface = {
+      id: "surface-1",
+      tabId: "22222222-2222-4222-8222-222222222222",
+      kind: "javascript-dialog",
+      dialogKind: "prompt",
+      message: "Continue?",
+      defaultPrompt: null,
+      inputType: null,
+      permission: null,
+      renderable: false,
+      remotelyAnswerable: true,
+      autoResolution: null,
+      openedAt: "2026-08-22T08:00:00.000Z",
+    } as const;
+    expect(Schema.is(BrowserBlockingSurface)(surface)).toBe(true);
+    expect(Schema.is(BrowserBlockingSurface)({ ...surface, message: "x".repeat(4_097) })).toBe(
+      false,
+    );
+    expect(
+      Schema.is(ThreadBrowserStateSnapshot)({
+        ...snapshot,
+        blocking: Array.from({ length: 9 }, (_, index) => ({
+          ...surface,
+          id: `surface-${index}`,
+        })),
+      }),
+    ).toBe(false);
+  });
+
+  it("validates generation-fenced reveal and tagged blocking resolutions", () => {
+    expect(
+      Schema.is(BrowserDesktopWindowRevealRequest)({
+        threadId: "thread-1",
+        expectedGeneration: 2,
+        reason: "javascript-dialog",
+      }),
+    ).toBe(true);
+    expect(
+      Schema.is(BrowserBlockingSurfaceResolveRequest)({
+        threadId: "thread-1",
+        expectedGeneration: 2,
+        surfaceId: "surface-1",
+        resolution: { action: "accept", promptText: "answer" },
       }),
     ).toBe(true);
   });
