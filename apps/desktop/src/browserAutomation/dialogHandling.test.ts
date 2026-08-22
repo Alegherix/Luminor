@@ -111,6 +111,126 @@ describe("browser JavaScript dialog handling", () => {
     });
   });
 
+  it("keeps a successor dialog that opens before the prior resolution continues", async () => {
+    const debuggerInstance = new FakeDebugger();
+    const runtime = makeRuntime(debuggerInstance);
+    const reports: Array<{ message?: string } | null> = [];
+    await observeJavaScriptDialogs(runtime, (dialog) => reports.push(dialog));
+    debuggerInstance.emit("message", {}, "Page.javascriptDialogOpening", {
+      type: "alert",
+      message: "first",
+    });
+    debuggerInstance.onDialogHandled = () => {
+      debuggerInstance.emit("message", {}, "Page.javascriptDialogOpening", {
+        type: "prompt",
+        message: "second",
+      });
+    };
+
+    await expect(resolveJavaScriptDialog(runtime, { accept: true })).resolves.toBe(true);
+
+    expect(reports.map((dialog) => dialog?.message ?? null)).toEqual([null, "first", "second"]);
+  });
+
+  it("treats an already-closed reported dialog as resolved and clears observers", async () => {
+    const debuggerInstance = new FakeDebugger();
+    const runtime = makeRuntime(debuggerInstance);
+    const reports: unknown[] = [];
+    await observeJavaScriptDialogs(runtime, (dialog) => reports.push(dialog));
+    debuggerInstance.emit("message", {}, "Page.javascriptDialogOpening", {
+      type: "alert",
+      message: "stale",
+    });
+    debuggerInstance.sendCommand.mockImplementation(
+      async (method: string, params: Record<string, unknown> = {}) => {
+        debuggerInstance.commands.push({ method, params });
+        if (method === "Page.handleJavaScriptDialog") throw new Error("No dialog is showing");
+        return {};
+      },
+    );
+
+    await expect(resolveJavaScriptDialog(runtime, { accept: false })).resolves.toBe(true);
+    expect(reports.at(-1)).toBeNull();
+  });
+
+  it("dismisses a dialog that was already open when an agent turn starts", async () => {
+    const debuggerInstance = new FakeDebugger();
+    const runtime = makeRuntime(debuggerInstance);
+    const reports: unknown[] = [];
+    await observeJavaScriptDialogs(runtime, (dialog) => reports.push(dialog));
+    debuggerInstance.emit("message", {}, "Page.javascriptDialogOpening", {
+      type: "confirm",
+      message: "Before turn",
+    });
+
+    await expect(withDialogHandling(runtime, async () => "completed")).resolves.toEqual({
+      value: "completed",
+      dialogs: [],
+    });
+    expect(reports.at(-1)).toBeNull();
+    expect(debuggerInstance.commands).toContainEqual({
+      method: "Page.handleJavaScriptDialog",
+      params: { accept: false },
+    });
+  });
+
+  it("publishes an in-turn dialog when automatic handling fails", async () => {
+    const debuggerInstance = new FakeDebugger();
+    let handleAttempts = 0;
+    debuggerInstance.sendCommand.mockImplementation(
+      async (method: string, params: Record<string, unknown> = {}) => {
+        debuggerInstance.commands.push({ method, params });
+        if (method === "Page.handleJavaScriptDialog" && handleAttempts++ > 0) {
+          throw new Error("debugger detached");
+        }
+        if (method === "Runtime.evaluate") return { result: { value: [] } };
+        return {};
+      },
+    );
+    const runtime = makeRuntime(debuggerInstance);
+    const reports: unknown[] = [];
+    await observeJavaScriptDialogs(runtime, (dialog) => reports.push(dialog));
+
+    const result = await withDialogHandling(runtime, async () => {
+      debuggerInstance.emit("message", {}, "Page.javascriptDialogOpening", {
+        type: "prompt",
+        message: "Needs a human",
+      });
+      return "completed";
+    });
+
+    expect(result).toEqual({ value: "completed", dialogs: [] });
+    expect(reports.at(-1)).toEqual(
+      expect.objectContaining({ kind: "prompt", message: "Needs a human" }),
+    );
+  });
+
+  it("keeps a dialog through context replacement and re-observes it after a generation bump", async () => {
+    const debuggerInstance = new FakeDebugger();
+    const runtime = makeRuntime(debuggerInstance);
+    const firstGeneration: unknown[] = [];
+    const unsubscribe = await observeJavaScriptDialogs(runtime, (dialog) =>
+      firstGeneration.push(dialog),
+    );
+    debuggerInstance.emit("message", {}, "Page.javascriptDialogOpening", {
+      type: "prompt",
+      message: "Still blocked",
+    });
+    debuggerInstance.emit("message", {}, "Runtime.executionContextsCleared", {});
+    debuggerInstance.emit("message", {}, "Page.frameNavigated", {
+      frame: { id: "main-frame", url: "https://example.test/next" },
+    });
+    expect(firstGeneration.at(-1)).toEqual(expect.objectContaining({ message: "Still blocked" }));
+    unsubscribe();
+
+    const nextGeneration: unknown[] = [];
+    await observeJavaScriptDialogs(runtime, (dialog) => nextGeneration.push(dialog));
+    expect(nextGeneration).toEqual([expect.objectContaining({ message: "Still blocked" })]);
+
+    debuggerInstance.emit("message", {}, "Page.javascriptDialogClosed", {});
+    expect(nextGeneration.at(-1)).toBeNull();
+  });
+
   it("unblocks a command through the debugger event path and applies the safe policy", async () => {
     const debuggerInstance = new FakeDebugger();
     const runtime = makeRuntime(debuggerInstance);

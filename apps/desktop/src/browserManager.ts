@@ -59,6 +59,7 @@ import {
   isSameLocalHtmlPreviewGrant,
 } from "./localHtmlPreviewProtocol";
 import { getCdpSessionCoordinator } from "./browserAutomation/cdpRuntime";
+import { initializeJavaScriptDialogHandling } from "./browserAutomation/dialogHandling";
 
 export { BROWSER_SESSION_PARTITION } from "./browserSessionPolicy";
 const BROWSER_INACTIVE_TAB_SUSPEND_DELAY_MS = 1_500;
@@ -121,6 +122,7 @@ interface LiveTabRuntime {
   hostWindow: BrowserWindow | null;
   placement: "attached" | "offscreen" | "renderer";
   ownsWebContents: boolean;
+  dialogMonitorReady: Promise<void> | null;
   listenerDisposers: Array<() => void>;
 }
 
@@ -1462,6 +1464,7 @@ export class DesktopBrowserManager {
       // A fresh WebContentsView has no main frame until its first load. Bootstrap
       // an inert document so the host's subsequent CDP Page.navigate can observe
       // lifecycle events even while the view is parked outside the visible shell.
+      await this.ensureRuntimeDialogMonitor(runtime);
       await runtime.webContents.loadURL(ABOUT_BLANK_URL);
       tab.url = expectedUrl;
       tab.title = defaultTitleForUrl(expectedUrl);
@@ -1773,6 +1776,7 @@ export class DesktopBrowserManager {
         hostWindow: null,
         placement: "renderer",
         ownsWebContents: false,
+        dialogMonitorReady: null,
         listenerDisposers: [],
       };
       this.configureRuntimeWebContents(runtime);
@@ -2601,6 +2605,11 @@ export class DesktopBrowserManager {
             : {}),
         },
       });
+      const dialogMonitorReady = this.startRuntimeDialogMonitor(
+        threadId,
+        tabId,
+        hostWindow.webContents,
+      );
       hostWindow.webContents.setFrameRate(30);
       const runtime: LiveTabRuntime = {
         key: buildRuntimeKey(threadId, tabId),
@@ -2611,6 +2620,7 @@ export class DesktopBrowserManager {
         hostWindow,
         placement: "offscreen",
         ownsWebContents: true,
+        dialogMonitorReady,
         listenerDisposers: [],
       };
       this.configureRuntimeWebContents(runtime);
@@ -2627,6 +2637,7 @@ export class DesktopBrowserManager {
           : {}),
       },
     });
+    const dialogMonitorReady = this.startRuntimeDialogMonitor(threadId, tabId, view.webContents);
     const runtime: LiveTabRuntime = {
       key: buildRuntimeKey(threadId, tabId),
       threadId,
@@ -2636,6 +2647,7 @@ export class DesktopBrowserManager {
       hostWindow: null,
       placement: "attached",
       ownsWebContents: true,
+      dialogMonitorReady,
       listenerDisposers: [],
     };
     if (this.automationRuntimeKeys.has(runtime.key)) {
@@ -2646,6 +2658,25 @@ export class DesktopBrowserManager {
     }
     this.configureRuntimeWebContents(runtime);
     return runtime;
+  }
+
+  private startRuntimeDialogMonitor(
+    threadId: ThreadId,
+    tabId: string,
+    webContents: WebContents,
+  ): Promise<void> {
+    const ready = initializeJavaScriptDialogHandling({ threadId, tabId, webContents });
+    void ready.catch(() => undefined);
+    return ready;
+  }
+
+  private ensureRuntimeDialogMonitor(runtime: LiveTabRuntime): Promise<void> {
+    runtime.dialogMonitorReady ??= this.startRuntimeDialogMonitor(
+      runtime.threadId,
+      runtime.tabId,
+      runtime.webContents,
+    );
+    return runtime.dialogMonitorReady;
   }
 
   private configureRuntimeWebContents(runtime: LiveTabRuntime): void {
@@ -2891,7 +2922,9 @@ export class DesktopBrowserManager {
     this.emitState(threadId);
 
     try {
-      await webContents.loadURL(this.sessionPolicy.resolveRuntimeUrl(nextUrl));
+      const runtimeUrl = this.sessionPolicy.resolveRuntimeUrl(nextUrl);
+      await this.ensureRuntimeDialogMonitor(runtime);
+      await webContents.loadURL(runtimeUrl);
       this.queueRuntimeStateSync(threadId, tabId);
     } catch (error) {
       if (isAbortedNavigationError(error)) {

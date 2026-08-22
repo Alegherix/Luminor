@@ -4,7 +4,12 @@ import { ThreadId } from "@luminor/contracts";
 import type { BrowserWindow, WebContents } from "electron";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { browserSession, rendererWebContentsById, rendererWebContentsFromId } = vi.hoisted(() => {
+const {
+  browserSession,
+  initializeJavaScriptDialogHandling,
+  rendererWebContentsById,
+  rendererWebContentsFromId,
+} = vi.hoisted(() => {
   const rendererWebContentsById = new Map<number, unknown>();
   return {
     browserSession: {
@@ -12,6 +17,7 @@ const { browserSession, rendererWebContentsById, rendererWebContentsFromId } = v
       webRequest: { onBeforeSendHeaders: vi.fn() },
       protocol: { handle: vi.fn(), unhandle: vi.fn() },
     },
+    initializeJavaScriptDialogHandling: vi.fn(async (): Promise<void> => undefined),
     rendererWebContentsById,
     rendererWebContentsFromId: vi.fn((id: number) => rendererWebContentsById.get(id) ?? null),
   };
@@ -33,6 +39,7 @@ vi.mock("electron", () => ({
   webContents: { fromId: rendererWebContentsFromId },
   WebContentsView: class {},
 }));
+vi.mock("./browserAutomation/dialogHandling", () => ({ initializeJavaScriptDialogHandling }));
 
 import { DesktopBrowserManager } from "./browserManager";
 

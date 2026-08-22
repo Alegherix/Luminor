@@ -4,34 +4,45 @@ import { ThreadId } from "@luminor/contracts";
 import type { WebContents } from "electron";
 import { describe, expect, it, vi } from "vitest";
 
-const { browserSession, fromId, webContentsViewConstructor, willDownloadListener } = vi.hoisted(
-  () => {
-    const willDownloadListener = {
-      current: null as null | ((event: object, item: object, webContents: object) => void),
-    };
-    return {
-      browserSession: {
-        setUserAgent: vi.fn(),
-        webRequest: { onBeforeSendHeaders: vi.fn() },
-        protocol: { handle: vi.fn(), unhandle: vi.fn() },
-        on: vi.fn((event: string, listener: typeof willDownloadListener.current) => {
-          if (event === "will-download") willDownloadListener.current = listener;
-        }),
-        removeListener: vi.fn(),
-      },
-      fromId: vi.fn(),
-      webContentsViewConstructor: vi.fn(),
-      willDownloadListener,
-    };
-  },
-);
+const {
+  browserSession,
+  browserWindowConstructor,
+  fromId,
+  initializeJavaScriptDialogHandling,
+  webContentsViewConstructor,
+  willDownloadListener,
+} = vi.hoisted(() => {
+  const willDownloadListener = {
+    current: null as null | ((event: object, item: object, webContents: object) => void),
+  };
+  return {
+    browserSession: {
+      setUserAgent: vi.fn(),
+      webRequest: { onBeforeSendHeaders: vi.fn() },
+      protocol: { handle: vi.fn(), unhandle: vi.fn() },
+      on: vi.fn((event: string, listener: typeof willDownloadListener.current) => {
+        if (event === "will-download") willDownloadListener.current = listener;
+      }),
+      removeListener: vi.fn(),
+    },
+    browserWindowConstructor: vi.fn(),
+    fromId: vi.fn(),
+    initializeJavaScriptDialogHandling: vi.fn(async (): Promise<void> => undefined),
+    webContentsViewConstructor: vi.fn(),
+    willDownloadListener,
+  };
+});
 vi.mock("electron", () => ({
   app: {
     getName: () => "Luminor",
     getPreferredSystemLanguages: () => ["en-US"],
     userAgentFallback: "Mozilla/5.0 Electron/40.0.0",
   },
-  BrowserWindow: class {},
+  BrowserWindow: class {
+    constructor() {
+      return browserWindowConstructor();
+    }
+  },
   clipboard: { writeImage: vi.fn(), writeText: vi.fn() },
   nativeImage: { createFromBuffer: vi.fn() },
   session: {
@@ -44,6 +55,7 @@ vi.mock("electron", () => ({
     }
   },
 }));
+vi.mock("./dialogHandling", () => ({ initializeJavaScriptDialogHandling }));
 
 import { DesktopBrowserManager } from "../browserManager";
 import { dispatchTrustedClick } from "./trustedInput";
@@ -1052,6 +1064,57 @@ describe("DesktopBrowserManager automation runtime boundary", () => {
     expect(nativeWebContents.loadURL).toHaveBeenCalledOnce();
     expect(nativeWebContents.loadURL).toHaveBeenCalledWith("about:blank");
     manager.dispose();
+  });
+
+  it("initializes dialog interception before the first load and after WebContents recreation", async () => {
+    const webContents = [
+      Object.assign(new FakeWebContents(201), { getURL: () => "" }),
+      Object.assign(new FakeWebContents(202), { getURL: () => "" }),
+    ];
+    for (const contents of webContents) {
+      Object.assign(contents, { setFrameRate: vi.fn() });
+      browserWindowConstructor.mockReturnValueOnce({
+        webContents: contents,
+        setContentSize: vi.fn(),
+        isDestroyed: () => false,
+        destroy: vi.fn(),
+      });
+    }
+    const releases: Array<() => void> = [];
+    initializeJavaScriptDialogHandling.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releases.push(resolve);
+        }),
+    );
+    const manager = new DesktopBrowserManager();
+    try {
+      const opened = manager.open({ threadId: THREAD_ID });
+      const tabId = opened.activeTabId!;
+      manager.navigate({ threadId: THREAD_ID, tabId, url: "https://agent.example/path" });
+      const viewport = { width: 1280, height: 720, deviceScaleFactor: 1 };
+
+      const firstRuntime = manager.activateRemoteRuntime(THREAD_ID, viewport);
+      await vi.waitFor(() => expect(releases).toHaveLength(1));
+      expect(webContents[0]!.loadURL).not.toHaveBeenCalled();
+      releases[0]!();
+      await firstRuntime;
+      expect(webContents[0]!.loadURL).toHaveBeenCalledWith("https://agent.example/path");
+
+      const access = manager as unknown as {
+        destroyRuntime(threadId: typeof THREAD_ID, tabId: string): void;
+      };
+      access.destroyRuntime(THREAD_ID, tabId);
+      const recreatedRuntime = manager.activateRemoteRuntime(THREAD_ID, viewport);
+      await vi.waitFor(() => expect(releases).toHaveLength(2));
+      expect(webContents[1]!.loadURL).not.toHaveBeenCalled();
+      releases[1]!();
+      await recreatedRuntime;
+      expect(webContents[1]!.loadURL).toHaveBeenCalledWith("https://agent.example/path");
+    } finally {
+      manager.dispose();
+      initializeJavaScriptDialogHandling.mockImplementation(async () => undefined);
+    }
   });
 
   it("does not suspend the active agent tab when its chat stays hidden", async () => {
