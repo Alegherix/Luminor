@@ -386,6 +386,14 @@ describe("useSidebarThreadActions", () => {
     resolveMigration();
   });
 
+  it("drains a migrated legacy pin from the persisted store so unpins stick", async () => {
+    harness.pinnedThreadIds = [THREAD_ID];
+
+    render({ threadsHydrated: true });
+
+    await vi.waitFor(() => expect(harness.unpinThread).toHaveBeenCalledWith(THREAD_ID));
+  });
+
   it("keeps archive available while server-side runtime cleanup is pending", async () => {
     await expect(render().archiveThread(THREAD_ID)).resolves.toBe(true);
 

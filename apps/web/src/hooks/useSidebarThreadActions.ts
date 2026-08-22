@@ -440,6 +440,12 @@ export function useSidebarThreadActions(input: {
       }
       legacyPinMigrationThreadIdsRef.current.add(threadId);
       void dispatchThreadPinnedState(threadId, true)
+        .then(() => {
+          // The pin now lives server-side; dropping the persisted entry keeps
+          // the local list a mirror of the server so this migration can never
+          // re-pin a thread another client has legitimately unpinned.
+          unpinThread(threadId);
+        })
         .catch((error) => {
           console.error("Failed to migrate pinned thread state", { threadId, error });
         })
@@ -447,7 +453,7 @@ export function useSidebarThreadActions(input: {
           legacyPinMigrationThreadIdsRef.current.delete(threadId);
         });
     }
-  }, [dispatchThreadPinnedState, sidebarThreads, threadsHydrated, persistedPinnedThreadIds]);
+  }, [dispatchThreadPinnedState, sidebarThreads, threadsHydrated, persistedPinnedThreadIds, unpinThread]);
 
   const deleteThread = useCallback(
     async (
