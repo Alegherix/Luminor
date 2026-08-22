@@ -29,7 +29,6 @@ import { FolderClosed } from "../FolderClosed";
 import { SpaceIcon } from "../SpaceIcon";
 import { PickerPanelShell } from "./PickerPanelShell";
 import { PickerTriggerButton } from "./PickerTriggerButton";
-import { useComposerPickerAnchor } from "./ComposerPickerAnchor";
 import {
   Combobox,
   ComboboxEmpty,
@@ -158,10 +157,6 @@ export const ProjectPicker = memo(function ProjectPicker({
 }: ProjectPickerProps) {
   const align = alignProp ?? "start";
   const side = sideProp ?? "bottom";
-  const composerAnchor = useComposerPickerAnchor();
-  const popupAnchor = composerAnchor ?? undefined;
-  const popupSide = popupAnchor ? "top" : side;
-  const popupSideOffset = popupAnchor ? 8 : undefined;
   const selectionMode = selectionModeProp ?? "workspace-root";
   const showResetToHome = showResetToHomeProp ?? false;
   const selectedProjectId = selectedProjectIdProp ?? null;
@@ -631,13 +626,7 @@ export const ProjectPicker = memo(function ProjectPicker({
           ) : null}
         </div>
       )}
-      <ComboboxPopup
-        align={align}
-        side={popupSide}
-        sideOffset={popupSideOffset}
-        anchor={popupAnchor}
-        className="p-0"
-      >
+      <ComboboxPopup align={align} side={side} className="p-0">
         <PickerPanelShell
           searchInput={
             <ComboboxInput

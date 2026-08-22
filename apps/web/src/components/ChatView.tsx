@@ -330,7 +330,6 @@ import { ComposerQueuedHeader } from "./chat/ComposerQueuedHeader";
 import { ComposerLiveChangesHeader } from "./chat/ComposerLiveChangesHeader";
 import { ComposerGoalHeader } from "./chat/ComposerGoalHeader";
 import { ComposerPickerMenuPopup } from "./chat/ComposerPickerMenuPopup";
-import { ComposerPickerAnchorProvider } from "./chat/ComposerPickerAnchor";
 import { Button } from "./ui/button";
 import { PresenceDisclosure } from "./ui/DisclosureRegion";
 import { Skeleton } from "./ui/skeleton";
@@ -1601,7 +1600,6 @@ export default function ChatView({
   }, [threadId]);
   const composerEditorRef = useRef<ComposerPromptEditorHandle>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
-  const composerPickerAnchorRef = useRef<HTMLDivElement>(null);
   // Set by whichever mounted GitActionsControl instance (header quick-action or the
   // Environment panel row) last registered — either performs the identical commit &
   // push mutation for this thread's repo, so it doesn't matter which one is "current".
@@ -11381,19 +11379,16 @@ export default function ChatView({
   const composerSection =
     secondaryChromeReady && shouldRenderChatPaneContent ? (
       <div
-        ref={composerPickerAnchorRef}
-        className="relative w-full overflow-visible"
-        data-composer-picker-anchor=""
+        className={cn(isCenteredEmptyLanding ? "w-full overflow-visible" : "contents")}
         data-empty-landing-composer-block={isCenteredEmptyLanding ? "true" : undefined}
       >
-        <ComposerPickerAnchorProvider anchorRef={composerPickerAnchorRef}>
-          <form
-            ref={composerFormRef}
-            onSubmit={onSend}
-            className="relative z-10 w-full overflow-visible"
-            data-chat-composer-form="true"
-            data-chat-pane-scope={paneScopeId}
-          >
+        <form
+          ref={composerFormRef}
+          onSubmit={onSend}
+          className="relative z-10 w-full overflow-visible"
+          data-chat-composer-form="true"
+          data-chat-pane-scope={paneScopeId}
+        >
           <ComposerColumnFrame>
             <div data-composer-stacked-panels="true">
               <PresenceDisclosure open={showComposerLiveChangesHeader} className="-mb-px">
@@ -11959,7 +11954,6 @@ export default function ChatView({
           </ComposerColumnFrame>
         </form>
         {emptyLandingControls}
-        </ComposerPickerAnchorProvider>
       </div>
     ) : (
       <div
