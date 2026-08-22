@@ -12,6 +12,7 @@ type InputProps = Omit<ComponentPropsWithoutRef<typeof InputPrimitive>, "size"> 
   // surface-matching fill, so it reads as an input even on a flush card.
   variant?: "default" | "soft";
   unstyled?: boolean;
+  /** Native `<input>` for full OS text-editing (backspace, undo, paste). Base UI Field.Control is opt-out. */
   nativeInput?: boolean;
 };
 
@@ -31,7 +32,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const size = sizeProp ?? "default";
   const variant = variantProp ?? "default";
   const unstyled = unstyledProp ?? false;
-  const nativeInput = nativeInputProp ?? false;
+  const nativeInput = nativeInputProp ?? true;
   const inputClassName = cn(
     "font-system-ui h-full w-full min-w-0 rounded-[inherit] border-0 bg-transparent px-3 py-1.5 text-[length:var(--app-font-size-ui,12px)] leading-normal outline-none placeholder:text-muted-foreground/72 [transition:background-color_5000000s_ease-in-out_0s] sm:text-[length:var(--app-font-size-ui,12px)]",
     size === "sm" &&

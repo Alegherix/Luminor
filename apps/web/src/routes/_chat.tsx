@@ -26,6 +26,7 @@ import {
   resolveLatestProjectTargetIdWithFallback,
   resolveNewThreadTarget,
 } from "../lib/projectShortcutTargets";
+import { isEditableEventTarget } from "../lib/editableEventTarget";
 import { resolveInheritedThreadContext } from "../lib/threadBootstrap";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
@@ -333,6 +334,7 @@ function ChatRouteGlobalShortcuts() {
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
+      if (isEditableEventTarget(event)) return;
       const shortcutContext = {
         terminalFocus: isTerminalFocused(),
         terminalOpen,

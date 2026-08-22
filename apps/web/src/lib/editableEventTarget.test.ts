@@ -78,4 +78,15 @@ describe("isEditableEventTarget", () => {
     const svg = new MockElement();
     expect(isEditableEventTarget(makeEvent(svg))).toBe(false);
   });
+
+  it("returns true when focus is on an input but the event target is a decoration node", () => {
+    if (typeof document === "undefined") return;
+    const wrapper = document.createElement("span");
+    const input = document.createElement("input");
+    wrapper.append(input);
+    document.body.append(wrapper);
+    input.focus();
+    expect(isEditableEventTarget(makeEvent(wrapper))).toBe(true);
+    wrapper.remove();
+  });
 });

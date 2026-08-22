@@ -86,7 +86,7 @@ function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
 }
 
 function InputGroupInput({ className, ...props }: InputProps) {
-  return <Input className={className} unstyled {...props} />;
+  return <Input className={className} unstyled nativeInput {...props} />;
 }
 
 function InputGroupTextarea({ className, ...props }: TextareaProps) {

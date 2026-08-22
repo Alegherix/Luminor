@@ -7,11 +7,20 @@
 
 const EDITABLE_TAG_SELECTOR = "input, textarea, select";
 
+function elementIsEditableSurface(element: Element): boolean {
+  if (element.closest(EDITABLE_TAG_SELECTOR) !== null) return true;
+  return element instanceof HTMLElement && element.isContentEditable;
+}
+
 export function isEditableEventTarget(event: globalThis.KeyboardEvent): boolean {
   const target = event.target;
   if (!(target instanceof Element)) return false;
-  if (target.closest(EDITABLE_TAG_SELECTOR) !== null) return true;
-  // `isContentEditable` already reflects inherited editability from any
-  // contenteditable ancestor, so no manual ancestor walk is needed here.
-  return target instanceof HTMLElement && target.isContentEditable;
+  if (elementIsEditableSurface(target)) return true;
+  // Decorations around dialog/picker fields can receive the event while focus
+  // remains on the real control underneath.
+  const active = target.ownerDocument?.activeElement;
+  if (active instanceof Element && active !== target && elementIsEditableSurface(active)) {
+    return true;
+  }
+  return false;
 }

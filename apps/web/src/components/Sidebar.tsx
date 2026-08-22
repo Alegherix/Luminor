@@ -180,6 +180,7 @@ import {
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useLatestProjectStore } from "../latestProjectStore";
 import { resolveThreadEnvironmentPresentation } from "../lib/threadEnvironment";
+import { isEditableEventTarget } from "../lib/editableEventTarget";
 import { dispatchThreadRename } from "../lib/threadRename";
 import {
   archiveFolder,
@@ -5892,6 +5893,7 @@ export default function Sidebar() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
+      if (isEditableEventTarget(event)) return;
 
       const shortcutContext = getCurrentSidebarShortcutContext();
       if (!shouldIgnoreThreadJumpHintUpdate(event)) {
