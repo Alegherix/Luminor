@@ -26,6 +26,7 @@ import {
   COMMAND_PRIORITY_HIGH,
   KEY_BACKSPACE_COMMAND,
   PASTE_COMMAND,
+  CLICK_COMMAND,
   TextNode,
   $getRoot,
   $nodesOfType,
@@ -52,6 +53,7 @@ import {
   collapseExpandedComposerCursor,
   expandCollapsedComposerCursor,
   isCollapsedCursorAdjacentToInlineToken,
+  wordRangeAtCollapsedComposerOffset,
 } from "~/composer-logic";
 import {
   matchComposerLinkToken,
@@ -403,6 +405,25 @@ function $setSelectionAtComposerOffset(nextOffset: number): void {
   $setSelection(selection);
 }
 
+function $setSelectionAtComposerRange(start: number, end: number): void {
+  const root = $getRoot();
+  const composerLength = $getComposerRootLength();
+  const boundedStart = Math.max(0, Math.min(start, composerLength));
+  const boundedEnd = Math.max(boundedStart, Math.min(end, composerLength));
+  const startRemaining = { value: boundedStart };
+  const endRemaining = { value: boundedEnd };
+  const anchorPoint = findSelectionPointAtOffset(root, startRemaining) ?? {
+    key: root.getKey(),
+    offset: root.getChildren().length,
+    type: "element" as const,
+  };
+  const focusPoint = findSelectionPointAtOffset(root, endRemaining) ?? anchorPoint;
+  const selection = $createRangeSelection();
+  selection.anchor.set(anchorPoint.key, anchorPoint.offset, anchorPoint.type);
+  selection.focus.set(focusPoint.key, focusPoint.offset, focusPoint.type);
+  $setSelection(selection);
+}
+
 function $readSelectionOffsetFromEditorState(fallback: number): number {
   const selection = $getSelection();
   if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
@@ -542,6 +563,41 @@ interface ComposerPromptEditorProps {
 
 interface ComposerPromptEditorInnerProps extends ComposerPromptEditorProps {
   editorRef: Ref<ComposerPromptEditorHandle>;
+}
+
+function ComposerDoubleClickWordSelectPlugin() {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    return editor.registerCommand(
+      CLICK_COMMAND,
+      (event) => {
+        if (!(event instanceof MouseEvent) || event.detail !== 2 || event.shiftKey) {
+          return false;
+        }
+
+        let wordRange: { start: number; end: number } | null = null;
+        editor.getEditorState().read(() => {
+          const offset = $readSelectionOffsetFromEditorState(0);
+          const text = $getRoot().getTextContent();
+          wordRange = wordRangeAtCollapsedComposerOffset(text, offset);
+        });
+        if (!wordRange || wordRange.start === wordRange.end) {
+          return false;
+        }
+
+        const { start, end } = wordRange;
+        editor.update(() => {
+          $setSelectionAtComposerRange(start, end);
+        });
+        event.preventDefault();
+        return true;
+      },
+      COMMAND_PRIORITY_LOW,
+    );
+  }, [editor]);
+
+  return null;
 }
 
 function ComposerCommandKeyPlugin(props: {
@@ -1166,6 +1222,7 @@ function ComposerPromptEditorInner({
         previousSnapshot.value === nextValue &&
         previousSnapshot.cursor === nextCursor &&
         previousSnapshot.expandedCursor === nextExpandedCursor &&
+        previousSnapshot.selectionCollapsed === selectionCollapsed &&
         previousSnapshot.terminalContextIds.length === terminalContextIds.length &&
         previousSnapshot.terminalContextIds.every((id, index) => id === terminalContextIds[index])
       ) {
@@ -1229,6 +1286,7 @@ function ComposerPromptEditorInner({
           ErrorBoundary={LexicalErrorBoundary}
         />
         <OnChangePlugin onChange={handleEditorChange} />
+        <ComposerDoubleClickWordSelectPlugin />
         <ComposerCommandKeyPlugin {...(onCommandKeyDown ? { onCommandKeyDown } : {})} />
         <ComposerInlineTokenArrowPlugin />
         <ComposerInlineTokenSelectionNormalizePlugin />

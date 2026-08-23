@@ -9,6 +9,7 @@ import {
   parseStandaloneComposerSlashCommand,
   replaceTextRange,
   stripComposerTriggerText,
+  wordRangeAtCollapsedComposerOffset,
 } from "./composer-logic";
 import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "./lib/terminalContext";
 
@@ -486,5 +487,15 @@ describe("parseStandaloneComposerSlashCommand", () => {
 
   it("ignores slash commands with extra message text", () => {
     expect(parseStandaloneComposerSlashCommand("/plan explain this")).toBeNull();
+  });
+});
+
+describe("wordRangeAtCollapsedComposerOffset", () => {
+  it("selects the word under the cursor and the word to the left in whitespace", () => {
+    const text = "hello brave world";
+    expect(wordRangeAtCollapsedComposerOffset(text, 1)).toEqual({ start: 0, end: 5 });
+    expect(wordRangeAtCollapsedComposerOffset(text, 5)).toEqual({ start: 0, end: 5 });
+    expect(wordRangeAtCollapsedComposerOffset(text, 7)).toEqual({ start: 6, end: 11 });
+    expect(wordRangeAtCollapsedComposerOffset(text, 12)).toEqual({ start: 12, end: 17 });
   });
 });

@@ -425,3 +425,31 @@ export function replaceTextRange(
   const nextText = `${text.slice(0, safeStart)}${replacement}${text.slice(safeEnd)}`;
   return { text: nextText, cursor: safeStart + replacement.length };
 }
+
+/** Word boundaries for double-click selection in the composer editor. */
+export function wordRangeAtCollapsedComposerOffset(
+  text: string,
+  cursorInput: number,
+): { start: number; end: number } {
+  const cursor = clampCursor(text, cursorInput);
+  if (text.length === 0) {
+    return { start: 0, end: 0 };
+  }
+
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+  let previousWord: { start: number; end: number } | null = null;
+  for (const { index, segment, isWordLike } of segmenter.segment(text)) {
+    if (!isWordLike) {
+      continue;
+    }
+    const end = index + segment.length;
+    if (cursor >= index && cursor <= end) {
+      return { start: index, end };
+    }
+    if (end <= cursor) {
+      previousWord = { start: index, end };
+    }
+  }
+
+  return previousWord ?? { start: cursor, end: cursor };
+}
