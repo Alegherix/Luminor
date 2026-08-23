@@ -65,6 +65,7 @@ import { createInboundNewChatRuntime } from "./inbound/inboundNewChat";
 import { parseInboundArgv } from "./inbound/parseInboundArgv";
 import { resolveBackendNodeArgs } from "./backendNodeOptions";
 import { withDesktopRemoteAccessEnv } from "./backendRemoteAccess";
+import { composeServerdCoreSpec } from "./serverdCoreSpec";
 import { applyLinuxElectronDisplayEnvironment } from "./linuxDisplayEnv";
 import {
   retainLiveBackendAfterShutdownFailure,
@@ -3422,16 +3423,61 @@ function startBackend(trigger: BackendStartTrigger = "lifecycle"): void {
     return;
   }
 
-  const child = ChildProcess.spawn(process.execPath, [...backendNodeArgs(), backendEntry], {
+  const nodeArgs = [...backendNodeArgs(), backendEntry];
+  const childEnv: NodeJS.ProcessEnv = {
+    ...backendEnv(),
+    ELECTRON_RUN_AS_NODE: "1",
+    LUMINOR_SERVER_ENTRY: backendEntry,
+  };
+  const useServerd = process.env.LUMINOR_SERVER_IMPL === "edge";
+  let childProgram = process.execPath;
+  let childArgs = nodeArgs;
+
+  if (useServerd) {
+    const serverdBin = process.env.LUMINOR_SERVERD_BIN?.trim();
+    if (!serverdBin) {
+      handleFatalStartupError(
+        "edge backend",
+        new Error(
+          "LUMINOR_SERVER_IMPL=edge requires LUMINOR_SERVERD_BIN to name an executable luminor-serverd binary.",
+        ),
+      );
+      return;
+    }
+
+    try {
+      if (!FS.statSync(serverdBin).isFile()) {
+        throw new Error("path is not a file");
+      }
+      FS.accessSync(
+        serverdBin,
+        process.platform === "win32" ? FS.constants.F_OK : FS.constants.X_OK,
+      );
+    } catch (error) {
+      handleFatalStartupError(
+        "edge backend",
+        new Error(
+          `LUMINOR_SERVERD_BIN is not spawnable: ${serverdBin} (${formatErrorMessage(error)})`,
+        ),
+      );
+      return;
+    }
+
+    childProgram = serverdBin;
+    childArgs = [];
+    childEnv.LUMINOR_SERVERD_CORE_SPEC = composeServerdCoreSpec({
+      program: process.execPath,
+      args: nodeArgs,
+    });
+  }
+
+  const child = ChildProcess.spawn(childProgram, childArgs, {
     cwd: resolveBackendCwd(),
     // In Electron main, process.execPath points to the Electron binary.
     // Run the child in Node mode so this backend process does not become a GUI app instance.
-    env: {
-      ...backendEnv(),
-      ELECTRON_RUN_AS_NODE: "1",
-      LUMINOR_SERVER_ENTRY: backendEntry,
-    },
+    env: childEnv,
     stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"],
+    ...(useServerd && process.platform !== "win32" ? { detached: true } : {}),
   });
   const capabilityPipe = child.stdio[DESKTOP_BROWSER_HOST_CAPABILITY_FD];
   if (capabilityPipe && "end" in capabilityPipe) {
@@ -3513,10 +3559,29 @@ function startBackend(trigger: BackendStartTrigger = "lifecycle"): void {
     }
     closeBackendSession(`pid=${child.pid ?? "unknown"} error=${error.message}`);
     lastBackendFailureDetail = error.message;
+    if (useServerd) {
+      handleFatalStartupError(
+        "edge backend",
+        new Error(`Failed to spawn luminor-serverd: ${error.message}`),
+      );
+      return;
+    }
     scheduleBackendRestart(error.message);
   });
 
   child.on("exit", (code, signal) => {
+    if (useServerd && process.platform !== "win32" && child.pid !== undefined) {
+      try {
+        // A signal that kills serverd directly can leave its core alive with the
+        // stdio pipes open. End the isolated serverd process group so output can
+        // drain and the existing crash watcher can start a fresh supervised pair.
+        process.kill(-child.pid, "SIGTERM");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+          safeConsoleError("[desktop] failed to stop orphaned edge backend processes", error);
+        }
+      }
+    }
     if (backendListeningDetector === listeningDetector) {
       listeningDetector.fail(
         new Error(
