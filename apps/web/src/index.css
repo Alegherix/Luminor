@@ -2580,12 +2580,14 @@ diffs-container {
 }
 
 .chat-composer-surface,
-.chat-composer-stacked-top {
+.chat-composer-stacked-top,
+.chat-composer-project-tray {
   position: relative;
 }
 
 .chat-composer-surface::before,
-.chat-composer-stacked-top::before {
+.chat-composer-stacked-top::before,
+.chat-composer-project-tray::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -2606,7 +2608,8 @@ diffs-container {
   );
 }
 
-.chat-composer-surface {
+.chat-composer-surface,
+.chat-composer-project-tray {
   background: color-mix(
     in srgb,
     var(--composer-glass-surface) var(--composer-glass-opacity),

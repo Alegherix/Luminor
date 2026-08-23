@@ -11209,7 +11209,7 @@ export default function ChatView({
     !showContainerChatWorkspacePicker &&
     !showEmptyLandingProjectPicker &&
     activeProjectDisplayName ? (
-      <span className="inline-flex min-w-0 max-w-56 shrink items-center gap-2 overflow-hidden rounded-md px-2 py-1 text-[length:var(--app-font-size-ui-sm,11px)] font-normal text-[var(--color-text-foreground-secondary)] sm:max-w-64">
+      <span className="inline-flex min-w-0 max-w-56 shrink items-center gap-2 overflow-hidden rounded-md px-2 py-0.5 text-[length:var(--app-font-size-ui-sm,11px)] font-normal text-[var(--color-text-foreground-secondary)] sm:max-w-64">
         <FolderClosed className="size-3.5 shrink-0" />
         <span className="min-w-0 truncate">{activeProjectDisplayName}</span>
       </span>
@@ -11224,12 +11224,13 @@ export default function ChatView({
     <div
       className={cn(
         // Full-width tray under the composer that reads as UNITED but not fused: it carries extra
-        // top height (pt-6) and is pulled up by that amount (-mt-5 = 20px, just past the
+        // top height (pt-5) and is pulled up by that amount (-mt-5 = 20px, just past the
         // --composer-radius ~19px corner). That hidden top slice sits BEHIND the composer's rounded
-        // bottom corners (z-0), so its tint fills those corner notches and its straight full-width
-        // top edge stays covered by the composer's solid sides — no gap/poke at the sides. The
-        // composer keeps its own rounded shape; the tray keeps its tint + rounded bottom.
-        "chat-composer-shell relative z-0 -mt-5 flex min-h-8 min-w-0 flex-nowrap items-center gap-x-1.5 overflow-hidden !rounded-t-none !rounded-b-[var(--composer-radius)] bg-[color-mix(in_srgb,var(--color-background-elevated-secondary)_76%,var(--color-background-surface)_24%)] px-2 pb-1.5 pt-6 transition-colors duration-150 ease-out motion-reduce:transition-none sm:min-h-7",
+        // bottom corners (z-0), so its glass fill fills those corner notches and its straight
+        // full-width top edge stays covered by the composer's solid sides — no gap/poke at the
+        // sides. The tray uses the same frosted glass as `.chat-composer-surface` so it reads as
+        // one material with the input above, not a separate elevated slab.
+        "chat-composer-shell chat-composer-project-tray relative z-0 -mt-5 flex min-w-0 flex-nowrap items-center gap-x-1.5 overflow-hidden !rounded-t-none !rounded-b-[var(--composer-radius)] px-2 pb-1 pt-5 transition-colors duration-150 ease-out motion-reduce:transition-none",
         COMPOSER_COLUMN_FRAME_CLASS_NAME,
       )}
     >
@@ -11237,7 +11238,7 @@ export default function ChatView({
         <ProjectPicker
           align="start"
           side="top"
-          triggerClassName="h-7 py-1"
+          triggerClassName="h-6 py-0.5"
           showResetToHome={Boolean(
             isStudioContainer ? resolvedThreadWorkingDirectory : resolvedThreadWorktreePath,
           )}
@@ -11257,7 +11258,7 @@ export default function ChatView({
         <ProjectPicker
           align="start"
           side="top"
-          triggerClassName="h-7 py-1"
+          triggerClassName="h-6 py-0.5"
           selectionMode="project"
           selectedProjectId={activeProject.id}
           selectedWorkspaceRoot={activeProject.cwd}
@@ -11301,7 +11302,7 @@ export default function ChatView({
           }
           aria-label="Temporary chat"
           className={cn(
-            "ml-auto shrink-0 gap-1.5 whitespace-nowrap px-2 text-[length:var(--app-font-size-ui-sm,11px)] font-normal transition-colors sm:px-2.5",
+            "ml-auto h-6 shrink-0 gap-1.5 whitespace-nowrap px-2 text-[length:var(--app-font-size-ui-sm,11px)] font-normal transition-colors sm:px-2.5",
             isThreadTemporary
               ? "text-[var(--color-text-accent)] hover:bg-[var(--color-background-button-secondary-hover)] hover:text-[var(--color-text-accent)]"
               : "text-[var(--color-text-foreground-secondary)] hover:bg-[var(--color-background-button-secondary-hover)] hover:text-[var(--color-text-foreground)]",
