@@ -552,7 +552,10 @@ export class DesktopBrowserManager {
     runtime.hostWindow?.setContentSize(viewport.width, viewport.height);
     const expectedUrl = normalizeUrlInput(tab.lastCommittedUrl ?? tab.url);
     const currentUrl = this.sessionPolicy.resolveDisplayUrl(runtime.webContents.getURL());
-    if (currentUrl.length === 0 || currentUrl !== expectedUrl) {
+    if (
+      !this.findAdoptedPopupRuntime(threadId, tab.id) &&
+      (currentUrl.length === 0 || currentUrl !== expectedUrl)
+    ) {
       await this.loadTab(threadId, tab.id, { force: true, runtime });
     }
     return {
@@ -759,6 +762,7 @@ export class DesktopBrowserManager {
     listenerDisposers: Array<() => void>,
   ): void {
     const { threadId, tabId } = context;
+    let pendingOffscreenPopupAutomationGesture = false;
 
     const blockUnsafeMainFrameNavigation = (
       details: Electron.Event<
@@ -810,14 +814,7 @@ export class DesktopBrowserManager {
         disposition: details.disposition,
       });
       if (context.placement === "offscreen" && kind === "popup") {
-        if (automationGestureActive) {
-          this.emitAutomationWindowOpen({
-            threadId,
-            sourceTabId: tabId,
-            kind: "popup",
-            openedTabId: null,
-          });
-        }
+        pendingOffscreenPopupAutomationGesture = automationGestureActive;
         const viewport = this.remoteViewportByThreadId.get(threadId) ?? {
           width: 480,
           height: 640,
@@ -878,7 +875,18 @@ export class DesktopBrowserManager {
     });
 
     const didCreateWindow = (childWindow: BrowserWindow, details: { readonly url: string }) => {
-      this.registerOAuthPopupWindow(childWindow, context, details.url);
+      const automationGestureActive =
+        context.placement === "offscreen" && pendingOffscreenPopupAutomationGesture;
+      pendingOffscreenPopupAutomationGesture = false;
+      const openedTabId = this.registerOAuthPopupWindow(childWindow, context, details.url);
+      if (automationGestureActive && openedTabId) {
+        this.emitAutomationWindowOpen({
+          threadId,
+          sourceTabId: tabId,
+          kind: "tab",
+          openedTabId,
+        });
+      }
     };
     webContents.on("did-create-window", didCreateWindow);
     listenerDisposers.push(() => {
@@ -1132,13 +1140,13 @@ export class DesktopBrowserManager {
     popup: BrowserWindow,
     context: OAuthPopupContext & { readonly placement?: LiveTabRuntime["placement"] },
     url: string,
-  ): void {
-    if (this.popupRuntimes.has(popup)) {
-      return;
+  ): string | null {
+    const existing = this.popupRuntimes.get(popup);
+    if (existing) {
+      return existing.openerTabId ? existing.tabId : null;
     }
     if (context.placement === "offscreen") {
-      this.adoptOffscreenOAuthPopupWindow(popup, context, url);
-      return;
+      return this.adoptOffscreenOAuthPopupWindow(popup, context, url);
     }
     const runtime: OAuthPopupRuntime = {
       ...context,
@@ -1150,22 +1158,23 @@ export class DesktopBrowserManager {
     popup.setMenuBarVisibility(false);
     this.configureOAuthPopupRuntime(runtime);
     this.centerPopupWindow(runtime);
+    return null;
   }
 
   private adoptOffscreenOAuthPopupWindow(
     popup: BrowserWindow,
     context: OAuthPopupContext,
     url: string,
-  ): void {
-    const state = this.states.get(context.threadId);
-    if (
-      this.disposed ||
-      popup.isDestroyed() ||
-      !state?.open ||
-      !state.tabs.some((tab) => tab.id === context.tabId)
-    ) {
+  ): string | null {
+    if (this.disposed || popup.isDestroyed()) {
       if (!popup.isDestroyed()) popup.destroy();
-      return;
+      return null;
+    }
+    popup.hide();
+    const state = this.states.get(context.threadId);
+    if (!state?.open || !state.tabs.some((tab) => tab.id === context.tabId)) {
+      popup.destroy();
+      return null;
     }
 
     const tab = createBrowserTab(normalizeUrlInput(url), context.tabId);
@@ -1211,6 +1220,7 @@ export class DesktopBrowserManager {
     syncThreadLastError(state);
     this.markThreadStateChanged(context.threadId);
     this.emitState(context.threadId);
+    return tab.id;
   }
 
   private configureAdoptedPopupCloseHandling(runtime: OAuthPopupRuntime): void {
@@ -1380,6 +1390,32 @@ export class DesktopBrowserManager {
       }
     }
     return null;
+  }
+
+  private getPopupOwnerRuntimeKeys(): Set<string> {
+    const adoptedPopupRuntimesByKey = new Map<string, OAuthPopupRuntime>();
+    for (const popup of this.popupRuntimes.values()) {
+      if (popup.openerTabId) {
+        adoptedPopupRuntimesByKey.set(buildRuntimeKey(popup.threadId, popup.tabId), popup);
+      }
+    }
+
+    const keys = new Set<string>();
+    for (const popup of this.popupRuntimes.values()) {
+      let current: OAuthPopupRuntime | undefined = popup;
+      const visited = new Set<string>();
+      while (current) {
+        const currentKey = buildRuntimeKey(current.threadId, current.tabId);
+        if (visited.has(currentKey)) break;
+        visited.add(currentKey);
+        keys.add(currentKey);
+        if (!current.openerTabId) break;
+        const openerKey = buildRuntimeKey(current.threadId, current.openerTabId);
+        keys.add(openerKey);
+        current = adoptedPopupRuntimesByKey.get(openerKey);
+      }
+    }
+    return keys;
   }
 
   private closePopupWindowsForThread(threadId: ThreadId): void {
@@ -2106,8 +2142,7 @@ export class DesktopBrowserManager {
   closeTab(input: BrowserTabInput): ThreadBrowserState {
     this.markHumanControl(input.threadId);
     const state = this.ensureWorkspace(input.threadId);
-    const nextTabs = state.tabs.filter((tab) => tab.id !== input.tabId);
-    if (nextTabs.length === state.tabs.length) {
+    if (!state.tabs.some((tab) => tab.id === input.tabId)) {
       return this.snapshotThreadState(input.threadId, state);
     }
 
@@ -2122,6 +2157,7 @@ export class DesktopBrowserManager {
     this.annotations.clearProjection(input.threadId, input.tabId);
     this.rendererOnlyRuntimeKeys.delete(buildRuntimeKey(input.threadId, input.tabId));
     this.automationRuntimeKeys.delete(buildRuntimeKey(input.threadId, input.tabId));
+    const nextTabs = state.tabs.filter((tab) => tab.id !== input.tabId);
     state.tabs = nextTabs;
 
     if (nextTabs.length === 0) {
@@ -2378,13 +2414,7 @@ export class DesktopBrowserManager {
 
     // An OAuth popup is a live user interaction even when its opener's panel is
     // hidden. Evicting that opener would sever window.opener and break sign-in.
-    const popupOwnerRuntimeKeys = new Set(
-      [...this.popupRuntimes.values()].flatMap((popup) =>
-        [popup.tabId, popup.openerTabId]
-          .filter((tabId): tabId is string => Boolean(tabId))
-          .map((tabId) => buildRuntimeKey(popup.threadId, tabId)),
-      ),
-    );
+    const popupOwnerRuntimeKeys = this.getPopupOwnerRuntimeKeys();
     const backgroundRuntimes = [...this.runtimes.values()].filter(
       (runtime) =>
         runtime.ownsWebContents &&
@@ -2449,8 +2479,10 @@ export class DesktopBrowserManager {
     }
 
     let didChange = false;
+    const popupOwnerRuntimeKeys = this.getPopupOwnerRuntimeKeys();
     const inactiveRuntimeTabIds = state.tabs
       .filter((tab) => tab.id !== activeTabId)
+      .filter((tab) => !popupOwnerRuntimeKeys.has(buildRuntimeKey(threadId, tab.id)))
       .filter((tab) => this.runtimes.has(buildRuntimeKey(threadId, tab.id)))
       .sort((left, right) => {
         const leftKey = buildRuntimeKey(threadId, left.id);
@@ -2467,12 +2499,13 @@ export class DesktopBrowserManager {
     );
 
     for (const tab of state.tabs) {
-      if (tab.id === activeTabId) {
+      const runtimeKey = buildRuntimeKey(threadId, tab.id);
+      if (tab.id === activeTabId || popupOwnerRuntimeKeys.has(runtimeKey)) {
         this.clearTabSuspendTimer(threadId, tab.id);
         continue;
       }
 
-      const runtime = this.runtimes.get(buildRuntimeKey(threadId, tab.id));
+      const runtime = this.runtimes.get(runtimeKey);
       if (runtime) {
         if (warmRuntimeTabIds.has(tab.id)) {
           this.scheduleInactiveTabSuspend(threadId, tab.id);
@@ -2513,11 +2546,14 @@ export class DesktopBrowserManager {
     }
 
     let didChange = false;
+    const popupOwnerRuntimeKeys = this.getPopupOwnerRuntimeKeys();
     for (const tab of state.tabs) {
+      const runtimeKey = buildRuntimeKey(threadId, tab.id);
       if (
-        tab.id === state.activeTabId &&
-        this.automationRuntimeKeys.has(buildRuntimeKey(threadId, tab.id))
+        popupOwnerRuntimeKeys.has(runtimeKey) ||
+        (tab.id === state.activeTabId && this.automationRuntimeKeys.has(runtimeKey))
       ) {
+        this.clearTabSuspendTimer(threadId, tab.id);
         continue;
       }
       this.destroyRuntime(threadId, tab.id);
@@ -2554,6 +2590,9 @@ export class DesktopBrowserManager {
       const state = this.states.get(threadId);
       const tab = state ? this.getTab(state, tabId) : null;
       if (!state || !tab) {
+        return;
+      }
+      if (this.getPopupOwnerRuntimeKeys().has(key)) {
         return;
       }
 
