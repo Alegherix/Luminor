@@ -849,6 +849,38 @@ it.effect("accepts provider-scoped model options in thread.turn.start", () =>
   }),
 );
 
+it.effect("accepts grok Extra High in thread.turn.start modelSelection", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeClientOrchestrationCommand({
+      type: "thread.turn.start",
+      commandId: "cmd-grok-xhigh",
+      threadId: "thread-grok-xhigh",
+      message: {
+        messageId: "msg-grok-xhigh",
+        role: "user",
+        text: "hello",
+        attachments: [],
+      },
+      modelSelection: {
+        provider: "grok",
+        model: "grok-4.6",
+        options: {
+          reasoningEffort: "xhigh",
+        },
+      },
+      runtimeMode: "approval-required",
+      interactionMode: "default",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.type, "thread.turn.start");
+    assert.strictEqual(parsed.modelSelection?.provider, "grok");
+    if (parsed.modelSelection?.provider !== "grok") {
+      throw new Error("Expected grok modelSelection");
+    }
+    assert.strictEqual(parsed.modelSelection.options?.reasoningEffort, "xhigh");
+  }),
+);
+
 it.effect("accepts a source proposed plan reference in thread.turn.start", () =>
   Effect.gen(function* () {
     const parsed = yield* decodeThreadTurnStartCommand({
