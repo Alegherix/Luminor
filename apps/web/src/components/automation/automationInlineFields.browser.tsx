@@ -60,7 +60,9 @@ it("opens a dark themed popup instead of a native select", async () => {
   const popup = document.querySelector<HTMLElement>('[data-slot="select-popup"]');
   expect(popup).not.toBeNull();
   const surface =
-    popup?.querySelector<HTMLElement>("[class*='bg-popover']") ?? popup ?? option.parentElement;
+    popup?.querySelector<HTMLElement>("[class*='bg-[var(--color-background-surface)]']") ??
+    popup ??
+    option.parentElement;
   expect(surface).not.toBeNull();
 
   const textLightness = cssLightness(getComputedStyle(option).color);

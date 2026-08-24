@@ -716,10 +716,8 @@ export function buildThemeCssVariables(
     variant === "dark"
       ? readCodexVariable("--color-background-control-opaque")
       : "color-mix(in oklab, var(--color-background-control) 90%, transparent)";
-  // Mirrors Codex Electron's [cmdk-root] dropdown shell: thin the dropdown-background
-  // token by 5% in oklab over the existing backdrop blur. Light vs dark is already
-  // handled by --color-background-control-opaque (white in light, dark control in dark).
-  const composerPickerMenuSurface = "color-mix(in oklab, var(--popover) 70%, transparent)";
+  // Shared opaque Theme Background fill for floating menus and pickers.
+  const composerPickerMenuSurface = "var(--color-background-surface)";
   const composerFocusBorder = buildComposerFocusBorder(
     pack,
     variant,
@@ -737,14 +735,10 @@ export function buildThemeCssVariables(
         ? "transparent"
         : readCodexVariable("--color-background-surface-under"),
     "--app-composer-focus-border": composerFocusBorder,
-    // Frosted blur only when the shell is translucent (macOS). On an opaque
-    // shell this promotes the surface to a GPU layer that Chromium rasterizes at
-    // the wrong scale on fractional DPI (Windows), so text reads blurry until a
-    // repaint. Keep it "none" off macOS.
-    // NOTE: this gates window-vibrancy frosting only. The composer's own glass
-    // (`.chat-composer-surface`, index.css) frosts page content, not the window
-    // material, so — like the floating menus — it stays on across platforms.
-    "--app-composer-picker-backdrop-filter": material === "translucent" ? "blur(32px)" : "none",
+    // Floating popup surfaces use an opaque Theme Background fill, so their
+    // backdrop filter stays off. Composer input glass is separate and remains
+    // frosted through the composer styles in index.css.
+    "--app-composer-picker-backdrop-filter": "none",
     "--app-composer-picker-surface": composerPickerMenuSurface,
     "--app-chat-code-surface": chatCodeSurface,
     "--app-user-message-background": chatCodeSurface,

@@ -153,16 +153,16 @@ export const RAISED_SURFACE_CHROME_CLASS_NAME = `border ${COMPOSER_SURFACE_BORDE
  *  of dropping to shadow-only separation. */
 export const COMPOSER_INPUT_SURFACE_CLASS_NAME = `chat-composer-surface border ${COMPOSER_SURFACE_BORDER_CLASS_NAME} dark:border-border ${COMPOSER_SURFACE_SHADOW_CLASS_NAME} transition-colors duration-200`;
 
-/** Shadcn default-translucent shell for floating menus, pickers, and popovers. */
+/** Opaque Theme Background shell for floating menus, pickers, and popovers. */
 export const APP_TRANSLUCENT_POPUP_SURFACE_BASE_CLASS_NAME =
-  "relative overflow-hidden border border-border bg-popover/70 text-popover-foreground before:pointer-events-none before:absolute before:inset-0 before:-z-1 before:rounded-[inherit] before:backdrop-blur-2xl before:backdrop-saturate-150";
+  "relative overflow-hidden border border-border bg-[var(--color-background-surface)] text-popover-foreground";
 
 /** Default floating popup shell (dropdown menus, selects, popovers). */
 export const APP_TRANSLUCENT_POPUP_SURFACE_CLASS_NAME = `${APP_TRANSLUCENT_POPUP_SURFACE_BASE_CLASS_NAME} rounded-2xl shadow-xl`;
 
 /**
- * Frosted surface chrome shared by every plain tooltip (default TooltipPopup) and
- * the sidebar hover cards: the translucent shell at the tooltip's tighter
+ * Opaque surface chrome shared by every plain tooltip (default TooltipPopup) and
+ * the sidebar hover cards: the themed shell at the tooltip's tighter
  * `rounded-lg` radius with a lifted shadow. The sidebar hover cards extend this
  * with their fixed width, so a plain tooltip, the thread card, and the project
  * card all read as one surface and can never drift apart. Composer-attached
@@ -198,8 +198,8 @@ export const COMPOSER_PICKER_SELECT_OPTION_CLASS_NAME = `${COMPOSER_PICKER_MENU_
 export const COMPOSER_PICKER_TOOLTIP_SURFACE_CLASS_NAME = `${COMPOSER_PICKER_MENU_SURFACE_CLASS_NAME} font-normal text-[var(--color-text-foreground)]`;
 
 /** Opaque floating panel for the slash/mention command menu and @local browser.
- *  Picker border/radius/shadow, but a solid fill: the menu floats over the
- *  transcript, so frosted bg-popover/70 would let chat content bleed through. */
+ *  Picker border/radius/shadow, but a solid fill so the menu floats over the
+ *  transcript without allowing chat content to bleed through. */
 export const COMPOSER_COMMAND_MENU_SURFACE_CLASS_NAME =
   "relative overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground";
 

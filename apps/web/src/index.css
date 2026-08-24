@@ -2551,31 +2551,25 @@ diffs-container {
   border-top-right-radius: 0;
 }
 
-/* Composer glass — the same material as the floating menus/pickers
-   (`APP_TRANSLUCENT_POPUP_SURFACE_BASE_CLASS_NAME`) and the sidebar.
+/* Composer glass — the input material, separate from the opaque floating menus/pickers
+   and the sidebar.
 
    The blur lives on a `::before` at `z-index: -1` rather than on the element itself,
-   exactly like the popup primitive: `backdrop-filter` on the element would make it a
-   containing block and clip the composer's anchored pickers (which rely on
-   `overflow-visible`). Painted behind the element's own translucent fill, the layer
-   frosts the transcript scrolling underneath (see composerOverlay.ts).
+   so it frosts the transcript scrolling underneath (see composerOverlay.ts) without
+   making the composer a containing block that clips anchored pickers (which rely on
+   `overflow-visible`).
 
-   Fill comes from the SAME token the floating menus use (`--popover`, via
-   `--app-composer-picker-surface`), not from `--composer-surface`. In dark mode
-   `--composer-surface` resolves to `--color-background-control-opaque`, which sits
-   within a couple of RGB steps of the chat background — thinning a color to 72% of
-   the color already behind it is a no-op, so the composer read as a flat slab even
-   with the blur running. `--popover` is the elevated token the handoff menu and the
-   pickers are built from, so the composer now lifts off the transcript exactly the
-   way they do.
+   Fill comes from the composer glass surface token, not from the opaque
+   `--app-composer-picker-surface` used by floating menus. The composer keeps its own
+   opacity and blur knobs so the input remains frosted while popup fills stay sealed.
 
    `--composer-glass-opacity` keeps every composer-family surface on one knob. */
 :root {
   --composer-glass-opacity: 55%;
   --composer-glass-stacked-opacity: calc(var(--composer-glass-opacity) / 2);
   --composer-glass-filter: blur(40px) saturate(150%);
-  /* Same base as `.composer-picker-menu-surface`, kept opaque here so the shared
-     `--composer-glass-opacity` knob is the only thing thinning it. */
+  /* Composer glass base, kept opaque here so the shared `--composer-glass-opacity`
+     knob is the only thing thinning it. */
   --composer-glass-surface: var(--popover);
 }
 
@@ -2671,16 +2665,15 @@ diffs-container {
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-/* Frosted translucent shell shared by floating menus & pickers (dropdown menus,
-   selects, popovers, comboboxes) and composer pickers. Background + blur are
-   theme-aware via the tokens set in theme.logic (control-opaque @70% + blur). */
+/* Opaque Theme Background shell shared by floating menus & pickers (dropdown menus,
+   selects, popovers, comboboxes) and composer pickers. */
 .composer-picker-menu-surface {
   background: var(
     --app-composer-picker-surface,
-    color-mix(in oklab, var(--popover) 70%, transparent)
+    var(--color-background-surface)
   );
-  -webkit-backdrop-filter: var(--app-composer-picker-backdrop-filter, blur(32px));
-  backdrop-filter: var(--app-composer-picker-backdrop-filter, blur(32px));
+  -webkit-backdrop-filter: var(--app-composer-picker-backdrop-filter, none);
+  backdrop-filter: var(--app-composer-picker-backdrop-filter, none);
 }
 
 /* Density tokens per size modifier (--normal / --small). Width is opt-in below.
