@@ -249,6 +249,8 @@ describe("DesktopBrowserManager repeated workflow characterization", () => {
 
   it("applies the same popup, tab-open, and scheme-denial policy to tabs and popups", async () => {
     const manager = new DesktopBrowserManager();
+    const mainWindow = {} as BrowserWindow;
+    manager.setWindow(mainWindow);
     const initial = manager.open({ threadId: THREAD_ID });
     const tabId = initial.activeTabId;
     expect(tabId).not.toBeNull();
@@ -288,7 +290,10 @@ describe("DesktopBrowserManager repeated workflow characterization", () => {
           features: "width=480,height=640",
           disposition: "new-window",
         }),
-      ).toMatchObject({ action: "allow", overrideBrowserWindowOptions: expect.any(Object) });
+      ).toMatchObject({
+        action: "allow",
+        overrideBrowserWindowOptions: { parent: mainWindow },
+      });
 
       const beforeTabOpen = manager.getState({ threadId: THREAD_ID }).tabs.length;
       expect(
