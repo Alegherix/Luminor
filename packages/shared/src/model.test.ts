@@ -11,6 +11,7 @@ import {
   MODEL_OPTIONS_BY_PROVIDER,
   CODEX_REASONING_EFFORT_OPTIONS,
   GROK_REASONING_EFFORT_OPTIONS,
+  grokModelSupportsXhighEffort,
 } from "@luminor/contracts";
 
 import {
@@ -348,9 +349,19 @@ describe("getModelCapabilities reasoningEffortLevels", () => {
   });
 
   it("returns Grok effort options for Grok Build models", () => {
-    expect(values("grok", "grok-build-0.1")).toEqual([...GROK_REASONING_EFFORT_OPTIONS]);
-    expect(values("grok", "grok-build")).toEqual([...GROK_REASONING_EFFORT_OPTIONS]);
-    expect(values("grok", "grok-4.5")).toEqual([...GROK_REASONING_EFFORT_OPTIONS]);
+    expect(values("grok", "grok-build-0.1")).toEqual(["none", "low", "medium", "high"]);
+    expect(values("grok", "grok-build")).toEqual(["none", "low", "medium", "high"]);
+    expect(values("grok", "grok-4.5")).toEqual(["none", "low", "medium", "high"]);
+  });
+
+  it("returns Extra High for Grok 4.6 and later before runtime discovery", () => {
+    expect(values("grok", "grok-4.6")).toEqual([...GROK_REASONING_EFFORT_OPTIONS]);
+    expect(values("grok", "grok-4.20-multi-agent")).toEqual([...GROK_REASONING_EFFORT_OPTIONS]);
+    expect(values("grok", "grok-5")).toEqual([...GROK_REASONING_EFFORT_OPTIONS]);
+    expect(GROK_REASONING_EFFORT_OPTIONS).toContain("xhigh");
+    expect(grokModelSupportsXhighEffort("grok-4.6")).toBe(true);
+    expect(grokModelSupportsXhighEffort("grok-4.5")).toBe(false);
+    expect(grokModelSupportsXhighEffort("grok-build")).toBe(false);
   });
 
   it("co-locates labels with effort values", () => {
@@ -403,6 +414,10 @@ describe("hasEffortLevel", () => {
     const grokCaps = getModelCapabilities("grok", "grok-build-0.1");
     expect(hasEffortLevel(grokCaps, "high")).toBe(true);
     expect(hasEffortLevel(grokCaps, "xhigh")).toBe(false);
+
+    const grok46Caps = getModelCapabilities("grok", "grok-4.6");
+    expect(hasEffortLevel(grok46Caps, "high")).toBe(true);
+    expect(hasEffortLevel(grok46Caps, "xhigh")).toBe(true);
   });
 });
 
@@ -877,6 +892,10 @@ describe("normalizeGrokModelOptions", () => {
     });
     expect(normalizeGrokModelOptions("grok-4.5", { reasoningEffort: "high" })).toEqual({
       reasoningEffort: "high",
+    });
+    expect(normalizeGrokModelOptions("grok-4.5", { reasoningEffort: "xhigh" })).toBeUndefined();
+    expect(normalizeGrokModelOptions("grok-4.6", { reasoningEffort: "xhigh" })).toEqual({
+      reasoningEffort: "xhigh",
     });
   });
 });

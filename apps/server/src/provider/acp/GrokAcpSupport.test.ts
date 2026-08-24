@@ -71,6 +71,29 @@ describe("buildGrokAcpSpawnInput", () => {
     expect(spawn.args).not.toContain("--always-approve");
   });
 
+  it("passes xhigh reasoning effort through to Grok 4.6", () => {
+    const spawn = buildGrokAcpSpawnInput(
+      {
+        model: "grok-4.6",
+        reasoningEffort: "xhigh",
+      },
+      "/tmp/project",
+      "approval-required",
+    );
+
+    expect(spawn.args).toEqual([
+      "--permission-mode",
+      "default",
+      "agent",
+      "--no-leader",
+      "-m",
+      "grok-4.6",
+      "--reasoning-effort",
+      "xhigh",
+      "stdio",
+    ]);
+  });
+
   it("uses Grok's process-scoped approval override only for Full Access", () => {
     expect(buildGrokAcpSpawnInput(undefined, "/tmp/project", "full-access").args).toEqual([
       "--permission-mode",

@@ -27,8 +27,34 @@ export const PI_THINKING_LEVEL_OPTIONS = [
   "max",
 ] as const;
 export type PiThinkingLevel = (typeof PI_THINKING_LEVEL_OPTIONS)[number];
-export const GROK_REASONING_EFFORT_OPTIONS = ["none", "low", "medium", "high"] as const;
+export const GROK_REASONING_EFFORT_OPTIONS = ["none", "low", "medium", "high", "xhigh"] as const;
 export type GrokReasoningEffort = (typeof GROK_REASONING_EFFORT_OPTIONS)[number];
+
+const GROK_XHIGH_MIN_VERSION = { major: 4, minor: 6 } as const;
+
+export function grokModelSupportsXhighEffort(model: string | null | undefined): boolean {
+  if (typeof model !== "string") {
+    return false;
+  }
+  const match = /^grok-(\d+)(?:\.(\d+))?/iu.exec(model.trim());
+  if (!match) {
+    return false;
+  }
+  const major = Number(match[1]);
+  const minor = match[2] === undefined ? 0 : Number(match[2]);
+  return (
+    major > GROK_XHIGH_MIN_VERSION.major ||
+    (major === GROK_XHIGH_MIN_VERSION.major && minor >= GROK_XHIGH_MIN_VERSION.minor)
+  );
+}
+
+export function grokReasoningEffortOptionsForModel(
+  model: string | null | undefined,
+): readonly GrokReasoningEffort[] {
+  return grokModelSupportsXhighEffort(model)
+    ? GROK_REASONING_EFFORT_OPTIONS
+    : GROK_REASONING_EFFORT_OPTIONS.filter((value) => value !== "xhigh");
+}
 export const DROID_REASONING_EFFORT_OPTIONS = [
   "off",
   "none",
@@ -223,19 +249,32 @@ const CODEX_GPT_5_5_CAPABILITIES: ModelCapabilities = {
   ],
 };
 
-const GROK_BUILD_CAPABILITIES: ModelCapabilities = {
-  reasoningEffortLevels: [
-    { value: "none", label: "None" },
-    { value: "low", label: "Low", isDefault: true },
-    { value: "medium", label: "Medium" },
-    { value: "high", label: "High" },
-  ],
-  supportsFastMode: false,
-  supportsThinkingToggle: false,
-  promptInjectedEffortLevels: [],
-  contextWindowOptions: [],
-  contextWindowTokens: 500_000,
-};
+const GROK_BASE_EFFORT_LEVELS = [
+  { value: "none", label: "None" },
+  { value: "low", label: "Low", isDefault: true as const },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+] as const;
+
+const GROK_XHIGH_EFFORT_LEVELS = [
+  ...GROK_BASE_EFFORT_LEVELS,
+  { value: "xhigh", label: "Extra High" },
+] as const;
+
+export function grokCapabilitiesForModel(model: string | null | undefined): ModelCapabilities {
+  return {
+    reasoningEffortLevels: grokModelSupportsXhighEffort(model)
+      ? GROK_XHIGH_EFFORT_LEVELS
+      : GROK_BASE_EFFORT_LEVELS,
+    supportsFastMode: false,
+    supportsThinkingToggle: false,
+    promptInjectedEffortLevels: [],
+    contextWindowOptions: [],
+    contextWindowTokens: 500_000,
+  };
+}
+
+const GROK_BUILD_CAPABILITIES: ModelCapabilities = grokCapabilitiesForModel("grok-build");
 
 // Cursor's live catalog is discovered per session (see CursorAdapter.listModels);
 // these entries are the cold-start fallback and mirror the base model ids the

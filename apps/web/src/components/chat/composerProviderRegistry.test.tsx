@@ -106,6 +106,19 @@ const GROK_RUNTIME_4_5_WITH_REASONING: ProviderModelDescriptor = {
   defaultReasoningEffort: "low",
 };
 
+const GROK_RUNTIME_4_6_WITH_REASONING: ProviderModelDescriptor = {
+  slug: "grok-4.6",
+  name: "Grok 4.6",
+  supportedReasoningEfforts: [
+    { value: "none" },
+    { value: "low" },
+    { value: "medium" },
+    { value: "high" },
+    { value: "xhigh" },
+  ],
+  defaultReasoningEffort: "low",
+};
+
 describe("getComposerProviderState", () => {
   it("dispatches Antigravity effort separately from its base model", () => {
     const state = getComposerProviderState({
@@ -647,6 +660,53 @@ describe("getComposerProviderState", () => {
     ]);
     expect(selection.defaultEffort).toBe("low");
     expect(selection.effort).toBe("low");
+  });
+
+  it("exposes Extra High for Grok 4.6 before runtime discovery", () => {
+    const selection = getComposerTraitSelection("grok", "grok-4.6", "", undefined);
+
+    expect(selection.effortLevels.map((effort) => effort.value)).toEqual([
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(selection.effortLevels.find((effort) => effort.value === "xhigh")?.label).toBe(
+      "Extra High",
+    );
+    expect(selection.defaultEffort).toBe("low");
+  });
+
+  it("exposes and dispatches Extra High for Grok 4.6", () => {
+    const selection = getComposerTraitSelection(
+      "grok",
+      "grok-4.6",
+      "",
+      { reasoningEffort: "xhigh" },
+      GROK_RUNTIME_4_6_WITH_REASONING,
+    );
+    const state = getComposerProviderState({
+      provider: "grok",
+      model: "grok-4.6",
+      runtimeModel: GROK_RUNTIME_4_6_WITH_REASONING,
+      prompt: "",
+      modelOptions: { grok: { reasoningEffort: "xhigh" } },
+    });
+
+    expect(selection.effortLevels.map((effort) => effort.value)).toEqual([
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(selection.effort).toBe("xhigh");
+    expect(state).toEqual({
+      provider: "grok",
+      promptEffort: "xhigh",
+      modelOptionsForDispatch: { reasoningEffort: "xhigh" },
+    });
   });
 
   it("exposes and dispatches runtime-discovered Droid efforts for GPT-5.6", () => {

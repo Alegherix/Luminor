@@ -132,6 +132,25 @@ describe("ProviderSendTurnInput", () => {
     expect(parsed.modelSelection.options?.fastMode).toBe(true);
   });
 
+  it("accepts grok modelSelection including xhigh for Grok 4.6", () => {
+    const parsed = decodeProviderSendTurnInput({
+      threadId: "thread-1",
+      modelSelection: {
+        provider: "grok",
+        model: "grok-4.6",
+        options: {
+          reasoningEffort: "xhigh",
+        },
+      },
+    });
+
+    expect(parsed.modelSelection?.provider).toBe("grok");
+    if (parsed.modelSelection?.provider !== "grok") {
+      throw new Error("Expected grok modelSelection");
+    }
+    expect(parsed.modelSelection.options?.reasoningEffort).toBe("xhigh");
+  });
+
   it("accepts claude modelSelection including xhigh for Opus 4.7", () => {
     const parsed = decodeProviderSendTurnInput({
       threadId: "thread-1",

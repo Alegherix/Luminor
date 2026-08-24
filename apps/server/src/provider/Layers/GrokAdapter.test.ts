@@ -318,6 +318,7 @@ describe("GrokAdapter runtime event scoping", () => {
       [
         { slug: "grok-build-0.1", name: "Grok Build 0.1" },
         { slug: "grok-4.5", name: "Grok 4.5" },
+        { slug: "grok-4.6", name: "Grok 4.6" },
       ],
     ]);
 
@@ -325,15 +326,20 @@ describe("GrokAdapter runtime event scoping", () => {
       { slug: "grok-build", name: "Grok 4.3" },
       { slug: "grok-build-0.1", name: "Grok Build 0.1" },
       { slug: "grok-4.5", name: "Grok 4.5" },
+      { slug: "grok-4.6", name: "Grok 4.6" },
     ]);
     for (const model of models) {
       expect(model.defaultReasoningEffort).toBe("low");
-      expect(model.supportedReasoningEfforts?.map((effort) => effort.value)).toEqual([
-        "none",
-        "low",
-        "medium",
-        "high",
-      ]);
     }
+    expect(
+      models
+        .find((model) => model.slug === "grok-4.5")
+        ?.supportedReasoningEfforts?.map((effort) => effort.value),
+    ).toEqual(["none", "low", "medium", "high"]);
+    expect(
+      models
+        .find((model) => model.slug === "grok-4.6")
+        ?.supportedReasoningEfforts?.map((effort) => effort.value),
+    ).toEqual(["none", "low", "medium", "high", "xhigh"]);
   });
 });

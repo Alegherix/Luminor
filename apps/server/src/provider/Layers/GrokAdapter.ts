@@ -5,7 +5,7 @@
  */
 import {
   ApprovalRequestId,
-  GROK_REASONING_EFFORT_OPTIONS,
+  grokReasoningEffortOptionsForModel,
   type GrokModelOptions,
   EventId,
   type ProviderComposerCapabilities,
@@ -199,7 +199,6 @@ const GROK_TURN_SETTLE_DRAIN_POLL_MS = 25;
 const GROK_EXIT_PLAN_RESPONSE_GRACE_MS = 25;
 const XAI_API_BASE_URL = "https://api.x.ai/v1";
 const GROK_DEFAULT_REASONING_EFFORT = "low";
-const GROK_RUNTIME_REASONING_EFFORTS = GROK_REASONING_EFFORT_OPTIONS.map((value) => ({ value }));
 const GROK_PLAN_MODE_PROMPT_PREFIX = [
   "Luminor requested Grok's native plan mode.",
   "Do not implement or mutate files in this turn.",
@@ -586,7 +585,9 @@ export function mergeGrokModelDescriptors(
       models.push({
         slug,
         name: model.name.trim() || formatGrokModelName(slug),
-        supportedReasoningEfforts: GROK_RUNTIME_REASONING_EFFORTS,
+        supportedReasoningEfforts: grokReasoningEffortOptionsForModel(slug).map((value) => ({
+          value,
+        })),
         defaultReasoningEffort: GROK_DEFAULT_REASONING_EFFORT,
       });
     }
