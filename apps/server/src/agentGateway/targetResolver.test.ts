@@ -152,6 +152,88 @@ describe("agent gateway target resolver", () => {
     }),
   );
 
+  it.effect("accepts model-specific Codex Max and Ultra static fallbacks", () =>
+    Effect.gen(function* () {
+      const codexDiscovery = {
+        listModels: () =>
+          Effect.succeed({
+            source: "test",
+            models: [
+              { slug: "gpt-5.6-luna", name: "GPT-5.6 Luna" },
+              { slug: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
+              { slug: "gpt-5.6-terra", name: "GPT-5.6 Terra" },
+              { slug: "gpt-5.5", name: "GPT-5.5" },
+            ],
+          }),
+      } as unknown as ProviderDiscoveryServiceShape;
+
+      const targets = [
+        {
+          provider: "codex" as const,
+          model: "gpt-5.6-luna",
+          options: { reasoningEffort: "max" },
+        },
+        {
+          provider: "codex" as const,
+          model: "gpt-5.6-sol",
+          options: { reasoningEffort: "ultra" },
+        },
+        {
+          provider: "codex" as const,
+          model: "gpt-5.6-terra",
+          options: { reasoningEffort: "ultra" },
+        },
+      ];
+
+      for (const target of targets) {
+        assert.deepEqual(
+          yield* resolveAgentGatewayTarget({ target, discovery: codexDiscovery }),
+          target,
+        );
+      }
+
+      const guidance = agentGatewayTargetOptionGuidance({
+        provider: "codex",
+        defaultModel: "gpt-5.5",
+        enabled: true,
+        available: true,
+        models: (yield* codexDiscovery.listModels({ provider: "codex" })).models,
+      });
+      const effortValues = (model: string) =>
+        guidance.optionsByModel[model]?.find((option) => option.key === "reasoningEffort")
+          ?.allowedValues;
+      assert.deepEqual(effortValues("gpt-5.6-luna"), [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+      ]);
+      assert.deepEqual(effortValues("gpt-5.6-sol"), [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra",
+      ]);
+      assert.notInclude(effortValues("gpt-5.5") ?? [], "max");
+
+      const rejected = yield* resolveAgentGatewayTarget({
+        target: {
+          provider: "codex",
+          model: "gpt-5.5",
+          options: { reasoningEffort: "max" },
+        },
+        discovery: codexDiscovery,
+      }).pipe(
+        Effect.map(() => ({ code: "unexpected-success" })),
+        Effect.catch((error) => Effect.succeed(error)),
+      );
+      assert.equal(rejected.code, "model_option_unavailable");
+    }),
+  );
+
   it.effect("rejects a guessed model slug before creation", () =>
     Effect.gen(function* () {
       const result = yield* resolveAgentGatewayTarget({

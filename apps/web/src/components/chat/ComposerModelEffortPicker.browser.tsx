@@ -10,6 +10,7 @@ import { ComposerModelEffortPicker } from "./ComposerModelEffortPicker";
 const THREAD_ID = ThreadId.makeUnsafe("thread-grok-model-effort-picker");
 const GROK_4_5 = "grok-4.5" as ModelSlug;
 const GROK_4_6 = "grok-4.6" as ModelSlug;
+const CODEX_LUNA = "gpt-5.6-luna" as ModelSlug;
 
 describe("ComposerModelEffortPicker", () => {
   it("keeps Grok effort visible in compact layouts before runtime discovery", async () => {
@@ -83,6 +84,41 @@ describe("ComposerModelEffortPicker", () => {
       const trigger = page.getByRole("button", { name: "Change model and reasoning" });
       await trigger.click();
       await expect.element(page.getByRole("menuitemradio", { name: "Extra High" })).toBeVisible();
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("shows Max for Codex Luna before runtime discovery", async () => {
+    const screen = await render(
+      <ComposerModelEffortPicker
+        provider="codex"
+        model={CODEX_LUNA}
+        lockedProvider={null}
+        modelOptionsByProvider={{
+          claudeAgent: [],
+          codex: [{ slug: CODEX_LUNA, name: "GPT-5.6 Luna" }],
+          cursor: [],
+          antigravity: [],
+          grok: [],
+          droid: [],
+          kilo: [],
+          opencode: [],
+          pi: [],
+        }}
+        hideStatusLabel
+        onProviderModelChange={vi.fn()}
+        threadId={THREAD_ID}
+        modelOptions={undefined}
+        prompt=""
+        onPromptChange={vi.fn()}
+      />,
+    );
+
+    try {
+      const trigger = page.getByRole("button", { name: "Change model and reasoning" });
+      await trigger.click();
+      await expect.element(page.getByRole("menuitemradio", { name: "Max" })).toBeVisible();
     } finally {
       await screen.unmount();
     }

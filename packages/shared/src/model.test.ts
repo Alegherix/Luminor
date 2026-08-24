@@ -220,6 +220,34 @@ describe("getModelCapabilities reasoningEffortLevels", () => {
     expect(values("codex", "gpt-5.4")).toEqual([...CODEX_REASONING_EFFORT_OPTIONS]);
   });
 
+  it("keeps Codex Max and Ultra model-specific in the static fallback", () => {
+    expect(values("codex", "gpt-5.6-luna")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+    expect(values("codex", "gpt-5.6-sol")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra",
+    ]);
+    expect(values("codex", "gpt-5.6-terra")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra",
+    ]);
+    expect(values("codex", "gpt-5.5")).not.toContain("max");
+    expect(values("codex", "gpt-5.4")).not.toContain("max");
+  });
+
   it("matches Droid's GPT-5.5 and GPT-5.6 fallback effort ladders", () => {
     expect(values("droid", "gpt-5.5")).toEqual(["low", "medium", "high", "xhigh"]);
     expect(values("droid", "gpt-5.5-pro")).toEqual(["medium", "high", "xhigh"]);

@@ -8,6 +8,8 @@ import {
   type ClaudeModelOptions,
   type ClaudeCodeEffort,
   type CodexModelOptions,
+  codexCapabilitiesForModel,
+  codexModelHasModelSpecificEfforts,
   grokCapabilitiesForModel,
   type GrokModelOptions,
   type GrokReasoningEffort,
@@ -426,6 +428,9 @@ export function getModelCapabilities(
   }
   if (provider === "grok" && slug) {
     return grokCapabilitiesForModel(slug);
+  }
+  if (provider === "codex" && slug && codexModelHasModelSpecificEfforts(slug)) {
+    return codexCapabilitiesForModel(slug);
   }
   return EMPTY_MODEL_CAPABILITIES;
 }

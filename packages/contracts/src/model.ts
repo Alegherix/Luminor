@@ -5,6 +5,43 @@ import type { ProviderKind } from "./orchestration";
 export const CODEX_REASONING_EFFORT_OPTIONS = ["low", "medium", "high", "xhigh"] as const;
 // Codex app-server can add model-specific efforts through runtime discovery.
 export type CodexReasoningEffort = string;
+
+const CODEX_MAX_REASONING_EFFORT_OPTIONS = [...CODEX_REASONING_EFFORT_OPTIONS, "max"] as const;
+const CODEX_ULTRA_REASONING_EFFORT_OPTIONS = [
+  ...CODEX_MAX_REASONING_EFFORT_OPTIONS,
+  "ultra",
+] as const;
+
+function normalizedCodexModel(model: string | null | undefined): string | null {
+  if (typeof model !== "string") {
+    return null;
+  }
+  const normalized = model.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : null;
+}
+
+export function codexModelHasModelSpecificEfforts(model: string | null | undefined): boolean {
+  const normalized = normalizedCodexModel(model);
+  return (
+    normalized === "gpt-5.6-luna" ||
+    normalized === "gpt-5.6-sol" ||
+    normalized === "gpt-5.6-terra"
+  );
+}
+
+export function codexReasoningEffortOptionsForModel(
+  model: string | null | undefined,
+): readonly CodexReasoningEffort[] {
+  switch (normalizedCodexModel(model)) {
+    case "gpt-5.6-luna":
+      return CODEX_MAX_REASONING_EFFORT_OPTIONS;
+    case "gpt-5.6-sol":
+    case "gpt-5.6-terra":
+      return CODEX_ULTRA_REASONING_EFFORT_OPTIONS;
+    default:
+      return CODEX_REASONING_EFFORT_OPTIONS;
+  }
+}
 export const CLAUDE_API_EFFORT_OPTIONS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type ClaudeApiEffort = (typeof CLAUDE_API_EFFORT_OPTIONS)[number];
 export const CLAUDE_PROMPT_MODE_OPTIONS = ["ultrathink"] as const;
@@ -225,6 +262,39 @@ export type ModelCapabilities = {
   readonly variantOptions?: readonly EffortOption[];
   readonly agentOptions?: readonly EffortOption[];
 };
+
+function codexEffortLabel(value: CodexReasoningEffort): string {
+  switch (value) {
+    case "low":
+      return "Low";
+    case "medium":
+      return "Medium";
+    case "high":
+      return "High";
+    case "xhigh":
+      return "Extra High";
+    case "max":
+      return "Max";
+    case "ultra":
+      return "Ultra";
+    default:
+      return value;
+  }
+}
+
+export function codexCapabilitiesForModel(model: string | null | undefined): ModelCapabilities {
+  return {
+    reasoningEffortLevels: codexReasoningEffortOptionsForModel(model).map((value) => ({
+      value,
+      label: codexEffortLabel(value),
+      ...(value === "high" ? { isDefault: true as const } : {}),
+    })),
+    supportsFastMode: true,
+    supportsThinkingToggle: false,
+    promptInjectedEffortLevels: [],
+    contextWindowOptions: [],
+  };
+}
 
 const CODEX_GPT_5_CAPABILITIES: ModelCapabilities = {
   reasoningEffortLevels: [

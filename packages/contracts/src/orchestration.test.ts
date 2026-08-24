@@ -494,6 +494,36 @@ it.effect("preserves explicit provider and runtime mode in thread.turn.start", (
   }),
 );
 
+it.effect("decodes Codex Luna Max in thread.turn.start", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeClientOrchestrationCommand({
+      type: "thread.turn.start",
+      commandId: "cmd-luna-max",
+      threadId: "thread-luna-max",
+      message: {
+        messageId: "msg-luna-max",
+        role: "user",
+        text: "Use Luna Max",
+        attachments: [],
+      },
+      modelSelection: {
+        provider: "codex",
+        model: "gpt-5.6-luna",
+        options: { reasoningEffort: "max" },
+      },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      createdAt: "2026-08-24T00:00:00.000Z",
+    });
+
+    assert.deepStrictEqual(parsed.modelSelection, {
+      provider: "codex",
+      model: "gpt-5.6-luna",
+      options: { reasoningEffort: "max" },
+    });
+  }),
+);
+
 it.effect("preserves debug mode in thread turns and interaction-mode commands", () =>
   Effect.gen(function* () {
     const turn = yield* decodeThreadTurnStartCommand({

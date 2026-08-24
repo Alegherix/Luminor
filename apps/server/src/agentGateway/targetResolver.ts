@@ -1,6 +1,7 @@
 import {
   CLAUDE_CODE_EFFORT_OPTIONS,
   CODEX_REASONING_EFFORT_OPTIONS,
+  codexReasoningEffortOptionsForModel,
   DEFAULT_MODEL_BY_PROVIDER,
   DROID_REASONING_EFFORT_OPTIONS,
   GROK_REASONING_EFFORT_OPTIONS,
@@ -344,6 +345,7 @@ function modelTargetOptionRules(
     key: string,
     values: ReadonlyArray<AgentGatewayTargetOptionValue>,
     allowEmpty = false,
+    source: AgentGatewayTargetOptionRule["allowedValuesSource"] = "model-discovery",
   ) => {
     if (values.length === 0 && !allowEmpty) return;
     const index = rules.findIndex((rule) => rule.key === key);
@@ -351,11 +353,19 @@ function modelTargetOptionRules(
     rules[index] = {
       ...rules[index]!,
       allowedValues: values,
-      allowedValuesSource: "model-discovery",
+      allowedValuesSource: source,
       ...(rules[index]!.allowsCustomValue === true ? { allowsCustomValue: false } : {}),
     };
   };
 
+  if (provider === "codex") {
+    replaceAllowedValues(
+      providerPrimaryOptionKey(provider),
+      codexReasoningEffortOptionsForModel(model.slug),
+      false,
+      "provider-contract",
+    );
+  }
   const discoveredEfforts = model.supportedReasoningEfforts?.map((entry) => entry.value) ?? [];
   replaceAllowedValues(providerPrimaryOptionKey(provider), discoveredEfforts);
 
@@ -483,7 +493,10 @@ function validateOptionsWithoutCatalog(target: ModelSelection): void {
     switch (rule.validation.kind) {
       case "effort": {
         const effort = normalizedEffortValue(value);
-        const available = rule.allowedValues.map(String);
+        const available =
+          target.provider === "codex"
+            ? codexReasoningEffortOptionsForModel(target.model).map(String)
+            : rule.allowedValues.map(String);
         if (effort === undefined || !available.includes(effort)) {
           failUnavailableOption(target, effort ?? optionId, available);
         }
@@ -547,7 +560,10 @@ function validateEffortOption(
   }
 
   if ((advertisedEfforts?.length ?? 0) === 0 && effortDescriptors.length === 0) {
-    const available = rule.allowedValues.map(String);
+    const available =
+      target.provider === "codex"
+        ? codexReasoningEffortOptionsForModel(target.model).map(String)
+        : rule.allowedValues.map(String);
     if (!available.includes(effort)) failUnavailableOption(target, effort, available);
   }
 }
