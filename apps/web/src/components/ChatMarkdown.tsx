@@ -33,7 +33,7 @@ import { resolveDiffThemeName, type DiffThemeName } from "../lib/diffRendering";
 import { dedentCode, parseCodeFenceInfo, type CodeFenceInfo } from "../lib/codeFence";
 import { getFileIconName, pathLooksLikeKnownFile } from "../file-icons";
 import { CentralIcon } from "~/lib/central-icons";
-import { isLocalImageMarkdownSrc } from "../lib/localImageUrls";
+import { extractLocalMarkdownImages, isLocalImageMarkdownSrc } from "../lib/localImageUrls";
 import { repairMarkdownTableDelimiters } from "../lib/markdownTableRepair";
 import { showFileReferenceContextMenu } from "../lib/fileReferenceContextMenu";
 import { useTheme } from "../hooks/useTheme";
@@ -1072,6 +1072,14 @@ function ChatMarkdown({
   // completed messages render the exact current text immediately (no visual change).
   const deferredNormalizedText = useDeferredValue(normalizedText);
   const renderedText = isStreaming ? deferredNormalizedText : normalizedText;
+  const localImages = useMemo(
+    () =>
+      extractLocalMarkdownImages(renderedText).map((image) => ({
+        alt: image.alt,
+        src: restoreLiteralDollarPlaceholders(image.src),
+      })),
+    [renderedText],
+  );
   // Marker offsets are applied against mdast positions, which come from the
   // repaired text — validate them against the same string. A marker recorded
   // after a repaired delimiter row fails its `selectedText` check and is
@@ -1199,18 +1207,20 @@ function ChatMarkdown({
           </code>
         );
       },
+      p({ children, ...props }) {
+        const visibleChildren = Children.toArray(children).filter(
+          (child) => child !== null && child !== false && child !== "",
+        );
+        if (visibleChildren.length === 0) {
+          return null;
+        }
+        return <p {...props}>{children}</p>;
+      },
       img({ node: _node, src, alt: altProp, ...props }) {
         const alt = altProp ?? "";
         const restoredSrc = src ? restoreLiteralDollarPlaceholders(src) : "";
         if (isLocalImageMarkdownSrc(restoredSrc)) {
-          return (
-            <GeneratedMarkdownImage
-              src={restoredSrc}
-              alt={alt}
-              cwd={cwd}
-              onImageExpand={onImageExpand}
-            />
-          );
+          return null;
         }
         return <img {...props} src={restoredSrc} alt={alt} loading="lazy" />;
       },
@@ -1274,7 +1284,6 @@ function ChatMarkdown({
       isStreaming,
       isUserVariant,
       mentionReferences,
-      onImageExpand,
       onTaskToggle,
       resolvedTheme,
       terminalContexts,
@@ -1286,6 +1295,19 @@ function ChatMarkdown({
       className={`chat-markdown ${isUserVariant ? "chat-markdown--user " : ""}w-full min-w-0 ${className} text-foreground`}
       style={style}
     >
+      {localImages.length > 0 ? (
+        <div className="mb-2 flex flex-wrap justify-start gap-2">
+          {localImages.map((image) => (
+            <GeneratedMarkdownImage
+              key={image.src}
+              src={image.src}
+              alt={image.alt}
+              cwd={cwd}
+              onImageExpand={onImageExpand}
+            />
+          ))}
+        </div>
+      ) : null}
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}

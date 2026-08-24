@@ -261,6 +261,46 @@ describe("ChatMarkdown", () => {
     expect(markup).not.toContain('class="katex"');
   });
 
+  it("renders local generated images as transcript thumbnails without extra action chrome", async () => {
+    const markup = await renderMarkdown(
+      "Here you go:\n\n![Generated image](/tmp/generated/mock-a.png)\n",
+    );
+
+    expect(markup).toContain('aria-label="Preview Generated image"');
+    expect(markup).toContain(
+      "flex size-15 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/70",
+    );
+    expect(markup).toContain("size-full object-cover");
+    expect(markup).not.toContain("Expand");
+    expect(markup).not.toContain("Download");
+    expect(markup).not.toContain("Open panel");
+    expect(markup).not.toContain("chat-generated-image");
+    expect(markup).not.toContain('loading="lazy"');
+  });
+
+  it("keeps surrounding assistant text when rendering a local markdown image", async () => {
+    const markup = await renderMarkdown(
+      "Before the shot.\n\n![Generated image](/tmp/generated/mock-a.png)\n\nAfter the shot.",
+    );
+
+    expect(markup).toContain("Before the shot.");
+    expect(markup).toContain("After the shot.");
+    expect(markup).toContain('aria-label="Preview Generated image"');
+  });
+
+  it("renders several local images as a left-aligned thumbnail row", async () => {
+    const markup = await renderMarkdown(
+      [
+        "![Generated image](/tmp/generated/mock-a.png)",
+        "",
+        "![Generated image](/tmp/generated/mock-b.png)",
+      ].join("\n"),
+    );
+
+    expect(markup).toContain("flex flex-wrap justify-start gap-2");
+    expect((markup.match(/aria-label="Preview Generated image"/g) ?? []).length).toBe(2);
+  });
+
   it("keeps plan, diff, and transcript surfaces routed through the shared renderer", () => {
     const planSidebarSource = readFileSync(new URL("./PlanSidebar.tsx", import.meta.url), "utf8");
     const proposedPlanCardSource = readFileSync(

@@ -4,8 +4,7 @@
 // Layer: Web UI primitive
 // Exports: useLocalImagePreview, LocalImageErrorCard, LocalImagePreview
 // Notes: Pure UI; image URL building lives in `~/lib/localImageUrls`. The chat
-//        markdown variant (`GeneratedMarkdownImage`) composes the same hook and
-//        error card with its own inline frame/overlay rendering.
+//        markdown variant (`GeneratedMarkdownImage`) composes the same hook.
 
 import { type ImgHTMLAttributes, type MouseEvent, useState } from "react";
 
@@ -19,7 +18,7 @@ export type LocalImagePreviewStatus = "loading" | "ready" | "error";
 
 type LocalImagePreviewImgProps = Pick<
   ImgHTMLAttributes<HTMLImageElement>,
-  "src" | "loading" | "decoding" | "draggable" | "onLoad" | "onError"
+  "src" | "decoding" | "draggable" | "onLoad" | "onError"
 >;
 
 export interface LocalImagePreviewState {
@@ -35,6 +34,21 @@ export interface LocalImagePreviewState {
 
 const MAX_LOCAL_IMAGE_LOAD_ATTEMPTS = 3;
 const LOCAL_IMAGE_RETRY_BASE_DELAY_MS = 1_500;
+
+type RememberedLocalImageLoad = {
+  attempt: number;
+  status: LocalImagePreviewStatus;
+};
+
+const rememberedLocalImageLoadByUrl = new Map<string, RememberedLocalImageLoad>();
+
+function readRememberedLocalImageLoad(url: string): RememberedLocalImageLoad {
+  return rememberedLocalImageLoadByUrl.get(url) ?? { attempt: 0, status: "loading" };
+}
+
+function persistLocalImageLoad(url: string, load: RememberedLocalImageLoad): void {
+  rememberedLocalImageLoadByUrl.set(url, load);
+}
 
 export function useLocalImagePreview(input: {
   src: string;
@@ -60,21 +74,29 @@ export function useLocalImagePreview(input: {
     generation: number;
     attempt: number;
     status: LocalImagePreviewStatus;
-  }>(() => ({ url: previewUrl, generation: 0, attempt: 0, status: "loading" }));
+  }>(() => {
+    const remembered = readRememberedLocalImageLoad(previewUrl);
+    return {
+      url: previewUrl,
+      generation: 0,
+      attempt: remembered.attempt,
+      status: remembered.status,
+    };
+  });
   const load =
     storedLoad.url === previewUrl
       ? storedLoad
       : {
           url: previewUrl,
           generation: storedLoad.generation + 1,
-          attempt: 0,
-          status: "loading" as const,
+          ...readRememberedLocalImageLoad(previewUrl),
         };
   if (load !== storedLoad) {
     setStoredLoad(load);
   }
 
   const settleLoad = (status: Exclude<LocalImagePreviewStatus, "loading">) => {
+    persistLocalImageLoad(previewUrl, { attempt: load.attempt, status });
     setStoredLoad((current) =>
       current.url === previewUrl && current.generation === load.generation
         ? { ...current, status }
@@ -86,6 +108,7 @@ export function useLocalImagePreview(input: {
   // before finishing the write, or the server is still snapshotting it), so a
   // couple of delayed cache-busted retries run before the error card commits.
   const scheduleRetry = (nextAttempt: number) => {
+    persistLocalImageLoad(previewUrl, { attempt: nextAttempt, status: "loading" });
     window.setTimeout(() => {
       setStoredLoad((current) =>
         current.url === previewUrl &&
@@ -102,7 +125,6 @@ export function useLocalImagePreview(input: {
 
   const imgProps: LocalImagePreviewImgProps = {
     src: attemptSrc,
-    loading: "lazy",
     decoding: "async",
     draggable: false,
     onLoad: () => {

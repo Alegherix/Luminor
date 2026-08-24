@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { buildLocalImageUrl, isLocalImageMarkdownSrc, localImageFileName } from "./localImageUrls";
+import {
+  buildLocalImageUrl,
+  extractLocalMarkdownImages,
+  isLocalImageMarkdownSrc,
+  localImageFileName,
+} from "./localImageUrls";
 
 describe("local image URL helpers", () => {
   afterEach(() => {
@@ -16,6 +21,23 @@ describe("local image URL helpers", () => {
     expect(isLocalImageMarkdownSrc("D:/codex/generated_images/thread/call.png")).toBe(true);
     expect(isLocalImageMarkdownSrc("https://example.com/image.png")).toBe(false);
     expect(isLocalImageMarkdownSrc("/Users/me/file.txt")).toBe(false);
+  });
+
+  it("extracts local markdown images and skips remotes and duplicates", () => {
+    expect(
+      extractLocalMarkdownImages(
+        [
+          "Here you go:",
+          "![Generated image](/tmp/generated/mock-a.png)",
+          "![Generated image](/tmp/generated/mock-a.png)",
+          "![remote](https://example.com/image.png)",
+          "![](./assets/mock-b.webp)",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      { alt: "Generated image", src: "/tmp/generated/mock-a.png" },
+      { alt: "", src: "./assets/mock-b.webp" },
+    ]);
   });
 
   it("builds preview and download routes (no window context)", () => {

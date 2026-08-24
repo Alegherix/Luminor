@@ -29,6 +29,22 @@ function normalizeMarkdownImagePath(src: string): string {
   }
 }
 
+const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(<?([^)\s>]+)>?(?:\s+"[^"]*")?\)/g;
+
+export function extractLocalMarkdownImages(text: string): Array<{ alt: string; src: string }> {
+  const images: Array<{ alt: string; src: string }> = [];
+  const seen = new Set<string>();
+  for (const match of text.matchAll(MARKDOWN_IMAGE_PATTERN)) {
+    const src = match[2];
+    if (!src || !isLocalImageMarkdownSrc(src) || seen.has(src)) {
+      continue;
+    }
+    seen.add(src);
+    images.push({ alt: match[1] ?? "", src });
+  }
+  return images;
+}
+
 export function isLocalImageMarkdownSrc(src: string | undefined): src is string {
   if (!src) {
     return false;
