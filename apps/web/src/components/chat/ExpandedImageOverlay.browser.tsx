@@ -46,7 +46,9 @@ describe("ExpandedImageOverlay", () => {
 
     try {
       await expect.element(page.getByRole("img", { name: "Second image" })).toBeInTheDocument();
-      await expect.element(page.getByText("Second image (2/3)")).toBeInTheDocument();
+      await expect.element(page.getByRole("link", { name: "Download image" })).toBeInTheDocument();
+      await expect.element(page.getByText("Second image (2/3)")).not.toBeInTheDocument();
+      await expect.element(page.getByText("Open panel")).not.toBeInTheDocument();
 
       await page.getByRole("button", { name: "Previous image" }).click();
       await page.getByRole("button", { name: "Next image" }).click();

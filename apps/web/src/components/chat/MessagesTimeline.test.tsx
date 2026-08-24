@@ -239,6 +239,61 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain('data-timeline-row-kind="message"');
   });
 
+  it("renders assistant image attachments as transcript thumbnails without attachment-key chrome", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        hasMessages
+        isWorking={false}
+        activeTurnInProgress={false}
+        activeTurnStartedAt={null}
+        timelineEntries={[
+          {
+            id: "entry-assistant-image",
+            kind: "message",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            message: {
+              id: MessageId.makeUnsafe("assistant-message-image"),
+              role: "assistant",
+              text: "Here you go.",
+              createdAt: "2026-03-17T19:12:28.000Z",
+              streaming: false,
+              attachments: [
+                {
+                  id: "att_v2_73b1149b75ed46d698a64420b93d0353",
+                  type: "image",
+                  name: "attachment:att_v2_73b1149b75ed46d698a64420b93d0353",
+                  mimeType: "image/png",
+                  sizeBytes: 12,
+                  previewUrl: "/attachments/att_v2_73b1149b75ed46d698a64420b93d0353",
+                },
+              ],
+            },
+          },
+        ]}
+        turnDiffSummaryByAssistantMessageId={new Map()}
+        nowIso="2026-03-17T19:12:30.000Z"
+        expandedWorkGroups={{}}
+        onToggleWorkGroup={() => {}}
+        onOpenTurnDiff={() => {}}
+        revertTurnCountByUserMessageId={new Map()}
+        onRevertUserMessage={() => {}}
+        isRevertingCheckpoint={false}
+        onImageExpand={() => {}}
+        markdownCwd={undefined}
+        resolvedTheme="light"
+        timestampFormat="locale"
+        workspaceRoot={undefined}
+      />,
+    );
+
+    expect(markup).toContain('aria-label="Preview Image"');
+    expect(markup).toContain("/attachments/att_v2_73b1149b75ed46d698a64420b93d0353");
+    expect(markup).not.toContain("Open panel");
+    expect(markup).not.toContain(">Download<");
+    expect(markup).not.toContain("attachment:att_v2_73b1149b75ed46d698a64420b93d0353");
+  });
+
   it("renders assistant math through the shared markdown renderer", async () => {
     const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(

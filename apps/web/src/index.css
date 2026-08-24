@@ -1477,8 +1477,14 @@ label:has(> select#reasoning-effort) select {
 }
 
 .local-image-preview[data-status="ready"]:hover .local-image-preview__download,
-.local-image-preview[data-status="ready"]:focus-within .local-image-preview__download {
+.local-image-preview[data-status="ready"]:focus-within .local-image-preview__download,
+.expanded-image-preview:hover .local-image-preview__download,
+.expanded-image-preview:focus-within .local-image-preview__download {
   opacity: 1;
+}
+
+.expanded-image-preview__download {
+  right: 2.75rem;
 }
 
 /* Shared error card used by chat markdown images and editor/diff previews. */

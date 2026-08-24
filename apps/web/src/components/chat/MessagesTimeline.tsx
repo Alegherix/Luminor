@@ -68,6 +68,7 @@ import { CrossTaskOriginLabel, type CrossTaskOrigin } from "./CrossTaskOriginLab
 import { LuminorThreadCreationCard } from "./LuminorThreadCreationCard";
 import { ForkSourceDivider, type ForkSourceReference } from "./ForkSourceDivider";
 import { buildExpandedImagePreview, ExpandedImagePreview } from "./ExpandedImagePreview";
+import { imageAccessibleName } from "./imagePreviewDownload";
 import { TRANSCRIPT_IMAGE_THUMBNAIL_BUTTON_CLASS_NAME } from "./transcriptImageThumbnail";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { DiffStatLabel } from "./DiffStatLabel";
@@ -1595,7 +1596,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                       )}
                     >
                       {userImages.map((image) => (
-                        <UserImageAttachmentThumbnail
+                        <TranscriptImageAttachmentThumbnail
                           key={image.id}
                           image={image}
                           userImages={userImages}
@@ -1844,6 +1845,14 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             ? undefined
             : settledTurnCollapseTransitions[row.message.id];
           const isTailContentRow = row.id === tailContentRowId;
+          const assistantImages = (row.message.attachments ?? []).filter(
+            (
+              attachment,
+            ): attachment is Extract<
+              NonNullable<TimelineMessage["attachments"]>[number],
+              { type: "image" }
+            > => attachment.type === "image",
+          );
           const renderWorkDisplay = (
             display: typeof leadingWorkDisplay,
             placement: "leading" | "inline",
@@ -2112,6 +2121,27 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               )}
               <div className="group min-w-0 py-0.5">
                 {renderWorkDisplay(leadingWorkDisplay, "leading")}
+                {assistantImages.length > 0 ? (
+                  <div
+                    className={cn(
+                      "flex flex-wrap justify-start gap-2",
+                      messageText !== null ? "mb-2" : null,
+                    )}
+                  >
+                    {assistantImages.map((image) => (
+                      <TranscriptImageAttachmentThumbnail
+                        key={image.id}
+                        image={image}
+                        userImages={assistantImages}
+                        onImageExpand={onImageExpand}
+                        onTimelineImageLoad={
+                          isTailContentRow ? scrollTailExpansionToEnd : ignoreTimelineImageLoad
+                        }
+                        resolvedTheme={resolvedTheme}
+                      />
+                    ))}
+                  </div>
+                ) : null}
                 {messageText !== null ? (
                   <div data-assistant-message-id={row.message.id}>
                     <ChatMarkdown
@@ -2971,7 +3001,7 @@ function formatWorkingTimerNow(startIso: string): string {
   return formatClockElapsed(startIso, new Date().toISOString()) ?? "0s";
 }
 
-const UserImageAttachmentThumbnail = memo(function UserImageAttachmentThumbnail(props: {
+const TranscriptImageAttachmentThumbnail = memo(function TranscriptImageAttachmentThumbnail(props: {
   image: Extract<NonNullable<TimelineMessage["attachments"]>[number], { type: "image" }>;
   userImages: Array<
     Extract<NonNullable<TimelineMessage["attachments"]>[number], { type: "image" }>
@@ -2980,12 +3010,13 @@ const UserImageAttachmentThumbnail = memo(function UserImageAttachmentThumbnail(
   onTimelineImageLoad: () => void;
   resolvedTheme: "light" | "dark";
 }) {
+  const accessibleName = imageAccessibleName(props.image.name);
   return (
     <button
       type="button"
       className={TRANSCRIPT_IMAGE_THUMBNAIL_BUTTON_CLASS_NAME}
-      aria-label={`Preview ${props.image.name}`}
-      title={props.image.name}
+      aria-label={`Preview ${accessibleName}`}
+      title={accessibleName}
       onClick={() => {
         const preview = buildExpandedImagePreview(props.userImages, props.image.id);
         if (!preview) return;
@@ -2995,7 +3026,7 @@ const UserImageAttachmentThumbnail = memo(function UserImageAttachmentThumbnail(
       {props.image.previewUrl ? (
         <img
           src={props.image.previewUrl}
-          alt={props.image.name}
+          alt={accessibleName}
           className="size-full object-cover"
           onLoad={props.onTimelineImageLoad}
           onError={props.onTimelineImageLoad}

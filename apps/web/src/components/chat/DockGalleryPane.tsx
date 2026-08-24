@@ -9,22 +9,23 @@ import { memo, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 
 import type { ThreadId } from "@luminor/contracts";
 
-import { DownloadIcon, LayoutGridIcon, PhotoIcon } from "~/lib/icons";
+import { LayoutGridIcon, PhotoIcon } from "~/lib/icons";
 import { cn } from "~/lib/utils";
 import type { RightDockPane } from "~/rightDockStore.logic";
 import { useStore } from "~/store";
 import { createThreadSelector } from "~/storeSelectors";
 import type { ChatMessage } from "~/types";
 
-import { useLocalImageDownloadClick, useLocalImagePreview } from "../LocalImagePreview";
+import { useLocalImagePreview } from "../LocalImagePreview";
 import { IconButton } from "../ui/icon-button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   collectGalleryImages,
   groupGalleryImagesByMessage,
   resolveSelectedGalleryImage,
   type GalleryImage,
 } from "./galleryPane.logic";
+import { ImageCornerDownload } from "./ImageCornerDownload";
+import { imageAccessibleName } from "./imagePreviewDownload";
 
 type GalleryViewMode = "focus" | "canvas";
 
@@ -53,7 +54,9 @@ function LocalGalleryImage(props: { image: GalleryImage; cwd: string | null; cla
       </div>
     );
   }
-  return <img {...imgProps} alt={props.image.name} className={props.className} />;
+  return (
+    <img {...imgProps} alt={imageAccessibleName(props.image.name)} className={props.className} />
+  );
 }
 
 function GalleryImageView(props: { image: GalleryImage; cwd: string | null; className?: string }) {
@@ -69,7 +72,7 @@ function GalleryImageView(props: { image: GalleryImage; cwd: string | null; clas
   return (
     <img
       src={props.image.src}
-      alt={props.image.name}
+      alt={imageAccessibleName(props.image.name)}
       loading="lazy"
       decoding="async"
       draggable={false}
@@ -91,8 +94,8 @@ function GalleryThumbnail(props: {
   return (
     <button
       type="button"
-      title={props.image.name}
-      aria-label={`View ${props.image.name}`}
+      title={imageAccessibleName(props.image.name)}
+      aria-label={`View ${imageAccessibleName(props.image.name)}`}
       aria-current={props.selected ? "true" : undefined}
       onClick={props.onSelect}
       className={cn(
@@ -110,34 +113,19 @@ function GalleryThumbnail(props: {
   );
 }
 
-function LocalImageDownloadButton(props: { image: GalleryImage; cwd: string | null }) {
+function GalleryImageCornerDownload(props: { image: GalleryImage; cwd: string | null }) {
+  if (props.image.kind === "local") {
+    return <LocalGalleryCornerDownload image={props.image} cwd={props.cwd} />;
+  }
+  return <ImageCornerDownload href={props.image.src} name={props.image.name} />;
+}
+
+function LocalGalleryCornerDownload(props: { image: GalleryImage; cwd: string | null }) {
   const { downloadUrl, downloadName } = useLocalImagePreview({
     src: props.image.src,
     cwd: props.cwd,
   });
-  const downloadImage = useLocalImageDownloadClick({
-    downloadUrl,
-    downloadName,
-    errorTitle: "Could not download image",
-  });
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <a
-            href={downloadUrl}
-            download={downloadName}
-            onClick={downloadImage}
-            aria-label={`Download ${props.image.name}`}
-            className="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <DownloadIcon className="size-4" />
-          </a>
-        }
-      />
-      <TooltipPopup>Download</TooltipPopup>
-    </Tooltip>
-  );
+  return <ImageCornerDownload href={downloadUrl} name={downloadName || props.image.name} />;
 }
 
 function GalleryFocusView(props: {
@@ -185,12 +173,13 @@ function GalleryFocusView(props: {
           />
         ))}
       </div>
-      <div className="flex min-w-0 flex-1 items-center justify-center overflow-hidden p-4">
+      <div className="expanded-image-preview relative flex min-w-0 flex-1 items-center justify-center overflow-hidden p-4">
         <GalleryImageView
           image={props.selected}
           cwd={props.cwd}
           className="max-h-full max-w-full rounded-lg object-contain"
         />
+        <GalleryImageCornerDownload image={props.selected} cwd={props.cwd} />
       </div>
     </div>
   );
@@ -288,25 +277,6 @@ export const DockGalleryPane = memo(function DockGalleryPane(props: {
         >
           <LayoutGridIcon className="size-4" />
         </IconButton>
-        {viewMode === "focus" && selected ? (
-          <>
-            <span className="min-w-0 flex-1 truncate px-1.5 text-xs text-muted-foreground">
-              {selected.name}
-            </span>
-            {selected.kind === "local" ? (
-              <LocalImageDownloadButton image={selected} cwd={props.workspaceRoot} />
-            ) : (
-              <a
-                href={selected.src}
-                download={selected.name}
-                aria-label={`Download ${selected.name}`}
-                className="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <DownloadIcon className="size-4" />
-              </a>
-            )}
-          </>
-        ) : null}
       </div>
       {images.length === 0 ? (
         <GalleryEmptyState />

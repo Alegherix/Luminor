@@ -8,7 +8,9 @@ import { useLayoutEffect } from "react";
 import { Button } from "~/components/ui/button";
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "~/lib/icons";
 import { notifyNativeSurfaceOcclusionChange } from "~/lib/nativeSurfaceOcclusion";
+import { ImageCornerDownload } from "./ImageCornerDownload";
 import type { ExpandedImagePreview } from "./ExpandedImagePreview";
+import { imageAccessibleName } from "./imagePreviewDownload";
 
 interface ExpandedImageOverlayProps {
   readonly expandedImage: ExpandedImagePreview | null;
@@ -62,12 +64,12 @@ export function ExpandedImageOverlay({
           <ChevronLeftIcon className="size-5" />
         </Button>
       ) : null}
-      <div className="relative isolate z-10 max-h-[92vh] max-w-[92vw]">
+      <div className="expanded-image-preview relative isolate z-10 max-h-[92vh] max-w-[92vw]">
         <Button
           type="button"
           size="icon-xs"
           variant="ghost"
-          className="absolute right-2 top-2"
+          className="absolute right-2 top-2 z-20"
           onClick={onClose}
           aria-label="Close image preview"
         >
@@ -75,16 +77,20 @@ export function ExpandedImageOverlay({
         </Button>
         <img
           src={expandedImageItem.src}
-          alt={expandedImageItem.name}
+          alt={imageAccessibleName(expandedImageItem.name)}
           className="max-h-[86vh] max-w-[92vw] select-none rounded-lg border border-[color:var(--color-border)] bg-[var(--color-background-elevated-primary-opaque)] object-contain shadow-2xl"
           draggable={false}
         />
-        <p className="mt-2 max-w-[92vw] truncate text-center text-xs text-muted-foreground/80">
-          {expandedImageItem.name}
-          {expandedImage.images.length > 1
-            ? ` (${expandedImage.index + 1}/${expandedImage.images.length})`
-            : ""}
-        </p>
+        <ImageCornerDownload
+          href={expandedImageItem.src}
+          name={expandedImageItem.name}
+          className="expanded-image-preview__download"
+        />
+        {expandedImage.images.length > 1 ? (
+          <p className="mt-2 max-w-[92vw] truncate text-center text-xs text-muted-foreground/80">
+            {expandedImage.index + 1}/{expandedImage.images.length}
+          </p>
+        ) : null}
       </div>
       {expandedImage.images.length > 1 ? (
         <Button
