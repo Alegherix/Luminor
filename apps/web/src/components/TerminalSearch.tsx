@@ -133,7 +133,7 @@ export function TerminalSearch({ searchAddon, isOpen, onClose }: TerminalSearchP
   if (!isOpen) return null;
 
   return (
-    <div className="absolute right-1 top-1 z-10 flex max-w-[calc(100%-0.5rem)] items-center rounded bg-popover/95 pl-2 pr-0.5 shadow-lg ring-1 ring-border/40 backdrop-blur">
+    <div className="absolute right-1 top-1 z-10 flex max-w-[calc(100%-0.5rem)] items-center rounded bg-[var(--color-background-surface)] pl-2 pr-0.5 shadow-lg ring-1 ring-border/40 backdrop-blur">
       <input
         ref={inputRef}
         type="text"

@@ -353,6 +353,23 @@ describe("buildThemeCssVariables", () => {
     expect(cssVariables.variables["--color-token-terminal-ansi-red"]).toBe("#ff7e78");
   });
 
+  it("seals floating popup surfaces with the theme background", () => {
+    const importedTheme = parseThemeShareString(PROVIDED_THEME_STRING);
+    const cssVariables = buildThemeCssVariables(
+      {
+        codeThemeId: importedTheme.codeThemeId,
+        theme: importedTheme.theme,
+      },
+      importedTheme.variant,
+      { electron: true },
+    );
+
+    expect(cssVariables.variables["--app-composer-picker-surface"]).toBe(
+      "var(--color-background-surface)",
+    );
+    expect(cssVariables.variables["--app-composer-picker-backdrop-filter"]).toBe("none");
+  });
+
   it("exposes a structured derived-token surface for retrieving non-stored colors", () => {
     const importedTheme = parseThemeShareString(PROVIDED_THEME_STRING);
     const tokens = buildResolvedThemeTokens(
