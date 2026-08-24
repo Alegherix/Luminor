@@ -176,6 +176,33 @@ describe("BrowserSessionPolicy", () => {
     expect(policy.buildOAuthPopupWindowOptions(null)).not.toHaveProperty("parent");
   });
 
+  it("builds hidden offscreen popup options with the select shim and no visible parent", () => {
+    const policy = new BrowserSessionPolicy();
+
+    expect(
+      policy.buildOffscreenWindowOptions({
+        width: 1280,
+        height: 800,
+        preloadPath: "/tmp/selectShim.js",
+        skipTaskbar: true,
+      }),
+    ).toEqual({
+      show: false,
+      width: 1280,
+      height: 800,
+      skipTaskbar: true,
+      webPreferences: {
+        offscreen: true,
+        backgroundThrottling: false,
+        partition: BROWSER_SESSION_PARTITION,
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        preload: "/tmp/selectShim.js",
+      },
+    });
+  });
+
   it("applies the same derived identity to the partition, tabs, and popups", () => {
     const policy = new BrowserSessionPolicy();
     const firstContents = { setUserAgent: vi.fn() };

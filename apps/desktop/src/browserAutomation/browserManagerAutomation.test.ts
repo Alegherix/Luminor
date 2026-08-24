@@ -39,8 +39,8 @@ vi.mock("electron", () => ({
     userAgentFallback: "Mozilla/5.0 Electron/40.0.0",
   },
   BrowserWindow: class {
-    constructor() {
-      return browserWindowConstructor();
+    constructor(options?: unknown) {
+      return browserWindowConstructor(options);
     }
   },
   clipboard: { writeImage: vi.fn(), writeText: vi.fn() },
@@ -72,6 +72,7 @@ class FakeWebContents extends EventEmitter {
   };
   isDestroyed = () => false;
   setUserAgent = vi.fn();
+  setFrameRate = vi.fn();
   windowOpenHandler:
     | ((details: { url: string; frameName: string; features: string; disposition: string }) => {
         action: "allow" | "deny";
@@ -87,6 +88,41 @@ class FakeWebContents extends EventEmitter {
   canGoForward = () => false;
   close = vi.fn();
   loadURL = vi.fn(() => Promise.resolve());
+}
+
+class FakeBrowserWindow extends EventEmitter {
+  private destroyed = false;
+
+  constructor(readonly webContents: FakeWebContents) {
+    super();
+  }
+
+  setMenuBarVisibility = vi.fn();
+  setContentSize = vi.fn();
+  hide = vi.fn();
+  show = vi.fn();
+  getBounds = vi.fn(() => ({ x: 0, y: 0, width: 480, height: 640 }));
+  setBounds = vi.fn();
+  focus = vi.fn();
+  blur = vi.fn();
+  isDestroyed = () => this.destroyed;
+  destroy = vi.fn(() => {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    this.emit("closed");
+  });
+}
+
+async function createOffscreenManager() {
+  browserWindowConstructor.mockReset();
+  const sourceContents = new FakeWebContents(200);
+  const sourceWindow = new FakeBrowserWindow(sourceContents);
+  browserWindowConstructor.mockReturnValueOnce(sourceWindow);
+  const manager = new DesktopBrowserManager({ offscreenPreloadPath: "/tmp/selectShim.js" });
+  const opened = manager.open({ threadId: THREAD_ID, initialUrl: "https://example.test/" });
+  const sourceTabId = opened.activeTabId!;
+  await manager.activateRemoteRuntime(THREAD_ID, { width: 1280, height: 800 });
+  return { manager, sourceContents, sourceTabId, sourceWindow };
 }
 
 describe("DesktopBrowserManager automation runtime boundary", () => {
@@ -895,6 +931,310 @@ describe("DesktopBrowserManager automation runtime boundary", () => {
     expect(manager.getAutomationHumanControlEpoch(THREAD_ID)).toBe(1);
   });
 
+  it("allows offscreen popup-classified window.open so Electron preserves window.opener", async () => {
+    const { manager, sourceContents, sourceTabId } = await createOffscreenManager();
+    const popupUrl = "https://accounts.google.com/o/oauth2/auth";
+    const parentGetBounds = vi.fn(() => ({ x: 10, y: 20, width: 1200, height: 900 }));
+    manager.setWindow({
+      webContents: { id: 41, isDestroyed: () => false },
+      contentView: { addChildView: vi.fn(), removeChildView: vi.fn() },
+      getBounds: parentGetBounds,
+      isDestroyed: () => false,
+    } as never);
+    const automationRuntime = await manager.getAutomationRuntime(
+      { threadId: THREAD_ID, tabId: sourceTabId },
+      { restore: false },
+    );
+    const releaseGesture = automationRuntime.expectAgentInput!({
+      kind: "mouse",
+      type: "mouseDown",
+      button: "left",
+      x: 10,
+      y: 20,
+    });
+    const observedWindowOpen = vi.fn();
+    const releaseWindowOpenTracking = manager.trackAutomationWindowOpen(
+      { threadId: THREAD_ID, tabId: sourceTabId },
+      observedWindowOpen,
+    );
+
+    const decision = sourceContents.windowOpenHandler?.({
+      url: popupUrl,
+      frameName: "oauth",
+      features: "width=480,height=640",
+      disposition: "new-window",
+    });
+
+    expect(decision).toEqual({
+      action: "allow",
+      overrideBrowserWindowOptions: {
+        show: false,
+        width: 1280,
+        height: 800,
+        skipTaskbar: true,
+        webPreferences: {
+          offscreen: true,
+          backgroundThrottling: false,
+          partition: "persist:luminor-browser",
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+          preload: "/tmp/selectShim.js",
+        },
+      },
+    });
+    expect(manager.getState({ threadId: THREAD_ID }).tabs).toHaveLength(1);
+    expect(observedWindowOpen).not.toHaveBeenCalled();
+
+    const childContents = new FakeWebContents(201);
+    childContents.getURL = () => popupUrl;
+    const childWindow = new FakeBrowserWindow(childContents);
+    sourceContents.emit("did-create-window", childWindow, { url: popupUrl });
+
+    const adopted = manager.getState({ threadId: THREAD_ID });
+    const popupTabId = adopted.activeTabId!;
+    expect(adopted.tabs).toHaveLength(2);
+    expect(adopted.tabs.find((tab) => tab.id === popupTabId)).toMatchObject({
+      url: popupUrl,
+      openerTabId: sourceTabId,
+      runtimeSurface: "native",
+      status: "live",
+    });
+    expect(adopted.tabs.find((tab) => tab.id === sourceTabId)?.status).toBe("live");
+    expect(observedWindowOpen).toHaveBeenCalledOnce();
+    expect(observedWindowOpen).toHaveBeenCalledWith({
+      threadId: THREAD_ID,
+      sourceTabId,
+      kind: "tab",
+      openedTabId: popupTabId,
+    });
+    expect(childWindow.hide).toHaveBeenCalledOnce();
+    expect(childWindow.setBounds).not.toHaveBeenCalled();
+    expect(childWindow.show).not.toHaveBeenCalled();
+    expect(parentGetBounds).not.toHaveBeenCalled();
+
+    const streamed = await manager.activateRemoteRuntime(THREAD_ID, { width: 1280, height: 800 });
+    expect(streamed).toMatchObject({ tabId: popupTabId, webContents: childContents });
+    expect(browserWindowConstructor).toHaveBeenCalledOnce();
+    expect(childContents.loadURL).not.toHaveBeenCalled();
+
+    releaseWindowOpenTracking();
+    releaseGesture();
+    manager.dispose();
+  });
+
+  it.each(["", "about:blank"])(
+    "does not force-load an adopted popup whose current URL is %j",
+    async (currentUrl) => {
+      const { manager, sourceContents } = await createOffscreenManager();
+      const popupUrl = "https://accounts.google.com/o/oauth2/auth";
+      sourceContents.windowOpenHandler?.({
+        url: popupUrl,
+        frameName: "oauth",
+        features: "popup=yes",
+        disposition: "new-window",
+      });
+      const childContents = new FakeWebContents(208);
+      childContents.getURL = () => currentUrl;
+      const childWindow = new FakeBrowserWindow(childContents);
+      sourceContents.emit("did-create-window", childWindow, { url: popupUrl });
+
+      const popupTabId = manager.getState({ threadId: THREAD_ID }).activeTabId!;
+      const streamed = await manager.activateRemoteRuntime(THREAD_ID, {
+        width: 1280,
+        height: 800,
+      });
+
+      expect(streamed).toMatchObject({ tabId: popupTabId, webContents: childContents });
+      expect(childContents.loadURL).not.toHaveBeenCalled();
+      manager.dispose();
+    },
+  );
+
+  it("allows and adopts an offscreen about:blank staging popup", async () => {
+    const { manager, sourceContents, sourceTabId } = await createOffscreenManager();
+
+    expect(
+      sourceContents.windowOpenHandler?.({
+        url: "about:blank",
+        frameName: "_blank",
+        features: "",
+        disposition: "foreground-tab",
+      }),
+    ).toMatchObject({ action: "allow" });
+    const childContents = new FakeWebContents(209);
+    childContents.getURL = () => "about:blank";
+    const childWindow = new FakeBrowserWindow(childContents);
+    sourceContents.emit("did-create-window", childWindow, { url: "about:blank" });
+
+    const adopted = manager.getState({ threadId: THREAD_ID });
+    expect(adopted.tabs).toHaveLength(2);
+    expect(adopted.tabs.find((tab) => tab.id === adopted.activeTabId)).toMatchObject({
+      url: "about:blank",
+      openerTabId: sourceTabId,
+      status: "live",
+    });
+    expect(childWindow.hide).toHaveBeenCalledOnce();
+    manager.dispose();
+  });
+
+  it("removes a live adopted popup before closing its opener", async () => {
+    const { manager, sourceContents, sourceTabId } = await createOffscreenManager();
+    const popupUrl = "https://github.com/login/oauth/authorize";
+    sourceContents.windowOpenHandler?.({
+      url: popupUrl,
+      frameName: "oauth",
+      features: "popup=yes",
+      disposition: "new-window",
+    });
+    const childContents = new FakeWebContents(210);
+    childContents.getURL = () => popupUrl;
+    const childWindow = new FakeBrowserWindow(childContents);
+    sourceContents.emit("did-create-window", childWindow, { url: popupUrl });
+    const popupTabId = manager.getState({ threadId: THREAD_ID }).activeTabId!;
+
+    manager.closeTab({ threadId: THREAD_ID, tabId: sourceTabId });
+
+    const closed = manager.getState({ threadId: THREAD_ID });
+    expect(closed.tabs).toHaveLength(1);
+    expect(closed.activeTabId).not.toBe(popupTabId);
+    expect(closed.tabs.some((tab) => tab.id === popupTabId || tab.openerTabId === sourceTabId)).toBe(
+      false,
+    );
+    expect(childWindow.isDestroyed()).toBe(true);
+    const access = manager as unknown as {
+      runtimes: Map<string, { tabId: string }>;
+      popupRuntimes: Map<object, { tabId: string }>;
+    };
+    expect([...access.runtimes.values()].some((runtime) => runtime.tabId === popupTabId)).toBe(false);
+    expect([...access.popupRuntimes.values()].some((runtime) => runtime.tabId === popupTabId)).toBe(
+      false,
+    );
+
+    const replacementContents = new FakeWebContents(211);
+    replacementContents.getURL = () => "about:blank";
+    browserWindowConstructor.mockReturnValueOnce(new FakeBrowserWindow(replacementContents));
+    const streamed = await manager.activateRemoteRuntime(THREAD_ID, {
+      width: 1280,
+      height: 800,
+    });
+    expect(streamed?.tabId).toBe(closed.activeTabId);
+    expect(replacementContents.loadURL).not.toHaveBeenCalledWith(popupUrl);
+    expect(browserWindowConstructor).toHaveBeenCalledTimes(2);
+    manager.dispose();
+  });
+
+  it("keeps offscreen target=_blank opens on the deny and canonical new-tab path", async () => {
+    const { manager, sourceContents, sourceTabId } = await createOffscreenManager();
+
+    expect(
+      sourceContents.windowOpenHandler?.({
+        url: "https://docs.example/path",
+        frameName: "_blank",
+        features: "",
+        disposition: "foreground-tab",
+      }),
+    ).toEqual({ action: "deny" });
+    expect(manager.getState({ threadId: THREAD_ID }).tabs).toHaveLength(1);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const opened = manager.getState({ threadId: THREAD_ID });
+    expect(opened.tabs).toHaveLength(2);
+    expect(opened.tabs.find((tab) => tab.id === opened.activeTabId)).toMatchObject({
+      url: "https://docs.example/path",
+      openerTabId: sourceTabId,
+    });
+
+    manager.dispose();
+  });
+
+  it.each(["pane tab", "child window", "Escape", "Ctrl-W"] as const)(
+    "closing an adopted popup through %s restores the opener and destroys the child",
+    async (closePath) => {
+      const { manager, sourceContents, sourceTabId } = await createOffscreenManager();
+      const popupUrl = "https://github.com/login/oauth/authorize";
+      sourceContents.windowOpenHandler?.({
+        url: popupUrl,
+        frameName: "oauth",
+        features: "popup=yes",
+        disposition: "new-window",
+      });
+      const childContents = new FakeWebContents(202);
+      childContents.getURL = () => popupUrl;
+      const childWindow = new FakeBrowserWindow(childContents);
+      sourceContents.emit("did-create-window", childWindow, { url: popupUrl });
+      const popupTabId = manager.getState({ threadId: THREAD_ID }).activeTabId!;
+
+      if (closePath === "pane tab") {
+        manager.closeTab({ threadId: THREAD_ID, tabId: popupTabId });
+      } else if (closePath === "child window") {
+        childWindow.destroy();
+      } else {
+        const event = { preventDefault: vi.fn() };
+        childContents.emit("before-input-event", event, {
+          type: "keyDown",
+          key: closePath === "Escape" ? "Escape" : "w",
+          shift: false,
+          alt: false,
+          meta: false,
+          control: closePath === "Ctrl-W",
+        });
+        expect(event.preventDefault).toHaveBeenCalledOnce();
+      }
+
+      const closed = manager.getState({ threadId: THREAD_ID });
+      expect(closed.tabs.map((tab) => tab.id)).toEqual([sourceTabId]);
+      expect(closed.activeTabId).toBe(sourceTabId);
+      expect(childWindow.isDestroyed()).toBe(true);
+
+      manager.dispose();
+    },
+  );
+
+  it("adopts popup chains with each child pointing at its immediate opener tab", async () => {
+    const { manager, sourceContents, sourceTabId } = await createOffscreenManager();
+    const providerUrl = "https://accounts.example/provider";
+    sourceContents.windowOpenHandler?.({
+      url: providerUrl,
+      frameName: "provider",
+      features: "popup=yes",
+      disposition: "new-window",
+    });
+    const providerContents = new FakeWebContents(203);
+    providerContents.getURL = () => providerUrl;
+    const providerWindow = new FakeBrowserWindow(providerContents);
+    sourceContents.emit("did-create-window", providerWindow, { url: providerUrl });
+    const providerTabId = manager.getState({ threadId: THREAD_ID }).activeTabId!;
+
+    const consentUrl = "https://consent.example/authorize";
+    expect(
+      providerContents.windowOpenHandler?.({
+        url: consentUrl,
+        frameName: "consent",
+        features: "width=520,height=720",
+        disposition: "new-window",
+      }),
+    ).toMatchObject({ action: "allow" });
+    const consentContents = new FakeWebContents(204);
+    consentContents.getURL = () => consentUrl;
+    const consentWindow = new FakeBrowserWindow(consentContents);
+    providerContents.emit("did-create-window", consentWindow, { url: consentUrl });
+
+    const chained = manager.getState({ threadId: THREAD_ID });
+    const consentTabId = chained.activeTabId!;
+    expect(chained.tabs.find((tab) => tab.id === providerTabId)?.openerTabId).toBe(sourceTabId);
+    expect(chained.tabs.find((tab) => tab.id === consentTabId)?.openerTabId).toBe(providerTabId);
+
+    manager.closeTab({ threadId: THREAD_ID, tabId: providerTabId });
+    const closed = manager.getState({ threadId: THREAD_ID });
+    expect(closed.tabs.map((tab) => tab.id)).toEqual([sourceTabId]);
+    expect(closed.activeTabId).toBe(sourceTabId);
+    expect(providerWindow.isDestroyed()).toBe(true);
+    expect(consentWindow.isDestroyed()).toBe(true);
+
+    manager.dispose();
+  });
+
   it("reports an agent-opened OAuth popup without converting it into a tab", () => {
     const manager = new DesktopBrowserManager();
     const prepared = manager.prepareAutomationTab({ threadId: THREAD_ID, reuse: true });
@@ -1140,6 +1480,127 @@ describe("DesktopBrowserManager automation runtime boundary", () => {
         runtimeSurface: "native",
         status: "live",
       });
+      manager.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not evict an offscreen opener while its adopted popup is live", async () => {
+    vi.useFakeTimers();
+    try {
+      browserWindowConstructor.mockReset();
+      webContentsViewConstructor.mockReset();
+      const sourceContents = new FakeWebContents(300);
+      const sourceWindow = new FakeBrowserWindow(sourceContents);
+      browserWindowConstructor.mockReturnValueOnce(sourceWindow);
+      const backgroundContents = Array.from(
+        { length: 5 },
+        (_, index) => new FakeWebContents(301 + index),
+      );
+      for (const webContents of backgroundContents) {
+        webContentsViewConstructor.mockReturnValueOnce({
+          webContents,
+          setBounds: vi.fn(),
+          setVisible: vi.fn(),
+        });
+      }
+
+      const manager = new DesktopBrowserManager({ offscreenPreloadPath: "/tmp/selectShim.js" });
+      const prepared = manager.prepareAutomationTab({
+        threadId: THREAD_ID,
+        url: "https://example.test/",
+        reuse: true,
+      });
+      const sourceTabId = prepared.activeTabId!;
+      await manager.activateRemoteRuntime(THREAD_ID, { width: 1280, height: 800 });
+
+      const popupUrl = "https://accounts.google.com/o/oauth2/auth";
+      sourceContents.windowOpenHandler?.({
+        url: popupUrl,
+        frameName: "oauth",
+        features: "popup=yes",
+        disposition: "new-window",
+      });
+      const popupContents = new FakeWebContents(307);
+      popupContents.getURL = () => popupUrl;
+      const popupWindow = new FakeBrowserWindow(popupContents);
+      sourceContents.emit("did-create-window", popupWindow, { url: popupUrl });
+
+      for (let index = 0; index < backgroundContents.length; index += 1) {
+        const threadId = ThreadId.makeUnsafe(`thread-popup-budget-${index}`);
+        const background = manager.prepareAutomationTab({ threadId, reuse: true });
+        await manager.getAutomationRuntime(
+          { threadId, tabId: background.activeTabId! },
+          { restore: false },
+        );
+      }
+      await vi.advanceTimersByTimeAsync(31_001);
+
+      expect(sourceWindow.isDestroyed()).toBe(false);
+      expect(sourceContents.close).not.toHaveBeenCalled();
+      expect(backgroundContents[0]!.close).toHaveBeenCalledOnce();
+      expect(manager.getState({ threadId: THREAD_ID }).tabs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: sourceTabId, status: "live" }),
+          expect.objectContaining({ openerTabId: sourceTabId, status: "live" }),
+        ]),
+      );
+
+      manager.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps an adopted popup ancestor chain live across panel resume and thread suspend", async () => {
+    vi.useFakeTimers();
+    try {
+      const { manager, sourceContents, sourceTabId, sourceWindow } =
+        await createOffscreenManager();
+      const parentGetBounds = vi.fn(() => ({ x: 10, y: 20, width: 1200, height: 900 }));
+      manager.setWindow({
+        webContents: { id: 41, isDestroyed: () => false },
+        contentView: { addChildView: vi.fn(), removeChildView: vi.fn() },
+        getBounds: parentGetBounds,
+        isDestroyed: () => false,
+      } as never);
+      const popupUrl = "https://accounts.google.com/o/oauth2/auth";
+      sourceContents.windowOpenHandler?.({
+        url: popupUrl,
+        frameName: "oauth",
+        features: "popup=yes",
+        disposition: "new-window",
+      });
+      const popupContents = new FakeWebContents(308);
+      popupContents.getURL = () => popupUrl;
+      const popupWindow = new FakeBrowserWindow(popupContents);
+      sourceContents.emit("did-create-window", popupWindow, { url: popupUrl });
+
+      manager.setPanelBounds({
+        threadId: THREAD_ID,
+        surface: "native",
+        bounds: { x: 0, y: 0, width: 900, height: 700 },
+      });
+      await vi.advanceTimersByTimeAsync(1_501);
+
+      expect(sourceWindow.isDestroyed()).toBe(false);
+      expect(popupWindow.isDestroyed()).toBe(false);
+      expect(parentGetBounds).not.toHaveBeenCalled();
+      expect(popupWindow.setBounds).not.toHaveBeenCalled();
+      expect(popupWindow.show).not.toHaveBeenCalled();
+
+      manager.hide({ threadId: THREAD_ID });
+      await vi.advanceTimersByTimeAsync(30_001);
+
+      expect(sourceWindow.isDestroyed()).toBe(false);
+      expect(popupWindow.isDestroyed()).toBe(false);
+      expect(manager.getState({ threadId: THREAD_ID }).tabs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: sourceTabId, status: "live" }),
+          expect.objectContaining({ openerTabId: sourceTabId, status: "live" }),
+        ]),
+      );
       manager.dispose();
     } finally {
       vi.useRealTimers();

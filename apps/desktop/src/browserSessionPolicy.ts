@@ -29,6 +29,13 @@ export interface BrowserSessionDownloadEvent {
 
 export type BrowserSessionDownloadListener = (event: BrowserSessionDownloadEvent) => void;
 
+interface BrowserOffscreenWindowOptions {
+  readonly width: number;
+  readonly height: number;
+  readonly preloadPath?: string;
+  readonly skipTaskbar?: boolean;
+}
+
 function replaceRequestHeadersCaseInsensitive(
   headers: Record<string, string>,
   replacements: Record<string, string>,
@@ -161,6 +168,26 @@ export class BrowserSessionPolicy {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+      },
+    };
+  }
+
+  buildOffscreenWindowOptions(
+    options: BrowserOffscreenWindowOptions,
+  ): BrowserWindowConstructorOptions {
+    return {
+      show: false,
+      width: options.width,
+      height: options.height,
+      ...(options.skipTaskbar === true ? { skipTaskbar: true } : {}),
+      webPreferences: {
+        offscreen: true,
+        backgroundThrottling: false,
+        partition: BROWSER_SESSION_PARTITION,
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        ...(options.preloadPath ? { preload: options.preloadPath } : {}),
       },
     };
   }
