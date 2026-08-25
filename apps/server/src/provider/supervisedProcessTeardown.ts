@@ -1,18 +1,24 @@
 import {
   defaultProcessTreeKiller,
   type CapturedProcess,
+  type CapturedProcessTree,
   type ProcessTreeKiller,
   type TerminalKillSignal,
 } from "../terminal/processTreeKiller";
 import { Effect } from "effect";
 
 const DEFAULT_TERM_GRACE_MS = 1_500;
-const DEFAULT_FORCE_EXIT_MS = 1_500;
+// Provider MCP helpers (`npm exec`, context-mode, etc.) often ignore SIGTERM and
+// only die after SIGKILL; a single 1.5s force window left survivors parked and
+// failed idle/reaper stopSession permanently.
+const DEFAULT_FORCE_EXIT_MS = 5_000;
 const DEFAULT_POLL_MS = 25;
 // Each descendant inspection shells out to a synchronous `ps`, so it must not run
 // once per poll: that put ~120 blocking scans on the event loop per teardown, and
 // the session reaper runs teardowns on a timer with no user present.
 const DEFAULT_INSPECT_INTERVAL_MS = 250;
+/** Re-signal stubborn survivors during the force window (MCP trees under npm exec). */
+const DEFAULT_FORCE_RESIGNAL_INTERVAL_MS = 500;
 
 export interface SupervisedProcessTeardownInput {
   readonly rootPid: number;
@@ -23,6 +29,8 @@ export interface SupervisedProcessTeardownInput {
   readonly pollMs?: number;
   /** Minimum gap between descendant `ps` inspections while polling for exit proof. */
   readonly inspectIntervalMs?: number;
+  /** Minimum gap between repeated SIGKILL rounds while waiting for force proof. */
+  readonly forceResignalIntervalMs?: number;
 }
 
 export interface ProcessExitHandle {
@@ -127,6 +135,32 @@ export function teardownEffectProcessTree(
 }
 
 /**
+ * Merge freshly discovered descendants into the mutable teardown tree without
+ * dropping the original startTime identities. Late MCP grandchildren that spawn
+ * during SIGTERM otherwise survive the force round.
+ */
+export function mergeCapturedProcessTree(
+  tree: CapturedProcessTree,
+  discovered: ReadonlyArray<CapturedProcess>,
+): void {
+  const byPid = new Map(tree.descendants.map((descendant) => [descendant.pid, descendant]));
+  for (const process of discovered) {
+    const existing = byPid.get(process.pid);
+    if (!existing) {
+      byPid.set(process.pid, process);
+      continue;
+    }
+    byPid.set(process.pid, {
+      ...existing,
+      // Prefer the original startTime; refresh cmdline so diagnostics stay current.
+      command: process.command || existing.command,
+      startTime: existing.startTime ?? process.startTime,
+    });
+  }
+  tree.descendants = [...byPid.values()];
+}
+
+/**
  * Owns the complete provider process-tree stop sequence. Success means the exact root emitted exit
  * and every identity-matched descendant captured before TERM is gone; sending a signal is not
  * considered completion.
@@ -173,14 +207,34 @@ export async function teardownProviderProcessTree(
     return inspection?.verified === true ? inspection.survivors : null;
   };
 
-  const waitForExitProof = async (timeoutMs: number) => {
+  const expandTreeFromSurvivors = (survivors: ReadonlyArray<CapturedProcess>): void => {
+    if (tree.captureComplete === false) return;
+    for (const survivor of survivors) {
+      const nested = deps.processTreeKiller.capture(survivor.pid);
+      if (nested.captureComplete === false) continue;
+      mergeCapturedProcessTree(tree, [survivor, ...nested.descendants]);
+    }
+  };
+
+  const waitForExitProof = async (
+    timeoutMs: number,
+    options?: {
+      readonly resignal?: TerminalKillSignal;
+      readonly resignalIntervalMs?: number;
+    },
+  ) => {
     const deadline = deps.now() + timeoutMs;
     const inspectIntervalMs = positiveDuration(
       input.inspectIntervalMs,
       DEFAULT_INSPECT_INTERVAL_MS,
     );
+    const resignalIntervalMs =
+      options?.resignal === undefined
+        ? null
+        : positiveDuration(options.resignalIntervalMs, DEFAULT_FORCE_RESIGNAL_INTERVAL_MS);
     let remainingDescendants: ReadonlyArray<CapturedProcess> | null = null;
     let lastInspectedAt: number | null = null;
+    let lastResignaledAt: number | null = null;
     do {
       // Flush a root-exit resolution caused synchronously by a signal test double.
       await Promise.resolve();
@@ -194,6 +248,21 @@ export async function teardownProviderProcessTree(
         remainingDescendants = inspectDescendants();
         if (remainingDescendants !== null && remainingDescendants.length === 0) {
           return { proven: true as const, remainingDescendants };
+        }
+        if (
+          options?.resignal !== undefined &&
+          resignalIntervalMs !== null &&
+          remainingDescendants !== null &&
+          remainingDescendants.length > 0
+        ) {
+          const sinceLastResignal =
+            lastResignaledAt === null ? null : deps.now() - lastResignaledAt;
+          if (sinceLastResignal === null || sinceLastResignal >= resignalIntervalMs) {
+            expandTreeFromSurvivors(remainingDescendants);
+            // Root already exited: never re-signal a potentially reused root PID.
+            signal(options.resignal, false);
+            lastResignaledAt = deps.now();
+          }
         }
       }
       const remainingMs = deadline - deps.now();
@@ -216,8 +285,17 @@ export async function teardownProviderProcessTree(
 
   // A root can exit while descendants ignore TERM and become reparented. Preserve the captured
   // identities and force only those descendants rather than re-signalling a potentially reused PID.
+  if (graceful.remainingDescendants && graceful.remainingDescendants.length > 0) {
+    expandTreeFromSurvivors(graceful.remainingDescendants);
+  }
   signal("SIGKILL", !rootExited);
-  const forced = await waitForExitProof(positiveDuration(input.forceExitMs, DEFAULT_FORCE_EXIT_MS));
+  const forced = await waitForExitProof(positiveDuration(input.forceExitMs, DEFAULT_FORCE_EXIT_MS), {
+    resignal: "SIGKILL",
+    resignalIntervalMs: positiveDuration(
+      input.forceResignalIntervalMs,
+      DEFAULT_FORCE_RESIGNAL_INTERVAL_MS,
+    ),
+  });
   if (forced.proven) {
     return { escalated: true, signalErrors };
   }

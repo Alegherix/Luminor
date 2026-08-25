@@ -1,15 +1,15 @@
-import { describe, expect, it } from "vitest";
-
+import {
+  ProviderProcessExitUnprovenError,
+  mergeCapturedProcessTree,
+  teardownProviderProcessTree,
+} from "./supervisedProcessTeardown";
 import type {
   CapturedProcess,
   CapturedProcessTree,
   ProcessTreeKiller,
   TerminalKillSignal,
 } from "../terminal/processTreeKiller";
-import {
-  ProviderProcessExitUnprovenError,
-  teardownProviderProcessTree,
-} from "./supervisedProcessTeardown";
+import { describe, expect, it } from "vitest";
 
 function deterministicClock() {
   let now = 0;
@@ -236,6 +236,8 @@ describe("teardownProviderProcessTree", () => {
         forceExitMs: 1_000,
         pollMs: 25,
         inspectIntervalMs: 250,
+        // Keep resignal rare so this still asserts inspect throttling, not kill spam.
+        forceResignalIntervalMs: 10_000,
       },
       {
         processTreeKiller: {
@@ -259,5 +261,70 @@ describe("teardownProviderProcessTree", () => {
     // The root exits immediately, so every poll used to trigger its own `ps`.
     expect(sleepCalls).toBeGreaterThan(60);
     expect(inspectCalls).toBeLessThanOrEqual(sleepCalls / 4);
+  });
+
+  it("re-signals surviving descendants during the force window", async () => {
+    const tree: CapturedProcessTree = {
+      descendants: [{ pid: 802, command: "npm exec @agentmemory/mcp", startTime: "1" }],
+      captureComplete: true,
+    };
+    let killRounds = 0;
+    let resolveRootExit: (() => void) | undefined;
+    const rootExited = new Promise<void>((resolve) => {
+      resolveRootExit = resolve;
+    });
+    const signals: TerminalKillSignal[] = [];
+    let now = 0;
+
+    await teardownProviderProcessTree(
+      {
+        rootPid: 801,
+        rootExited,
+        termGraceMs: 100,
+        forceExitMs: 1_000,
+        pollMs: 25,
+        inspectIntervalMs: 50,
+        forceResignalIntervalMs: 100,
+      },
+      {
+        processTreeKiller: {
+          capture: (rootPid) =>
+            rootPid === 801
+              ? tree
+              : { descendants: [], captureComplete: true },
+          inspect: () => ({
+            verified: true,
+            survivors: killRounds >= 3 ? [] : tree.descendants,
+          }),
+          signal: ({ signal }) => {
+            signals.push(signal);
+            if (signal === "SIGTERM") resolveRootExit?.();
+            if (signal === "SIGKILL") killRounds += 1;
+          },
+        },
+        now: () => now,
+        sleep: async (milliseconds: number) => {
+          now += milliseconds;
+        },
+      },
+    );
+
+    expect(killRounds).toBeGreaterThanOrEqual(3);
+    expect(signals.filter((signal) => signal === "SIGKILL").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("merges late-discovered grandchildren into the teardown tree", () => {
+    const tree: CapturedProcessTree = {
+      descendants: [{ pid: 10, command: "npm exec", startTime: "1" }],
+      captureComplete: true,
+    };
+    mergeCapturedProcessTree(tree, [
+      { pid: 10, command: "node agentmemory-mcp", startTime: "1" },
+      { pid: 11, command: "node agentmemory-mcp-worker", startTime: "2" },
+    ]);
+    expect(tree.descendants).toEqual([
+      { pid: 10, command: "node agentmemory-mcp", startTime: "1" },
+      { pid: 11, command: "node agentmemory-mcp-worker", startTime: "2" },
+    ]);
   });
 });
