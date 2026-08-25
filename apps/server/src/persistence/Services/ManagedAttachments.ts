@@ -124,6 +124,13 @@ export interface ManagedAttachmentRepositoryShape {
   readonly findClaimedById: (input: {
     readonly attachmentId: string;
   }) => Effect.Effect<Option.Option<ManagedAttachmentBlob>, PersistenceSqlError>;
+  /** Claimed always; staged only when still owned by the principal and unexpired. */
+  readonly findReadableById: (input: {
+    readonly attachmentId: string;
+    readonly ownerKind: string;
+    readonly ownerId: string;
+    readonly now: string;
+  }) => Effect.Effect<Option.Option<ManagedAttachmentBlob>, PersistenceSqlError>;
   readonly findClaimedForCommand: (input: {
     readonly commandId: string;
   }) => Effect.Effect<ReadonlyArray<ManagedAttachmentBlob>, PersistenceSqlError>;

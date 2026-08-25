@@ -119,6 +119,21 @@ layer("ManagedAttachmentRepository", (it) => {
 
       assert.isTrue(Option.isNone(crossOwner));
       assert.strictEqual(Option.getOrNull(exact)?.attachmentId, "opaque-a");
+
+      const readableStaged = yield* repository.findReadableById({
+        attachmentId: "opaque-a",
+        ownerKind: "principal",
+        ownerId: "principal-1",
+        now: "2026-07-14T10:01:00.000Z",
+      });
+      const readableForeign = yield* repository.findReadableById({
+        attachmentId: "opaque-a",
+        ownerKind: "principal",
+        ownerId: "other-principal",
+        now: "2026-07-14T10:01:00.000Z",
+      });
+      assert.isTrue(Option.isSome(readableStaged));
+      assert.isTrue(Option.isNone(readableForeign));
     }),
   );
 

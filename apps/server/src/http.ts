@@ -209,7 +209,7 @@ export function makeEffectHttpRouteLayer(
     localImageEffectRouteLayer,
     binaryUploadEffectRouteLayer,
     attachmentsEffectRouteLayer,
-    makeInboundNewChatEffectRouteLayer(requireAuthenticatedMutationRequest),
+    makeInboundNewChatEffectRouteLayer(),
     staticAndDevEffectRouteLayer,
   );
 }
@@ -1082,9 +1082,17 @@ export const attachmentsEffectRouteLayer = HttpRouter.add(
     const config = yield* ServerConfig;
     // Desktop image tags cannot attach Authorization headers; preserve the same
     // startup token rule that the WebSocket route already accepts.
-    if (!isLegacyTokenAuthorized({ config, url, localAddress: requestLocalAddress(request) })) {
-      yield* requireAuthenticatedRequest;
-    }
+    const legacyAuthorized = isLegacyTokenAuthorized({
+      config,
+      url,
+      localAddress: requestLocalAddress(request),
+    });
+    const attachmentPrincipal = legacyAuthorized
+      ? LOCAL_LOOPBACK_ATTACHMENT_PRINCIPAL
+      : attachmentPrincipalForSession(
+          (yield* (yield* ServerAuth).authenticateHttpRequest(makeEffectAuthRequest(request)))
+            .sessionId,
+        );
 
     const rawRelativePath = url.pathname.slice(ATTACHMENTS_ROUTE_PREFIX.length);
     const normalizedRelativePath = normalizeAttachmentRelativePath(rawRelativePath);
@@ -1102,8 +1110,11 @@ export const attachmentsEffectRouteLayer = HttpRouter.add(
       !normalizedRelativePath.includes("/") && !normalizedRelativePath.includes(".");
     const managedBlob =
       isIdLookup && normalizedRelativePath.startsWith("att_v2_")
-        ? yield* (yield* ManagedAttachmentRepository).findClaimedById({
+        ? yield* (yield* ManagedAttachmentRepository).findReadableById({
             attachmentId: normalizedRelativePath,
+            ownerKind: attachmentPrincipal.ownerKind,
+            ownerId: attachmentPrincipal.ownerId,
+            now: new Date().toISOString(),
           })
         : Option.none();
     const filePath = Option.isSome(managedBlob)

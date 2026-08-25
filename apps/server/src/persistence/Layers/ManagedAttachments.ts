@@ -162,6 +162,25 @@ const makeRepository = (limits: ManagedAttachmentLimits) =>
         Effect.mapError(toPersistenceSqlError("ManagedAttachment.findClaimedById")),
       );
 
+    const findReadableById: ManagedAttachmentRepositoryShape["findReadableById"] = (input) =>
+      sql<ManagedAttachmentBlob>`
+        SELECT ${blobColumns(sql)}
+        FROM managed_attachment_blobs
+        WHERE attachment_id = ${input.attachmentId}
+          AND (
+            state = 'claimed'
+            OR (
+              state = 'staged'
+              AND owner_kind = ${input.ownerKind}
+              AND owner_id = ${input.ownerId}
+              AND staging_expires_at > ${input.now}
+            )
+          )
+      `.pipe(
+        Effect.map((rows) => Option.fromNullishOr(rows[0])),
+        Effect.mapError(toPersistenceSqlError("ManagedAttachment.findReadableById")),
+      );
+
     const findClaimedForCommand: ManagedAttachmentRepositoryShape["findClaimedForCommand"] = (
       input,
     ) =>
@@ -606,6 +625,7 @@ const makeRepository = (limits: ManagedAttachmentLimits) =>
       finalizeStaged,
       findServerOwned,
       findClaimedById,
+      findReadableById,
       findClaimedForCommand,
       cancelStaged,
       claimForAcceptedTurn,
