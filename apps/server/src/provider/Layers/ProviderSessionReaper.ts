@@ -11,6 +11,42 @@ import { ProviderService } from "../Services/ProviderService";
 const DEFAULT_INACTIVITY_THRESHOLD_MS = 30 * 60 * 1000;
 const DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
+const TERMINAL_IDLE_RUNTIME_EVENTS = new Set([
+  "turn.completed",
+  "turn.aborted",
+  "thread.state.changed",
+  "provider.stopRuntimeSession",
+]);
+
+/**
+ * Prefer the last terminal turn/runtime timestamp when present. Binding upserts
+ * refresh `lastSeenAt` on every write (including reconciler noise), which otherwise
+ * prevents the reaper from ever stopping warm provider+MCP trees.
+ */
+export function resolveProviderSessionReaperIdleAnchor(binding: {
+  readonly lastSeenAt?: string;
+  readonly runtimePayload?: unknown | null;
+}): string | undefined {
+  const payload =
+    binding.runtimePayload !== null &&
+    typeof binding.runtimePayload === "object" &&
+    !Array.isArray(binding.runtimePayload)
+      ? (binding.runtimePayload as Record<string, unknown>)
+      : null;
+  const lastRuntimeEvent =
+    typeof payload?.lastRuntimeEvent === "string" ? payload.lastRuntimeEvent : undefined;
+  const lastRuntimeEventAt =
+    typeof payload?.lastRuntimeEventAt === "string" ? payload.lastRuntimeEventAt : undefined;
+  if (
+    lastRuntimeEventAt !== undefined &&
+    lastRuntimeEvent !== undefined &&
+    TERMINAL_IDLE_RUNTIME_EVENTS.has(lastRuntimeEvent)
+  ) {
+    return lastRuntimeEventAt;
+  }
+  return binding.lastSeenAt;
+}
+
 export interface ProviderSessionReaperLiveOptions {
   readonly inactivityThresholdMs?: number;
   readonly sweepIntervalMs?: number;
@@ -34,14 +70,15 @@ const makeProviderSessionReaper = (options?: ProviderSessionReaperLiveOptions) =
 
       for (const binding of bindings) {
         if (binding.status === "stopped") continue;
-        if (!binding.lastSeenAt) continue;
+        const idleAnchor = resolveProviderSessionReaperIdleAnchor(binding);
+        if (!idleAnchor) continue;
 
-        const lastSeenMs = Date.parse(binding.lastSeenAt);
+        const lastSeenMs = Date.parse(idleAnchor);
         if (Number.isNaN(lastSeenMs)) {
           yield* Effect.logWarning("provider session reaper skipped invalid timestamp", {
             threadId: binding.threadId,
             provider: binding.provider,
-            lastSeenAt: binding.lastSeenAt,
+            lastSeenAt: idleAnchor,
           });
           continue;
         }

@@ -10,7 +10,10 @@ import {
 } from "../Services/ProviderSessionDirectory";
 import { ProviderSessionReaper } from "../Services/ProviderSessionReaper";
 import { ProviderService, type ProviderServiceShape } from "../Services/ProviderService";
-import { makeProviderSessionReaperLive } from "./ProviderSessionReaper";
+import {
+  makeProviderSessionReaperLive,
+  resolveProviderSessionReaperIdleAnchor,
+} from "./ProviderSessionReaper";
 
 const unsupported = () => Effect.die(new Error("Unsupported test call")) as never;
 
@@ -59,6 +62,27 @@ function makeLayer(input: {
 }
 
 describe("ProviderSessionReaperLive", () => {
+  it("anchors idle time to turn completion rather than later binding upserts", () => {
+    expect(
+      resolveProviderSessionReaperIdleAnchor({
+        lastSeenAt: "2026-08-25T15:00:00.000Z",
+        runtimePayload: {
+          lastRuntimeEvent: "turn.completed",
+          lastRuntimeEventAt: "2026-08-25T14:00:00.000Z",
+        },
+      }),
+    ).toBe("2026-08-25T14:00:00.000Z");
+    expect(
+      resolveProviderSessionReaperIdleAnchor({
+        lastSeenAt: "2026-08-25T15:00:00.000Z",
+        runtimePayload: {
+          lastRuntimeEvent: "task.progress",
+          lastRuntimeEventAt: "2026-08-25T14:55:00.000Z",
+        },
+      }),
+    ).toBe("2026-08-25T15:00:00.000Z");
+  });
+
   it("stops stale sessions without active turns", async () => {
     const threadId = ThreadId.makeUnsafe("thread-reaper-stale");
     const stopSession = vi.fn<ProviderServiceShape["stopSession"]>(() => Effect.void);
@@ -75,6 +99,73 @@ describe("ProviderSessionReaperLive", () => {
             provider: "codex",
             status: "running",
             lastSeenAt: "2026-01-01T00:00:00.000Z",
+          },
+        ]),
+    };
+    const providerService: ProviderServiceShape = {
+      startSession: () => unsupported(),
+      sendTurn: () => unsupported(),
+      steerTurn: () => unsupported(),
+      startReview: () => unsupported(),
+      interruptTurn: () => unsupported(),
+      stopTask: () => unsupported(),
+      backgroundTask: () => unsupported(),
+      steerSubagent: () => unsupported(),
+      respondToRequest: () => unsupported(),
+      respondToUserInput: () => unsupported(),
+      stopSession,
+      listSessions: () => Effect.succeed([]),
+      getCapabilities: () => unsupported(),
+      rollbackConversation: () => unsupported(),
+      compactThread: () => unsupported(),
+      closeRuntimeEvents: Effect.void,
+      streamEvents: Stream.empty,
+    };
+
+    const scope = await Effect.runPromise(Scope.make());
+    try {
+      await Effect.gen(function* () {
+        const reaper = yield* ProviderSessionReaper;
+        yield* Scope.provide(reaper.start(), scope);
+      }).pipe(
+        Effect.provide(
+          makeLayer({
+            threadShell: makeThreadShell({ threadId, activeTurnId: null }),
+            directory,
+            providerService,
+          }),
+        ),
+        Effect.runPromise,
+      );
+      await waitFor(() => stopSession.mock.calls.length === 1);
+    } finally {
+      await Effect.runPromise(Scope.close(scope, Exit.void));
+    }
+
+    expect(stopSession).toHaveBeenCalledWith({ threadId });
+  });
+
+  it("stops sessions whose turn completed even when lastSeenAt was refreshed later", async () => {
+    const threadId = ThreadId.makeUnsafe("thread-reaper-stale-turn");
+    const stopSession = vi.fn<ProviderServiceShape["stopSession"]>(() => Effect.void);
+    const directory: ProviderSessionDirectoryShape = {
+      upsert: () => Effect.void,
+      getProvider: () => unsupported(),
+      getBinding: () => unsupported(),
+      remove: () => Effect.void,
+      listThreadIds: () => Effect.succeed([]),
+      listBindings: () =>
+        Effect.succeed([
+          {
+            threadId,
+            provider: "codex",
+            status: "running",
+            // Fresh upsert timestamp that would otherwise block the reaper.
+            lastSeenAt: new Date().toISOString(),
+            runtimePayload: {
+              lastRuntimeEvent: "turn.completed",
+              lastRuntimeEventAt: "2026-01-01T00:00:00.000Z",
+            },
           },
         ]),
     };

@@ -8,6 +8,7 @@ import {
   collectDescendantProcesses,
   createProcessTreeKiller,
   parseProcessCommandMap,
+  parseProcStatStartTime,
   type CapturedProcessTree,
   type ProcessChildrenMap,
   type TerminalKillSignal,
@@ -47,14 +48,14 @@ describe("processTreeKiller", () => {
     );
   });
 
-  it("validates captured child commands before delayed SIGKILL", () => {
+  it("validates captured child identity before delayed SIGKILL", () => {
     const signaledPids: Array<{ pid: number; signal: TerminalKillSignal }> = [];
     const treeSignals: Array<{ rootPid: number; signal: TerminalKillSignal }> = [];
     const commandReadCalls: number[][] = [];
     const tree: CapturedProcessTree = {
       descendants: [
-        { pid: 102, command: "bun run dev" },
-        { pid: 103, command: "tsdown --watch" },
+        { pid: 102, command: "bun run dev", startTime: "100" },
+        { pid: 103, command: "tsdown --watch", startTime: "200" },
       ],
     };
     const killer = createProcessTreeKiller({
@@ -62,9 +63,15 @@ describe("processTreeKiller", () => {
         commandReadCalls.push([...pids]);
         return new Map([
           [102, "bun run dev"],
+          // PID reused by an unrelated process (different starttime).
           [103, "node unrelated-process.js"],
         ]);
       },
+      readCurrentStartTimes: () =>
+        new Map([
+          [102, "100"],
+          [103, "999"],
+        ]),
       signalPid: (pid, signal) => {
         signaledPids.push({ pid, signal });
         return null;
@@ -85,6 +92,57 @@ describe("processTreeKiller", () => {
     expect(signaledPids).toEqual([{ pid: 102, signal: "SIGKILL" }]);
     expect(commandReadCalls).toEqual([[102, 103]]);
     expect(treeSignals).toEqual([{ rootPid: 100, signal: "SIGKILL" }]);
+  });
+
+  it("still SIGKILLs an exec'd helper whose cmdline changed under the same starttime", () => {
+    const signaledPids: number[] = [];
+    const killer = createProcessTreeKiller({
+      readCurrentCommands: () => new Map([[102, "node /tmp/agentmemory-mcp"]]),
+      readCurrentStartTimes: () => new Map([[102, "555"]]),
+      signalPid: (pid) => {
+        signaledPids.push(pid);
+        return null;
+      },
+      signalTree: (_rootPid, _signal, callback) => callback(null),
+    });
+
+    killer.signal({
+      rootPid: 100,
+      signal: "SIGKILL",
+      includeRootTree: false,
+      tree: {
+        descendants: [{ pid: 102, command: "npm exec @agentmemory/mcp", startTime: "555" }],
+      },
+      onError: () => undefined,
+    });
+
+    expect(signaledPids).toEqual([102]);
+  });
+
+  it("parses Linux /proc/<pid>/stat starttime across comm parentheses", () => {
+    const afterComm = [
+      "S",
+      "1",
+      "1234",
+      "1234",
+      "0",
+      "-1",
+      "4194304",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "20",
+      "0",
+      "1",
+      "0",
+      "987654321",
+    ];
+    expect(parseProcStatStartTime(`1234 (npm exec foo) ${afterComm.join(" ")}`)).toBe("987654321");
   });
 
   it("does not validate captured child commands before initial SIGTERM", () => {

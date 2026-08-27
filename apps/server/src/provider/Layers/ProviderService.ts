@@ -2501,9 +2501,25 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
         yield* stopRuntimeSessionInternal({ threadId }, generation);
       }).pipe(
         Effect.catchCause((cause) =>
-          Effect.logWarning("provider.session.idle_stop_failed", {
-            threadId,
-            cause,
+          Effect.gen(function* () {
+            yield* Effect.logWarning("provider.session.idle_stop_failed", {
+              threadId,
+              cause,
+            });
+            // Teardown proof can fail while MCP grandchildren (`npm exec`,
+            // context-mode, …) are still dying. Abandoning the idle generation
+            // left those trees parked until process restart; reschedule so the
+            // next idle tick retries stopSession against the same thread only.
+            yield* Effect.sync(() => {
+              if ((liveRuntimeTaskIds.get(threadId)?.size ?? 0) > 0) {
+                retireRuntimeIdleGeneration(threadId, generation);
+                return;
+              }
+              if (!isRuntimeIdleGenerationCurrent(threadId, generation)) {
+                return;
+              }
+              scheduleRuntimeIdleStop(threadId);
+            });
           }),
         ),
       );
