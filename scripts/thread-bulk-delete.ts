@@ -47,7 +47,6 @@ async function main(): Promise<void> {
 
     const { executeThreadBulkDelete } = await import("./lib/thread-bulk-delete-execute.ts");
     await executeThreadBulkDelete({
-      repoRoot: REPO_ROOT,
       homeDir: paths.homeDir,
       plan,
     });

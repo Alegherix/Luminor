@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import {
   ORCHESTRATION_WS_METHODS,
+  WsFeatureRpcGroup,
   WS_CLIENT_REQUIRED_CAPABILITIES,
   WS_COMPATIBILITY_QUERY,
   WS_FEATURE_PATH,
@@ -14,7 +15,9 @@ import {
   WS_PROTOCOL_MIN_REVISION,
   type WsBootstrapNegotiateResult,
 } from "@luminor/contracts";
-import WebSocket from "ws";
+import { Cause, Effect, Exit, Layer, ManagedRuntime, Scope } from "effect";
+import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import { Socket } from "effect/unstable/socket";
 
 const CLIENT_BUILD = "thread-bulk-delete-cli";
 const REQUEST_TIMEOUT_MS = 120_000;
@@ -32,6 +35,81 @@ interface RpcExitFrame {
   readonly exit:
     | { readonly _tag: "Success"; readonly value: unknown }
     | { readonly _tag: "Failure"; readonly cause: unknown };
+}
+
+interface RpcDefectFrame {
+  readonly _tag: "Defect";
+  readonly requestId: string;
+  readonly defect: unknown;
+}
+
+type RpcResponseFrame = RpcExitFrame | RpcDefectFrame | { readonly _tag: string };
+
+type RpcClientEffect = typeof makeRpcClient;
+type RpcClientInstance =
+  RpcClientEffect extends Effect.Effect<infer Client, unknown, unknown> ? Client : never;
+
+const makeRpcClient = RpcClient.make(WsFeatureRpcGroup);
+
+export function parseRpcResponseFrame(
+  data: string,
+  requestId: string,
+):
+  | { readonly kind: "ping" }
+  | { readonly kind: "pending" }
+  | { readonly kind: "success"; readonly value: unknown }
+  | { readonly kind: "failure"; readonly message: string } {
+  let frame: RpcResponseFrame;
+  try {
+    frame = JSON.parse(data) as RpcResponseFrame;
+  } catch {
+    return { kind: "pending" };
+  }
+  if (frame._tag === "Ping") {
+    return { kind: "ping" };
+  }
+  if (frame._tag === "Ack" || frame._tag === "Chunk" || frame._tag === "Pong") {
+    return { kind: "pending" };
+  }
+  if (frame._tag === "Defect") {
+    const defectFrame = frame as RpcDefectFrame;
+    if (defectFrame.requestId !== requestId) {
+      return { kind: "pending" };
+    }
+    return {
+      kind: "failure",
+      message: `RPC defect: ${JSON.stringify(defectFrame.defect)}`,
+    };
+  }
+  if (frame._tag !== "Exit") {
+    return { kind: "pending" };
+  }
+  const exitFrame = frame as RpcExitFrame;
+  if (exitFrame.requestId !== requestId) {
+    return { kind: "pending" };
+  }
+  if (exitFrame.exit._tag === "Success") {
+    return { kind: "success", value: exitFrame.exit.value };
+  }
+  return {
+    kind: "failure",
+    message: `RPC failed: ${JSON.stringify(exitFrame.exit.cause)}`,
+  };
+}
+
+function makeProtocolLayer(url: string): Layer.Layer<RpcClient.Protocol> {
+  const socketLayer = Socket.layerWebSocket(url).pipe(
+    Layer.provide(Socket.layerWebSocketConstructorGlobal),
+  );
+  return RpcClient.layerProtocolSocket().pipe(
+    Layer.provideMerge(socketLayer),
+    Layer.provideMerge(RpcSerialization.layerJson),
+  );
+}
+
+function causeToError(cause: Cause.Cause<unknown>): Error {
+  const error = Cause.squash(cause);
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 export function readLuminorServerRuntime(homeDir: string): LuminorServerRuntime {
@@ -144,82 +222,60 @@ export function buildFeatureSocketUrl(
   return url.toString();
 }
 
-function connectWebSocket(url: string): Promise<WebSocket> {
-  return new Promise((resolve, reject) => {
-    const socket = new WebSocket(url);
-    socket.once("open", () => resolve(socket));
-    socket.once("error", (error) => {
-      reject(error instanceof Error ? error : new Error(String(error)));
-    });
-    socket.once("unexpected-response", (_request, response) => {
-      response.resume();
-      reject(
-        new Error(
-          `WebSocket upgrade failed (${String(response.statusCode)} ${response.statusMessage}). If the server requires auth, set LUMINOR_AUTH_TOKEN to the desktop token.`,
-        ),
-      );
-    });
-  });
-}
-
 export class LuminorWsRpcClient {
-  private constructor(private readonly socket: WebSocket) {}
+  private constructor(
+    private readonly runtime: ManagedRuntime.ManagedRuntime<RpcClient.Protocol, never>,
+    private readonly scope: Scope.Scope,
+    private readonly client: RpcClientInstance,
+  ) {}
 
   static async connect(input: {
     readonly homeDir: string;
     readonly authToken?: string | undefined;
   }): Promise<LuminorWsRpcClient> {
-    const runtime = readLuminorServerRuntime(input.homeDir);
-    const negotiation = await negotiateLuminorWs(runtime.origin);
-    const socket = await connectWebSocket(
-      buildFeatureSocketUrl(runtime.origin, negotiation, input.authToken),
-    );
-    return new LuminorWsRpcClient(socket);
+    const authToken = resolveLuminorAuthToken({
+      homeDir: input.homeDir,
+      explicitToken: input.authToken,
+    });
+    if (!authToken) {
+      throw new Error(
+        "Could not resolve LUMINOR_AUTH_TOKEN. Start Luminor desktop dev, or export the token before running --execute.",
+      );
+    }
+
+    const runtimeInfo = readLuminorServerRuntime(input.homeDir);
+    const negotiation = await negotiateLuminorWs(runtimeInfo.origin);
+    const socketUrl = buildFeatureSocketUrl(runtimeInfo.origin, negotiation, authToken);
+    const managedRuntime = ManagedRuntime.make(makeProtocolLayer(socketUrl));
+    const scope = managedRuntime.runSync(Scope.make());
+    const client = await managedRuntime.runPromise(Scope.provide(scope)(makeRpcClient));
+    return new LuminorWsRpcClient(managedRuntime, scope, client);
   }
 
   async request<T>(tag: string, payload: unknown): Promise<T> {
-    const requestId = randomUUID();
-    const result = await new Promise<T>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.socket.off("message", onMessage);
-        reject(new Error(`RPC timed out for ${tag}`));
-      }, REQUEST_TIMEOUT_MS);
-
-      const onMessage = (data: WebSocket.RawData) => {
-        const frame = JSON.parse(data.toString()) as RpcExitFrame | { readonly _tag: string };
-        if (frame._tag !== "Exit" || frame.requestId !== requestId) {
-          return;
-        }
-        clearTimeout(timeout);
-        this.socket.off("message", onMessage);
-        if (frame.exit._tag === "Success") {
-          resolve(frame.exit.value as T);
-          return;
-        }
-        reject(new Error(`RPC ${tag} failed: ${JSON.stringify(frame.exit.cause)}`));
-      };
-
-      this.socket.on("message", onMessage);
-      this.socket.send(
-        JSON.stringify({
-          _tag: "Request",
-          id: requestId,
-          tag,
-          payload,
-          headers: [],
-        }),
-      );
-    });
-    return result;
+    const call = (
+      this.client as unknown as Record<string, (input: unknown) => Effect.Effect<T, unknown, never>>
+    )[tag];
+    if (!call) {
+      throw new Error(`Unknown RPC method: ${tag}`);
+    }
+    return this.runtime.runPromise(
+      call(payload).pipe(
+        Effect.timeout(REQUEST_TIMEOUT_MS),
+        Effect.catchCause((cause) => Effect.fail(causeToError(cause))),
+      ),
+    );
   }
 
-  close(): void {
-    if (this.socket.readyState === WebSocket.OPEN) {
-      this.socket.close();
-    }
+  async close(): Promise<void> {
+    await this.runtime.runPromise(Scope.close(this.scope, Exit.void)).catch(() => undefined);
+    await this.runtime.dispose().catch(() => undefined);
   }
 }
 
 export const LUMINOR_WS_RPC_TAGS = {
   dispatchCommand: ORCHESTRATION_WS_METHODS.dispatchCommand,
 } as const;
+
+// Keep a stable id helper for execute callers/tests.
+export const createRpcRequestId = (): string => randomUUID();

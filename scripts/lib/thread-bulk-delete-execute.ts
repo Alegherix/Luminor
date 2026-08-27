@@ -54,6 +54,6 @@ export async function executeThreadBulkDelete(input: {
       `\nDone. Deleted ${String(deletedCount)} thread(s) and removed ${String(removedWorktreeCount)} worktree(s).\n`,
     );
   } finally {
-    client.close();
+    await client.close();
   }
 }
