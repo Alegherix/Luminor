@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildThreadBulkDeletePlan,
   getOrphanedWorktreePathForDeletion,
+  PR_PARITY_GAP_FOLDER,
   threadMatchesSelector,
   type ProjectionThreadRow,
   type ThreadBulkDeleteSelector,
@@ -27,14 +28,14 @@ const THREADS: ReadonlyArray<ProjectionThreadRow> = [
   {
     threadId: "parity-1",
     title: "PR list pane parity in sidebar",
-    folderName: "PR parity gap (right-view open)",
+    folderName: PR_PARITY_GAP_FOLDER,
     worktreePath: "/worktrees/a",
     projectCwd: "/repo",
   },
   {
     threadId: "parity-2",
     title: "PR row click opens right dock",
-    folderName: "PR parity gap (right-view open)",
+    folderName: PR_PARITY_GAP_FOLDER,
     worktreePath: "/worktrees/b",
     projectCwd: "/repo",
   },
@@ -55,7 +56,7 @@ const THREADS: ReadonlyArray<ProjectionThreadRow> = [
 ];
 
 const DEFAULT_SELECTOR: ThreadBulkDeleteSelector = {
-  folders: ["Crashes", "PR parity gap (right-view open)"],
+  folders: ["Crashes", PR_PARITY_GAP_FOLDER],
   titles: ["New thread"],
   titleLikes: [],
   threadIds: [],
@@ -101,5 +102,26 @@ describe("thread bulk delete", () => {
     expect(
       getOrphanedWorktreePathForDeletion(THREADS, new Set(["keep-1"]), "keep-1"),
     ).toBeNull();
+  });
+
+  it("does not remove worktrees for matched threads outside the PR parity gap folder", () => {
+    const threads: ReadonlyArray<ProjectionThreadRow> = [
+      {
+        threadId: "crash-with-wt",
+        title: "Process crashed: node",
+        folderName: "Crashes",
+        worktreePath: "/worktrees/should-stay",
+        projectCwd: "/repo",
+      },
+    ];
+    const plan = buildThreadBulkDeletePlan(threads, {
+      folders: ["Crashes"],
+      titles: [],
+      titleLikes: [],
+      threadIds: [],
+    });
+    expect(plan.candidates).toHaveLength(1);
+    expect(plan.worktreesToRemove).toEqual([]);
+    expect(plan.candidates[0]?.orphanedWorktreePath).toBeNull();
   });
 });

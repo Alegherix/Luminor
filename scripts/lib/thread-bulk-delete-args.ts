@@ -105,6 +105,9 @@ Defaults (when no selector flags are passed):
   --folder "PR parity gap (right-view open)"
   --title "New thread"
 
+Worktree removal is limited to threads in "PR parity gap (right-view open)".
+Other matched threads (for example Crashes / New thread) are deleted without touching worktrees.
+
 Options:
   --dry-run           Preview matched threads without deleting (default)
   --execute           Delete matched threads via the running Luminor server

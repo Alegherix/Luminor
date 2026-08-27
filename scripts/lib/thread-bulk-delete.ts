@@ -7,8 +7,13 @@ export interface ThreadBulkDeleteSelector {
   readonly threadIds: ReadonlyArray<string>;
 }
 
+export const PR_PARITY_GAP_FOLDER = "PR parity gap (right-view open)";
+
+/** Only threads in these folders may trigger managed worktree removal. */
+export const WORKTREE_REMOVAL_FOLDERS: ReadonlySet<string> = new Set([PR_PARITY_GAP_FOLDER]);
+
 export const DEFAULT_THREAD_BULK_DELETE_SELECTOR: ThreadBulkDeleteSelector = {
-  folders: ["Crashes", "PR parity gap (right-view open)"],
+  folders: ["Crashes", PR_PARITY_GAP_FOLDER],
   titles: ["New thread"],
   titleLikes: [],
   threadIds: [],
@@ -116,6 +121,12 @@ export function getOrphanedWorktreePathForDeletion(
 ): string | null {
   const targetThread = threads.find((thread) => thread.threadId === threadId);
   if (!targetThread) {
+    return null;
+  }
+  if (
+    targetThread.folderName === null ||
+    !WORKTREE_REMOVAL_FOLDERS.has(targetThread.folderName)
+  ) {
     return null;
   }
 
@@ -246,7 +257,9 @@ export function formatThreadBulkDeletePlan(
     `Threads matched: ${String(plan.candidates.length)} / ${String(plan.activeThreadCount)} active`,
   );
   lines.push(`Threads remaining after delete: ${String(plan.survivingThreadCount)}`);
-  lines.push(`Worktrees to remove: ${String(plan.worktreesToRemove.length)}`);
+  lines.push(
+    `Worktrees to remove (PR parity gap only): ${String(plan.worktreesToRemove.length)}`,
+  );
   lines.push("");
 
   if (plan.candidates.length === 0) {

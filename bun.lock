@@ -188,11 +188,13 @@
         "@luminor/contracts": "workspace:*",
         "@luminor/shared": "workspace:*",
         "effect": "catalog:",
+        "ws": "^8.21.0",
       },
       "devDependencies": {
         "@effect/language-service": "catalog:",
         "@effect/vitest": "catalog:",
         "@types/bun": "catalog:",
+        "@types/ws": "^8.5.13",
         "electron-builder": "26.15.3",
         "typescript": "catalog:",
         "vitest": "catalog:",
